@@ -1,11 +1,12 @@
 import { useState, useCallback } from "react";
 import { useParams, Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Button, Badge } from "@/components/ui";
+import { Button, Badge, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
   ArrowLeft, Calendar, Clock, User, CloudSun, ClipboardList,
   CheckCircle2, XCircle, MinusCircle, AlertTriangle, MessageSquare,
-  Building, Loader2, ChevronRight, FileText, Link2, Paperclip
+  Building, Loader2, ChevronRight, FileText, Link2, Paperclip,
+  Award, BarChart2, Send
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -113,6 +114,11 @@ export default function InspectionDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [docsByItem, setDocsByItem] = useState<Record<number, { id: number; name: string; mimeType?: string }[]>>({});
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [selectedReportType, setSelectedReportType] = useState("inspection_certificate");
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [generatedReport, setGeneratedReport] = useState<any>(null);
+  const [submittingReport, setSubmittingReport] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -139,6 +145,45 @@ export default function InspectionDetail() {
   }, [inspId]);
 
   useState(() => { load(); });
+
+  const REPORT_TYPES_DESKTOP = [
+    { key: "inspection_certificate", label: "Inspection Certificate", icon: Award },
+    { key: "compliance_report", label: "Compliance Report", icon: BarChart2 },
+    { key: "defect_notice", label: "Defect Notice", icon: AlertTriangle },
+    { key: "non_compliance_notice", label: "Non-Compliance Notice", icon: XCircle },
+  ] as const;
+
+  const generateReport = async () => {
+    setGeneratingReport(true);
+    setGeneratedReport(null);
+    try {
+      const data = await apiFetch("/api/reports/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inspectionId: inspId, reportType: selectedReportType, userId: 1 }),
+      });
+      setGeneratedReport(data);
+    } catch {
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
+  const submitReport = async () => {
+    if (!generatedReport) return;
+    setSubmittingReport(true);
+    try {
+      await apiFetch(`/api/reports/${generatedReport.id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      setReportDialogOpen(false);
+      setGeneratedReport(null);
+    } catch {
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -214,27 +259,39 @@ export default function InspectionDetail() {
             </div>
           </div>
 
-          {/* Stats pills */}
-          {total > 0 && (
-            <div className="flex sm:flex-col items-center gap-2 sm:text-right shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200">
-                  <CheckCircle2 className="h-3 w-3" /> {inspection.passCount} Pass
-                </span>
-                <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">
-                  <XCircle className="h-3 w-3" /> {inspection.failCount} Fail
-                </span>
-                <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-gray-50 text-gray-500 border border-gray-200">
-                  <MinusCircle className="h-3 w-3" /> {inspection.naCount} N/A
-                </span>
+          {/* Stats pills + Generate Report */}
+          <div className="flex sm:flex-col items-start gap-3 sm:text-right shrink-0">
+            {total > 0 && (
+              <div className="flex sm:flex-col items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200">
+                    <CheckCircle2 className="h-3 w-3" /> {inspection.passCount} Pass
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">
+                    <XCircle className="h-3 w-3" /> {inspection.failCount} Fail
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-gray-50 text-gray-500 border border-gray-200">
+                    <MinusCircle className="h-3 w-3" /> {inspection.naCount} N/A
+                  </span>
+                </div>
+                {passRate !== null && (
+                  <span className="text-sm font-semibold text-sidebar">
+                    {passRate}% pass rate
+                  </span>
+                )}
               </div>
-              {passRate !== null && (
-                <span className="text-sm font-semibold text-sidebar">
-                  {passRate}% pass rate
-                </span>
-              )}
-            </div>
-          )}
+            )}
+            {(inspection.status === "completed" || inspection.status === "follow_up_required") && (
+              <Button
+                size="sm"
+                onClick={() => { setGeneratedReport(null); setReportDialogOpen(true); }}
+                className="gap-1.5 bg-sidebar hover:bg-sidebar/90"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Generate Report
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -268,6 +325,93 @@ export default function InspectionDetail() {
       {tab === "Overview" && <OverviewTab inspection={inspection} />}
       {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults} docsByItem={docsByItem} />}
       {tab === "Issues" && <IssuesTab issues={inspection.issues} />}
+
+      {/* ── Generate Report Dialog ── */}
+      <Dialog open={reportDialogOpen} onOpenChange={o => { setReportDialogOpen(o); if (!o) setGeneratedReport(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-sidebar" />
+              Generate Inspection Report
+            </DialogTitle>
+          </DialogHeader>
+
+          {!generatedReport ? (
+            <>
+              <div className="overflow-auto space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Select a report type to auto-fill with inspection results, project details, and checklist items.
+                </p>
+                <div className="space-y-2">
+                  {REPORT_TYPES_DESKTOP.map(rt => {
+                    const Icon = rt.icon;
+                    return (
+                      <label
+                        key={rt.key}
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                          selectedReportType === rt.key
+                            ? "border-sidebar bg-sidebar/5"
+                            : "border-border hover:border-sidebar/30"
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="reportType"
+                          value={rt.key}
+                          checked={selectedReportType === rt.key}
+                          onChange={() => setSelectedReportType(rt.key)}
+                          className="sr-only"
+                        />
+                        <Icon className={cn("h-4 w-4 shrink-0", selectedReportType === rt.key ? "text-sidebar" : "text-muted-foreground")} />
+                        <span className={cn("text-sm font-medium", selectedReportType === rt.key ? "text-sidebar" : "text-muted-foreground")}>
+                          {rt.label}
+                        </span>
+                        {selectedReportType === rt.key && (
+                          <span className="ml-auto text-xs text-sidebar font-semibold">Selected</span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex justify-end pt-3 border-t border-border mt-2">
+                <Button onClick={generateReport} disabled={generatingReport}>
+                  {generatingReport ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Generating…</> : "Generate Report"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+              <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 font-medium">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                Report generated — {generatedReport.reportTypeLabel}
+              </div>
+              <div className="flex-1 overflow-auto bg-muted/30 rounded-lg border border-border">
+                <pre className="text-xs font-mono leading-relaxed p-4 whitespace-pre-wrap text-sidebar">
+                  {generatedReport.content}
+                </pre>
+              </div>
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
+                <Button variant="outline" size="sm" onClick={() => setGeneratedReport(null)}>
+                  ← Choose Different Type
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={submitReport}
+                  disabled={submittingReport}
+                  className="gap-1.5"
+                >
+                  {submittingReport
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Approving…</>
+                    : <><Send className="h-3.5 w-3.5" />Approve & Save to Project</>
+                  }
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

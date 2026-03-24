@@ -126,7 +126,7 @@ export default function InspectionDetailScreen() {
           )}
         </View>
 
-        {inspection.status !== "completed" && (
+        {inspection.status !== "completed" && inspection.status !== "follow_up_required" && (
           <Pressable
             style={styles.conductBtn}
             onPress={() => router.push(`/inspection/conduct/${inspection.id}` as any)}
@@ -136,6 +136,16 @@ export default function InspectionDetailScreen() {
               {inspection.status === "in_progress" ? "Continue Inspection" : "Start Inspection"}
             </Text>
             <Feather name="arrow-right" size={16} color={Colors.primary} />
+          </Pressable>
+        )}
+        {(inspection.status === "completed" || inspection.status === "follow_up_required") && (
+          <Pressable
+            style={styles.reportBtn}
+            onPress={() => router.push({ pathname: "/inspection/generate-report", params: { id: inspection.id } } as any)}
+          >
+            <Feather name="file-text" size={18} color={Colors.surface} />
+            <Text style={styles.reportBtnText}>Generate Report</Text>
+            <Feather name="arrow-right" size={16} color={Colors.surface} />
           </Pressable>
         )}
       </View>
@@ -296,6 +306,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.primary,
+  },
+  reportBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.secondary,
+    paddingVertical: 13,
+    borderRadius: 10,
+    marginTop: 6,
+  },
+  reportBtnText: {
+    fontSize: 15,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.surface,
   },
   projectName: {
     fontSize: 18,

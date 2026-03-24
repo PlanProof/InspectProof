@@ -81,6 +81,10 @@ function RootLayoutNav() {
         name="inspection/conduct/[id]"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="inspection/generate-report"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

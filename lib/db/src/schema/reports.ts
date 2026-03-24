@@ -7,8 +7,12 @@ export const reportsTable = pgTable("reports", {
   projectId: integer("project_id").notNull(),
   inspectionId: integer("inspection_id"),
   title: text("title").notNull(),
-  reportType: text("report_type").notNull().default("summary"),
+  reportType: text("report_type").notNull().default("inspection_certificate"),
   status: text("status").notNull().default("draft"),
+  content: text("content"),
+  sentTo: text("sent_to"),
+  sentAt: timestamp("sent_at"),
+  submittedAt: timestamp("submitted_at"),
   generatedById: integer("generated_by_id").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
