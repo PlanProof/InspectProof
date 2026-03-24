@@ -285,7 +285,7 @@ export default function InspectionDetail() {
               <Button
                 size="sm"
                 onClick={() => { setGeneratedReport(null); setReportDialogOpen(true); }}
-                className="gap-1.5 bg-sidebar hover:bg-sidebar/90"
+                className="gap-1.5 bg-accent hover:bg-accent/90 text-sidebar"
               >
                 <FileText className="h-3.5 w-3.5" />
                 Generate Report
