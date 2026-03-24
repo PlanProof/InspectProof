@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { sql, ne } from "drizzle-orm";
-import { db, projectsTable, inspectionsTable, issuesTable, reportsTable, activityLogsTable, checklistResultsTable, checklistItemsTable } from "@workspace/db";
+import { sql, ne, eq } from "drizzle-orm";
+import { db, projectsTable, inspectionsTable, issuesTable, reportsTable, activityLogsTable, checklistResultsTable, checklistItemsTable, usersTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -25,10 +25,41 @@ router.get("/dashboard", async (req, res) => {
     const [pendingReportsRow] = await db.select({ count: sql<number>`count(*)::int` })
       .from(reportsTable).where(sql`${reportsTable.status} = 'draft'`);
 
-    const upcomingInspections = await db.select().from(inspectionsTable)
-      .where(sql`${inspectionsTable.status} = 'scheduled' AND ${inspectionsTable.scheduledDate} >= ${now.toISOString().split("T")[0]}`)
-      .orderBy(inspectionsTable.scheduledDate)
-      .limit(5);
+    // Fetch ALL inspections for the calendar (entire year ±)
+    const allInspectionsRaw = await db.select({
+      id: inspectionsTable.id,
+      projectId: inspectionsTable.projectId,
+      projectName: projectsTable.name,
+      siteAddress: projectsTable.siteAddress,
+      inspectionType: inspectionsTable.inspectionType,
+      status: inspectionsTable.status,
+      scheduledDate: inspectionsTable.scheduledDate,
+      scheduledTime: inspectionsTable.scheduledTime,
+      completedDate: inspectionsTable.completedDate,
+      inspectorId: inspectionsTable.inspectorId,
+      duration: inspectionsTable.duration,
+      notes: inspectionsTable.notes,
+      createdAt: inspectionsTable.createdAt,
+    })
+    .from(inspectionsTable)
+    .leftJoin(projectsTable, eq(inspectionsTable.projectId, projectsTable.id))
+    .orderBy(inspectionsTable.scheduledDate, inspectionsTable.scheduledTime);
+
+    // Resolve inspector names
+    const users = await db.select().from(usersTable);
+    const userMap = new Map(users.map(u => [u.id, `${u.firstName} ${u.lastName}`]));
+
+    const allInspections = allInspectionsRaw.map(i => ({
+      ...i,
+      inspectorName: i.inspectorId ? (userMap.get(i.inspectorId) ?? null) : null,
+      createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : i.createdAt,
+    }));
+
+    // Upcoming (scheduled, future) for legacy compat
+    const todayStr2 = now.toISOString().split("T")[0];
+    const formattedUpcoming = allInspections.filter(
+      i => i.status === "scheduled" && i.scheduledDate >= todayStr2
+    ).slice(0, 5);
 
     const recentActivity = await db.select().from(activityLogsTable)
       .orderBy(sql`${activityLogsTable.createdAt} DESC`)
@@ -48,29 +79,6 @@ router.get("/dashboard", async (req, res) => {
       .where(sql`${issuesTable.status} NOT IN ('closed', 'resolved')`)
       .groupBy(issuesTable.severity);
 
-    // Format upcoming inspections with project names
-    const formattedUpcoming = await Promise.all(upcomingInspections.map(async (i) => {
-      const projects = await db.select().from(projectsTable).where(sql`${projectsTable.id} = ${i.projectId}`);
-      return {
-        id: i.id,
-        projectId: i.projectId,
-        projectName: projects[0]?.name || "Unknown",
-        inspectionType: i.inspectionType,
-        status: i.status,
-        scheduledDate: i.scheduledDate,
-        scheduledTime: i.scheduledTime,
-        completedDate: i.completedDate,
-        inspectorId: i.inspectorId,
-        inspectorName: null,
-        duration: i.duration,
-        notes: i.notes,
-        weatherConditions: i.weatherConditions,
-        checklistTemplateId: i.checklistTemplateId,
-        passCount: 0, failCount: 0, naCount: 0,
-        createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : i.createdAt,
-      };
-    }));
-
     const inspectionsByType = await db.select({
       type: inspectionsTable.inspectionType,
       total: sql<number>`count(*)::int`,
@@ -88,6 +96,7 @@ router.get("/dashboard", async (req, res) => {
       overdueIssues: overdueRow.count,
       reportsPending: pendingReportsRow.count,
       upcomingInspections: formattedUpcoming,
+      allInspections,
       recentActivity: recentActivity.map(a => ({
         id: a.id,
         entityType: a.entityType,

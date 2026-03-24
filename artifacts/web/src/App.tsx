@@ -9,10 +9,9 @@ import Dashboard from "@/pages/dashboard";
 import Projects from "@/pages/projects";
 import ProjectDetail from "@/pages/project-detail";
 import Inspections from "@/pages/inspections";
-import Issues from "@/pages/issues";
 import Analytics from "@/pages/analytics";
 import Templates from "@/pages/templates";
-import Compliance from "@/pages/compliance";
+import Inspectors from "@/pages/inspectors";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -58,10 +57,9 @@ function Router() {
       <Route path="/projects" component={Projects} />
       <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/inspections" component={Inspections} />
-      <Route path="/issues" component={Issues} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/templates" component={Templates} />
-      <Route path="/compliance" component={Compliance} />
+      <Route path="/inspectors" component={Inspectors} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>

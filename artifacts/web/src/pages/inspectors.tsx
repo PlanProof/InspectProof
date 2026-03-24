@@ -1,0 +1,380 @@
+import { useState } from "react";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { Card, Button } from "@/components/ui";
+import {
+  Users, Smartphone, Monitor, Mail, Phone, CheckSquare,
+  UserPlus, Send, MoreVertical, Shield, ChevronDown,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+// ── Mock Inspector Data ───────────────────────────────────────────────────────
+const MOCK_INSPECTORS = [
+  {
+    id: 1,
+    firstName: "Rachel",
+    lastName: "Chen",
+    email: "rachel@inspectproof.com.au",
+    phone: "0412 345 678",
+    role: "Inspector",
+    status: "active",
+    appAccess: "app_only",      // "app_only" | "full" | "invited" | "none"
+    platformAccess: false,
+    lastActive: "Today, 9:14 AM",
+    inspectionsCompleted: 34,
+    initials: "RC",
+    color: "bg-teal-500",
+  },
+  {
+    id: 2,
+    firstName: "David",
+    lastName: "Kovacs",
+    email: "david@inspectproof.com.au",
+    phone: "0423 456 789",
+    role: "Inspector",
+    status: "active",
+    appAccess: "app_only",
+    platformAccess: false,
+    lastActive: "Yesterday, 4:30 PM",
+    inspectionsCompleted: 28,
+    initials: "DK",
+    color: "bg-blue-500",
+  },
+  {
+    id: 3,
+    firstName: "James",
+    lastName: "Thornton",
+    email: "james@inspectproof.com.au",
+    phone: "0434 567 890",
+    role: "Certifier",
+    status: "active",
+    appAccess: "full",
+    platformAccess: true,
+    lastActive: "Today, 11:02 AM",
+    inspectionsCompleted: 61,
+    initials: "JT",
+    color: "bg-violet-500",
+  },
+  {
+    id: 4,
+    firstName: "Emily",
+    lastName: "Walsh",
+    email: "emily@inspectproof.com.au",
+    phone: "0445 678 901",
+    role: "Staff",
+    status: "invited",
+    appAccess: "invited",
+    platformAccess: false,
+    lastActive: "Never",
+    inspectionsCompleted: 0,
+    initials: "EW",
+    color: "bg-rose-400",
+  },
+  {
+    id: 5,
+    firstName: "Tom",
+    lastName: "Nguyen",
+    email: "tom.nguyen@inspectproof.com.au",
+    phone: "0456 789 012",
+    role: "Inspector",
+    status: "active",
+    appAccess: "app_only",
+    platformAccess: false,
+    lastActive: "2 days ago",
+    inspectionsCompleted: 15,
+    initials: "TN",
+    color: "bg-amber-500",
+  },
+];
+
+const ROLE_BADGE: Record<string, string> = {
+  Inspector: "bg-blue-50 text-blue-700 border-blue-200",
+  Certifier: "bg-violet-50 text-violet-700 border-violet-200",
+  Staff: "bg-muted text-muted-foreground border-muted/60",
+  admin: "bg-sidebar/10 text-sidebar border-sidebar/20",
+};
+
+const APP_ACCESS_LABELS: Record<string, { label: string; badge: string; icon: string }> = {
+  app_only: { label: "APP Only", badge: "bg-green-50 text-green-700 border-green-200", icon: "📱" },
+  full:     { label: "APP + Platform", badge: "bg-secondary/10 text-secondary border-secondary/30", icon: "✓" },
+  invited:  { label: "Invite Sent", badge: "bg-amber-50 text-amber-700 border-amber-200", icon: "📧" },
+  none:     { label: "No Access", badge: "bg-red-50 text-red-700 border-red-200", icon: "✕" },
+};
+
+// ── Inspector Row ─────────────────────────────────────────────────────────────
+function InspectorRow({
+  inspector,
+  onTogglePlatform,
+  onSendInvite,
+}: {
+  inspector: (typeof MOCK_INSPECTORS)[0];
+  onTogglePlatform: (id: number) => void;
+  onSendInvite: (id: number) => void;
+}) {
+  const appMeta = APP_ACCESS_LABELS[inspector.appAccess] ?? APP_ACCESS_LABELS.none;
+  const roleBadge = ROLE_BADGE[inspector.role] ?? ROLE_BADGE.Staff;
+  const isInvited = inspector.status === "invited";
+
+  return (
+    <div className="flex items-center gap-4 px-6 py-4 hover:bg-muted/30 transition-colors group">
+      {/* Avatar */}
+      <div className={`h-10 w-10 rounded-full ${inspector.color} flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm`}>
+        {inspector.initials}
+      </div>
+
+      {/* Name / email */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-sidebar text-sm">
+            {inspector.firstName} {inspector.lastName}
+          </span>
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${roleBadge}`}>
+            {inspector.role}
+          </span>
+          {isInvited && (
+            <span className="text-[10px] text-amber-600 italic">(pending)</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+          <span className="flex items-center gap-1">
+            <Mail className="h-3 w-3" />{inspector.email}
+          </span>
+          {inspector.phone && (
+            <span className="flex items-center gap-1">
+              <Phone className="h-3 w-3" />{inspector.phone}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="hidden md:flex flex-col items-center min-w-[70px]">
+        <span className="text-sm font-bold text-sidebar">{inspector.inspectionsCompleted}</span>
+        <span className="text-[10px] text-muted-foreground text-center">Inspections</span>
+      </div>
+
+      {/* Last active */}
+      <div className="hidden lg:flex flex-col items-center min-w-[90px]">
+        <span className="text-xs text-muted-foreground text-center leading-snug">{inspector.lastActive}</span>
+        <span className="text-[10px] text-muted-foreground/60">Last active</span>
+      </div>
+
+      {/* APP Access */}
+      <div className="flex flex-col items-center min-w-[110px] gap-1">
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${appMeta.badge}`}>
+          <Smartphone className="h-2.5 w-2.5" />
+          {appMeta.label}
+        </span>
+        {(inspector.appAccess === "app_only" || inspector.appAccess === "none") && (
+          <button
+            onClick={() => onSendInvite(inspector.id)}
+            className="flex items-center gap-1 text-[10px] text-secondary hover:underline font-medium"
+          >
+            <Send className="h-2.5 w-2.5" /> Send APP Invite
+          </button>
+        )}
+        {inspector.appAccess === "invited" && (
+          <button
+            onClick={() => onSendInvite(inspector.id)}
+            className="flex items-center gap-1 text-[10px] text-amber-600 hover:underline font-medium"
+          >
+            <Send className="h-2.5 w-2.5" /> Resend Invite
+          </button>
+        )}
+      </div>
+
+      {/* Platform Access */}
+      <div className="flex flex-col items-center min-w-[110px] gap-1">
+        <div className="flex items-center gap-2">
+          <button
+            role="checkbox"
+            aria-checked={inspector.platformAccess}
+            onClick={() => onTogglePlatform(inspector.id)}
+            className={cn(
+              "relative inline-flex h-5 w-9 items-center rounded-full border-2 transition-colors focus:outline-none focus:ring-2 focus:ring-secondary/40",
+              inspector.platformAccess
+                ? "bg-secondary border-secondary"
+                : "bg-muted border-muted-foreground/30"
+            )}
+          >
+            <span className={cn(
+              "inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform",
+              inspector.platformAccess ? "translate-x-4" : "translate-x-0.5"
+            )} />
+          </button>
+          <span className="text-xs font-medium text-muted-foreground">Platform</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Monitor className={cn("h-2.5 w-2.5", inspector.platformAccess ? "text-secondary" : "text-muted-foreground/40")} />
+          <span className={cn("text-[10px]", inspector.platformAccess ? "text-secondary font-semibold" : "text-muted-foreground/50")}>
+            {inspector.platformAccess ? "Access granted" : "No access"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Inspectors Page ───────────────────────────────────────────────────────────
+export default function Inspectors() {
+  const [inspectors, setInspectors] = useState(MOCK_INSPECTORS);
+  const [inviteSentFor, setInviteSentFor] = useState<number | null>(null);
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+
+  const togglePlatform = (id: number) => {
+    setInspectors(prev =>
+      prev.map(i => i.id === id ? { ...i, platformAccess: !i.platformAccess } : i)
+    );
+  };
+
+  const sendInvite = (id: number) => {
+    setInviteSentFor(id);
+    setInspectors(prev =>
+      prev.map(i => i.id === id ? { ...i, appAccess: "invited", status: "invited" } : i)
+    );
+    setTimeout(() => setInviteSentFor(null), 3000);
+  };
+
+  const activeCount = inspectors.filter(i => i.status === "active").length;
+  const appCount = inspectors.filter(i => i.appAccess === "app_only" || i.appAccess === "full").length;
+
+  return (
+    <AppLayout>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-sidebar tracking-tight">Inspectors</h1>
+          <p className="text-muted-foreground mt-1">
+            Manage your inspection team, app access, and platform permissions.
+          </p>
+        </div>
+        <Button
+          onClick={() => setShowInviteForm(!showInviteForm)}
+          className="gap-2 shadow-lg shadow-primary/20"
+        >
+          <UserPlus className="h-4 w-4" /> Invite Inspector
+        </Button>
+      </div>
+
+      {/* Invite form */}
+      {showInviteForm && (
+        <Card className="mb-6 border-secondary/30 bg-secondary/5 shadow-sm">
+          <div className="p-5 flex items-center gap-3 flex-wrap">
+            <Send className="h-4 w-4 text-secondary shrink-0" />
+            <p className="text-sm font-semibold text-sidebar">Send APP Invitation</p>
+            <input
+              type="email"
+              placeholder="inspector@email.com.au"
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              className="flex-1 min-w-48 text-sm border border-input rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30"
+            />
+            <Button size="sm" onClick={() => { setNewEmail(""); setShowInviteForm(false); }}>
+              Send Invite
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowInviteForm(false)}>Cancel</Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <Card className="shadow-sm border-muted/60">
+          <div className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10 text-sidebar">
+              <Users className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-sidebar">{inspectors.length}</p>
+              <p className="text-xs text-muted-foreground font-medium">Total Team</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="shadow-sm border-muted/60">
+          <div className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-green-100 text-green-700">
+              <Smartphone className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-sidebar">{appCount}</p>
+              <p className="text-xs text-muted-foreground font-medium">APP Active</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="shadow-sm border-muted/60">
+          <div className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-secondary/10 text-secondary">
+              <Monitor className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-sidebar">
+                {inspectors.filter(i => i.platformAccess).length}
+              </p>
+              <p className="text-xs text-muted-foreground font-medium">Platform Access</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Toast for invite sent */}
+      {inviteSentFor !== null && (
+        <div className="mb-4 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-2.5 text-sm text-green-700 font-medium shadow-sm">
+          <Send className="h-3.5 w-3.5" />
+          APP invitation sent to {inspectors.find(i => i.id === inviteSentFor)?.firstName}!
+        </div>
+      )}
+
+      {/* Inspector table */}
+      <Card className="shadow-md border-muted/60 overflow-hidden">
+        {/* Table header */}
+        <div className="grid grid-cols-1 px-6 py-3 bg-muted/30 border-b border-muted/50">
+          <div className="flex items-center gap-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            <span className="flex-1">Inspector</span>
+            <span className="hidden md:block w-[70px] text-center">Inspections</span>
+            <span className="hidden lg:block w-[90px] text-center">Last Active</span>
+            <span className="w-[110px] text-center">APP Access</span>
+            <span className="w-[110px] text-center">Platform Access</span>
+          </div>
+        </div>
+
+        {/* Rows */}
+        <div className="divide-y divide-muted/40">
+          {inspectors.map(inspector => (
+            <InspectorRow
+              key={inspector.id}
+              inspector={inspector}
+              onTogglePlatform={togglePlatform}
+              onSendInvite={sendInvite}
+            />
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-3 border-t border-muted/50 bg-muted/10 flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            {activeCount} active · {inspectors.filter(i => i.status === "invited").length} pending · {inspectors.length} total
+          </p>
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Shield className="h-3 w-3" />
+            Platform access allows editing templates and viewing all projects
+          </p>
+        </div>
+      </Card>
+
+      {/* Info card */}
+      <Card className="mt-6 border-secondary/20 bg-secondary/5 shadow-sm">
+        <div className="p-5 flex gap-4">
+          <Smartphone className="h-8 w-8 text-secondary shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-semibold text-sidebar text-sm mb-1">InspectProof Mobile App</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Inspectors with <strong>APP access</strong> can receive assigned inspections on their device, complete checklists in the field with photos, and sync results directly back to this platform in real time.
+              <br /><br />
+              Enabling <strong>Platform Access</strong> additionally allows them to log in to this web portal to view reports, edit templates, and manage project documents.
+            </p>
+          </div>
+        </div>
+      </Card>
+    </AppLayout>
+  );
+}

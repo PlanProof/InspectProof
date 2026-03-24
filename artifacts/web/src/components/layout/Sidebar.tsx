@@ -6,6 +6,7 @@ import {
   CheckSquare,
   BarChart3,
   ClipboardList,
+  UsersRound,
   Settings,
   LogOut
 } from "lucide-react";
@@ -17,6 +18,7 @@ const navigation = [
   { name: "Projects",    href: "/projects",    icon: FolderOpen },
   { name: "Templates",   href: "/templates",   icon: ClipboardList },
   { name: "Analytics",   href: "/analytics",   icon: BarChart3 },
+  { name: "Inspectors",  href: "/inspectors",  icon: UsersRound },
 ];
 
 export function Sidebar() {
