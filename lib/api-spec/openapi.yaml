@@ -1,22 +1,42 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: InspectProof API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: projects
+    description: Project management
+  - name: inspections
+    description: Inspection management
+  - name: checklists
+    description: Checklist templates and items
+  - name: issues
+    description: Issues and defect tracking
+  - name: documents
+    description: Document management
+  - name: notes
+    description: Field notes and observations
+  - name: reports
+    description: Report generation
+  - name: analytics
+    description: Analytics and insights
+  - name: notifications
+    description: Notifications
+  - name: users
+    description: User management
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +44,677 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List all projects
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{id}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get project by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+    put:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete/archive project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Project deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /projects/{id}/activity:
+    get:
+      operationId: getProjectActivity
+      tags: [projects]
+      summary: Get project activity log
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Activity log
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityLog"
+
+  /inspections:
+    get:
+      operationId: listInspections
+      tags: [inspections]
+      summary: List all inspections
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: inspectorId
+          in: query
+          schema:
+            type: integer
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+        - name: toDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of inspections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Inspection"
+    post:
+      operationId: createInspection
+      tags: [inspections]
+      summary: Create inspection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInspectionRequest"
+      responses:
+        "201":
+          description: Inspection created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inspection"
+
+  /inspections/{id}:
+    get:
+      operationId: getInspection
+      tags: [inspections]
+      summary: Get inspection by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Inspection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InspectionDetail"
+    put:
+      operationId: updateInspection
+      tags: [inspections]
+      summary: Update inspection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInspectionRequest"
+      responses:
+        "200":
+          description: Updated inspection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inspection"
+
+  /inspections/{id}/checklist:
+    get:
+      operationId: getInspectionChecklist
+      tags: [inspections]
+      summary: Get checklist items for inspection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Checklist items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChecklistResult"
+    post:
+      operationId: saveChecklistResults
+      tags: [inspections]
+      summary: Save checklist results
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveChecklistRequest"
+      responses:
+        "200":
+          description: Results saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /checklist-templates:
+    get:
+      operationId: listChecklistTemplates
+      tags: [checklists]
+      summary: List checklist templates
+      responses:
+        "200":
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChecklistTemplate"
+    post:
+      operationId: createChecklistTemplate
+      tags: [checklists]
+      summary: Create checklist template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChecklistTemplateRequest"
+      responses:
+        "201":
+          description: Template created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChecklistTemplate"
+
+  /checklist-templates/{id}:
+    get:
+      operationId: getChecklistTemplate
+      tags: [checklists]
+      summary: Get checklist template
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChecklistTemplateDetail"
+
+  /issues:
+    get:
+      operationId: listIssues
+      tags: [issues]
+      summary: List all issues/defects
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: inspectionId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: severity
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of issues
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Issue"
+    post:
+      operationId: createIssue
+      tags: [issues]
+      summary: Create issue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIssueRequest"
+      responses:
+        "201":
+          description: Issue created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Issue"
+
+  /issues/{id}:
+    get:
+      operationId: getIssue
+      tags: [issues]
+      summary: Get issue by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Issue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Issue"
+    put:
+      operationId: updateIssue
+      tags: [issues]
+      summary: Update issue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateIssueRequest"
+      responses:
+        "200":
+          description: Updated issue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Issue"
+
+  /documents:
+    get:
+      operationId: listDocuments
+      tags: [documents]
+      summary: List documents
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: category
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Document"
+    post:
+      operationId: createDocument
+      tags: [documents]
+      summary: Create document record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentRequest"
+      responses:
+        "201":
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+
+  /notes:
+    get:
+      operationId: listNotes
+      tags: [notes]
+      summary: List notes
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: inspectionId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Note"
+    post:
+      operationId: createNote
+      tags: [notes]
+      summary: Create note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNoteRequest"
+      responses:
+        "201":
+          description: Note created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+
+  /reports:
+    get:
+      operationId: listReports
+      tags: [reports]
+      summary: List reports
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Report"
+    post:
+      operationId: generateReport
+      tags: [reports]
+      summary: Generate report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateReportRequest"
+      responses:
+        "201":
+          description: Report generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+
+  /reports/{id}:
+    get:
+      operationId: getReport
+      tags: [reports]
+      summary: Get report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportDetail"
+
+  /analytics/dashboard:
+    get:
+      operationId: getDashboardAnalytics
+      tags: [analytics]
+      summary: Get dashboard analytics
+      responses:
+        "200":
+          description: Dashboard analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardAnalytics"
+
+  /analytics/trends:
+    get:
+      operationId: getAnalyticsTrends
+      tags: [analytics]
+      summary: Get analytics trends
+      responses:
+        "200":
+          description: Trends data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsTrends"
+
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notifications
+      responses:
+        "200":
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}/read:
+    put:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Marked as read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +725,1111 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - token
+        - user
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum: [admin, certifier, inspector, staff]
+        phone:
+          type: string
+          nullable: true
+        avatar:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - email
+        - firstName
+        - lastName
+        - role
+        - isActive
+        - createdAt
+
+    CreateUserRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum: [admin, certifier, inspector, staff]
+        phone:
+          type: string
+          nullable: true
+      required:
+        - email
+        - password
+        - firstName
+        - lastName
+        - role
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        siteAddress:
+          type: string
+        suburb:
+          type: string
+        state:
+          type: string
+        postcode:
+          type: string
+        clientName:
+          type: string
+        builderName:
+          type: string
+          nullable: true
+        designerName:
+          type: string
+          nullable: true
+        daNumber:
+          type: string
+          nullable: true
+        certificationNumber:
+          type: string
+          nullable: true
+        buildingClassification:
+          type: string
+        projectType:
+          type: string
+          enum: [residential, commercial, industrial, mixed_use, infrastructure]
+        status:
+          type: string
+          enum: [active, on_hold, completed, archived]
+        stage:
+          type: string
+          enum: [pre_construction, footings, slab, frame, lock_up, fit_out, final, completed]
+        assignedCertifierId:
+          type: integer
+          nullable: true
+        assignedInspectorId:
+          type: integer
+          nullable: true
+        startDate:
+          type: string
+          nullable: true
+        expectedCompletionDate:
+          type: string
+          nullable: true
+        completedDate:
+          type: string
+          nullable: true
+        totalInspections:
+          type: integer
+        openIssues:
+          type: integer
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - siteAddress
+        - suburb
+        - state
+        - postcode
+        - clientName
+        - buildingClassification
+        - projectType
+        - status
+        - stage
+        - totalInspections
+        - openIssues
+        - createdAt
+        - updatedAt
+
+    ProjectDetail:
+      allOf:
+        - $ref: "#/components/schemas/Project"
+        - type: object
+          properties:
+            inspections:
+              type: array
+              items:
+                $ref: "#/components/schemas/Inspection"
+            recentIssues:
+              type: array
+              items:
+                $ref: "#/components/schemas/Issue"
+            documents:
+              type: array
+              items:
+                $ref: "#/components/schemas/Document"
+          required:
+            - inspections
+            - recentIssues
+            - documents
+
+    CreateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        siteAddress:
+          type: string
+        suburb:
+          type: string
+        state:
+          type: string
+        postcode:
+          type: string
+        clientName:
+          type: string
+        builderName:
+          type: string
+          nullable: true
+        designerName:
+          type: string
+          nullable: true
+        daNumber:
+          type: string
+          nullable: true
+        certificationNumber:
+          type: string
+          nullable: true
+        buildingClassification:
+          type: string
+        projectType:
+          type: string
+          enum: [residential, commercial, industrial, mixed_use, infrastructure]
+        assignedCertifierId:
+          type: integer
+          nullable: true
+        assignedInspectorId:
+          type: integer
+          nullable: true
+        startDate:
+          type: string
+          nullable: true
+        expectedCompletionDate:
+          type: string
+          nullable: true
+      required:
+        - name
+        - siteAddress
+        - suburb
+        - state
+        - postcode
+        - clientName
+        - buildingClassification
+        - projectType
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        siteAddress:
+          type: string
+        suburb:
+          type: string
+        state:
+          type: string
+        postcode:
+          type: string
+        clientName:
+          type: string
+        builderName:
+          type: string
+          nullable: true
+        designerName:
+          type: string
+          nullable: true
+        daNumber:
+          type: string
+          nullable: true
+        certificationNumber:
+          type: string
+          nullable: true
+        buildingClassification:
+          type: string
+        projectType:
+          type: string
+          enum: [residential, commercial, industrial, mixed_use, infrastructure]
+        status:
+          type: string
+          enum: [active, on_hold, completed, archived]
+        stage:
+          type: string
+          enum: [pre_construction, footings, slab, frame, lock_up, fit_out, final, completed]
+        assignedCertifierId:
+          type: integer
+          nullable: true
+        assignedInspectorId:
+          type: integer
+          nullable: true
+        startDate:
+          type: string
+          nullable: true
+        expectedCompletionDate:
+          type: string
+          nullable: true
+        completedDate:
+          type: string
+          nullable: true
+
+    ActivityLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        entityType:
+          type: string
+        entityId:
+          type: integer
+        action:
+          type: string
+        description:
+          type: string
+        userId:
+          type: integer
+        userName:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - entityType
+        - entityId
+        - action
+        - description
+        - userId
+        - userName
+        - createdAt
+
+    Inspection:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        inspectionType:
+          type: string
+          enum: [footings, slab, frame, final, fire_safety, pool_barrier, special, preliminary, progress]
+        status:
+          type: string
+          enum: [scheduled, in_progress, completed, follow_up_required, cancelled]
+        scheduledDate:
+          type: string
+        scheduledTime:
+          type: string
+          nullable: true
+        completedDate:
+          type: string
+          nullable: true
+        inspectorId:
+          type: integer
+          nullable: true
+        inspectorName:
+          type: string
+          nullable: true
+        duration:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        weatherConditions:
+          type: string
+          nullable: true
+        checklistTemplateId:
+          type: integer
+          nullable: true
+        passCount:
+          type: integer
+        failCount:
+          type: integer
+        naCount:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - projectId
+        - projectName
+        - inspectionType
+        - status
+        - scheduledDate
+        - passCount
+        - failCount
+        - naCount
+        - createdAt
+
+    InspectionDetail:
+      allOf:
+        - $ref: "#/components/schemas/Inspection"
+        - type: object
+          properties:
+            checklistResults:
+              type: array
+              items:
+                $ref: "#/components/schemas/ChecklistResult"
+            issues:
+              type: array
+              items:
+                $ref: "#/components/schemas/Issue"
+            notes:
+              type: array
+              items:
+                $ref: "#/components/schemas/Note"
+          required:
+            - checklistResults
+            - issues
+            - notes
+
+    CreateInspectionRequest:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        inspectionType:
+          type: string
+          enum: [footings, slab, frame, final, fire_safety, pool_barrier, special, preliminary, progress]
+        scheduledDate:
+          type: string
+        scheduledTime:
+          type: string
+          nullable: true
+        inspectorId:
+          type: integer
+          nullable: true
+        duration:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        checklistTemplateId:
+          type: integer
+          nullable: true
+      required:
+        - projectId
+        - inspectionType
+        - scheduledDate
+
+    UpdateInspectionRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [scheduled, in_progress, completed, follow_up_required, cancelled]
+        scheduledDate:
+          type: string
+        scheduledTime:
+          type: string
+          nullable: true
+        completedDate:
+          type: string
+          nullable: true
+        inspectorId:
+          type: integer
+          nullable: true
+        duration:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        weatherConditions:
+          type: string
+          nullable: true
+
+    ChecklistTemplate:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        inspectionType:
+          type: string
+        description:
+          type: string
+          nullable: true
+        itemCount:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - inspectionType
+        - itemCount
+        - createdAt
+
+    ChecklistTemplateDetail:
+      allOf:
+        - $ref: "#/components/schemas/ChecklistTemplate"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/ChecklistItem"
+          required:
+            - items
+
+    ChecklistItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        templateId:
+          type: integer
+        orderIndex:
+          type: integer
+        category:
+          type: string
+        description:
+          type: string
+        codeReference:
+          type: string
+          nullable: true
+        riskLevel:
+          type: string
+          enum: [low, medium, high, critical]
+        isRequired:
+          type: boolean
+      required:
+        - id
+        - templateId
+        - orderIndex
+        - category
+        - description
+        - riskLevel
+        - isRequired
+
+    ChecklistResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        inspectionId:
+          type: integer
+        checklistItemId:
+          type: integer
+        category:
+          type: string
+        description:
+          type: string
+        codeReference:
+          type: string
+          nullable: true
+        riskLevel:
+          type: string
+        result:
+          type: string
+          enum: [pass, fail, na, pending]
+        notes:
+          type: string
+          nullable: true
+        orderIndex:
+          type: integer
+      required:
+        - id
+        - inspectionId
+        - checklistItemId
+        - category
+        - description
+        - riskLevel
+        - result
+        - orderIndex
+
+    CreateChecklistTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        inspectionType:
+          type: string
+        description:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              description:
+                type: string
+              codeReference:
+                type: string
+                nullable: true
+              riskLevel:
+                type: string
+                enum: [low, medium, high, critical]
+              isRequired:
+                type: boolean
+              orderIndex:
+                type: integer
+            required:
+              - category
+              - description
+              - riskLevel
+              - isRequired
+              - orderIndex
+      required:
+        - name
+        - inspectionType
+        - items
+
+    SaveChecklistRequest:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              checklistItemId:
+                type: integer
+              result:
+                type: string
+                enum: [pass, fail, na, pending]
+              notes:
+                type: string
+                nullable: true
+            required:
+              - checklistItemId
+              - result
+      required:
+        - results
+
+    Issue:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        inspectionId:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        status:
+          type: string
+          enum: [open, in_progress, resolved, closed, deferred]
+        location:
+          type: string
+          nullable: true
+        codeReference:
+          type: string
+          nullable: true
+        responsibleParty:
+          type: string
+          nullable: true
+        dueDate:
+          type: string
+          nullable: true
+        resolvedDate:
+          type: string
+          nullable: true
+        assignedToId:
+          type: integer
+          nullable: true
+        projectName:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - projectId
+        - title
+        - description
+        - severity
+        - status
+        - projectName
+        - createdAt
+        - updatedAt
+
+    CreateIssueRequest:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        inspectionId:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        location:
+          type: string
+          nullable: true
+        codeReference:
+          type: string
+          nullable: true
+        responsibleParty:
+          type: string
+          nullable: true
+        dueDate:
+          type: string
+          nullable: true
+        assignedToId:
+          type: integer
+          nullable: true
+      required:
+        - projectId
+        - title
+        - description
+        - severity
+
+    UpdateIssueRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        status:
+          type: string
+          enum: [open, in_progress, resolved, closed, deferred]
+        location:
+          type: string
+          nullable: true
+        codeReference:
+          type: string
+          nullable: true
+        responsibleParty:
+          type: string
+          nullable: true
+        dueDate:
+          type: string
+          nullable: true
+        resolvedDate:
+          type: string
+          nullable: true
+        assignedToId:
+          type: integer
+          nullable: true
+
+    Document:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        name:
+          type: string
+        category:
+          type: string
+          enum: [plans, engineering, specifications, certificates, photos, correspondence, reports, other]
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+          nullable: true
+        mimeType:
+          type: string
+          nullable: true
+        version:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        uploadedById:
+          type: integer
+        uploadedByName:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - projectId
+        - name
+        - category
+        - fileName
+        - uploadedById
+        - uploadedByName
+        - tags
+        - createdAt
+
+    CreateDocumentRequest:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        name:
+          type: string
+        category:
+          type: string
+          enum: [plans, engineering, specifications, certificates, photos, correspondence, reports, other]
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+          nullable: true
+        mimeType:
+          type: string
+          nullable: true
+        version:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        uploadedById:
+          type: integer
+      required:
+        - projectId
+        - name
+        - category
+        - fileName
+        - uploadedById
+
+    Note:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        inspectionId:
+          type: integer
+          nullable: true
+        content:
+          type: string
+        authorId:
+          type: integer
+        authorName:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - projectId
+        - content
+        - authorId
+        - authorName
+        - createdAt
+
+    CreateNoteRequest:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        inspectionId:
+          type: integer
+          nullable: true
+        content:
+          type: string
+        authorId:
+          type: integer
+      required:
+        - projectId
+        - content
+        - authorId
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        inspectionId:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        reportType:
+          type: string
+          enum: [summary, detailed, defect_notice, follow_up]
+        status:
+          type: string
+          enum: [draft, final, sent]
+        generatedById:
+          type: integer
+        generatedByName:
+          type: string
+        projectName:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - projectId
+        - title
+        - reportType
+        - status
+        - generatedById
+        - generatedByName
+        - projectName
+        - createdAt
+
+    ReportDetail:
+      allOf:
+        - $ref: "#/components/schemas/Report"
+        - type: object
+          properties:
+            project:
+              $ref: "#/components/schemas/Project"
+            inspection:
+              $ref: "#/components/schemas/Inspection"
+              nullable: true
+            issues:
+              type: array
+              items:
+                $ref: "#/components/schemas/Issue"
+          required:
+            - project
+            - issues
+
+    GenerateReportRequest:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        inspectionId:
+          type: integer
+          nullable: true
+        title:
+          type: string
+        reportType:
+          type: string
+          enum: [summary, detailed, defect_notice, follow_up]
+        generatedById:
+          type: integer
+      required:
+        - projectId
+        - title
+        - reportType
+        - generatedById
+
+    DashboardAnalytics:
+      type: object
+      properties:
+        totalProjects:
+          type: integer
+        activeProjects:
+          type: integer
+        totalInspections:
+          type: integer
+        inspectionsThisMonth:
+          type: integer
+        openIssues:
+          type: integer
+        criticalIssues:
+          type: integer
+        overdueIssues:
+          type: integer
+        reportsPending:
+          type: integer
+        upcomingInspections:
+          type: array
+          items:
+            $ref: "#/components/schemas/Inspection"
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityLog"
+        projectsByStage:
+          type: array
+          items:
+            type: object
+            properties:
+              stage:
+                type: string
+              count:
+                type: integer
+            required:
+              - stage
+              - count
+        issuesBySeverity:
+          type: array
+          items:
+            type: object
+            properties:
+              severity:
+                type: string
+              count:
+                type: integer
+            required:
+              - severity
+              - count
+      required:
+        - totalProjects
+        - activeProjects
+        - totalInspections
+        - inspectionsThisMonth
+        - openIssues
+        - criticalIssues
+        - overdueIssues
+        - reportsPending
+        - upcomingInspections
+        - recentActivity
+        - projectsByStage
+        - issuesBySeverity
+
+    AnalyticsTrends:
+      type: object
+      properties:
+        inspectionsByMonth:
+          type: array
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+              count:
+                type: integer
+            required:
+              - month
+              - count
+        defectsByType:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              count:
+                type: integer
+            required:
+              - category
+              - count
+        commonFailures:
+          type: array
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+              count:
+                type: integer
+            required:
+              - description
+              - count
+        avgResolutionDays:
+          type: number
+        complianceRate:
+          type: number
+      required:
+        - inspectionsByMonth
+        - defectsByType
+        - commonFailures
+        - avgResolutionDays
+        - complianceRate
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        title:
+          type: string
+        body:
+          type: string
+        type:
+          type: string
+          enum: [inspection_reminder, issue_overdue, report_pending, project_update, system]
+        isRead:
+          type: boolean
+        entityType:
+          type: string
+          nullable: true
+        entityId:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - userId
+        - title
+        - body
+        - type
+        - isRead
+        - createdAt

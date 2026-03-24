@@ -1,0 +1,192 @@
+import React from "react";
+import { View, Text, Pressable, StyleSheet } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { Colors } from "@/constants/colors";
+import { Badge } from "@/components/ui/Badge";
+import { INSPECTION_TYPES } from "@/constants/api";
+
+interface InspectionCardProps {
+  inspection: {
+    id: number;
+    projectId: number;
+    projectName: string;
+    inspectionType: string;
+    status: string;
+    scheduledDate: string;
+    scheduledTime?: string | null;
+    inspectorName?: string | null;
+    passCount: number;
+    failCount: number;
+    naCount: number;
+  };
+  showProject?: boolean;
+}
+
+const statusLabels: Record<string, string> = {
+  scheduled: "Scheduled",
+  in_progress: "In Progress",
+  completed: "Completed",
+  follow_up_required: "Follow-Up",
+  cancelled: "Cancelled",
+};
+
+const typeIcons: Record<string, string> = {
+  footings: "layers",
+  slab: "square",
+  frame: "grid",
+  final: "check-circle",
+  fire_safety: "alert-triangle",
+  pool_barrier: "shield",
+  special: "star",
+  preliminary: "eye",
+  progress: "trending-up",
+};
+
+export function InspectionCard({ inspection, showProject = true }: InspectionCardProps) {
+  const total = inspection.passCount + inspection.failCount;
+  const date = new Date(inspection.scheduledDate);
+  const formattedDate = date.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+
+  return (
+    <Pressable
+      onPress={() => router.push({ pathname: "/inspection/[id]", params: { id: inspection.id } })}
+      style={({ pressed }) => [styles.card, pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] }]}
+    >
+      <View style={styles.header}>
+        <View style={styles.typeRow}>
+          <View style={[styles.typeIcon, { backgroundColor: inspection.status === "follow_up_required" ? Colors.dangerLight : Colors.infoLight }]}>
+            <Feather
+              name={(typeIcons[inspection.inspectionType] || "clipboard") as any}
+              size={16}
+              color={inspection.status === "follow_up_required" ? Colors.danger : Colors.secondary}
+            />
+          </View>
+          <View>
+            <Text style={styles.type}>{INSPECTION_TYPES[inspection.inspectionType] || inspection.inspectionType} Inspection</Text>
+            {showProject && <Text style={styles.projectName} numberOfLines={1}>{inspection.projectName}</Text>}
+          </View>
+        </View>
+        <Badge label={statusLabels[inspection.status] || inspection.status} variant="status" value={inspection.status} size="sm" />
+      </View>
+
+      <View style={styles.meta}>
+        <View style={styles.metaItem}>
+          <Feather name="calendar" size={12} color={Colors.textTertiary} />
+          <Text style={styles.metaText}>{formattedDate}</Text>
+        </View>
+        {inspection.scheduledTime && (
+          <View style={styles.metaItem}>
+            <Feather name="clock" size={12} color={Colors.textTertiary} />
+            <Text style={styles.metaText}>{inspection.scheduledTime}</Text>
+          </View>
+        )}
+        {inspection.inspectorName && (
+          <View style={styles.metaItem}>
+            <Feather name="user" size={12} color={Colors.textTertiary} />
+            <Text style={styles.metaText}>{inspection.inspectorName}</Text>
+          </View>
+        )}
+      </View>
+
+      {total > 0 && (
+        <View style={styles.checklistSummary}>
+          <View style={styles.checkItem}>
+            <View style={[styles.dot, { backgroundColor: Colors.success }]} />
+            <Text style={styles.checkText}>{inspection.passCount} Pass</Text>
+          </View>
+          {inspection.failCount > 0 && (
+            <View style={styles.checkItem}>
+              <View style={[styles.dot, { backgroundColor: Colors.danger }]} />
+              <Text style={[styles.checkText, { color: Colors.danger }]}>{inspection.failCount} Fail</Text>
+            </View>
+          )}
+          {inspection.naCount > 0 && (
+            <View style={styles.checkItem}>
+              <View style={[styles.dot, { backgroundColor: Colors.textTertiary }]} />
+              <Text style={styles.checkText}>{inspection.naCount} N/A</Text>
+            </View>
+          )}
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 10,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  typeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  typeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  type: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.text,
+  },
+  projectName: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    maxWidth: 180,
+  },
+  meta: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+  },
+  checklistSummary: {
+    flexDirection: "row",
+    gap: 12,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  checkItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  checkText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+  },
+});

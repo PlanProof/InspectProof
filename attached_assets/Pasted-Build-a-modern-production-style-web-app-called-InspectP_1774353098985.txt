@@ -1,0 +1,239 @@
+Build a modern, production-style web app called “InspectProof” for building certifiers and building surveyors. The app should feel like a professional field and office inspection platform tailored to the construction and certification industry in Australia, with a clean, premium, trustworthy interface.
+
+Brand and UI:
+Use this colour palette consistently throughout the app:
+- Maastricht Blue: #0B1933
+- Blue Yonder: #466DB5
+- Pear: #C5D92D
+- Rich Black: #001022
+- Anti-Flash White: #F2F3F5
+
+Design style:
+- Clean, sleek, modern, highly professional
+- Mobile-friendly and desktop-friendly
+- Suitable for field inspections on tablet/mobile and reporting in office on desktop
+- Use cards, dashboards, clean tables, status chips, icons, timelines, and structured forms
+- Strong UX with minimal clutter and intuitive workflows
+
+Build a full-stack app with a polished frontend and realistic backend structure. Use a scalable architecture and create seed/demo data so the app is immediately usable.
+
+Core purpose:
+InspectProof is a building inspection and compliance management platform for building certifiers. It should help manage projects, documents, inspections, checklists, defects/issues, photo evidence, notes, markups, and reporting.
+
+Main features to include:
+
+1. Authentication and roles
+- Secure login page
+- Roles such as Admin, Building Certifier, Inspector, Staff
+- Role-based permissions
+
+2. Dashboard
+- Overview of active projects
+- Upcoming inspections
+- Outstanding defects / non-compliances
+- Recent activity
+- Projects by stage/status
+- Quick stats such as total inspections completed, overdue actions, reports pending, compliance issues flagged
+
+3. Project management
+- Create and manage projects
+- Fields such as:
+  - Project name
+  - Site address
+  - Client / owner
+  - Builder / contractor
+  - Designer / consultant
+  - Development application / reference numbers
+  - Building classification
+  - Project type
+  - Stage/status
+  - Assigned certifier / inspector
+  - Key dates
+- Project timeline and activity log
+- Ability to archive projects
+
+4. Document management
+- Upload and organise project documents
+- Categories such as:
+  - Plans
+  - Engineering
+  - Specifications
+  - Certificates
+  - Photos
+  - Correspondence
+  - Reports
+- Version control / document revisions
+- Search and filter documents
+- Preview uploaded files
+- Tag documents by discipline and inspection stage
+
+5. Inspection scheduling and management
+- Create inspection bookings linked to projects
+- Inspection types such as:
+  - Footings
+  - Slab
+  - Frame
+  - Final
+  - Fire safety
+  - Swimming pool barrier
+  - Special inspections
+- Calendar / schedule view
+- Inspection status:
+  - Scheduled
+  - In progress
+  - Completed
+  - Follow-up required
+  - Cancelled
+- Inspection duration, inspector assigned, notes, reminders
+
+6. Inspection checklists
+- Dynamic checklist templates tailored for building inspections
+- Checklist items should support:
+  - Pass / Fail / N/A
+  - Notes
+  - Risk severity
+  - Code / clause reference
+  - Photo attachment
+- Ability to save custom checklist templates
+- Checklist templates by inspection type
+- Include example templates for residential building inspections
+
+7. Inspection results and issue tracking
+- Capture findings during inspection
+- Record non-compliances / defects / observations
+- Each issue should include:
+  - Title
+  - Description
+  - Severity
+  - Location / room / area
+  - Code reference / compliance reference
+  - Responsible party
+  - Due date
+  - Status
+- Ability to convert findings into action items
+- Track issue resolution and close-out workflow
+
+8. Photo capture, markup and annotation
+- Upload inspection photos
+- Ability to annotate / mark up images with arrows, circles, highlights, text notes
+- Link photos to checklist items or issues
+- Before/after photo comparison for rectification follow-up
+- Gallery view by project and inspection
+
+9. Notes and field observations
+- Freeform inspector notes
+- Voice-to-text note option placeholder
+- Site diary / inspection journal
+- Time-stamped entries
+- Mention/tag internal team members
+
+10. Report generation
+- Generate polished inspection reports as PDF-style previews
+- Include:
+  - Project details
+  - Inspection date
+  - Inspector details
+  - Checklist outcomes
+  - Photos and markups
+  - Non-compliances / defects
+  - Recommendations / required actions
+  - Sign-off section
+- Branded InspectProof reports
+- Export and download functionality
+- Different report types such as summary report, detailed report, defect notice, follow-up report
+
+11. Compliance references
+- Allow adding code/clause references to issues and checklist items
+- Include placeholders for NCC / standards / local requirements references
+- Make the system structured so future compliance intelligence can be integrated later
+
+12. Search, filtering and sorting
+- Global search across projects, inspections, documents, and issues
+- Filters by status, inspector, client, address, date, project type, severity
+
+13. Notifications and reminders
+- Upcoming inspection reminders
+- Overdue issue reminders
+- Report pending alerts
+- Dashboard notifications panel
+
+14. Client / stakeholder communication placeholders
+- Ability to log communications
+- Email/share report action placeholders
+- Client portal concept placeholder for future development
+
+15. Analytics and insights
+- Trends for defects/non-compliances
+- Most common failed checklist items
+- Average time to close issues
+- Inspection volumes by month
+- Project compliance health summary
+
+16. Settings / admin
+- Manage users
+- Manage checklist templates
+- Manage inspection types
+- Manage branding/settings
+- Manage status labels and workflows
+
+Suggested extra features that would add value:
+- Mobile inspection mode optimised for tablets
+- Offline mode placeholder / draft saving
+- Digital signatures for inspector sign-off
+- Geotagged inspection entries placeholder
+- Weather and time stamp placeholders
+- Audit trail for edits
+- Recurring inspections
+- Project stage gates / approval milestones
+- Essential safety or compliance schedule placeholder
+- Integration-ready architecture for future AI compliance assistant
+
+Data model guidance:
+Create a realistic schema for:
+- Users
+- Projects
+- Contacts / stakeholders
+- Documents
+- Inspections
+- Checklist templates
+- Checklist items
+- Inspection results
+- Issues / defects
+- Photos / annotations
+- Notes
+- Reports
+- Notifications
+- Activity logs
+
+Technical requirements:
+- Build with a modern stack suitable for Replit
+- Use a clean component architecture
+- Strong responsive design
+- Include sample/mock data
+- Create polished navigation with sidebar and top bar
+- Include reusable UI components
+- Add proper empty states, loading states, and validation
+- Seed example projects and inspections so the app feels real immediately
+
+Suggested pages/screens:
+- Login
+- Dashboard
+- Projects list
+- Project detail page
+- Documents page
+- Inspections calendar/list
+- Inspection detail / field entry page
+- Checklist builder
+- Issues / defects tracker
+- Reports page
+- Analytics page
+- Settings/admin
+
+Please generate:
+1. The full app structure
+2. Clean UI
+3. Demo data
+4. Core workflows functioning end-to-end
+5. A professional brand identity for InspectProof using the supplied colours
+
+The app should feel like a serious SaaS platform for certifiers, not a generic checklist tool.

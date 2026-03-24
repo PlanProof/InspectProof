@@ -1,8 +1,30 @@
-# Workspace
+# InspectProof — Australian Building Certification Platform
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+InspectProof is a production-style mobile app for Australian building certifiers and surveyors. Built as a pnpm workspace monorepo with Expo (mobile), Express 5 backend, PostgreSQL + Drizzle ORM.
+
+**Login credentials:** `admin@inspectproof.com.au` / `password123`
+
+## Features
+
+- **Authentication** — Token-based login with persistent storage
+- **Dashboard** — Live stats (active projects, inspections, open issues, critical issues), upcoming inspections, recent activity, projects by stage
+- **Projects** — List with search and status filters, detail view with inspections, issues, and project metadata (council approval, PCA ref, contract value, building classification)
+- **Inspections** — List grouped by upcoming/past with type filters, detail view with checklist items by category (pass/fail/N/A), result summary progress bar
+- **Issues/Defects** — Dual filter by severity (Critical/High/Medium/Low) and status, overdue detection, NCC code references, actions panel
+- **More Tab** — Profile card, quick access menu (Analytics, Reports, Documents, Checklists), NCC compliance reference grid (NCC 2022 Part A-H, AS standards)
+- **Analytics** — Overview stats, issues by severity chart, inspections by type bar chart, projects by stage grid, NCC compliance summary
+
+## Color Palette
+
+- Primary: `#0B1933` (Maastricht Blue)
+- Secondary: `#466DB5` (BlueYonder)
+- Accent: `#C5D92D` (Pear)
+
+## Seed Data
+
+6 Australian projects (Sydney, Melbourne, Brisbane, Perth, Adelaide), 8 inspections, 5 users, 7 open issues (3 critical), checklist results, documents, notes, reports, activity logs
 
 ## Stack
 
