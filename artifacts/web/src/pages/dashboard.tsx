@@ -6,7 +6,7 @@ import {
   FolderOpen, CheckSquare, AlertTriangle, FileText, ArrowRight,
   ChevronLeft, ChevronRight, Calendar, Clock, MapPin, User, CalendarDays,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, parseISO,
@@ -48,6 +48,7 @@ function InspectorAvatar({ name }: { name: string }) {
 
 // ── Day Run Sheet ─────────────────────────────────────────────────────────────
 function DayRunSheet({ day, inspections }: { day: Date; inspections: any[] }) {
+  const [, navigate] = useLocation();
   const dayInspections = inspections
     .filter(i => { try { return isSameDay(parseISO(i.scheduledDate), day); } catch { return false; } })
     .sort((a, b) => {
@@ -98,7 +99,11 @@ function DayRunSheet({ day, inspections }: { day: Date; inspections: any[] }) {
               };
               const statusBadge = statusColors[insp.status] ?? "bg-muted text-muted-foreground border-muted/60";
               return (
-                <div key={insp.id} className={`px-4 py-3.5 border-l-4 ${c.border} bg-card hover:bg-muted/20 transition-colors`}>
+                <button
+                  key={insp.id}
+                  onClick={() => navigate(`/inspections/${insp.id}`)}
+                  className={`w-full text-left px-4 py-3.5 border-l-4 ${c.border} bg-card hover:bg-muted/30 transition-colors cursor-pointer`}
+                >
                   <div className="flex items-start justify-between gap-2 mb-1.5">
                     {/* Time */}
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -141,7 +146,7 @@ function DayRunSheet({ day, inspections }: { day: Date; inspections: any[] }) {
                       </div>
                     )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>

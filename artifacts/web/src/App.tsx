@@ -9,6 +9,7 @@ import Dashboard from "@/pages/dashboard";
 import Projects from "@/pages/projects";
 import ProjectDetail from "@/pages/project-detail";
 import Inspections from "@/pages/inspections";
+import InspectionDetail from "@/pages/inspection-detail";
 import Analytics from "@/pages/analytics";
 import Templates from "@/pages/templates";
 import Inspectors from "@/pages/inspectors";
@@ -57,6 +58,7 @@ function Router() {
       <Route path="/projects" component={Projects} />
       <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/inspections" component={Inspections} />
+      <Route path="/inspections/:id" component={InspectionDetail} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/templates" component={Templates} />
       <Route path="/inspectors" component={Inspectors} />

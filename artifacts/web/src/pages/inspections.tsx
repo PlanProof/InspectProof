@@ -4,9 +4,11 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge } from "@/components/ui";
 import { Search, Calendar as CalendarIcon, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { useLocation } from "wouter";
 
 export default function Inspections() {
   const [search, setSearch] = useState("");
+  const [, navigate] = useLocation();
   const { data: inspections, isLoading } = useListInspections({});
 
   const filtered = inspections?.filter(i => 
@@ -57,8 +59,12 @@ export default function Inspections() {
             </TableHeader>
             <TableBody>
               {filtered?.map((insp) => (
-                <TableRow key={insp.id} className="cursor-pointer hover:bg-muted/50">
-                  <TableCell className="font-medium text-sidebar">{insp.projectName}</TableCell>
+                <TableRow
+                  key={insp.id}
+                  className="cursor-pointer hover:bg-muted/50 group"
+                  onClick={() => navigate(`/inspections/${insp.id}`)}
+                >
+                  <TableCell className="font-medium text-sidebar group-hover:text-secondary transition-colors">{insp.projectName}</TableCell>
                   <TableCell className="capitalize">{insp.inspectionType.replace('_', ' ')}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5 text-sm">

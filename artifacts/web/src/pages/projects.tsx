@@ -4,10 +4,11 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, Label } from "@/components/ui";
 import { Search, Plus, Building } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 export default function Projects() {
   const [search, setSearch] = useState("");
+  const [, navigate] = useLocation();
   const { data: projects, isLoading, refetch } = useListProjects({});
   const [isNewOpen, setIsNewOpen] = useState(false);
 
@@ -57,9 +58,13 @@ export default function Projects() {
             </TableHeader>
             <TableBody>
               {filtered?.map((project) => (
-                <TableRow key={project.id} className="group cursor-pointer">
+                <TableRow
+                  key={project.id}
+                  className="group cursor-pointer hover:bg-muted/50"
+                  onClick={() => navigate(`/projects/${project.id}`)}
+                >
                   <TableCell>
-                    <Link href={`/projects/${project.id}`} className="block">
+                    <Link href={`/projects/${project.id}`} className="block" onClick={e => e.stopPropagation()}>
                       <div className="font-semibold text-sidebar group-hover:text-secondary transition-colors">
                         {project.name}
                       </div>

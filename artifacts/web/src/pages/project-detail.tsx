@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
   Button, Badge, Input, Label, Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -232,6 +232,7 @@ function StatusBadge({ status }: { status: string }) {
 function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () => void }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [, navigate] = useLocation();
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -357,14 +358,18 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
           ) : (
             <div className="space-y-2">
               {project.inspections.slice(0, 4).map(i => (
-                <div key={i.id} className="flex items-center gap-2 text-sm">
+                <button
+                  key={i.id}
+                  onClick={() => navigate(`/inspections/${i.id}`)}
+                  className="w-full flex items-center gap-2 text-sm rounded-lg p-1.5 -mx-1.5 hover:bg-muted/50 transition-colors group text-left"
+                >
                   {inspectionStatusIcon(i.status)}
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sidebar capitalize truncate">{i.inspectionType.replace("_", " ")}</div>
+                    <div className="font-medium text-sidebar capitalize truncate group-hover:text-secondary transition-colors">{i.inspectionType.replace("_", " ")}</div>
                     <div className="text-xs text-muted-foreground">{formatDate(i.scheduledDate)}</div>
                   </div>
                   {inspectionStatusBadge(i.status)}
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -758,6 +763,7 @@ function FileTypeIcon({ mimeType }: { mimeType?: string }) {
 
 function InspectionsTab({ project }: { project: Project }) {
   const inspections = project.inspections || [];
+  const [, navigate] = useLocation();
 
   return (
     <div className="space-y-4">
@@ -796,12 +802,16 @@ function InspectionsTab({ project }: { project: Project }) {
             </TableHeader>
             <TableBody>
               {inspections.map((insp, idx) => (
-                <TableRow key={insp.id} className="group">
+                <TableRow
+                  key={insp.id}
+                  className="group cursor-pointer hover:bg-muted/50"
+                  onClick={() => navigate(`/inspections/${insp.id}`)}
+                >
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {inspectionStatusIcon(insp.status)}
                       <div>
-                        <div className="font-medium text-sm text-sidebar capitalize">
+                        <div className="font-medium text-sm text-sidebar capitalize group-hover:text-secondary transition-colors">
                           {insp.inspectionType.replace(/_/g, " ")}
                         </div>
                         <div className="text-xs text-muted-foreground">#{idx + 1}</div>
