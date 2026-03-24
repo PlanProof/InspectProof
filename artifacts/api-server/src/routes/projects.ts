@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, sql } from "drizzle-orm";
-import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable } from "@workspace/db";
+import { eq, ilike, or, sql, and } from "drizzle-orm";
+import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -30,6 +30,26 @@ function formatProject(p: any, totalInspections = 0, openIssues = 0) {
     openIssues,
     createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
     updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : p.updatedAt,
+  };
+}
+
+function formatDoc(d: any) {
+  return {
+    id: d.id,
+    projectId: d.projectId,
+    name: d.name,
+    category: d.category,
+    fileName: d.fileName,
+    fileSize: d.fileSize,
+    mimeType: d.mimeType,
+    version: d.version,
+    tags: d.tags || [],
+    folder: d.folder || "General",
+    fileUrl: d.fileUrl,
+    includedInInspection: d.includedInInspection ?? true,
+    uploadedById: d.uploadedById,
+    createdAt: d.createdAt instanceof Date ? d.createdAt.toISOString() : d.createdAt,
+    updatedAt: d.updatedAt instanceof Date ? d.updatedAt.toISOString() : d.updatedAt,
   };
 }
 
@@ -167,21 +187,6 @@ router.get("/:id", async (req, res) => {
       updatedAt: i.updatedAt instanceof Date ? i.updatedAt.toISOString() : i.updatedAt,
     });
 
-    const formatDoc = (d: any) => ({
-      id: d.id,
-      projectId: d.projectId,
-      name: d.name,
-      category: d.category,
-      fileName: d.fileName,
-      fileSize: d.fileSize,
-      mimeType: d.mimeType,
-      version: d.version,
-      tags: d.tags || [],
-      uploadedById: d.uploadedById,
-      uploadedByName: "Inspector",
-      createdAt: d.createdAt instanceof Date ? d.createdAt.toISOString() : d.createdAt,
-    });
-
     res.json({
       ...formatProject(project, inspections.length, openIssues),
       inspections: inspections.map(formatInspection),
@@ -256,6 +261,166 @@ router.get("/:id/activity", async (req, res) => {
     })));
   } catch (err) {
     req.log.error({ err }, "Get project activity error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── Documents ────────────────────────────────────────────────────────────────
+
+router.get("/:id/documents", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const docs = await db.select().from(documentsTable)
+      .where(eq(documentsTable.projectId, id))
+      .orderBy(sql`${documentsTable.folder} ASC, ${documentsTable.name} ASC`);
+    res.json(docs.map(formatDoc));
+  } catch (err) {
+    req.log.error({ err }, "List documents error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.post("/:id/documents", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { name, fileName, fileSize, mimeType, fileUrl, folder, includedInInspection } = req.body;
+    const [doc] = await db.insert(documentsTable).values({
+      projectId: id,
+      name: name || fileName,
+      category: "other",
+      fileName: fileName,
+      fileSize: fileSize || null,
+      mimeType: mimeType || null,
+      fileUrl: fileUrl || null,
+      folder: folder || "General",
+      includedInInspection: includedInInspection ?? true,
+      uploadedById: 1,
+    }).returning();
+    res.status(201).json(formatDoc(doc));
+  } catch (err) {
+    req.log.error({ err }, "Create document error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.patch("/:id/documents/:docId", async (req, res) => {
+  try {
+    const docId = parseInt(req.params.docId);
+    const updates: any = { updatedAt: new Date() };
+    if (req.body.name !== undefined) updates.name = req.body.name;
+    if (req.body.folder !== undefined) updates.folder = req.body.folder;
+    if (req.body.includedInInspection !== undefined) updates.includedInInspection = req.body.includedInInspection;
+
+    const [doc] = await db.update(documentsTable)
+      .set(updates)
+      .where(eq(documentsTable.id, docId))
+      .returning();
+
+    if (!doc) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(formatDoc(doc));
+  } catch (err) {
+    req.log.error({ err }, "Update document error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.delete("/:id/documents/:docId", async (req, res) => {
+  try {
+    const docId = parseInt(req.params.docId);
+    await db.delete(documentsTable).where(eq(documentsTable.id, docId));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Delete document error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.post("/:id/documents/folders", async (req, res) => {
+  try {
+    const { folderName } = req.body;
+    if (!folderName?.trim()) {
+      res.status(400).json({ error: "folder_name_required" });
+      return;
+    }
+    res.json({ folderName: folderName.trim() });
+  } catch (err) {
+    req.log.error({ err }, "Create folder error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.patch("/:id/documents/folders/:folderName", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const oldName = decodeURIComponent(req.params.folderName);
+    const { newName } = req.body;
+    if (!newName?.trim()) {
+      res.status(400).json({ error: "new_name_required" });
+      return;
+    }
+    await db.update(documentsTable)
+      .set({ folder: newName.trim(), updatedAt: new Date() })
+      .where(and(eq(documentsTable.projectId, id), eq(documentsTable.folder, oldName)));
+    res.json({ success: true, folderName: newName.trim() });
+  } catch (err) {
+    req.log.error({ err }, "Rename folder error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── Inspection Types ─────────────────────────────────────────────────────────
+
+router.get("/:id/inspection-types", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const all = await db.select().from(checklistTemplatesTable)
+      .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.name} ASC`);
+
+    const selected = await db.select().from(projectInspectionTypesTable)
+      .where(eq(projectInspectionTypesTable.projectId, id));
+
+    const selectedIds = new Set(selected.filter(s => s.isSelected).map(s => s.templateId));
+
+    res.json(all.map(t => ({
+      templateId: t.id,
+      name: t.name,
+      inspectionType: t.inspectionType,
+      folder: t.folder,
+      itemCount: t.itemCount,
+      isSelected: selectedIds.has(t.id),
+    })));
+  } catch (err) {
+    req.log.error({ err }, "Get inspection types error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.put("/:id/inspection-types", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { selectedTemplateIds } = req.body as { selectedTemplateIds: number[] };
+
+    await db.delete(projectInspectionTypesTable)
+      .where(eq(projectInspectionTypesTable.projectId, id));
+
+    if (selectedTemplateIds?.length) {
+      await db.insert(projectInspectionTypesTable).values(
+        selectedTemplateIds.map((tid, i) => ({
+          projectId: id,
+          inspectionType: "template",
+          isSelected: true,
+          templateId: tid,
+          sortOrder: i,
+        }))
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Update inspection types error");
     res.status(500).json({ error: "internal_error" });
   }
 });

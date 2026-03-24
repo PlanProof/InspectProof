@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import Projects from "@/pages/projects";
+import ProjectDetail from "@/pages/project-detail";
 import Inspections from "@/pages/inspections";
 import Issues from "@/pages/issues";
 import Analytics from "@/pages/analytics";
@@ -55,6 +56,7 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/projects" component={Projects} />
+      <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/inspections" component={Inspections} />
       <Route path="/issues" component={Issues} />
       <Route path="/analytics" component={Analytics} />
