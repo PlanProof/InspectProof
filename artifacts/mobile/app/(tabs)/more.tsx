@@ -6,12 +6,15 @@ import {
   StyleSheet,
   Pressable,
   Platform,
+  Image,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+
+const logoImage = require("@/assets/images/logo.png");
 
 const WEB_TOP = Platform.OS === "web" ? 67 : 0;
 
@@ -181,10 +184,7 @@ export default function MoreScreen() {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <View style={styles.logoRow}>
-          <Feather name="shield" size={14} color={Colors.secondary} />
-          <Text style={styles.footerBrand}>InspectProof</Text>
-        </View>
+        <Image source={logoImage} style={styles.footerLogo} resizeMode="contain" />
         <Text style={styles.footerVersion}>Version 1.0.0 · Australian Building Certification Platform</Text>
         <Text style={styles.footerCompliance}>NCC 2022 · BCA · AS Standards Compatible</Text>
       </View>
@@ -330,18 +330,13 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignItems: "center",
-    gap: 4,
+    gap: 6,
     padding: 16,
   },
-  logoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  footerBrand: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    color: Colors.textSecondary,
+  footerLogo: {
+    width: 44,
+    height: 44,
+    marginBottom: 2,
   },
   footerVersion: {
     fontSize: 12,

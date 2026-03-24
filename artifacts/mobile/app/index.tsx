@@ -9,12 +9,15 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Image,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+
+const logoImage = require("@/assets/images/logo.png");
 
 export default function LoginScreen() {
   const { user, isLoading, login } = useAuth();
@@ -70,11 +73,7 @@ export default function LoginScreen() {
       >
         {/* Logo & Brand */}
         <View style={styles.brand}>
-          <View style={styles.logoContainer}>
-            <View style={styles.logoIcon}>
-              <Feather name="shield" size={28} color={Colors.accent} />
-            </View>
-          </View>
+          <Image source={logoImage} style={styles.logoImage} resizeMode="contain" />
           <Text style={styles.brandName}>InspectProof</Text>
           <Text style={styles.brandTagline}>Building Inspection & Certification Platform</Text>
         </View>
@@ -183,22 +182,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 20,
   },
-  logoContainer: {
-    marginBottom: 8,
-  },
-  logoIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: Colors.primary,
-    borderWidth: 2,
-    borderColor: Colors.secondary + "60",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: Colors.accent,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
+  logoImage: {
+    width: 90,
+    height: 90,
+    marginBottom: 4,
   },
   brandName: {
     fontSize: 32,
