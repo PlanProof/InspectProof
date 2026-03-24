@@ -7,7 +7,9 @@ export const checklistTemplatesTable = pgTable("checklist_templates", {
   name: text("name").notNull(),
   inspectionType: text("inspection_type").notNull(),
   description: text("description"),
-  folder: text("folder").notNull().default("Dwelling"),
+  folder: text("folder").notNull().default("Class 1a"),
+  discipline: text("discipline").notNull().default("Building Surveyor"),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

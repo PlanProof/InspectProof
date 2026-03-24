@@ -47,6 +47,7 @@ export * from "./inspectionStatus";
 export * from "./issue";
 export * from "./issueSeverity";
 export * from "./issueStatus";
+export * from "./listChecklistTemplatesParams";
 export * from "./listDocumentsParams";
 export * from "./listInspectionsParams";
 export * from "./listIssuesParams";

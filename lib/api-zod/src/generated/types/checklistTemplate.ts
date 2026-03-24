@@ -12,6 +12,8 @@ export interface ChecklistTemplate {
   inspectionType: string;
   description?: string | null;
   folder: string;
+  discipline: string;
+  sortOrder: number;
   itemCount: number;
   createdAt: string;
 }

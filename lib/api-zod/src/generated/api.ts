@@ -709,12 +709,18 @@ export const SaveChecklistResultsResponse = zod.object({
 /**
  * @summary List checklist templates
  */
+export const ListChecklistTemplatesQueryParams = zod.object({
+  discipline: zod.coerce.string().optional(),
+});
+
 export const ListChecklistTemplatesResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
   inspectionType: zod.string(),
   description: zod.string().nullish(),
   folder: zod.string(),
+  discipline: zod.string(),
+  sortOrder: zod.number(),
   itemCount: zod.number(),
   createdAt: zod.string(),
 });
@@ -755,6 +761,8 @@ export const GetChecklistTemplateResponse = zod
     inspectionType: zod.string(),
     description: zod.string().nullish(),
     folder: zod.string(),
+    discipline: zod.string(),
+    sortOrder: zod.number(),
     itemCount: zod.number(),
     createdAt: zod.string(),
   })

@@ -380,6 +380,12 @@ paths:
       operationId: listChecklistTemplates
       tags: [checklists]
       summary: List checklist templates
+      parameters:
+        - name: discipline
+          in: query
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: List of templates
@@ -1217,6 +1223,10 @@ components:
           nullable: true
         folder:
           type: string
+        discipline:
+          type: string
+        sortOrder:
+          type: integer
         itemCount:
           type: integer
         createdAt:
@@ -1226,6 +1236,8 @@ components:
         - name
         - inspectionType
         - folder
+        - discipline
+        - sortOrder
         - itemCount
         - createdAt
 

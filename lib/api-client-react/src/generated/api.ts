@@ -37,6 +37,7 @@ import type {
   Inspection,
   InspectionDetail,
   Issue,
+  ListChecklistTemplatesParams,
   ListDocumentsParams,
   ListInspectionsParams,
   ListIssuesParams,
@@ -1500,42 +1501,66 @@ export const useSaveChecklistResults = <
 /**
  * @summary List checklist templates
  */
-export const getListChecklistTemplatesUrl = () => {
-  return `/api/checklist-templates`;
+export const getListChecklistTemplatesUrl = (
+  params?: ListChecklistTemplatesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/checklist-templates?${stringifiedParams}`
+    : `/api/checklist-templates`;
 };
 
 export const listChecklistTemplates = async (
+  params?: ListChecklistTemplatesParams,
   options?: RequestInit,
 ): Promise<ChecklistTemplate[]> => {
-  return customFetch<ChecklistTemplate[]>(getListChecklistTemplatesUrl(), {
-    ...options,
-    method: "GET",
-  });
+  return customFetch<ChecklistTemplate[]>(
+    getListChecklistTemplatesUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
-export const getListChecklistTemplatesQueryKey = () => {
-  return [`/api/checklist-templates`] as const;
+export const getListChecklistTemplatesQueryKey = (
+  params?: ListChecklistTemplatesParams,
+) => {
+  return [`/api/checklist-templates`, ...(params ? [params] : [])] as const;
 };
 
 export const getListChecklistTemplatesQueryOptions = <
   TData = Awaited<ReturnType<typeof listChecklistTemplates>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listChecklistTemplates>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListChecklistTemplatesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listChecklistTemplates>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
   const queryKey =
-    queryOptions?.queryKey ?? getListChecklistTemplatesQueryKey();
+    queryOptions?.queryKey ?? getListChecklistTemplatesQueryKey(params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof listChecklistTemplates>>
-  > = ({ signal }) => listChecklistTemplates({ signal, ...requestOptions });
+  > = ({ signal }) =>
+    listChecklistTemplates(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listChecklistTemplates>>,
@@ -1556,15 +1581,18 @@ export type ListChecklistTemplatesQueryError = ErrorType<unknown>;
 export function useListChecklistTemplates<
   TData = Awaited<ReturnType<typeof listChecklistTemplates>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listChecklistTemplates>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListChecklistTemplatesQueryOptions(options);
+>(
+  params?: ListChecklistTemplatesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listChecklistTemplates>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListChecklistTemplatesQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

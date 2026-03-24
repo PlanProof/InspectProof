@@ -440,6 +440,8 @@ export interface ChecklistTemplate {
   inspectionType: string;
   description?: string | null;
   folder: string;
+  discipline: string;
+  sortOrder: number;
   itemCount: number;
   createdAt: string;
 }
@@ -742,6 +744,10 @@ export type ListInspectionsParams = {
   inspectorId?: number;
   fromDate?: string;
   toDate?: string;
+};
+
+export type ListChecklistTemplatesParams = {
+  discipline?: string;
 };
 
 export type ListIssuesParams = {
