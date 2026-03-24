@@ -714,6 +714,7 @@ export const ListChecklistTemplatesResponseItem = zod.object({
   name: zod.string(),
   inspectionType: zod.string(),
   description: zod.string().nullish(),
+  folder: zod.string(),
   itemCount: zod.number(),
   createdAt: zod.string(),
 });
@@ -753,6 +754,7 @@ export const GetChecklistTemplateResponse = zod
     name: zod.string(),
     inspectionType: zod.string(),
     description: zod.string().nullish(),
+    folder: zod.string(),
     itemCount: zod.number(),
     createdAt: zod.string(),
   })

@@ -439,6 +439,7 @@ export interface ChecklistTemplate {
   name: string;
   inspectionType: string;
   description?: string | null;
+  folder: string;
   itemCount: number;
   createdAt: string;
 }

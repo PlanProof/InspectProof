@@ -1,24 +1,26 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
-import { 
-  LayoutDashboard, 
-  FolderOpen, 
-  CheckSquare, 
-  AlertTriangle, 
-  BarChart3, 
-  BookOpen, 
+import {
+  LayoutDashboard,
+  FolderOpen,
+  CheckSquare,
+  AlertTriangle,
+  BarChart3,
+  BookOpen,
+  ClipboardList,
   Settings,
   LogOut
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Projects", href: "/projects", icon: FolderOpen },
+  { name: "Dashboard",   href: "/dashboard",   icon: LayoutDashboard },
+  { name: "Projects",    href: "/projects",    icon: FolderOpen },
   { name: "Inspections", href: "/inspections", icon: CheckSquare },
-  { name: "Issues", href: "/issues", icon: AlertTriangle },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
-  { name: "Compliance", href: "/compliance", icon: BookOpen },
+  { name: "Issues",      href: "/issues",      icon: AlertTriangle },
+  { name: "Analytics",   href: "/analytics",   icon: BarChart3 },
+  { name: "Templates",   href: "/templates",   icon: ClipboardList },
+  { name: "Compliance",  href: "/compliance",  icon: BookOpen },
 ];
 
 export function Sidebar() {
@@ -30,19 +32,19 @@ export function Sidebar() {
       <div className="flex h-16 shrink-0 items-center px-6 border-b border-white/10">
         <img src="/logo.png" alt="InspectProof" className="h-8 w-auto" />
       </div>
-      
+
       <div className="flex flex-1 flex-col overflow-y-auto pt-6 px-4 pb-4">
         <nav className="flex-1 space-y-1">
           {navigation.map((item) => {
             const isActive = location === item.href || location.startsWith(`${item.href}/`);
             return (
-              <Link 
-                key={item.name} 
+              <Link
+                key={item.name}
                 href={item.href}
                 className={cn(
                   "group flex items-center rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                  isActive 
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-md" 
+                  isActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-md"
                     : "text-sidebar-foreground/70 hover:bg-white/5 hover:text-white"
                 )}
               >
@@ -61,12 +63,12 @@ export function Sidebar() {
       </div>
 
       <div className="border-t border-white/10 p-4 space-y-1">
-        <Link 
+        <Link
           href="/settings"
           className={cn(
             "group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
-            location === "/settings" 
-              ? "bg-sidebar-accent text-sidebar-accent-foreground" 
+            location === "/settings"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : "text-sidebar-foreground/70 hover:bg-white/5 hover:text-white"
           )}
         >

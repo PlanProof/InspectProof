@@ -17,6 +17,7 @@ router.get("/", async (req, res) => {
         name: t.name,
         inspectionType: t.inspectionType,
         description: t.description,
+        folder: t.folder,
         itemCount: countRow.count,
         createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : t.createdAt,
       };
@@ -31,9 +32,9 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { name, inspectionType, description, items } = req.body;
+    const { name, inspectionType, description, folder, items } = req.body;
     const [template] = await db.insert(checklistTemplatesTable).values({
-      name, inspectionType, description,
+      name, inspectionType, description, folder: folder ?? "Dwelling",
     }).returning();
 
     if (items?.length > 0) {
@@ -83,6 +84,7 @@ router.get("/:id", async (req, res) => {
       name: template.name,
       inspectionType: template.inspectionType,
       description: template.description,
+      folder: template.folder,
       itemCount: items.length,
       createdAt: template.createdAt instanceof Date ? template.createdAt.toISOString() : template.createdAt,
       items: items.map(i => ({

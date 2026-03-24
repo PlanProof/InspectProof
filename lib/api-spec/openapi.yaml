@@ -1215,6 +1215,8 @@ components:
         description:
           type: string
           nullable: true
+        folder:
+          type: string
         itemCount:
           type: integer
         createdAt:
@@ -1223,6 +1225,7 @@ components:
         - id
         - name
         - inspectionType
+        - folder
         - itemCount
         - createdAt
 
