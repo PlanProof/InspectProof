@@ -107,6 +107,7 @@ function TemplateDetail({
   const [templateDesc, setTemplateDesc] = useState("");
   const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [newSectionName, setNewSectionName] = useState("");
   const [addingSectionFor, setAddingSectionFor] = useState<string | null>(null); // which category we're adding item to
   const [newItem, setNewItem] = useState<Partial<LocalItem>>({});
@@ -407,64 +408,96 @@ function TemplateDetail({
           </div>
         )}
 
-        {uniqueCategories.map(category => (
-          <div key={category}>
-            {/* Category header */}
-            <div className="flex items-center gap-2 mb-3">
-              <span className="flex-1 border-t border-muted/50" />
-              {editMode ? (
-                <input
-                  value={category}
-                  onChange={e => {
-                    const newCat = e.target.value;
-                    setLocalItems(prev => prev.map(i => i.category === category ? { ...i, category: newCat, dirty: true } : i));
-                  }}
-                  className="text-xs font-bold uppercase tracking-widest text-muted-foreground bg-transparent border-b border-secondary outline-none text-center min-w-20"
-                />
-              ) : (
-                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{category}</h3>
-              )}
-              <span className="flex-1 border-t border-muted/50" />
-              {editMode && (
-                <button
-                  onClick={() => { setAddingSectionFor(category); setNewItem({}); }}
-                  className="text-xs text-secondary hover:text-secondary/80 flex items-center gap-1 font-medium"
-                >
-                  <Plus className="h-3 w-3" /> Add Item
-                </button>
-              )}
-            </div>
+        {uniqueCategories.map(category => {
+          const isCollapsed = collapsedSections.has(category);
+          const toggleCollapse = () => setCollapsedSections(prev => {
+            const next = new Set(prev);
+            next.has(category) ? next.delete(category) : next.add(category);
+            return next;
+          });
+          const itemCount = (grouped[category] ?? []).length;
 
-            {/* Items */}
-            <div className="space-y-2">
-              {(grouped[category] ?? []).map((item: any, idx: number) => (
-                editMode
-                  ? <EditableItem
-                      key={item.tempId}
-                      item={item}
-                      idx={idx}
-                      total={(grouped[category] ?? []).length}
-                      onChange={patch => updateItem(item.tempId, patch)}
-                      onDelete={() => deleteItem(item.tempId)}
-                      onMoveUp={() => moveItem(item.tempId, -1)}
-                      onMoveDown={() => moveItem(item.tempId, 1)}
+          return (
+            <div key={category}>
+              {/* Category header */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="flex-1 border-t border-muted/50" />
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={toggleCollapse}
+                    className="flex items-center gap-1.5 group"
+                    title={isCollapsed ? "Expand section" : "Collapse section"}
+                  >
+                    {isCollapsed
+                      ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-sidebar transition-colors" />
+                      : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-sidebar transition-colors" />
+                    }
+                    {editMode ? (
+                      <input
+                        value={category}
+                        onChange={e => {
+                          const newCat = e.target.value;
+                          setLocalItems(prev => prev.map(i => i.category === category ? { ...i, category: newCat, dirty: true } : i));
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        className="text-xs font-bold uppercase tracking-widest text-muted-foreground bg-transparent border-b border-secondary outline-none text-center min-w-20"
+                      />
+                    ) : (
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground group-hover:text-sidebar transition-colors">
+                        {category}
+                      </h3>
+                    )}
+                  </button>
+                  {isCollapsed && (
+                    <span className="text-xs text-muted-foreground/60 ml-1">({itemCount})</span>
+                  )}
+                </div>
+                <span className="flex-1 border-t border-muted/50" />
+                {editMode && (
+                  <button
+                    onClick={() => { setAddingSectionFor(category); setNewItem({}); }}
+                    className="text-xs text-secondary hover:text-secondary/80 flex items-center gap-1 font-medium"
+                  >
+                    <Plus className="h-3 w-3" /> Add Item
+                  </button>
+                )}
+              </div>
+
+              {/* Items — hidden when collapsed */}
+              {!isCollapsed && (
+                <>
+                  <div className="space-y-2">
+                    {(grouped[category] ?? []).map((item: any, idx: number) => (
+                      editMode
+                        ? <EditableItem
+                            key={item.tempId}
+                            item={item}
+                            idx={idx}
+                            total={(grouped[category] ?? []).length}
+                            onChange={patch => updateItem(item.tempId, patch)}
+                            onDelete={() => deleteItem(item.tempId)}
+                            onMoveUp={() => moveItem(item.tempId, -1)}
+                            onMoveDown={() => moveItem(item.tempId, 1)}
+                          />
+                        : <ReadItem key={item.id ?? `idx-${idx}`} item={item} idx={idx} />
+                    ))}
+                  </div>
+
+                  {/* Inline add item form for this category */}
+                  {editMode && addingSectionFor === category && (
+                    <AddItemForm
+                      category={category}
+                      value={newItem}
+                      onChange={setNewItem}
+                      onAdd={addItemToCategory}
+                      onCancel={() => { setAddingSectionFor(null); setNewItem({}); }}
                     />
-                  : <ReadItem key={item.id ?? `idx-${idx}`} item={item} idx={idx} />
-              ))}
+                  )}
+                </>
+              )}
             </div>
-
-            {/* Inline add item form for this category */}
-            {editMode && addingSectionFor === category && (
-              <AddItemForm
-                category={category}
-                value={newItem}
-                onChange={setNewItem}
-                onAdd={addItemToCategory}
-                onCancel={() => { setAddingSectionFor(null); setNewItem({}); }}
-              />
-            )}
-          </div>
-        ))}
+          );
+        })}
 
         {/* Add section / Add item to new category */}
         {editMode && (
