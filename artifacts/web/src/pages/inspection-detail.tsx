@@ -5,7 +5,7 @@ import { Button, Badge } from "@/components/ui";
 import {
   ArrowLeft, Calendar, Clock, User, CloudSun, ClipboardList,
   CheckCircle2, XCircle, MinusCircle, AlertTriangle, MessageSquare,
-  Building, Loader2, ChevronRight, FileText
+  Building, Loader2, ChevronRight, FileText, Link2, Paperclip
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -112,12 +112,25 @@ export default function InspectionDetail() {
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [docsByItem, setDocsByItem] = useState<Record<number, { id: number; name: string; mimeType?: string }[]>>({});
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
       const data = await apiFetch(`/api/inspections/${inspId}`);
       setInspection(data);
+      // Load documents linked to checklist items for this project
+      if (data.projectId) {
+        const docsWithLinks = await apiFetch(`/api/projects/${data.projectId}/documents-with-links`).catch(() => []);
+        const byItem: Record<number, { id: number; name: string; mimeType?: string }[]> = {};
+        for (const doc of docsWithLinks) {
+          for (const itemId of (doc.linkedItemIds ?? [])) {
+            if (!byItem[itemId]) byItem[itemId] = [];
+            byItem[itemId].push({ id: doc.id, name: doc.name, mimeType: doc.mimeType });
+          }
+        }
+        setDocsByItem(byItem);
+      }
     } catch {
       setError("Failed to load inspection");
     } finally {
@@ -253,7 +266,7 @@ export default function InspectionDetail() {
       </div>
 
       {tab === "Overview" && <OverviewTab inspection={inspection} />}
-      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults} />}
+      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults} docsByItem={docsByItem} />}
       {tab === "Issues" && <IssuesTab issues={inspection.issues} />}
     </AppLayout>
   );
@@ -372,7 +385,13 @@ function OverviewTab({ inspection }: { inspection: Inspection }) {
 
 // ── Checklist Tab ─────────────────────────────────────────────────────────────
 
-function ChecklistTab({ results }: { results: ChecklistResult[] }) {
+function ChecklistTab({
+  results,
+  docsByItem,
+}: {
+  results: ChecklistResult[];
+  docsByItem: Record<number, { id: number; name: string; mimeType?: string }[]>;
+}) {
   if (results.length === 0) {
     return (
       <div className="text-center py-16 text-muted-foreground">
@@ -435,6 +454,20 @@ function ChecklistTab({ results }: { results: ChecklistResult[] }) {
                   </div>
                   {item.notes && (
                     <p className="text-xs text-muted-foreground mt-1.5 italic">"{item.notes}"</p>
+                  )}
+                  {/* Linked documents */}
+                  {(docsByItem[item.checklistItemId] ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {docsByItem[item.checklistItemId].map(doc => (
+                        <span
+                          key={doc.id}
+                          className="inline-flex items-center gap-1 text-[11px] bg-secondary/8 text-secondary border border-secondary/20 px-2 py-0.5 rounded-full font-medium"
+                        >
+                          <Paperclip className="h-2.5 w-2.5 shrink-0" />
+                          {doc.name}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
                 <div className="shrink-0">

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, boolean, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -23,6 +23,14 @@ export const documentsTable = pgTable("documents", {
 export const insertDocumentSchema = createInsertSchema(documentsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documentsTable.$inferSelect;
+
+export const documentChecklistLinksTable = pgTable("document_checklist_links", {
+  id: serial("id").primaryKey(),
+  documentId: integer("document_id").notNull(),
+  checklistItemId: integer("checklist_item_id").notNull(),
+  projectId: integer("project_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, t => [unique("doc_item_unique").on(t.documentId, t.checklistItemId)]);
 
 export const projectInspectionTypesTable = pgTable("project_inspection_types", {
   id: serial("id").primaryKey(),

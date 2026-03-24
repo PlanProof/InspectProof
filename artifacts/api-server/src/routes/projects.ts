@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql, and } from "drizzle-orm";
-import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable } from "@workspace/db";
+import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -421,6 +421,102 @@ router.put("/:id/inspection-types", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Update inspection types error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── Checklist Items (for linking to documents) ────────────────────────────────
+
+router.get("/:id/checklist-items", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const selected = await db.select().from(projectInspectionTypesTable)
+      .where(and(eq(projectInspectionTypesTable.projectId, id), eq(projectInspectionTypesTable.isSelected, true)));
+
+    if (!selected.length) {
+      res.json([]);
+      return;
+    }
+
+    const templateIds = selected.map(s => s.templateId).filter(Boolean) as number[];
+    const allItems: any[] = [];
+
+    for (const templateId of templateIds) {
+      const template = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, templateId));
+      if (!template[0]) continue;
+      const items = await db.select().from(checklistItemsTable)
+        .where(eq(checklistItemsTable.templateId, templateId))
+        .orderBy(checklistItemsTable.orderIndex);
+      allItems.push({ templateId, templateName: template[0].name, inspectionType: template[0].inspectionType, items });
+    }
+
+    res.json(allItems);
+  } catch (err) {
+    req.log.error({ err }, "List checklist items error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── Document ↔ Checklist Item Links ──────────────────────────────────────────
+
+router.get("/:id/documents/:docId/checklist-links", async (req, res) => {
+  try {
+    const docId = parseInt(req.params.docId);
+    const links = await db.select().from(documentChecklistLinksTable)
+      .where(eq(documentChecklistLinksTable.documentId, docId));
+    res.json(links.map(l => l.checklistItemId));
+  } catch (err) {
+    req.log.error({ err }, "Get checklist links error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.put("/:id/documents/:docId/checklist-links", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const docId = parseInt(req.params.docId);
+    const { itemIds } = req.body as { itemIds: number[] };
+
+    await db.delete(documentChecklistLinksTable)
+      .where(eq(documentChecklistLinksTable.documentId, docId));
+
+    if (itemIds?.length) {
+      await db.insert(documentChecklistLinksTable).values(
+        itemIds.map(itemId => ({ documentId: docId, checklistItemId: itemId, projectId: id }))
+      );
+    }
+
+    res.json({ success: true, linkedCount: itemIds?.length ?? 0 });
+  } catch (err) {
+    req.log.error({ err }, "Set checklist links error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── Documents with linked checklist item ids (enriched list) ─────────────────
+
+router.get("/:id/documents-with-links", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const docs = await db.select().from(documentsTable)
+      .where(eq(documentsTable.projectId, id))
+      .orderBy(sql`${documentsTable.folder} ASC, ${documentsTable.name} ASC`);
+
+    const links = await db.select().from(documentChecklistLinksTable)
+      .where(eq(documentChecklistLinksTable.projectId, id));
+
+    const linksByDoc: Record<number, number[]> = {};
+    for (const l of links) {
+      if (!linksByDoc[l.documentId]) linksByDoc[l.documentId] = [];
+      linksByDoc[l.documentId].push(l.checklistItemId);
+    }
+
+    res.json(docs.map(d => ({
+      ...formatDoc(d),
+      linkedItemIds: linksByDoc[d.id] ?? [],
+    })));
+  } catch (err) {
+    req.log.error({ err }, "List docs with links error");
     res.status(500).json({ error: "internal_error" });
   }
 });

@@ -9,7 +9,7 @@ import {
   ArrowLeft, Building, FileText, ClipboardList, CheckSquare, Plus, Upload,
   FolderPlus, Pencil, Trash2, Eye, EyeOff, File, Folder, FolderOpen,
   ChevronRight, Calendar, Clock, CheckCircle, AlertCircle, XCircle, MoreHorizontal,
-  Download, Mail, Loader2
+  Download, Mail, Loader2, Link2, Unlink
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -392,6 +392,8 @@ function DocumentsTab({ projectId }: { projectId: number }) {
   const [newFolderName, setNewFolderName] = useState("");
   const [extraFolders, setExtraFolders] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [linkingDoc, setLinkingDoc] = useState<ProjectDoc | null>(null);
+  const [docLinkCounts, setDocLinkCounts] = useState<Record<number, number>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadDocs = useCallback(async () => {
@@ -399,6 +401,11 @@ function DocumentsTab({ projectId }: { projectId: number }) {
       setLoading(true);
       const data = await apiFetch(`/api/projects/${projectId}/documents`);
       setDocs(data);
+      // Load link counts for all docs
+      const links = await apiFetch(`/api/projects/${projectId}/documents-with-links`).catch(() => []);
+      const counts: Record<number, number> = {};
+      for (const d of links) counts[d.id] = d.linkedItemIds?.length ?? 0;
+      setDocLinkCounts(counts);
     } catch {
     } finally {
       setLoading(false);
@@ -688,32 +695,50 @@ function DocumentsTab({ projectId }: { projectId: number }) {
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatDate(doc.createdAt)}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {doc.fileUrl && (
-                          <a
-                            href={`${apiBase()}/api/storage/objects${doc.fileUrl}`}
-                            target="_blank"
-                            rel="noreferrer"
+                      <div className="flex items-center gap-1">
+                        {/* Checklist link badge — always visible */}
+                        <button
+                          onClick={() => setLinkingDoc(doc)}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium transition-colors ${
+                            (docLinkCounts[doc.id] ?? 0) > 0
+                              ? "bg-secondary/10 text-secondary hover:bg-secondary/20"
+                              : "text-muted-foreground/50 hover:text-secondary hover:bg-secondary/10"
+                          }`}
+                          title="Link to checklist items"
+                        >
+                          <Link2 className="h-3 w-3" />
+                          {(docLinkCounts[doc.id] ?? 0) > 0 && (
+                            <span>{docLinkCounts[doc.id]}</span>
+                          )}
+                        </button>
+                        {/* Other actions - fade in on hover */}
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {doc.fileUrl && (
+                            <a
+                              href={`${apiBase()}/api/storage/objects${doc.fileUrl}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar"
+                              title="Download"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                          <button
+                            onClick={() => setRenamingDoc(doc)}
                             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar"
-                            title="Download"
+                            title="Rename"
                           >
-                            <Download className="h-3.5 w-3.5" />
-                          </a>
-                        )}
-                        <button
-                          onClick={() => setRenamingDoc(doc)}
-                          className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar"
-                          title="Rename"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => deleteDoc(doc)}
-                          className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => deleteDoc(doc)}
+                            className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -745,7 +770,168 @@ function DocumentsTab({ projectId }: { projectId: number }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Checklist Link Dialog */}
+      {linkingDoc && (
+        <ChecklistLinkDialog
+          projectId={projectId}
+          doc={linkingDoc}
+          onClose={() => setLinkingDoc(null)}
+          onSaved={(docId, count) => {
+            setDocLinkCounts(prev => ({ ...prev, [docId]: count }));
+            setLinkingDoc(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+// ── Checklist Link Dialog ─────────────────────────────────────────────────────
+
+interface ChecklistItemGroup { templateId: number; templateName: string; inspectionType: string; items: any[]; }
+
+function ChecklistLinkDialog({
+  projectId, doc, onClose, onSaved
+}: {
+  projectId: number;
+  doc: ProjectDoc;
+  onClose: () => void;
+  onSaved: (docId: number, count: number) => void;
+}) {
+  const [groups, setGroups] = useState<ChecklistItemGroup[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [itemGroups, linkedIds] = await Promise.all([
+        apiFetch(`/api/projects/${projectId}/checklist-items`),
+        apiFetch(`/api/projects/${projectId}/documents/${doc.id}/checklist-links`),
+      ]);
+      setGroups(itemGroups);
+      setSelectedIds(new Set(linkedIds));
+    } catch {
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, doc.id]);
+
+  useState(() => { load(); });
+
+  const toggle = (itemId: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(itemId) ? next.delete(itemId) : next.add(itemId);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiFetch(`/api/projects/${projectId}/documents/${doc.id}/checklist-links`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemIds: Array.from(selectedIds) }),
+      });
+      onSaved(doc.id, selectedIds.size);
+    } catch {
+      setSaving(false);
+    }
+  };
+
+  const totalItems = groups.reduce((acc, g) => acc + g.items.length, 0);
+
+  return (
+    <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Link2 className="h-4 w-4 text-secondary" />
+            Link to Checklist Items
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground mt-1 truncate">
+            <span className="font-medium text-sidebar">{doc.name}</span> — select which checklist items this document supports
+          </p>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto -mx-6 px-6 mt-3">
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading checklist items…
+            </div>
+          ) : totalItems === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">No checklist items found</p>
+              <p className="text-sm mt-1">Go to "Inspection Types" tab to assign templates to this project first.</p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {groups.map(group => (
+                <div key={group.templateId}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{group.templateName}</span>
+                    <span className="flex-1 border-t border-muted/40" />
+                    <span className="text-xs text-muted-foreground">
+                      {group.items.filter(i => selectedIds.has(i.id)).length}/{group.items.length}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {group.items.map((item: any) => (
+                      <label
+                        key={item.id}
+                        className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                          selectedIds.has(item.id)
+                            ? "bg-secondary/5 border-secondary/30"
+                            : "bg-card border-muted/40 hover:bg-muted/30 hover:border-muted"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(item.id)}
+                          onChange={() => toggle(item.id)}
+                          className="mt-0.5 h-3.5 w-3.5 rounded border-muted-foreground accent-secondary cursor-pointer"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-sidebar leading-snug">{item.description}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            {item.codeReference && (
+                              <span className="text-[10px] font-mono bg-muted px-1 py-0.5 rounded text-muted-foreground">
+                                {item.codeReference}
+                              </span>
+                            )}
+                            {item.category && (
+                              <span className="text-[10px] text-muted-foreground">{item.category}</span>
+                            )}
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between pt-4 border-t mt-4">
+          <span className="text-xs text-muted-foreground">
+            {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+            <Button onClick={save} disabled={saving || loading} className="gap-1.5">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+              Save Links
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
