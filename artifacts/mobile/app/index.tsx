@@ -75,7 +75,7 @@ export default function LoginScreen() {
         <View style={styles.brand}>
           <Image source={logoImage} style={styles.logoImage} resizeMode="contain" />
           <Text style={styles.brandName}>InspectProof</Text>
-          <Text style={styles.brandTagline}>Building Inspection & Certification Platform</Text>
+          <Text style={styles.brandTagline}>Building Inspection Platform</Text>
         </View>
 
         {/* Login Card */}
@@ -154,7 +154,7 @@ export default function LoginScreen() {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            InspectProof v1.0 · Australian Building Certification Platform
+            InspectProof v1.0 · Australian Building Inspection Platform
           </Text>
           <Text style={styles.footerSub}>NCC 2022 · BCA · AS Standards Compatible</Text>
         </View>
