@@ -13,6 +13,7 @@ export interface ChecklistItem {
   orderIndex: number;
   category: string;
   description: string;
+  reason?: string | null;
   codeReference?: string | null;
   riskLevel: ChecklistItemRiskLevel;
   isRequired: boolean;

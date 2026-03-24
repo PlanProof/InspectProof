@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useListChecklistTemplates, useGetChecklistTemplate } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -6,12 +6,12 @@ import { Card, Button } from "@/components/ui";
 import {
   FolderOpen, Folder, FileText, ChevronRight, ChevronDown,
   ClipboardList, CheckSquare, Plus, Search, X,
-  ChevronUp, Copy, ArrowUpDown, Loader2,
+  ChevronUp, Copy, ArrowUpDown, Loader2, Pencil, Trash2,
+  Save, AlertCircle, GripVertical, Heading, Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ── NCC Building Classifications ─────────────────────────────────────────────
-
+// ── NCC Classifications ───────────────────────────────────────────────────────
 const NCC_CLASSES: Record<string, string> = {
   "Class 1a":  "Class 1a — Dwelling",
   "Class 1b":  "Class 1b — Boarding house / Guest house / Hostel (>300m² or >12Pax)",
@@ -22,7 +22,7 @@ const NCC_CLASSES: Record<string, string> = {
   "Class 6":   "Class 6 — Shop or commercial premises",
   "Class 7a":  "Class 7a — Carpark",
   "Class 7b":  "Class 7b — Storage or display of goods by wholesale",
-  "Class 8":   "Class 8 — Laboratory or building for production/assembly/altering/repairing/packing",
+  "Class 8":   "Class 8 — Laboratory or production/assembly building",
   "Class 9a":  "Class 9a — Health-care building",
   "Class 9b":  "Class 9b — Assembly building",
   "Class 9c":  "Class 9c — Residential care building",
@@ -32,14 +32,12 @@ const NCC_CLASSES: Record<string, string> = {
 };
 
 const DISCIPLINE_ORDER = ["Building Surveyor", "Structural Engineer", "Plumbing Officer"];
-
-const DISCIPLINE_META: Record<string, { color: string; accent: string }> = {
-  "Building Surveyor":  { color: "bg-sidebar text-white", accent: "text-secondary border-secondary" },
-  "Structural Engineer":{ color: "bg-blue-700 text-white", accent: "text-blue-700 border-blue-700" },
-  "Plumbing Officer":   { color: "bg-teal-700 text-white", accent: "text-teal-700 border-teal-700" },
+const DISCIPLINE_META: Record<string, { active: string; accent: string }> = {
+  "Building Surveyor":  { active: "bg-sidebar text-white", accent: "text-secondary border-secondary" },
+  "Structural Engineer":{ active: "bg-blue-700 text-white", accent: "text-blue-700 border-blue-700" },
+  "Plumbing Officer":   { active: "bg-teal-700 text-white", accent: "text-teal-700 border-teal-700" },
 };
 
-// ── colours per inspection type ────────────────────────────────────────────────
 const TYPE_META: Record<string, { label: string; color: string; dot: string }> = {
   footing:      { label: "Footing",       color: "bg-amber-100 text-amber-800 border-amber-200",    dot: "bg-amber-500" },
   slab:         { label: "Slab",          color: "bg-orange-100 text-orange-800 border-orange-200",  dot: "bg-orange-500" },
@@ -52,17 +50,16 @@ const TYPE_META: Record<string, { label: string; color: string; dot: string }> =
   lock_up:      { label: "Lock-Up",       color: "bg-indigo-100 text-indigo-800 border-indigo-200",   dot: "bg-indigo-500" },
   fit_out:      { label: "Fit-Out",       color: "bg-pink-100 text-pink-800 border-pink-200",         dot: "bg-pink-500" },
 };
-
 function typeMeta(type: string) {
   const key = Object.keys(TYPE_META).find(k => type?.toLowerCase().includes(k)) ?? "";
   return TYPE_META[key] ?? { label: type, color: "bg-muted text-muted-foreground border-border", dot: "bg-muted-foreground" };
 }
 
 const RISK_COLORS: Record<string, string> = {
-  high:   "bg-red-50 text-red-700 border-red-200",
-  medium: "bg-amber-50 text-amber-700 border-amber-200",
-  low:    "bg-green-50 text-green-700 border-green-200",
-  critical:"bg-orange-50 text-orange-700 border-orange-200",
+  critical: "bg-orange-50 text-orange-700 border-orange-200",
+  high:     "bg-red-50 text-red-700 border-red-200",
+  medium:   "bg-amber-50 text-amber-700 border-amber-200",
+  low:      "bg-green-50 text-green-700 border-green-200",
 };
 
 function apiBase() { return import.meta.env.BASE_URL.replace(/\/$/, ""); }
@@ -72,21 +69,241 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return res.json();
 }
 
-// ── Template detail panel ─────────────────────────────────────────────────────
+// ── Local types for editing ───────────────────────────────────────────────────
+interface LocalItem {
+  id?: number;          // undefined = new (unsaved)
+  tempId: string;       // stable key for react
+  category: string;
+  description: string;
+  reason: string;
+  codeReference: string;
+  riskLevel: string;
+  isRequired: boolean;
+  orderIndex: number;
+  dirty: boolean;
+  isNew: boolean;
+}
+
+// ── Template Detail Panel ─────────────────────────────────────────────────────
 function TemplateDetail({
   templateId,
   discipline,
   onClose,
   onCopied,
+  onSaved,
 }: {
   templateId: number;
   discipline: string;
   onClose: () => void;
   onCopied: () => void;
+  onSaved: () => void;
 }) {
-  const { data, isLoading } = useGetChecklistTemplate(templateId);
+  const queryClient = useQueryClient();
+  const { data, isLoading, refetch } = useGetChecklistTemplate(templateId);
+  const [editMode, setEditMode] = useState(false);
+  const [localItems, setLocalItems] = useState<LocalItem[]>([]);
+  const [savedItems, setSavedItems] = useState<any[] | null>(null); // override after save
+  const [templateName, setTemplateName] = useState("");
+  const [templateDesc, setTemplateDesc] = useState("");
+  const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
+  const [newSectionName, setNewSectionName] = useState("");
+  const [addingSectionFor, setAddingSectionFor] = useState<string | null>(null); // which category we're adding item to
+  const [newItem, setNewItem] = useState<Partial<LocalItem>>({});
+  const [showAddSection, setShowAddSection] = useState(false);
   const dm = DISCIPLINE_META[discipline] ?? DISCIPLINE_META["Building Surveyor"];
+
+  const enterEdit = () => {
+    if (!data) return;
+    const sourceItems = savedItems ?? data.items ?? [];
+    setTemplateName(data.name);
+    setTemplateDesc(data.description ?? "");
+    setSavedItems(null); // clear override, will reload from sourceItems
+    setLocalItems(
+      sourceItems.map((i: any, idx: number) => ({
+        id: i.id,
+        tempId: `existing-${i.id}`,
+        category: i.category,
+        description: i.description,
+        reason: i.reason ?? "",
+        codeReference: i.codeReference ?? "",
+        riskLevel: i.riskLevel,
+        isRequired: i.isRequired,
+        orderIndex: i.orderIndex,
+        dirty: false,
+        isNew: false,
+      }))
+    );
+    setEditMode(true);
+  };
+
+  const cancelEdit = () => {
+    setEditMode(false);
+    setLocalItems([]);
+    setAddingSectionFor(null);
+    setNewItem({});
+    setShowAddSection(false);
+  };
+
+  const updateItem = (tempId: string, patch: Partial<LocalItem>) => {
+    setLocalItems(prev =>
+      prev.map(i => i.tempId === tempId ? { ...i, ...patch, dirty: true } : i)
+    );
+  };
+
+  const deleteItem = (tempId: string) => {
+    setLocalItems(prev => prev.filter(i => i.tempId !== tempId));
+  };
+
+  const moveItem = (tempId: string, dir: -1 | 1) => {
+    setLocalItems(prev => {
+      const idx = prev.findIndex(i => i.tempId === tempId);
+      const newIdx = idx + dir;
+      if (newIdx < 0 || newIdx >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+      return next.map((item, i) => ({ ...item, orderIndex: i }));
+    });
+  };
+
+  const addItemToCategory = () => {
+    if (!addingSectionFor || !newItem.description?.trim()) return;
+    const maxOrder = localItems.length;
+    setLocalItems(prev => [
+      ...prev,
+      {
+        tempId: `new-${Date.now()}`,
+        category: addingSectionFor,
+        description: newItem.description?.trim() ?? "New item",
+        reason: newItem.reason ?? "",
+        codeReference: newItem.codeReference ?? "",
+        riskLevel: newItem.riskLevel ?? "medium",
+        isRequired: newItem.isRequired ?? true,
+        orderIndex: maxOrder,
+        dirty: true,
+        isNew: true,
+      }
+    ]);
+    setNewItem({});
+    setAddingSectionFor(null);
+  };
+
+  const addSection = () => {
+    if (!newSectionName.trim()) return;
+    const maxOrder = localItems.length;
+    setLocalItems(prev => [
+      ...prev,
+      {
+        tempId: `new-section-${Date.now()}`,
+        category: newSectionName.trim(),
+        description: "Add first item to this section",
+        reason: "",
+        codeReference: "",
+        riskLevel: "medium",
+        isRequired: true,
+        orderIndex: maxOrder,
+        dirty: true,
+        isNew: true,
+      }
+    ]);
+    setNewSectionName("");
+    setShowAddSection(false);
+  };
+
+  const saveAll = async () => {
+    setSaving(true);
+    try {
+      // Auto-commit in-progress inline form if description is filled
+      let itemsToSave = localItems;
+      if (addingSectionFor && newItem.description?.trim()) {
+        const maxOrder = localItems.length;
+        const autoItem: LocalItem = {
+          tempId: `new-auto-${Date.now()}`,
+          category: addingSectionFor,
+          description: newItem.description.trim(),
+          reason: newItem.reason ?? "",
+          codeReference: newItem.codeReference ?? "",
+          riskLevel: newItem.riskLevel ?? "medium",
+          isRequired: newItem.isRequired ?? true,
+          orderIndex: maxOrder,
+          dirty: true,
+          isNew: true,
+        };
+        itemsToSave = [...localItems, autoItem];
+        setNewItem({});
+        setAddingSectionFor(null);
+      }
+
+      // Save template metadata if changed
+      if (templateName !== data?.name || templateDesc !== (data?.description ?? "")) {
+        await apiFetch(`/api/checklist-templates/${templateId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: templateName, description: templateDesc }),
+        });
+      }
+
+      // Upsert items
+      for (const item of itemsToSave) {
+        if (item.isNew) {
+          await apiFetch(`/api/checklist-templates/${templateId}/items`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              category: item.category,
+              description: item.description,
+              reason: item.reason || null,
+              codeReference: item.codeReference || null,
+              riskLevel: item.riskLevel,
+              isRequired: item.isRequired,
+            }),
+          });
+        } else if (item.dirty && item.id) {
+          await apiFetch(`/api/checklist-templates/items/${item.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              category: item.category,
+              description: item.description,
+              reason: item.reason || null,
+              codeReference: item.codeReference || null,
+              riskLevel: item.riskLevel,
+              isRequired: item.isRequired,
+              orderIndex: item.orderIndex,
+            }),
+          });
+        }
+      }
+
+      // Delete removed items (items in data.items but not in localItems)
+      const localIds = new Set(itemsToSave.filter(i => !i.isNew).map(i => i.id));
+      for (const orig of (data?.items ?? [])) {
+        if (!localIds.has((orig as any).id)) {
+          await apiFetch(`/api/checklist-templates/items/${(orig as any).id}`, { method: "DELETE" });
+        }
+      }
+
+      // Set savedItems directly from what we just saved (bypass RQ cache timing)
+      setSavedItems(itemsToSave.map(i => ({
+        id: i.id,
+        templateId,
+        orderIndex: i.orderIndex,
+        category: i.category,
+        description: i.description,
+        reason: i.reason || null,
+        codeReference: i.codeReference || null,
+        riskLevel: i.riskLevel,
+        isRequired: i.isRequired,
+      })));
+      setEditMode(false);
+      onSaved();
+      // Invalidate cache in background so subsequent opens are fresh
+      queryClient.invalidateQueries({ queryKey: [`/api/checklist-templates/${templateId}`] });
+    } catch (err) {
+      console.error("Save failed:", err);
+    }
+    setSaving(false);
+  };
 
   const handleCopy = async () => {
     setCopying(true);
@@ -100,7 +317,7 @@ function TemplateDetail({
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading template…
+        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
       </div>
     );
   }
@@ -109,117 +326,418 @@ function TemplateDetail({
   }
 
   const meta = typeMeta(data.inspectionType);
+  const displayItems = editMode ? localItems : (savedItems ?? data?.items ?? []);
 
-  // Group items by category
-  const categories: Record<string, typeof data.items> = {};
-  (data.items ?? []).forEach((item: any) => {
-    if (!categories[item.category]) categories[item.category] = [];
-    categories[item.category].push(item);
+  // Group by category in display order
+  const categories: string[] = [];
+  const grouped: Record<string, typeof displayItems> = {};
+  displayItems.forEach((i: any) => {
+    if (!grouped[i.category]) { grouped[i.category] = []; categories.push(i.category); }
+    grouped[i.category].push(i);
   });
+  const uniqueCategories = Array.from(new Set(categories));
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      {/* Header */}
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* ── Header ── */}
       <div className="sticky top-0 bg-background border-b border-muted/60 px-6 py-4 flex items-start justify-between gap-4 z-10">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${meta.color}`}>
-              {meta.label}
-            </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${meta.color}`}>{meta.label}</span>
             <span className="text-xs text-muted-foreground">{data.itemCount} items</span>
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${dm.accent}`}>
-              {data.discipline}
-            </span>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${dm.accent}`}>{data.discipline}</span>
             <span className="text-xs text-muted-foreground border border-muted/60 rounded-full px-2 py-0.5">{data.folder}</span>
           </div>
-          <h2 className="text-xl font-bold text-sidebar">{data.name}</h2>
-          {data.description && (
-            <p className="text-sm text-muted-foreground mt-1">{data.description}</p>
+          {editMode ? (
+            <div className="space-y-1.5">
+              <input
+                value={templateName}
+                onChange={e => setTemplateName(e.target.value)}
+                className="w-full text-xl font-bold text-sidebar bg-transparent border-b-2 border-secondary outline-none py-0.5"
+                placeholder="Template name"
+              />
+              <input
+                value={templateDesc}
+                onChange={e => setTemplateDesc(e.target.value)}
+                className="w-full text-sm text-muted-foreground bg-transparent border-b border-muted/60 outline-none py-0.5"
+                placeholder="Description (optional)"
+              />
+            </div>
+          ) : (
+            <>
+              <h2 className="text-xl font-bold text-sidebar">{data.name}</h2>
+              {data.description && <p className="text-sm text-muted-foreground mt-1">{data.description}</p>}
+            </>
           )}
         </div>
+
         <div className="flex items-center gap-1.5 shrink-0">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleCopy}
-            disabled={copying}
-            className="gap-1.5"
-          >
-            {copying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
-            Duplicate
-          </Button>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-muted/60 text-muted-foreground hover:text-foreground"
-          >
+          {editMode ? (
+            <>
+              <Button size="sm" onClick={saveAll} disabled={saving} className="gap-1.5">
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                Save Changes
+              </Button>
+              <Button size="sm" variant="outline" onClick={cancelEdit} disabled={saving}>Cancel</Button>
+            </>
+          ) : (
+            <>
+              <Button size="sm" variant="outline" onClick={enterEdit} className="gap-1.5">
+                <Pencil className="h-3.5 w-3.5" /> Edit
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleCopy} disabled={copying} className="gap-1.5">
+                {copying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+                Duplicate
+              </Button>
+            </>
+          )}
+          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-muted/60 text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Items by category */}
-      <div className="px-6 py-5 space-y-6">
-        {Object.keys(categories).length === 0 && (
+      {/* ── Items ── */}
+      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+        {uniqueCategories.length === 0 && !editMode && (
           <div className="text-center py-12 text-muted-foreground">
             <ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
             <p className="font-medium">No checklist items yet</p>
-            <p className="text-sm mt-1">Items will appear here once added to this template.</p>
+            <p className="text-sm mt-1">Click <strong>Edit</strong> to add sections and items.</p>
           </div>
         )}
 
-        {Object.entries(categories).map(([category, items]) => (
+        {uniqueCategories.map(category => (
           <div key={category}>
-            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-2">
+            {/* Category header */}
+            <div className="flex items-center gap-2 mb-3">
               <span className="flex-1 border-t border-muted/50" />
-              {category}
+              {editMode ? (
+                <input
+                  value={category}
+                  onChange={e => {
+                    const newCat = e.target.value;
+                    setLocalItems(prev => prev.map(i => i.category === category ? { ...i, category: newCat, dirty: true } : i));
+                  }}
+                  className="text-xs font-bold uppercase tracking-widest text-muted-foreground bg-transparent border-b border-secondary outline-none text-center min-w-20"
+                />
+              ) : (
+                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{category}</h3>
+              )}
               <span className="flex-1 border-t border-muted/50" />
-            </h3>
-            <div className="space-y-2">
-              {(items ?? []).map((item: any, idx: number) => (
-                <div
-                  key={item.id}
-                  className="flex items-start gap-3 p-3 rounded-lg border border-muted/50 bg-card hover:bg-muted/20 transition-colors"
+              {editMode && (
+                <button
+                  onClick={() => { setAddingSectionFor(category); setNewItem({}); }}
+                  className="text-xs text-secondary hover:text-secondary/80 flex items-center gap-1 font-medium"
                 >
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-muted/60 text-muted-foreground text-[10px] font-bold flex items-center justify-center mt-0.5">
-                    {idx + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-sidebar font-medium leading-snug">{item.description}</p>
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      {item.codeReference && (
-                        <span className="text-[10px] font-mono bg-sidebar/10 text-sidebar px-1.5 py-0.5 rounded border border-sidebar/20">
-                          {item.codeReference}
-                        </span>
-                      )}
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border capitalize ${RISK_COLORS[item.riskLevel] ?? RISK_COLORS.medium}`}>
-                        {item.riskLevel === "critical" ? "Critical Risk" : `${item.riskLevel} Risk`}
-                      </span>
-                      {!item.isRequired && (
-                        <span className="text-[10px] text-muted-foreground">Optional</span>
-                      )}
-                    </div>
-                  </div>
-                  {item.isRequired && (
-                    <CheckSquare className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-0.5" />
-                  )}
-                </div>
+                  <Plus className="h-3 w-3" /> Add Item
+                </button>
+              )}
+            </div>
+
+            {/* Items */}
+            <div className="space-y-2">
+              {(grouped[category] ?? []).map((item: any, idx: number) => (
+                editMode
+                  ? <EditableItem
+                      key={item.tempId}
+                      item={item}
+                      idx={idx}
+                      total={(grouped[category] ?? []).length}
+                      onChange={patch => updateItem(item.tempId, patch)}
+                      onDelete={() => deleteItem(item.tempId)}
+                      onMoveUp={() => moveItem(item.tempId, -1)}
+                      onMoveDown={() => moveItem(item.tempId, 1)}
+                    />
+                  : <ReadItem key={item.id ?? `idx-${idx}`} item={item} idx={idx} />
               ))}
             </div>
+
+            {/* Inline add item form for this category */}
+            {editMode && addingSectionFor === category && (
+              <AddItemForm
+                category={category}
+                value={newItem}
+                onChange={setNewItem}
+                onAdd={addItemToCategory}
+                onCancel={() => { setAddingSectionFor(null); setNewItem({}); }}
+              />
+            )}
           </div>
         ))}
+
+        {/* Add section / Add item to new category */}
+        {editMode && (
+          <div className="pt-2 border-t border-muted/50 space-y-3">
+            {showAddSection ? (
+              <div className="flex items-center gap-2">
+                <Heading className="h-4 w-4 text-muted-foreground" />
+                <input
+                  autoFocus
+                  value={newSectionName}
+                  onChange={e => setNewSectionName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addSection(); if (e.key === "Escape") setShowAddSection(false); }}
+                  placeholder="Section / header name (e.g. Reinforcement)"
+                  className="flex-1 text-sm border border-input rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30"
+                />
+                <Button size="sm" onClick={addSection} disabled={!newSectionName.trim()}>Add Header</Button>
+                <Button size="sm" variant="outline" onClick={() => setShowAddSection(false)}>Cancel</Button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowAddSection(true)}
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-sidebar border border-dashed border-muted rounded-lg px-4 py-2 transition-colors hover:border-sidebar/40"
+                >
+                  <Heading className="h-3.5 w-3.5" /> Add Section Header
+                </button>
+                {uniqueCategories.length > 0 && (
+                  <button
+                    onClick={() => { setAddingSectionFor(uniqueCategories[uniqueCategories.length - 1]); setNewItem({}); }}
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-sidebar border border-dashed border-muted rounded-lg px-4 py-2 transition-colors hover:border-sidebar/40"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Item
+                  </button>
+                )}
+                {uniqueCategories.length === 0 && (
+                  <button
+                    onClick={() => { setShowAddSection(true); }}
+                    className="flex items-center gap-1.5 text-sm text-secondary hover:text-secondary/80 border border-secondary/40 rounded-lg px-4 py-2 transition-colors hover:border-secondary"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Start by adding a section
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Read-only item ────────────────────────────────────────────────────────────
+function ReadItem({ item, idx }: { item: any; idx: number }) {
+  return (
+    <div className="flex items-start gap-3 p-3.5 rounded-lg border border-muted/50 bg-card hover:bg-muted/10 transition-colors">
+      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-muted/60 text-muted-foreground text-[10px] font-bold flex items-center justify-center mt-0.5">
+        {idx + 1}
+      </span>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-sidebar font-medium leading-snug">{item.description}</p>
+        {item.reason && (
+          <p className="text-xs text-blue-600/80 mt-1 flex items-start gap-1 italic">
+            <Info className="h-3 w-3 mt-0.5 shrink-0 text-blue-400" />
+            {item.reason}
+          </p>
+        )}
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+          {item.codeReference && (
+            <span className="text-[10px] font-mono bg-sidebar/10 text-sidebar px-1.5 py-0.5 rounded border border-sidebar/20">
+              {item.codeReference}
+            </span>
+          )}
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border capitalize ${RISK_COLORS[item.riskLevel] ?? RISK_COLORS.medium}`}>
+            {item.riskLevel === "critical" ? "Critical Risk" : `${item.riskLevel} Risk`}
+          </span>
+          {!item.isRequired && (
+            <span className="text-[10px] text-muted-foreground border border-muted/60 rounded px-1.5 py-0.5">Optional</span>
+          )}
+        </div>
+      </div>
+      {item.isRequired && <CheckSquare className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0 mt-0.5" />}
+    </div>
+  );
+}
+
+// ── Editable item ─────────────────────────────────────────────────────────────
+function EditableItem({
+  item, idx, total, onChange, onDelete, onMoveUp, onMoveDown,
+}: {
+  item: LocalItem;
+  idx: number;
+  total: number;
+  onChange: (patch: Partial<LocalItem>) => void;
+  onDelete: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-secondary/30 bg-secondary/5 p-3 space-y-2 group">
+      <div className="flex items-start gap-2">
+        {/* Reorder arrows */}
+        <div className="flex flex-col gap-0.5 mt-1 shrink-0">
+          <button
+            onClick={onMoveUp} disabled={idx === 0}
+            className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar disabled:opacity-20"
+            title="Move up"
+          >
+            <ChevronUp className="h-3 w-3" />
+          </button>
+          <button
+            onClick={onMoveDown} disabled={idx === total - 1}
+            className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar disabled:opacity-20"
+            title="Move down"
+          >
+            <ChevronRight className="h-3 w-3 rotate-90" />
+          </button>
+        </div>
+
+        {/* Main fields */}
+        <div className="flex-1 space-y-2">
+          {/* Description */}
+          <textarea
+            value={item.description}
+            onChange={e => onChange({ description: e.target.value })}
+            placeholder="Checklist item description…"
+            rows={2}
+            className="w-full text-sm text-sidebar bg-white border border-input rounded-md px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30 resize-none"
+          />
+          {/* Reason */}
+          <div className="flex items-start gap-1.5">
+            <Info className="h-3.5 w-3.5 text-blue-400 mt-1.5 shrink-0" />
+            <textarea
+              value={item.reason}
+              onChange={e => onChange({ reason: e.target.value })}
+              placeholder="Reason — why is this item required? (NCC intent, safety concern…)"
+              rows={1}
+              className="flex-1 text-xs text-blue-700 italic bg-blue-50 border border-blue-100 rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-blue-300 resize-none placeholder:text-blue-300"
+            />
+          </div>
+
+          {/* Code ref + risk + required in a row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              value={item.codeReference}
+              onChange={e => onChange({ codeReference: e.target.value })}
+              placeholder="Code ref (e.g. AS 1684.2 Cl 9)"
+              className="flex-1 min-w-[140px] text-xs font-mono bg-white border border-input rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-secondary/40"
+            />
+            <select
+              value={item.riskLevel}
+              onChange={e => onChange({ riskLevel: e.target.value })}
+              className={`text-xs font-semibold border rounded-md px-2 py-1 outline-none ${RISK_COLORS[item.riskLevel] ?? RISK_COLORS.medium}`}
+            >
+              <option value="low">Low Risk</option>
+              <option value="medium">Medium Risk</option>
+              <option value="high">High Risk</option>
+              <option value="critical">Critical Risk</option>
+            </select>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={item.isRequired}
+                onChange={e => onChange({ isRequired: e.target.checked })}
+                className="h-3.5 w-3.5 accent-secondary"
+              />
+              Required
+            </label>
+          </div>
+        </div>
+
+        {/* Delete */}
+        <button
+          onClick={onDelete}
+          className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors shrink-0"
+          title="Delete item"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Add item inline form ──────────────────────────────────────────────────────
+function AddItemForm({
+  category, value, onChange, onAdd, onCancel,
+}: {
+  category: string;
+  value: Partial<LocalItem>;
+  onChange: (v: Partial<LocalItem>) => void;
+  onAdd: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="mt-3 rounded-lg border-2 border-dashed border-secondary/40 bg-secondary/5 p-3 space-y-2">
+      <p className="text-xs font-semibold text-secondary flex items-center gap-1">
+        <Plus className="h-3 w-3" /> New item in <em>"{category}"</em>
+      </p>
+      <textarea
+        autoFocus
+        value={value.description ?? ""}
+        onChange={e => onChange({ ...value, description: e.target.value })}
+        placeholder="Item description (required)…"
+        rows={2}
+        className="w-full text-sm bg-white border border-input rounded-md px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30 resize-none"
+        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onAdd(); } }}
+      />
+      <div className="flex items-start gap-1.5">
+        <Info className="h-3.5 w-3.5 text-blue-400 mt-1.5 shrink-0" />
+        <textarea
+          value={value.reason ?? ""}
+          onChange={e => onChange({ ...value, reason: e.target.value })}
+          placeholder="Reason — why is this required?"
+          rows={1}
+          className="flex-1 text-xs italic bg-blue-50 border border-blue-100 rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-blue-300 resize-none placeholder:text-blue-300"
+        />
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <input
+          value={value.codeReference ?? ""}
+          onChange={e => onChange({ ...value, codeReference: e.target.value })}
+          placeholder="Code reference"
+          className="flex-1 min-w-[120px] text-xs font-mono bg-white border border-input rounded-md px-2 py-1 outline-none"
+        />
+        <select
+          value={value.riskLevel ?? "medium"}
+          onChange={e => onChange({ ...value, riskLevel: e.target.value })}
+          className={`text-xs font-semibold border rounded-md px-2 py-1 outline-none ${RISK_COLORS[value.riskLevel ?? "medium"]}`}
+        >
+          <option value="low">Low Risk</option>
+          <option value="medium">Medium Risk</option>
+          <option value="high">High Risk</option>
+          <option value="critical">Critical Risk</option>
+        </select>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={value.isRequired ?? true}
+            onChange={e => onChange({ ...value, isRequired: e.target.checked })}
+            className="h-3.5 w-3.5 accent-secondary"
+          />
+          Required
+        </label>
+      </div>
+      <div className="flex gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={!value.description?.trim()}
+          aria-label="Save new checklist item"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-secondary text-white hover:bg-secondary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add to Checklist
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border border-input bg-background hover:bg-muted transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Templates Page ───────────────────────────────────────────────────────
 export default function Templates() {
   const [discipline, setDiscipline] = useState("Building Surveyor");
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(["Class 1a"]));
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [reordering, setReordering] = useState(false);
-  const queryClient = useQueryClient();
 
   const { data: allTemplates, isLoading, refetch } = useListChecklistTemplates(
     { discipline },
@@ -236,7 +754,6 @@ export default function Templates() {
     });
   }
 
-  // Group templates by NCC classification folder, keeping sortOrder
   const grouped: Record<string, typeof templates> = {};
   templates
     .filter(t => !search ||
@@ -245,12 +762,10 @@ export default function Templates() {
       t.folder.toLowerCase().includes(search.toLowerCase())
     )
     .forEach(t => {
-      const f = t.folder ?? "Other";
-      if (!grouped[f]) grouped[f] = [];
-      grouped[f]!.push(t);
+      if (!grouped[t.folder]) grouped[t.folder] = [];
+      grouped[t.folder].push(t);
     });
 
-  // Order folders by NCC class number
   const classOrder = Object.keys(NCC_CLASSES);
   const folderKeys = [
     ...classOrder.filter(f => grouped[f]),
@@ -261,18 +776,14 @@ export default function Templates() {
     const items = grouped[folder] ?? [];
     const newIdx = idx + dir;
     if (newIdx < 0 || newIdx >= items.length) return;
-
     const updated = [...items];
     [updated[idx], updated[newIdx]] = [updated[newIdx], updated[idx]];
-
     setReordering(true);
     try {
       await apiFetch("/api/checklist-templates/reorder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: updated.map((t, i) => ({ id: t.id, sortOrder: i + 1 })),
-        }),
+        body: JSON.stringify({ items: updated.map((t, i) => ({ id: t.id, sortOrder: i + 1 })) }),
       });
       refetch();
     } catch {}
@@ -280,21 +791,16 @@ export default function Templates() {
   };
 
   const dm = DISCIPLINE_META[discipline] ?? DISCIPLINE_META["Building Surveyor"];
-  const totalCount = templates.length;
 
   return (
     <AppLayout>
-      {/* Page header */}
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-3xl font-bold text-sidebar tracking-tight">Templates</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage inspection checklist templates organised by NCC building classification.
-          </p>
+          <p className="text-muted-foreground mt-1">Manage inspection checklist templates organised by NCC building classification.</p>
         </div>
         <Button className="shadow-lg shadow-primary/20 gap-2">
-          <Plus className="h-4 w-4" />
-          New Template
+          <Plus className="h-4 w-4" /> New Template
         </Button>
       </div>
 
@@ -308,7 +814,7 @@ export default function Templates() {
             className={cn(
               "px-4 py-2 rounded-lg text-sm font-semibold border-2 transition-all",
               discipline === d
-                ? `${dm.color} border-transparent shadow-md`
+                ? `${dm.active} border-transparent shadow-md`
                 : "bg-card text-muted-foreground border-muted/60 hover:border-muted hover:text-sidebar"
             )}
           >
@@ -318,13 +824,11 @@ export default function Templates() {
         {reordering && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}
       </div>
 
-      {/* Content: 2-panel layout */}
       <Card className="shadow-md border-muted/60 overflow-hidden">
         <div className="flex divide-x divide-muted/50" style={{ minHeight: 580 }}>
 
           {/* ── Left: folder tree ── */}
           <div className="w-80 shrink-0 flex flex-col">
-            {/* Search */}
             <div className="p-3 border-b border-muted/50">
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -333,12 +837,11 @@ export default function Templates() {
                   placeholder="Search templates…"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 text-sm rounded-md border border-muted/60 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 placeholder:text-muted-foreground/60"
+                  className="w-full pl-8 pr-3 py-2 text-sm rounded-md border border-muted/60 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
                 />
               </div>
             </div>
 
-            {/* Folder tree */}
             <div className="flex-1 overflow-y-auto py-2">
               {isLoading && (
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -353,14 +856,12 @@ export default function Templates() {
                 const isOpen = openFolders.has(folder);
                 const FolderIcon = isOpen ? FolderOpen : Folder;
                 const items = grouped[folder] ?? [];
-                const nccDesc = NCC_CLASSES[folder];
 
                 return (
                   <div key={folder}>
-                    {/* Folder row */}
                     <button
                       onClick={() => toggleFolder(folder)}
-                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-sidebar hover:bg-muted/40 transition-colors group"
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-sidebar hover:bg-muted/40 transition-colors"
                     >
                       {isOpen
                         ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -373,14 +874,12 @@ export default function Templates() {
                       </span>
                     </button>
 
-                    {/* NCC description shown when folder open */}
-                    {isOpen && nccDesc && (
+                    {isOpen && NCC_CLASSES[folder] && (
                       <div className="mx-4 mb-1 px-2 py-1 text-[10px] text-muted-foreground bg-muted/30 rounded italic leading-snug">
-                        {nccDesc}
+                        {NCC_CLASSES[folder]}
                       </div>
                     )}
 
-                    {/* Template rows */}
                     {isOpen && items.map((t, idx) => {
                       const meta = typeMeta(t.inspectionType);
                       const isSelected = selectedId === t.id;
@@ -400,22 +899,13 @@ export default function Templates() {
                             <span className="flex-1 truncate">{t.name}</span>
                             <span className="text-[10px] text-muted-foreground shrink-0 mr-1">{t.itemCount}</span>
                           </button>
-                          {/* Move up/down + copy controls */}
-                          <div className="flex flex-col items-center opacity-0 group-hover/row:opacity-100 transition-opacity pr-1">
-                            <button
-                              disabled={idx === 0}
-                              onClick={() => moveTemplate(folder, idx, -1)}
-                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar disabled:opacity-20"
-                              title="Move up"
-                            >
+                          <div className="flex flex-col items-center opacity-0 group-hover/row:opacity-100 transition-opacity pr-0.5">
+                            <button disabled={idx === 0} onClick={() => moveTemplate(folder, idx, -1)}
+                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar disabled:opacity-20" title="Move up">
                               <ChevronUp className="h-3 w-3" />
                             </button>
-                            <button
-                              disabled={idx === items.length - 1}
-                              onClick={() => moveTemplate(folder, idx, 1)}
-                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar disabled:opacity-20"
-                              title="Move down"
-                            >
+                            <button disabled={idx === items.length - 1} onClick={() => moveTemplate(folder, idx, 1)}
+                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar disabled:opacity-20" title="Move down">
                               <ChevronRight className="h-3 w-3 rotate-90" />
                             </button>
                           </div>
@@ -427,7 +917,7 @@ export default function Templates() {
                               } catch {}
                             }}
                             className="opacity-0 group-hover/row:opacity-100 transition-opacity p-1 mr-1 rounded hover:bg-muted text-muted-foreground hover:text-sidebar"
-                            title="Duplicate template"
+                            title="Duplicate"
                           >
                             <Copy className="h-3 w-3" />
                           </button>
@@ -439,14 +929,13 @@ export default function Templates() {
               })}
             </div>
 
-            {/* Footer */}
             <div className="border-t border-muted/50 px-4 py-2 text-xs text-muted-foreground flex items-center gap-2">
-              <span>{totalCount} templates</span>
+              <span>{templates.length} templates</span>
               <span className="text-muted-foreground/40">·</span>
-              <span>{folderKeys.length} classifications</span>
+              <span>{folderKeys.length} classes</span>
               <span className="text-muted-foreground/40">·</span>
               <ArrowUpDown className="h-3 w-3" />
-              <span>hover row to reorder</span>
+              <span>hover to reorder</span>
             </div>
           </div>
 
@@ -454,25 +943,24 @@ export default function Templates() {
           <div className="flex-1 flex flex-col overflow-hidden">
             {selectedId ? (
               <TemplateDetail
+                key={selectedId}
                 templateId={selectedId}
                 discipline={discipline}
                 onClose={() => setSelectedId(null)}
-                onCopied={() => { refetch(); }}
+                onCopied={() => refetch()}
+                onSaved={() => refetch()}
               />
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-4 px-8">
                 <ClipboardList className="h-14 w-14 opacity-20" />
                 <div className="text-center">
                   <p className="font-semibold text-sidebar">Select a template</p>
-                  <p className="text-sm mt-1">Click any template in the folder tree to view its checklist items.</p>
-                  <p className="text-xs mt-3 text-muted-foreground/70">
-                    Hover a template row to reorder (↑↓) or duplicate it
-                  </p>
+                  <p className="text-sm mt-1">Click any template to view and edit its checklist items.</p>
+                  <p className="text-xs mt-3 text-muted-foreground/70">Hover a row to reorder (↑↓) or duplicate it</p>
                 </div>
               </div>
             )}
           </div>
-
         </div>
       </Card>
     </AppLayout>

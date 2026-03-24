@@ -11,6 +11,7 @@ InspectProof is a full-stack platform for Australian building certifiers and sur
 
 ## Features
 
+- **Checklist Template Editor** — Full inline editing of checklist items per template: add/edit/delete items, add section headers, reorder items up/down, per-item `reason` field (NCC intent, safety justification), code reference, risk level, required toggle. Saves atomically via PATCH/POST/DELETE to API.
 - **Authentication** — Token-based login with persistent storage
 - **Dashboard** — Live stats (active projects, inspections, open issues, critical issues), upcoming inspections, recent activity, projects by stage
 - **Projects** — List with search and status filters, detail view with inspections, issues, and project metadata (council approval, PCA ref, contract value, building classification)

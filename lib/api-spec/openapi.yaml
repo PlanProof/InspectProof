@@ -1266,6 +1266,9 @@ components:
           type: string
         description:
           type: string
+        reason:
+          type: string
+          nullable: true
         codeReference:
           type: string
           nullable: true

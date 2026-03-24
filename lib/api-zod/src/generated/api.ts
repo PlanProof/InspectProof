@@ -775,6 +775,7 @@ export const GetChecklistTemplateResponse = zod
           orderIndex: zod.number(),
           category: zod.string(),
           description: zod.string(),
+          reason: zod.string().nullish(),
           codeReference: zod.string().nullish(),
           riskLevel: zod.enum(["low", "medium", "high", "critical"]),
           isRequired: zod.boolean(),

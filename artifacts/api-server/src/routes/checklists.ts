@@ -18,14 +18,31 @@ function formatTemplate(t: any, itemCount = 0) {
   };
 }
 
+function formatItem(i: any) {
+  return {
+    id: i.id,
+    templateId: i.templateId,
+    orderIndex: i.orderIndex,
+    category: i.category,
+    description: i.description,
+    reason: i.reason ?? null,
+    codeReference: i.codeReference ?? null,
+    riskLevel: i.riskLevel,
+    isRequired: i.isRequired,
+  };
+}
+
+// ── Templates list & create ──────────────────────────────────────────────────
+
 router.get("/", async (req, res) => {
   try {
     const { discipline } = req.query;
-    let query = db.select().from(checklistTemplatesTable);
     const templates = discipline
-      ? await query.where(eq(checklistTemplatesTable.discipline, discipline as string))
+      ? await db.select().from(checklistTemplatesTable)
+          .where(eq(checklistTemplatesTable.discipline, discipline as string))
           .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.sortOrder} ASC`)
-      : await query.orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.sortOrder} ASC`);
+      : await db.select().from(checklistTemplatesTable)
+          .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.sortOrder} ASC`);
 
     const result = await Promise.all(templates.map(async (t) => {
       const [countRow] = await db.select({ count: sql<number>`count(*)::int` })
@@ -57,8 +74,9 @@ router.post("/", async (req, res) => {
           orderIndex: item.orderIndex ?? idx,
           category: item.category,
           description: item.description,
-          codeReference: item.codeReference,
-          riskLevel: item.riskLevel,
+          reason: item.reason ?? null,
+          codeReference: item.codeReference ?? null,
+          riskLevel: item.riskLevel ?? "medium",
           isRequired: item.isRequired ?? true,
         }))
       );
@@ -71,15 +89,68 @@ router.post("/", async (req, res) => {
   }
 });
 
+// ── Item-level routes (before /:id to avoid routing conflicts) ───────────────
+
+router.post("/items/reorder", async (req, res) => {
+  try {
+    const { items } = req.body as { items: { id: number; orderIndex: number }[] };
+    await Promise.all(items.map(({ id, orderIndex }) =>
+      db.update(checklistItemsTable)
+        .set({ orderIndex })
+        .where(eq(checklistItemsTable.id, id))
+    ));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Reorder items error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.patch("/items/:itemId", async (req, res) => {
+  try {
+    const itemId = parseInt(req.params.itemId);
+    const { description, reason, codeReference, riskLevel, isRequired, category, orderIndex } = req.body;
+    const updates: any = {};
+    if (description !== undefined) updates.description = description;
+    if (reason !== undefined) updates.reason = reason;
+    if (codeReference !== undefined) updates.codeReference = codeReference;
+    if (riskLevel !== undefined) updates.riskLevel = riskLevel;
+    if (isRequired !== undefined) updates.isRequired = isRequired;
+    if (category !== undefined) updates.category = category;
+    if (orderIndex !== undefined) updates.orderIndex = orderIndex;
+
+    const [item] = await db.update(checklistItemsTable)
+      .set(updates)
+      .where(eq(checklistItemsTable.id, itemId))
+      .returning();
+
+    if (!item) { res.status(404).json({ error: "not_found" }); return; }
+    res.json(formatItem(item));
+  } catch (err) {
+    req.log.error({ err }, "Update item error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.delete("/items/:itemId", async (req, res) => {
+  try {
+    const itemId = parseInt(req.params.itemId);
+    await db.delete(checklistItemsTable).where(eq(checklistItemsTable.id, itemId));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Delete item error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── Template by ID ────────────────────────────────────────────────────────────
+
 router.get("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const templates = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, id));
     const template = templates[0];
-    if (!template) {
-      res.status(404).json({ error: "not_found" });
-      return;
-    }
+    if (!template) { res.status(404).json({ error: "not_found" }); return; }
 
     const items = await db.select().from(checklistItemsTable)
       .where(eq(checklistItemsTable.templateId, id))
@@ -87,15 +158,7 @@ router.get("/:id", async (req, res) => {
 
     res.json({
       ...formatTemplate(template, items.length),
-      items: items.map(i => ({
-        id: i.id,
-        orderIndex: i.orderIndex,
-        category: i.category,
-        description: i.description,
-        codeReference: i.codeReference,
-        riskLevel: i.riskLevel,
-        isRequired: i.isRequired,
-      })),
+      items: items.map(formatItem),
     });
   } catch (err) {
     req.log.error({ err }, "Get template error");
@@ -106,13 +169,14 @@ router.get("/:id", async (req, res) => {
 router.patch("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { name, sortOrder, folder, discipline, description } = req.body;
+    const { name, sortOrder, folder, discipline, description, inspectionType } = req.body;
     const updates: any = {};
     if (name !== undefined) updates.name = name;
     if (sortOrder !== undefined) updates.sortOrder = sortOrder;
     if (folder !== undefined) updates.folder = folder;
     if (discipline !== undefined) updates.discipline = discipline;
     if (description !== undefined) updates.description = description;
+    if (inspectionType !== undefined) updates.inspectionType = inspectionType;
 
     const [template] = await db.update(checklistTemplatesTable)
       .set(updates)
@@ -127,7 +191,35 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-// Copy a template (duplicate it with all its items)
+// Add item to template
+router.post("/:id/items", async (req, res) => {
+  try {
+    const templateId = parseInt(req.params.id);
+    const { description, reason, codeReference, riskLevel, isRequired, category } = req.body;
+
+    const existing = await db.select({ maxOrder: sql<number>`coalesce(max(order_index), -1)::int` })
+      .from(checklistItemsTable).where(eq(checklistItemsTable.templateId, templateId));
+    const nextOrder = (existing[0]?.maxOrder ?? -1) + 1;
+
+    const [item] = await db.insert(checklistItemsTable).values({
+      templateId,
+      orderIndex: nextOrder,
+      category: category || "General",
+      description: description || "New checklist item",
+      reason: reason ?? null,
+      codeReference: codeReference ?? null,
+      riskLevel: riskLevel ?? "medium",
+      isRequired: isRequired ?? true,
+    }).returning();
+
+    res.status(201).json(formatItem(item));
+  } catch (err) {
+    req.log.error({ err }, "Add item error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// Copy template with all items
 router.post("/:id/copy", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -155,6 +247,7 @@ router.post("/:id/copy", async (req, res) => {
           orderIndex: i.orderIndex,
           category: i.category,
           description: i.description,
+          reason: i.reason,
           codeReference: i.codeReference,
           riskLevel: i.riskLevel,
           isRequired: i.isRequired,
@@ -169,7 +262,7 @@ router.post("/:id/copy", async (req, res) => {
   }
 });
 
-// Reorder templates within a folder — accepts [{id, sortOrder}] array
+// Reorder templates within folder
 router.post("/reorder", async (req, res) => {
   try {
     const { items } = req.body as { items: { id: number; sortOrder: number }[] };

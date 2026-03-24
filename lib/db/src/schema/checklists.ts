@@ -19,6 +19,7 @@ export const checklistItemsTable = pgTable("checklist_items", {
   orderIndex: integer("order_index").notNull(),
   category: text("category").notNull(),
   description: text("description").notNull(),
+  reason: text("reason"),
   codeReference: text("code_reference"),
   riskLevel: text("risk_level").notNull().default("medium"),
   isRequired: boolean("is_required").notNull().default(true),
