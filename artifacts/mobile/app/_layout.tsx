@@ -2,6 +2,7 @@ import {
   PlusJakartaSans_600SemiBold,
   useFonts,
 } from "@expo-google-fonts/plus-jakarta-sans";
+import { Feather } from "@expo/vector-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -79,6 +80,7 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     PlusJakartaSans_600SemiBold,
+    ...Feather.font,
   });
 
   useEffect(() => {
