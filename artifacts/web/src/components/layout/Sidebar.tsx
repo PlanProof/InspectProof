@@ -1,12 +1,10 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard,
+  Home,
   FolderOpen,
   CheckSquare,
-  AlertTriangle,
   BarChart3,
-  BookOpen,
   ClipboardList,
   Settings,
   LogOut
@@ -14,13 +12,11 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 
 const navigation = [
-  { name: "Dashboard",   href: "/dashboard",   icon: LayoutDashboard },
-  { name: "Projects",    href: "/projects",    icon: FolderOpen },
+  { name: "Home",        href: "/dashboard",   icon: Home },
   { name: "Inspections", href: "/inspections", icon: CheckSquare },
-  { name: "Issues",      href: "/issues",      icon: AlertTriangle },
-  { name: "Analytics",   href: "/analytics",   icon: BarChart3 },
+  { name: "Projects",    href: "/projects",    icon: FolderOpen },
   { name: "Templates",   href: "/templates",   icon: ClipboardList },
-  { name: "Compliance",  href: "/compliance",  icon: BookOpen },
+  { name: "Analytics",   href: "/analytics",   icon: BarChart3 },
 ];
 
 export function Sidebar() {
