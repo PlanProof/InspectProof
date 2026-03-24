@@ -239,6 +239,7 @@ router.get("/:id/checklist", async (req, res) => {
       riskLevel: r.item.riskLevel,
       result: r.result.result,
       notes: r.result.notes,
+      photoUrls: r.result.photoUrls ? JSON.parse(r.result.photoUrls) : [],
       orderIndex: r.item.orderIndex,
     })));
   } catch (err) {
@@ -273,6 +274,48 @@ router.post("/:id/checklist", async (req, res) => {
     res.json({ success: true, message: "Checklist results saved" });
   } catch (err) {
     req.log.error({ err }, "Save checklist error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.patch("/:id/checklist/:resultId", async (req, res) => {
+  try {
+    const resultId = parseInt(req.params.resultId);
+    const { result, notes, photoUrls } = req.body;
+
+    const updateData: any = { updatedAt: new Date() };
+    if (result !== undefined) updateData.result = result;
+    if (notes !== undefined) updateData.notes = notes;
+    if (photoUrls !== undefined) updateData.photoUrls = JSON.stringify(photoUrls);
+
+    const [updated] = await db.update(checklistResultsTable)
+      .set(updateData)
+      .where(eq(checklistResultsTable.id, resultId))
+      .returning();
+
+    if (!updated) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+
+    const item = await db.select().from(checklistItemsTable)
+      .where(eq(checklistItemsTable.id, updated.checklistItemId));
+
+    res.json({
+      id: updated.id,
+      inspectionId: updated.inspectionId,
+      checklistItemId: updated.checklistItemId,
+      category: item[0]?.category,
+      description: item[0]?.description,
+      codeReference: item[0]?.codeReference,
+      riskLevel: item[0]?.riskLevel,
+      result: updated.result,
+      notes: updated.notes,
+      photoUrls: updated.photoUrls ? JSON.parse(updated.photoUrls) : [],
+      orderIndex: item[0]?.orderIndex,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Patch checklist result error");
     res.status(500).json({ error: "internal_error" });
   }
 });

@@ -8,7 +8,9 @@ import {
   RefreshControl,
   Platform,
 } from "react-native";
+import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { InspectionCard } from "@/components/InspectionCard";
@@ -61,8 +63,14 @@ export default function InspectionsScreen() {
       <View style={[styles.header, { paddingTop: insets.top + WEB_TOP + 16 }]}>
         <View style={styles.headerTop}>
           <Text style={styles.title}>Inspections</Text>
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>{filtered.length}</Text>
+          <View style={styles.headerRight}>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{filtered.length}</Text>
+            </View>
+            <Pressable style={styles.newBtn} onPress={() => router.push("/inspection/create" as any)}>
+              <Feather name="plus" size={18} color={Colors.primary} />
+              <Text style={styles.newBtnText}>New</Text>
+            </Pressable>
           </View>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
@@ -126,6 +134,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  newBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: Colors.accent,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  newBtnText: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.primary,
   },
   title: {
     fontSize: 26,

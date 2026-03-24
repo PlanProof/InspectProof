@@ -73,6 +73,14 @@ function RootLayoutNav() {
           headerTitleStyle: { fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
         }}
       />
+      <Stack.Screen
+        name="inspection/create"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="inspection/conduct/[id]"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

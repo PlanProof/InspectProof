@@ -27,6 +27,7 @@ export const checklistResultsTable = pgTable("checklist_results", {
   checklistItemId: integer("checklist_item_id").notNull(),
   result: text("result").notNull().default("pending"),
   notes: text("notes"),
+  photoUrls: text("photo_urls"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

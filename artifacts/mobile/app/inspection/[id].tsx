@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Pressable,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -124,6 +125,19 @@ export default function InspectionDetailScreen() {
             </View>
           )}
         </View>
+
+        {inspection.status !== "completed" && (
+          <Pressable
+            style={styles.conductBtn}
+            onPress={() => router.push(`/inspection/conduct/${inspection.id}` as any)}
+          >
+            <Feather name="play-circle" size={18} color={Colors.primary} />
+            <Text style={styles.conductBtnText}>
+              {inspection.status === "in_progress" ? "Continue Inspection" : "Start Inspection"}
+            </Text>
+            <Feather name="arrow-right" size={16} color={Colors.primary} />
+          </Pressable>
+        )}
       </View>
 
       {/* Result Summary */}
@@ -265,6 +279,21 @@ const styles = StyleSheet.create({
   },
   typeText: {
     fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.primary,
+  },
+  conductBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.accent,
+    paddingVertical: 13,
+    borderRadius: 10,
+    marginTop: 6,
+  },
+  conductBtnText: {
+    fontSize: 15,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.primary,
   },

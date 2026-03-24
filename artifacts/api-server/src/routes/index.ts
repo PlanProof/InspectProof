@@ -11,6 +11,7 @@ import reportsRouter from "./reports";
 import analyticsRouter from "./analytics";
 import notificationsRouter from "./notifications";
 import usersRouter from "./users";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use("/reports", reportsRouter);
 router.use("/analytics", analyticsRouter);
 router.use("/notifications", notificationsRouter);
 router.use("/users", usersRouter);
+router.use(storageRouter);
 
 export default router;
