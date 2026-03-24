@@ -1,0 +1,21 @@
+packages:
+  "recharts": "Dashboard analytics charts and data visualization"
+  "date-fns": "Human-readable date formatting"
+  "react-hook-form": "Form state management"
+  "@hookform/resolvers": "Zod validation with react-hook-form"
+  "zod": "Schema validation"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility function to efficiently merge Tailwind CSS classes"
+  "@radix-ui/react-dialog": "Accessible dialog component"
+  "@radix-ui/react-slot": "Slot component for merging props"
+  "@radix-ui/react-tabs": "Accessible tabs component"
+  "@radix-ui/react-dropdown-menu": "Accessible dropdown menu component"
+
+images:
+  - path: "artifacts/web/public/images/login-bg.png"
+    description: "Abstract architectural blueprint lines and modern building silhouettes in deep navy blue (#0B1933) with subtle glowing accents in blue yonder (#466DB5)"
+    aspect_ratio: "16:9"
+
+notes:
+  - Using a global fetch interceptor in main to attach the Authorization: Basic token for all /api/ requests since Orval customFetch configuration is outside this artifact.
+  - Assuming @workspace/api-client-react is correctly linked in node_modules

@@ -2,7 +2,10 @@
 
 ## Overview
 
-InspectProof is a production-style mobile app for Australian building certifiers and surveyors. Built as a pnpm workspace monorepo with Expo (mobile), Express 5 backend, PostgreSQL + Drizzle ORM.
+InspectProof is a full-stack platform for Australian building certifiers and surveyors. Built as a pnpm workspace monorepo with:
+- **Desktop Web App** (React + Vite) — office/admin interface at `/`
+- **Mobile App** (Expo) — field inspection app at `/mobile/`
+- **API Server** (Express 5) — shared backend with PostgreSQL + Drizzle ORM
 
 **Login credentials:** `admin@inspectproof.com.au` / `password123`
 
