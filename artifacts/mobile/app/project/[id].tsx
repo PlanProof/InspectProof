@@ -246,12 +246,12 @@ const styles = StyleSheet.create({
   },
   typeText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.secondary,
   },
   projectName: {
     fontSize: 22,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     letterSpacing: -0.5,
     lineHeight: 28,
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     flex: 1,
   },
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
   },
   stagePillText: {
     fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.primary,
   },
   statsRow: {
@@ -302,12 +302,12 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 20,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
   },
   statLabel: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     textAlign: "center",
   },
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 14,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     marginBottom: 8,
   },
@@ -338,12 +338,12 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
   },
   detailValue: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     textAlign: "right",
     maxWidth: "60%",
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
   },
   criticalAlertText: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.danger,
     flex: 1,
   },
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
   },
   notesText: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     lineHeight: 20,
   },

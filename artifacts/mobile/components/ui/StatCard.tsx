@@ -45,18 +45,18 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 22,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
   },
   label: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     lineHeight: 16,
   },
   trend: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.success,
     marginTop: 2,
   },

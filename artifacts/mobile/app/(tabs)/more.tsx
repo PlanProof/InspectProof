@@ -215,23 +215,23 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 18,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.accent,
   },
   profileInfo: { flex: 1 },
   profileName: {
     fontSize: 16,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: "#FFFFFF",
   },
   profileRole: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.accent,
   },
   profileEmail: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: "rgba(255,255,255,0.5)",
   },
   profileBadge: {
@@ -242,13 +242,13 @@ const styles = StyleSheet.create({
   },
   profileBadgeText: {
     fontSize: 10,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.primary,
   },
   section: { gap: 10 },
   sectionTitle: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 1,
@@ -280,12 +280,12 @@ const styles = StyleSheet.create({
   menuLabel: { flex: 1 },
   menuText: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
   },
   menuSublabel: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textTertiary,
     marginTop: 1,
   },
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 12,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: "#FFFFFF",
   },
   referenceGrid: {
@@ -319,12 +319,12 @@ const styles = StyleSheet.create({
   },
   refCode: {
     fontSize: 13,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.secondary,
   },
   refDesc: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     lineHeight: 15,
   },
@@ -340,13 +340,13 @@ const styles = StyleSheet.create({
   },
   footerVersion: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textTertiary,
     textAlign: "center",
   },
   footerCompliance: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textTertiary + "AA",
     textAlign: "center",
   },

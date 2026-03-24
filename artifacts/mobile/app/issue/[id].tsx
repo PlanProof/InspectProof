@@ -191,13 +191,13 @@ const styles = StyleSheet.create({
   badges: { flexDirection: "row", gap: 8 },
   title: {
     fontSize: 20,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     lineHeight: 26,
   },
   projectName: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
   },
   overdueAlert: {
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   },
   overdueText: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.danger,
     flex: 1,
   },
@@ -228,13 +228,13 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 14,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     marginBottom: 4,
   },
   description: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     lineHeight: 22,
   },
@@ -255,12 +255,12 @@ const styles = StyleSheet.create({
   },
   detailLabelText: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
   },
   detailValue: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     maxWidth: "55%",
     textAlign: "right",
@@ -281,17 +281,17 @@ const styles = StyleSheet.create({
   },
   codeRefTitle: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.secondary,
   },
   codeRefCode: {
     fontSize: 16,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.primary,
   },
   codeRefDesc: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     lineHeight: 18,
   },
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     fontSize: 11,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     textAlign: "center",
   },

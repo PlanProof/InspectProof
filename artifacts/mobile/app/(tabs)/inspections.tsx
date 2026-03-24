@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     letterSpacing: -0.5,
   },
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   },
   countText: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.secondary,
   },
   filters: { gap: 8, paddingRight: 4 },
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 13,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
   },
   chipTextActive: { color: Colors.accent },
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
   section: { gap: 10 },
   sectionTitle: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.8,

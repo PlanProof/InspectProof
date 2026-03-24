@@ -189,13 +189,13 @@ const styles = StyleSheet.create({
   },
   brandName: {
     fontSize: 32,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: "#FFFFFF",
     letterSpacing: -1,
   },
   brandTagline: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: "rgba(255,255,255,0.5)",
     textAlign: "center",
     maxWidth: 260,
@@ -215,13 +215,13 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 22,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     letterSpacing: -0.5,
   },
   cardSubtitle: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     marginTop: -8,
   },
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.danger,
     flex: 1,
   },
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
   },
   inputWrapper: {
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 13,
     fontSize: 15,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
   },
   eyeButton: {
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   },
   loginButtonText: {
     fontSize: 16,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: "#FFFFFF",
   },
   demoNote: {
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   },
   demoText: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textTertiary,
   },
   footer: {
@@ -304,12 +304,12 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: "rgba(255,255,255,0.35)",
   },
   footerSub: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: "rgba(255,255,255,0.2)",
   },
 });

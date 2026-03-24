@@ -63,7 +63,7 @@ function ClassicTabLayout() {
             <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.tabBar }]} />
           ) : null,
         tabBarLabelStyle: {
-          fontFamily: "Inter_600SemiBold",
+          fontFamily: "PlusJakartaSans_600SemiBold",
           fontSize: 11,
         },
       }}

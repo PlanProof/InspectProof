@@ -231,18 +231,18 @@ const styles = StyleSheet.create({
   headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
   greeting: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
   },
   userName: {
     fontSize: 24,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     letterSpacing: -0.5,
   },
   dateText: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textTertiary,
     marginTop: 2,
   },
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 14,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.accent,
   },
   statsGrid: { gap: 10 },
@@ -292,12 +292,12 @@ const styles = StyleSheet.create({
   alertText: { flex: 1 },
   alertTitle: {
     fontSize: 14,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.danger,
   },
   alertSubtitle: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.danger + "99",
   },
   section: { gap: 12 },
@@ -320,12 +320,12 @@ const styles = StyleSheet.create({
   },
   stageCount: {
     fontSize: 20,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
   },
   stageLabel: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     textAlign: "center",
     textTransform: "capitalize",
@@ -357,13 +357,13 @@ const styles = StyleSheet.create({
   activityContent: { flex: 1, gap: 3 },
   activityDesc: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     lineHeight: 18,
   },
   activityTime: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textTertiary,
   },
 });

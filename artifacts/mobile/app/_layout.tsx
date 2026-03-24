@@ -1,10 +1,7 @@
 import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
+  PlusJakartaSans_600SemiBold,
   useFonts,
-} from "@expo-google-fonts/inter";
+} from "@expo-google-fonts/plus-jakarta-sans";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -45,7 +42,7 @@ function RootLayoutNav() {
           title: "Project",
           headerStyle: { backgroundColor: Colors.surface },
           headerTintColor: Colors.text,
-          headerTitleStyle: { fontFamily: "Inter_700Bold", color: Colors.text },
+          headerTitleStyle: { fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
         }}
       />
       <Stack.Screen
@@ -54,7 +51,7 @@ function RootLayoutNav() {
           title: "Inspection",
           headerStyle: { backgroundColor: Colors.surface },
           headerTintColor: Colors.text,
-          headerTitleStyle: { fontFamily: "Inter_700Bold", color: Colors.text },
+          headerTitleStyle: { fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
         }}
       />
       <Stack.Screen
@@ -63,7 +60,7 @@ function RootLayoutNav() {
           title: "Issue",
           headerStyle: { backgroundColor: Colors.surface },
           headerTintColor: Colors.text,
-          headerTitleStyle: { fontFamily: "Inter_700Bold", color: Colors.text },
+          headerTitleStyle: { fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
         }}
       />
       <Stack.Screen
@@ -72,7 +69,7 @@ function RootLayoutNav() {
           title: "Analytics",
           headerStyle: { backgroundColor: Colors.surface },
           headerTintColor: Colors.text,
-          headerTitleStyle: { fontFamily: "Inter_700Bold", color: Colors.text },
+          headerTitleStyle: { fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
         }}
       />
     </Stack>
@@ -81,10 +78,7 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
+    PlusJakartaSans_600SemiBold,
   });
 
   useEffect(() => {

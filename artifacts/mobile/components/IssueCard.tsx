@@ -107,13 +107,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     lineHeight: 20,
   },
   description: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     lineHeight: 18,
   },
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 11,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textTertiary,
     maxWidth: 160,
   },

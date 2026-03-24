@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   size_lg: { paddingHorizontal: 20, paddingVertical: 14 },
   pressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
   disabled: { opacity: 0.5 },
-  label: { fontFamily: "Inter_600SemiBold" },
+  label: { fontFamily: "PlusJakartaSans_600SemiBold" },
   label_primary: { color: "#FFFFFF" },
   label_secondary: { color: Colors.text },
   label_ghost: { color: Colors.secondary },

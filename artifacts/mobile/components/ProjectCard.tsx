@@ -121,18 +121,18 @@ const styles = StyleSheet.create({
   },
   projectType: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
   },
   name: {
     fontSize: 15,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
     letterSpacing: -0.2,
   },
   address: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
   },
   clientRow: {
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   },
   clientName: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textTertiary,
   },
   divider: {
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   },
   stageText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.primary,
   },
   footerStats: {
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   issuesStat: {},
   statText: {
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
   },
 });
