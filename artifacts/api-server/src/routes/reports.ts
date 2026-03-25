@@ -1,6 +1,13 @@
+import path from "path";
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import PDFDocument from "pdfkit";
+
+const FONT_DIR = path.join(__dirname, "..", "fonts");
+const FONT_REGULAR = path.join(FONT_DIR, "PlusJakartaSans-Regular.ttf");
+const FONT_BOLD    = path.join(FONT_DIR, "PlusJakartaSans-Bold.ttf");
+const F = "PJS";
+const FB = "PJS-Bold";
 import {
   db, reportsTable, projectsTable, inspectionsTable, issuesTable,
   usersTable, checklistResultsTable, checklistItemsTable,
@@ -399,18 +406,18 @@ function addPageHeader(doc: PDFKit.PDFDocument, typeLabel: string) {
   doc.rect(badgeX + 5, badgeY + 6, 3, badgeH - 12).fill(COLOR_NAVY);
 
   // "IP" centred in badge
-  doc.fillColor(COLOR_NAVY).fontSize(13).font("Helvetica-Bold")
+  doc.fillColor(COLOR_NAVY).fontSize(13).font(FB)
     .text("IP", badgeX + 8, badgeY + 12, { width: badgeW - 8, align: "center", lineBreak: false });
 
   // ── Brand text ────────────────────────────────────────────────────────────
   const textX = badgeX + badgeW + 9;
-  doc.fillColor("#ffffff").fontSize(15).font("Helvetica-Bold")
+  doc.fillColor("#ffffff").fontSize(15).font(FB)
     .text("InspectProof", textX, 19, { lineBreak: false });
-  doc.fillColor(COLOR_PEAR).fontSize(7.5).font("Helvetica")
+  doc.fillColor(COLOR_PEAR).fontSize(7.5).font(F)
     .text("Certification & Inspection Platform", textX, 40, { lineBreak: false });
 
   // ── Report type label (right-aligned) ────────────────────────────────────
-  doc.fillColor("rgba(255,255,255,0.75)").fontSize(7.5).font("Helvetica-Bold")
+  doc.fillColor("rgba(255,255,255,0.75)").fontSize(7.5).font(FB)
     .text(typeLabel.toUpperCase(), 0, 28, { align: "right", width: pageW - MARGIN, lineBreak: false });
 
   doc.restore();
@@ -428,7 +435,7 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
   const pageH = doc.page.height;
   doc.save();
   doc.rect(0, pageH - FOOTER_H, pageW, FOOTER_H).fill(COLOR_NAVY);
-  doc.fillColor("#9CA3AF").fontSize(7).font("Helvetica")
+  doc.fillColor("#9CA3AF").fontSize(7).font(F)
     .text(
       `InspectProof Certification Services  ·  Confidential  ·  Page ${pageNum} of ${totalPages}`,
       MARGIN, pageH - FOOTER_H + 15,
@@ -445,6 +452,9 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
     info: { Title: report.title || "Report", Author: "InspectProof" },
   });
 
+  doc.registerFont(F,  FONT_REGULAR);
+  doc.registerFont(FB, FONT_BOLD);
+
   const pageW = doc.page.width;
   const contentW = pageW - MARGIN * 2;
   const typeLabel = (report.reportTypeLabel || report.reportType || "Report").toUpperCase();
@@ -453,7 +463,7 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
   addPageHeader(doc, typeLabel);
 
   // ── Document title ─────────────────────────────────────────────────────────
-  doc.fillColor(COLOR_NAVY).fontSize(13).font("Helvetica-Bold")
+  doc.fillColor(COLOR_NAVY).fontSize(13).font(FB)
     .text(report.title || "Inspection Report", { width: contentW });
 
   doc.moveDown(0.4);
@@ -473,7 +483,7 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
   const pillX = doc.x;
   const pillY = doc.y;
   doc.roundedRect(pillX, pillY, 88, 15, 3).fill(sc);
-  doc.fillColor("#ffffff").fontSize(7).font("Helvetica-Bold")
+  doc.fillColor("#ffffff").fontSize(7).font(FB)
     .text(sl, pillX, pillY + 4, { width: 88, align: "center" });
   doc.y = pillY + 22;
 
@@ -521,7 +531,7 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
       doc.moveDown(0.5);
       const headerY = doc.y;
       doc.rect(MARGIN, headerY, contentW, 17).fill("#E8ECF2");
-      doc.fillColor(COLOR_NAVY).fontSize(8).font("Helvetica-Bold")
+      doc.fillColor(COLOR_NAVY).fontSize(8).font(FB)
         .text(line.trim(), MARGIN + 6, headerY + 5, { width: contentW - 12 });
       doc.y = headerY + 22;
       continue;
@@ -535,10 +545,10 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
       const val = kvMatch[2].trim();
       const rowY = doc.y;
       // Key column
-      doc.fillColor(COLOR_NAVY).fontSize(8).font("Helvetica-Bold")
+      doc.fillColor(COLOR_NAVY).fontSize(8).font(FB)
         .text(key + ":", MARGIN, rowY, { width: 145, lineBreak: false });
       // Value column — start at fixed x offset
-      doc.fillColor("#1F2937").fontSize(8).font("Helvetica")
+      doc.fillColor("#1F2937").fontSize(8).font(F)
         .text(val, MARGIN + 150, rowY, { width: contentW - 150 });
       // Advance past the taller of the two columns
       doc.moveDown(0.15);
@@ -561,10 +571,10 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
       const rowY = doc.y;
       // Badge box
       doc.roundedRect(MARGIN, rowY, 32, 12, 2).fillAndStroke(badgeBg, badgeBorder);
-      doc.fillColor(badgeColor).fontSize(6.5).font("Helvetica-Bold")
+      doc.fillColor(badgeColor).fontSize(6.5).font(FB)
         .text(badgeText, MARGIN, rowY + 3, { width: 32, align: "center", lineBreak: false });
       // Description
-      doc.fillColor("#1F2937").fontSize(8).font("Helvetica")
+      doc.fillColor("#1F2937").fontSize(8).font(F)
         .text(desc, MARGIN + 38, rowY, { width: contentW - 38 });
       doc.moveDown(0.2);
       continue;
@@ -577,13 +587,13 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
       const subKv = subText.match(/^([A-Za-z][A-Za-z 0-9\/]+?):\s+(.+)$/);
       if (subKv) {
         const rowY = doc.y;
-        doc.fillColor("#6B7280").fontSize(7.5).font("Helvetica-Bold")
+        doc.fillColor("#6B7280").fontSize(7.5).font(FB)
           .text(subKv[1] + ":", MARGIN + 38, rowY, { width: 90, lineBreak: false });
-        doc.fillColor("#374151").fontSize(7.5).font("Helvetica")
+        doc.fillColor("#374151").fontSize(7.5).font(F)
           .text(subKv[2], MARGIN + 130, rowY, { width: contentW - 130 });
         doc.moveDown(0.15);
       } else {
-        doc.fillColor("#374151").fontSize(8).font("Helvetica")
+        doc.fillColor("#374151").fontSize(8).font(F)
           .text(subText, MARGIN + 38, doc.y, { width: contentW - 38 });
         doc.moveDown(0.1);
       }
@@ -594,9 +604,9 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
     const numberedMatch = line.match(/^(Item \d+|[\d]+\.)\s+(.+)$/);
     if (numberedMatch) {
       checkPageBreak(14);
-      doc.fillColor(COLOR_NAVY).fontSize(8).font("Helvetica-Bold")
+      doc.fillColor(COLOR_NAVY).fontSize(8).font(FB)
         .text(numberedMatch[1], MARGIN, doc.y, { width: 45, lineBreak: false });
-      doc.fillColor("#1F2937").fontSize(8).font("Helvetica")
+      doc.fillColor("#1F2937").fontSize(8).font(F)
         .text(numberedMatch[2], MARGIN + 48, doc.y - doc.currentLineHeight(), { width: contentW - 48 });
       doc.moveDown(0.2);
       continue;
@@ -604,7 +614,7 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
 
     // Default body text
     checkPageBreak(14);
-    doc.fillColor("#1F2937").fontSize(8.5).font("Helvetica")
+    doc.fillColor("#1F2937").fontSize(8.5).font(F)
       .text(line.trim(), MARGIN, doc.y, { width: contentW });
     doc.moveDown(0.1);
   }
