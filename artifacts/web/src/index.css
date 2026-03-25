@@ -9,6 +9,14 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'OddliniUX';
+  src: url('/fonts/oddlini-medium-ultra-expanded.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme inline {
   --font-sans: 'Plus Jakarta Sans', sans-serif;
 

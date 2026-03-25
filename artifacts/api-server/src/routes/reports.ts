@@ -3,13 +3,13 @@ import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 
-const FONT_DIR     = path.join(__dirname, "..", "fonts");
-const FONT_REGULAR = path.join(FONT_DIR, "PlusJakartaSans-Regular.ttf");
-const FONT_BOLD    = path.join(FONT_DIR, "PlusJakartaSans-Bold.ttf");
-const FONT_ODDLINI = path.join(FONT_DIR, "Oddlini-Medium.ttf");
+const FONT_DIR        = path.join(__dirname, "..", "fonts");
+const FONT_REGULAR    = path.join(FONT_DIR, "PlusJakartaSans-Regular.ttf");
+const FONT_BOLD       = path.join(FONT_DIR, "PlusJakartaSans-Bold.ttf");
+const FONT_ODDLINI_UX = path.join(FONT_DIR, "Oddlini-MediumUltraExpanded.otf");
 const F        = "PJS";
 const FB       = "PJS-Bold";
-const FODDLINI = "Oddlini";
+const FODDLINI = "OddliniUX";
 import {
   db, reportsTable, projectsTable, inspectionsTable, issuesTable,
   usersTable, checklistResultsTable, checklistItemsTable,
@@ -464,7 +464,7 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
 
   doc.registerFont(F,        FONT_REGULAR);
   doc.registerFont(FB,       FONT_BOLD);
-  doc.registerFont(FODDLINI, FONT_ODDLINI);
+  doc.registerFont(FODDLINI, FONT_ODDLINI_UX);
 
   const pageW = doc.page.width;
   const contentW = pageW - MARGIN * 2;
