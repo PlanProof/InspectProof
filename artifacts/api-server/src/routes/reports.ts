@@ -474,10 +474,10 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
   addPageHeader(doc, typeLabel);
 
   // ── Document title ─────────────────────────────────────────────────────────
-  doc.fillColor(COLOR_NAVY).fontSize(13).font(FB)
+  doc.fillColor(COLOR_NAVY).fontSize(15).font(FB)
     .text(report.title || "Inspection Report", { width: contentW });
 
-  doc.moveDown(0.4);
+  doc.moveDown(0.6);
 
   // Status pill (inline text)
   const statusLabels: Record<string, string> = {
@@ -493,16 +493,16 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
 
   const pillX = doc.x;
   const pillY = doc.y;
-  doc.roundedRect(pillX, pillY, 88, 15, 3).fill(sc);
-  doc.fillColor("#ffffff").fontSize(7).font(FB)
-    .text(sl, pillX, pillY + 4, { width: 88, align: "center" });
-  doc.y = pillY + 22;
+  doc.roundedRect(pillX, pillY, 96, 18, 3).fill(sc);
+  doc.fillColor("#ffffff").fontSize(7.5).font(FB)
+    .text(sl, pillX, pillY + 5, { width: 96, align: "center" });
+  doc.y = pillY + 28;
 
   // Separator line
   doc.moveTo(MARGIN, doc.y)
     .lineTo(pageW - MARGIN, doc.y)
     .strokeColor(COLOR_PEAR).lineWidth(1.5).stroke();
-  doc.moveDown(0.8);
+  doc.moveDown(1.2);
 
   // ── Parse and render content ───────────────────────────────────────────────
   const lines = (report.content || "").split("\n");
@@ -522,9 +522,9 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
     // Skip pure divider lines
     if (/^─{5,}$/.test(line.trim())) continue;
 
-    // Blank line → small gap
+    // Blank line → breathing room
     if (line.trim() === "") {
-      doc.moveDown(0.3);
+      doc.moveDown(0.55);
       continue;
     }
 
@@ -538,38 +538,38 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
       && (prevIsDivider || nextIsDivider);
 
     if (looksLikeHeader) {
-      checkPageBreak(32);
-      doc.moveDown(0.5);
+      checkPageBreak(40);
+      doc.moveDown(0.6);
       const headerY = doc.y;
-      doc.rect(MARGIN, headerY, contentW, 17).fill("#E8ECF2");
-      doc.fillColor(COLOR_NAVY).fontSize(8).font(FB)
-        .text(line.trim(), MARGIN + 6, headerY + 5, { width: contentW - 12 });
-      doc.y = headerY + 22;
+      doc.rect(MARGIN, headerY, contentW, 22).fill("#E8ECF2");
+      // Left accent bar
+      doc.rect(MARGIN, headerY, 3, 22).fill(COLOR_BLUE);
+      doc.fillColor(COLOR_NAVY).fontSize(9).font(FB)
+        .text(line.trim(), MARGIN + 10, headerY + 7, { width: contentW - 16 });
+      doc.y = headerY + 30;
       continue;
     }
 
     // Key-value: "Label:   value" (2+ spaces after colon used for alignment)
     const kvMatch = line.match(/^([A-Za-z][A-Za-z 0-9\/\-&]+?):\s{2,}(.+)$/);
     if (kvMatch) {
-      checkPageBreak(14);
+      checkPageBreak(18);
       const key = kvMatch[1].trim();
       const val = kvMatch[2].trim();
       const rowY = doc.y;
-      // Key column
-      doc.fillColor(COLOR_NAVY).fontSize(8).font(FB)
-        .text(key + ":", MARGIN, rowY, { width: 145, lineBreak: false });
-      // Value column — start at fixed x offset
-      doc.fillColor("#1F2937").fontSize(8).font(F)
-        .text(val, MARGIN + 150, rowY, { width: contentW - 150 });
-      // Advance past the taller of the two columns
-      doc.moveDown(0.15);
+      // Subtle alternating row background (every other row)
+      doc.fillColor(COLOR_NAVY).fontSize(9).font(FB)
+        .text(key + ":", MARGIN, rowY, { width: 148, lineBreak: false });
+      doc.fillColor("#1F2937").fontSize(9).font(F)
+        .text(val, MARGIN + 152, rowY, { width: contentW - 152 });
+      doc.moveDown(0.45);
       continue;
     }
 
     // Checklist item: "1. [✓ PASS] description" or "1. [✗ FAIL] ..."
     const checkMatch = line.match(/^(\d+)\.\s+\[(.+?)\]\s+(.*)$/);
     if (checkMatch) {
-      checkPageBreak(14);
+      checkPageBreak(18);
       const resultStr = checkMatch[2].trim();
       const desc = checkMatch[3].trim();
       const isPass = resultStr.includes("PASS");
@@ -580,33 +580,33 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
       const badgeText = isPass ? "PASS" : isFail ? "FAIL" : "N/A";
 
       const rowY = doc.y;
-      // Badge box
-      doc.roundedRect(MARGIN, rowY, 32, 12, 2).fillAndStroke(badgeBg, badgeBorder);
-      doc.fillColor(badgeColor).fontSize(6.5).font(FB)
-        .text(badgeText, MARGIN, rowY + 3, { width: 32, align: "center", lineBreak: false });
+      // Badge box — slightly larger for readability
+      doc.roundedRect(MARGIN, rowY + 1, 36, 13, 2).fillAndStroke(badgeBg, badgeBorder);
+      doc.fillColor(badgeColor).fontSize(7).font(FB)
+        .text(badgeText, MARGIN, rowY + 4, { width: 36, align: "center", lineBreak: false });
       // Description
-      doc.fillColor("#1F2937").fontSize(8).font(F)
-        .text(desc, MARGIN + 38, rowY, { width: contentW - 38 });
-      doc.moveDown(0.2);
+      doc.fillColor("#1F2937").fontSize(9).font(F)
+        .text(desc, MARGIN + 43, rowY, { width: contentW - 43 });
+      doc.moveDown(0.45);
       continue;
     }
 
     // Sub-detail lines (indented with spaces, e.g. "   Code Ref: ...")
     if (/^\s{2,}/.test(raw)) {
-      checkPageBreak(12);
+      checkPageBreak(15);
       const subText = line.trim();
       const subKv = subText.match(/^([A-Za-z][A-Za-z 0-9\/]+?):\s+(.+)$/);
       if (subKv) {
         const rowY = doc.y;
-        doc.fillColor("#6B7280").fontSize(7.5).font(FB)
-          .text(subKv[1] + ":", MARGIN + 38, rowY, { width: 90, lineBreak: false });
-        doc.fillColor("#374151").fontSize(7.5).font(F)
-          .text(subKv[2], MARGIN + 130, rowY, { width: contentW - 130 });
-        doc.moveDown(0.15);
+        doc.fillColor("#6B7280").fontSize(8.5).font(FB)
+          .text(subKv[1] + ":", MARGIN + 43, rowY, { width: 90, lineBreak: false });
+        doc.fillColor("#374151").fontSize(8.5).font(F)
+          .text(subKv[2], MARGIN + 135, rowY, { width: contentW - 135 });
+        doc.moveDown(0.35);
       } else {
-        doc.fillColor("#374151").fontSize(8).font(F)
-          .text(subText, MARGIN + 38, doc.y, { width: contentW - 38 });
-        doc.moveDown(0.1);
+        doc.fillColor("#374151").fontSize(9).font(F)
+          .text(subText, MARGIN + 43, doc.y, { width: contentW - 43 });
+        doc.moveDown(0.3);
       }
       continue;
     }
@@ -614,20 +614,20 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
     // Numbered items without brackets: "Item 1: ..." or "1. description"
     const numberedMatch = line.match(/^(Item \d+|[\d]+\.)\s+(.+)$/);
     if (numberedMatch) {
-      checkPageBreak(14);
-      doc.fillColor(COLOR_NAVY).fontSize(8).font(FB)
-        .text(numberedMatch[1], MARGIN, doc.y, { width: 45, lineBreak: false });
-      doc.fillColor("#1F2937").fontSize(8).font(F)
-        .text(numberedMatch[2], MARGIN + 48, doc.y - doc.currentLineHeight(), { width: contentW - 48 });
-      doc.moveDown(0.2);
+      checkPageBreak(18);
+      doc.fillColor(COLOR_NAVY).fontSize(9).font(FB)
+        .text(numberedMatch[1], MARGIN, doc.y, { width: 48, lineBreak: false });
+      doc.fillColor("#1F2937").fontSize(9).font(F)
+        .text(numberedMatch[2], MARGIN + 52, doc.y - doc.currentLineHeight(), { width: contentW - 52 });
+      doc.moveDown(0.45);
       continue;
     }
 
     // Default body text
-    checkPageBreak(14);
-    doc.fillColor("#1F2937").fontSize(8.5).font(F)
+    checkPageBreak(18);
+    doc.fillColor("#1F2937").fontSize(9.5).font(F)
       .text(line.trim(), MARGIN, doc.y, { width: contentW });
-    doc.moveDown(0.1);
+    doc.moveDown(0.3);
   }
 
   // ── Footers on all pages ───────────────────────────────────────────────────
