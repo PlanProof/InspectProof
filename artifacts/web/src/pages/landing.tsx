@@ -406,7 +406,7 @@ function HowItWorks() {
             className="text-3xl sm:text-4xl font-normal text-[#0B1933] mb-4"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
-            From site to certificate in four steps
+            From site to report in four steps
           </h2>
           <p className="mx-auto max-w-2xl text-gray-500">
             InspectProof removes the paperwork from building inspections without
