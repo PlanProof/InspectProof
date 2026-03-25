@@ -118,9 +118,9 @@ function Hero() {
         </h1>
 
         <p className="mx-auto max-w-2xl text-lg text-white/60 mb-10 leading-relaxed">
-          InspectProof is the field inspection platform for building certifiers,
-          engineers, builders, WHS officers and site professionals. Capture,
-          document and report on every inspection — fast, accurate and audit-ready.
+          InspectProof is the field inspection platform for every professional
+          working within Australia's built environment. Capture, document and
+          report on every inspection — fast, accurate and audit-ready.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -229,8 +229,8 @@ function Features() {
             Everything you need in the field
           </h2>
           <p className="mx-auto max-w-2xl text-gray-500">
-            Built from the ground up for Australian building professionals who
-            need reliable, defensible records — not just another generic app.
+            Built from the ground up for professionals working within Australia's
+            built environment — not just another generic app.
           </p>
         </div>
 
@@ -374,7 +374,7 @@ function Professionals() {
             className="text-3xl sm:text-4xl font-normal text-white mb-4"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
-            Supporting the professionals<br />who build, inspect and certify Australia's built environment
+            Built for every professional<br />working within Australia's built environment
           </h2>
         </div>
 
@@ -520,8 +520,8 @@ function CTA() {
               Ready to streamline your inspections?
             </h2>
             <p className="text-white/60 mb-10 max-w-xl mx-auto">
-              Join building certifiers, engineers, builders, WHS officers and site
-              professionals across Australia who trust InspectProof for defensible, audit-ready records.
+              Trusted by professionals working within Australia's built environment
+              for defensible, audit-ready inspection records — from the field, every time.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
@@ -557,8 +557,8 @@ function Footer() {
               </span>
             </div>
             <p className="text-sm text-white/50 leading-relaxed">
-              The field inspection platform for building certifiers, engineers,
-              builders and site professionals. Fast, accurate and audit-ready.
+              The field inspection platform for professionals working within
+              Australia's built environment. Fast, accurate and audit-ready.
             </p>
           </div>
 
