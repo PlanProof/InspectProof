@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui";
+import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
-  Plus, Trash2, FileText, Upload, Image, Eye, Edit3, ChevronRight,
-  Download, Copy, MoreHorizontal, Check, X,
+  Plus, Trash2, FileText, Image, Eye, Edit3, ChevronRight,
+  Copy, Check, X, Link2, ClipboardList, Printer, ChevronDown,
 } from "lucide-react";
+import { useListChecklistTemplates, useListInspections } from "@workspace/api-client-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface DocTemplate {
@@ -12,6 +13,7 @@ interface DocTemplate {
   name: string;
   content: string;
   backgroundImage?: string;
+  linkedChecklistIds: number[];
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +39,7 @@ const FIELD_GROUPS = [
       { token: "{{inspection_time}}",  label: "Inspection Time" },
       { token: "{{result}}",           label: "Result (Pass/Fail)" },
       { token: "{{notes}}",            label: "Inspector Notes" },
+      { token: "{{checklist_items}}", label: "Checklist Items Table" },
     ],
   },
   {
@@ -74,7 +77,8 @@ const STORAGE_KEY = "inspectproof_doc_templates";
 function loadTemplates(): DocTemplate[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    return parsed.map((t: any) => ({ ...t, linkedChecklistIds: t.linkedChecklistIds ?? [] }));
   } catch {
     return [];
   }
@@ -89,6 +93,7 @@ function newTemplate(): DocTemplate {
   return {
     id: `tmpl_${Date.now()}`,
     name: "Untitled Template",
+    linkedChecklistIds: [],
     content: `<h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0B1933;">INSPECTION REPORT</h2>
 <p style="margin:0 0 8px;"><strong>Project:</strong> {{project_name}}</p>
 <p style="margin:0 0 8px;"><strong>Site Address:</strong> {{project_address}}</p>
@@ -97,19 +102,247 @@ function newTemplate(): DocTemplate {
 <p style="margin:0 0 8px;"><strong>Inspector:</strong> {{inspector_name}}</p>
 <p style="margin:0 0 24px;"><strong>Result:</strong> {{result}}</p>
 <p style="margin:0 0 8px;"><strong>Notes:</strong></p>
-<p style="margin:0 0 32px;">{{notes}}</p>
-<p style="margin:0 0 4px;border-top:1px solid #ccc;padding-top:12px;font-size:13px;color:#666;">{{certifier_name}} — License No. {{license_number}}</p>
+<p style="margin:0 0 24px;">{{notes}}</p>
+<p style="margin:0 0 16px;"><strong>Checklist:</strong></p>
+{{checklist_items}}
+<p style="margin:32px 0 4px;border-top:1px solid #ccc;padding-top:12px;font-size:13px;color:#666;">{{certifier_name}} — License No. {{license_number}}</p>
 <p style="margin:0;font-size:13px;color:#666;">{{company_name}}</p>`,
     createdAt: now,
     updatedAt: now,
   };
 }
 
-// ── Token highlight helper ────────────────────────────────────────────────────
+// ── Token highlight (edit mode) ────────────────────────────────────────────────
 function highlightTokens(html: string): string {
   return html.replace(
     /(\{\{[a-z_]+\}\})/g,
     `<span style="background:#dbeafe;color:#1d4ed8;border-radius:3px;padding:0 3px;font-family:monospace;font-size:12px;">$1</span>`
+  );
+}
+
+// ── Checklist table builder ────────────────────────────────────────────────────
+function buildChecklistTable(results: any[]): string {
+  if (!results || results.length === 0) return "<p style='color:#666;font-style:italic;'>No checklist items recorded.</p>";
+  const rows = results
+    .slice()
+    .sort((a: any, b: any) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+    .map((r: any, i: number) => {
+      const color = r.result === "pass" ? "#15803d" : r.result === "fail" ? "#b91c1c" : "#6b7280";
+      const bg = r.result === "pass" ? "#f0fdf4" : r.result === "fail" ? "#fef2f2" : "transparent";
+      return `<tr style="background:${bg};">
+        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#374151;">${i + 1}</td>
+        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;">${r.description ?? ""}</td>
+        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:600;color:${color};">${(r.result ?? "pending").toUpperCase()}</td>
+        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280;">${r.notes ?? ""}</td>
+      </tr>`;
+    }).join("");
+  return `<table style="width:100%;border-collapse:collapse;margin:8px 0;">
+    <thead>
+      <tr style="background:#f3f4f6;">
+        <th style="text-align:left;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;width:32px;">#</th>
+        <th style="text-align:left;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;">Description</th>
+        <th style="text-align:center;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;width:80px;">Result</th>
+        <th style="text-align:left;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;">Notes</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+// ── Token filler ──────────────────────────────────────────────────────────────
+function fillTokens(content: string, inspection: any, project: any): string {
+  const today = new Date();
+  const au = (d: string) => new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+  const vals: Record<string, string> = {
+    "{{project_name}}":     inspection.projectName ?? "",
+    "{{project_address}}":  project?.siteAddress ?? "",
+    "{{council_number}}":   project?.councilRef ?? "",
+    "{{ncc_class}}":        project?.nccClass ?? "",
+    "{{lot_number}}":       project?.lotNumber ?? "",
+    "{{da_number}}":        project?.daNumber ?? "",
+    "{{inspection_type}}":  (inspection.inspectionType ?? "").replace(/_/g, " "),
+    "{{inspection_date}}":  inspection.scheduledDate ? au(inspection.scheduledDate) : "",
+    "{{inspection_time}}":  inspection.scheduledTime ?? "",
+    "{{result}}":           `${inspection.passCount ?? 0} Pass / ${inspection.failCount ?? 0} Fail`,
+    "{{notes}}":            inspection.notes ?? "",
+    "{{inspector_name}}":   inspection.inspectorName ?? "",
+    "{{certifier_name}}":   inspection.inspectorName ?? "",
+    "{{license_number}}":   "",
+    "{{company_name}}":     "InspectProof",
+    "{{company_address}}":  "",
+    "{{phone}}":            "",
+    "{{email}}":            "",
+    "{{today}}":            today.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }),
+    "{{time_now}}":         today.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" }),
+    "{{year}}":             today.getFullYear().toString(),
+    "{{signature_line}}":   `<div style="margin-top:16px;border-top:1px solid #000;width:220px;padding-top:4px;font-size:12px;color:#555;">Signature</div>`,
+    "{{signature_block}}":  `<div style="margin-top:16px;"><div style="border-top:1px solid #000;width:220px;margin-bottom:4px;"></div><div style="font-size:12px;color:#555;">Signature &amp; Date</div></div>`,
+    "{{checklist_items}}":  buildChecklistTable(inspection.checklistResults ?? []),
+  };
+  return content.replace(/\{\{[a-z_]+\}\}/g, m => vals[m] ?? m);
+}
+
+// ── Generate Report Dialog ─────────────────────────────────────────────────────
+function GenerateReportDialog({ template, onClose }: { template: DocTemplate; onClose: () => void }) {
+  const { data: inspections } = useListInspections({});
+  const [selectedInspId, setSelectedInspId] = useState<string>("");
+  const [generating, setGenerating] = useState(false);
+  const [filledHtml, setFilledHtml] = useState<string | null>(null);
+  const [project, setProject] = useState<any>(null);
+  const [showAll, setShowAll] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
+
+  const hasLinked = template.linkedChecklistIds.length > 0;
+  const linkedMatches = (inspections ?? []).filter(i =>
+    template.linkedChecklistIds.includes((i as any).checklistTemplateId)
+  );
+  const noMatches = hasLinked && linkedMatches.length === 0;
+  const filtered = (!hasLinked || showAll || noMatches) ? (inspections ?? []) : linkedMatches;
+
+  async function generate() {
+    if (!selectedInspId) return;
+    setGenerating(true);
+    try {
+      const token = localStorage.getItem("inspectproof_token");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Basic ${token}`;
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+      const [inspRes, ] = await Promise.all([
+        fetch(`${baseUrl}/api/inspections/${selectedInspId}`, { headers }),
+      ]);
+      const insp = await inspRes.json();
+
+      let proj = null;
+      if (insp.projectId) {
+        const projRes = await fetch(`${baseUrl}/api/projects/${insp.projectId}`, { headers });
+        if (projRes.ok) proj = await projRes.json();
+      }
+      setProject(proj);
+      const filled = fillTokens(template.content, insp, proj);
+      setFilledHtml(filled);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function print() {
+    if (!printRef.current) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head><title>Report</title>
+<style>
+  @page { margin: 72px 80px; }
+  body { font-family: Georgia, serif; font-size: 14px; line-height: 1.6; color: #1a1a1a; margin: 0; padding: 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #e5e7eb; }
+</style>
+</head><body>${printRef.current.innerHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-sidebar font-bold">
+            <Printer className="h-4 w-4 text-secondary" />
+            Generate Report — {template.name}
+          </DialogTitle>
+        </DialogHeader>
+
+        {!filledHtml ? (
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Select Inspection</label>
+              {hasLinked && (
+                <div className="flex items-center justify-between rounded-lg bg-secondary/5 border border-secondary/20 px-3 py-2">
+                  <p className="text-xs text-secondary font-medium flex items-center gap-1.5">
+                    <Link2 className="h-3.5 w-3.5" />
+                    {noMatches
+                      ? "No matching inspections — showing all"
+                      : showAll
+                      ? `${(inspections ?? []).length} inspections (all)`
+                      : `${linkedMatches.length} matched to linked checklists`}
+                  </p>
+                  {!noMatches && (
+                    <button
+                      onClick={() => { setShowAll(s => !s); setSelectedInspId(""); }}
+                      className="text-xs underline text-secondary hover:text-secondary/70"
+                    >
+                      {showAll ? "Linked only" : "Show all"}
+                    </button>
+                  )}
+                </div>
+              )}
+              <div className="relative">
+                <select
+                  value={selectedInspId}
+                  onChange={e => setSelectedInspId(e.target.value)}
+                  className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-sidebar focus:outline-none focus:ring-2 focus:ring-secondary/50 pr-9"
+                >
+                  <option value="">Choose an inspection…</option>
+                  {filtered.map((i: any) => (
+                    <option key={i.id} value={i.id}>
+                      {i.projectName} — {(i.inspectionType ?? "").replace(/_/g, " ")} — {i.scheduledDate}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
+              <Button
+                disabled={!selectedInspId || generating}
+                onClick={generate}
+                className="flex-1 gap-2 bg-secondary hover:bg-secondary/90 text-white"
+              >
+                {generating ? "Generating…" : "Generate Report"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex items-center gap-2 mb-3">
+              <button
+                onClick={() => setFilledHtml(null)}
+                className="text-xs text-muted-foreground hover:text-sidebar flex items-center gap-1"
+              >
+                ← Back
+              </button>
+              <div className="flex-1" />
+              <button
+                onClick={print}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-white text-sm font-semibold hover:bg-secondary/90 transition-colors shadow-sm"
+              >
+                <Printer className="h-4 w-4" />
+                Print / Save PDF
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto bg-muted/30 rounded-xl border border-border p-6 flex justify-center">
+              <div
+                className="bg-white shadow-xl relative"
+                style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a" }}
+              >
+                {template.backgroundImage && (
+                  <img src={template.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ opacity: 0.15 }} />
+                )}
+                <div
+                  ref={printRef}
+                  style={{ padding: "72px 80px", position: "relative" }}
+                  dangerouslySetInnerHTML={{ __html: filledHtml }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -121,13 +354,16 @@ export default function DocTemplates() {
     return saved.length > 0 ? saved[0].id : null;
   });
   const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const [rightTab, setRightTab] = useState<"fields" | "checklists">("fields");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [saved, setSaved] = useState(false);
+  const [generateOpen, setGenerateOpen] = useState(false);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
 
+  const { data: checklistTemplates } = useListChecklistTemplates({});
   const selected = templates.find(t => t.id === selectedId) ?? null;
 
   function persist(updated: DocTemplate[]) {
@@ -137,8 +373,7 @@ export default function DocTemplates() {
 
   function createTemplate() {
     const t = newTemplate();
-    const updated = [...templates, t];
-    persist(updated);
+    persist([...templates, t]);
     setSelectedId(t.id);
     setMode("edit");
   }
@@ -146,42 +381,27 @@ export default function DocTemplates() {
   function deleteTemplate(id: string) {
     const updated = templates.filter(t => t.id !== id);
     persist(updated);
-    if (selectedId === id) {
-      setSelectedId(updated.length > 0 ? updated[0].id : null);
-    }
+    if (selectedId === id) setSelectedId(updated.length > 0 ? updated[0].id : null);
   }
 
   function duplicateTemplate(id: string) {
     const src = templates.find(t => t.id === id);
     if (!src) return;
     const now = new Date().toISOString();
-    const copy: DocTemplate = {
-      ...src,
-      id: `tmpl_${Date.now()}`,
-      name: `${src.name} (Copy)`,
-      createdAt: now,
-      updatedAt: now,
-    };
+    const copy: DocTemplate = { ...src, id: `tmpl_${Date.now()}`, name: `${src.name} (Copy)`, createdAt: now, updatedAt: now };
     const updated = [...templates, copy];
     persist(updated);
     setSelectedId(copy.id);
   }
 
-  function startRename(t: DocTemplate) {
-    setRenamingId(t.id);
-    setRenameValue(t.name);
-  }
+  function startRename(t: DocTemplate) { setRenamingId(t.id); setRenameValue(t.name); }
 
   function commitRename() {
     if (!renamingId || !renameValue.trim()) { setRenamingId(null); return; }
-    const updated = templates.map(t =>
-      t.id === renamingId ? { ...t, name: renameValue.trim(), updatedAt: new Date().toISOString() } : t
-    );
-    persist(updated);
+    persist(templates.map(t => t.id === renamingId ? { ...t, name: renameValue.trim(), updatedAt: new Date().toISOString() } : t));
     setRenamingId(null);
   }
 
-  // Sync editor content when selected template changes
   useEffect(() => {
     if (editorRef.current && selected) {
       editorRef.current.innerHTML = selected.content;
@@ -190,12 +410,7 @@ export default function DocTemplates() {
 
   function saveContent() {
     if (!editorRef.current || !selected) return;
-    const updated = templates.map(t =>
-      t.id === selected.id
-        ? { ...t, content: editorRef.current!.innerHTML, updatedAt: new Date().toISOString() }
-        : t
-    );
-    persist(updated);
+    persist(templates.map(t => t.id === selected.id ? { ...t, content: editorRef.current!.innerHTML, updatedAt: new Date().toISOString() } : t));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -216,27 +431,25 @@ export default function DocTemplates() {
     }
   }
 
+  function toggleChecklistLink(checklistId: number) {
+    if (!selected) return;
+    const ids = selected.linkedChecklistIds ?? [];
+    const updated = ids.includes(checklistId)
+      ? ids.filter(id => id !== checklistId)
+      : [...ids, checklistId];
+    persist(templates.map(t => t.id === selected.id ? { ...t, linkedChecklistIds: updated, updatedAt: new Date().toISOString() } : t));
+  }
+
   function handleBgUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !selected) return;
     const reader = new FileReader();
     reader.onload = ev => {
       const dataUrl = ev.target?.result as string;
-      const updated = templates.map(t =>
-        t.id === selected.id ? { ...t, backgroundImage: dataUrl, updatedAt: new Date().toISOString() } : t
-      );
-      persist(updated);
+      persist(templates.map(t => t.id === selected.id ? { ...t, backgroundImage: dataUrl, updatedAt: new Date().toISOString() } : t));
     };
     reader.readAsDataURL(file);
     e.target.value = "";
-  }
-
-  function clearBg() {
-    if (!selected) return;
-    const updated = templates.map(t =>
-      t.id === selected.id ? { ...t, backgroundImage: undefined, updatedAt: new Date().toISOString() } : t
-    );
-    persist(updated);
   }
 
   function execCmd(cmd: string, value?: string) {
@@ -247,15 +460,15 @@ export default function DocTemplates() {
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
 
+  const linkedCount = selected?.linkedChecklistIds.length ?? 0;
+
   return (
     <AppLayout>
       {/* Page header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold text-sidebar tracking-tight">Templates</h1>
-          <p className="text-muted-foreground mt-1">
-            Create reusable document templates with your letterhead and data fields.
-          </p>
+          <p className="text-muted-foreground mt-1">Create reusable document templates with your letterhead and data fields.</p>
         </div>
         <Button onClick={createTemplate} className="gap-2 bg-secondary hover:bg-secondary/90 text-white shadow-sm font-semibold">
           <Plus className="h-4 w-4" />
@@ -286,40 +499,36 @@ export default function DocTemplates() {
                       onChange={e => setRenameValue(e.target.value)}
                       onBlur={commitRename}
                       onKeyDown={e => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") setRenamingId(null); }}
-                      className="flex-1 text-xs px-1.5 py-0.5 rounded border border-secondary focus:outline-none focus:ring-1 focus:ring-secondary/50 bg-background"
+                      className="flex-1 text-xs px-1.5 py-0.5 rounded border border-secondary focus:outline-none"
                     />
                   </div>
                 ) : (
                   <button
                     onClick={() => { setSelectedId(t.id); setMode("edit"); }}
                     className={`w-full text-left px-2.5 py-2 rounded-lg text-sm transition-colors flex items-start gap-2 ${
-                      selectedId === t.id
-                        ? "bg-secondary text-white"
-                        : "hover:bg-muted text-sidebar"
+                      selectedId === t.id ? "bg-secondary text-white" : "hover:bg-muted text-sidebar"
                     }`}
                   >
                     <FileText className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${selectedId === t.id ? "text-white" : "text-muted-foreground"}`} />
                     <div className="min-w-0 flex-1">
                       <div className={`text-xs font-medium truncate ${selectedId === t.id ? "text-white" : ""}`}>{t.name}</div>
-                      <div className={`text-[10px] mt-0.5 ${selectedId === t.id ? "text-blue-100" : "text-muted-foreground"}`}>
+                      <div className={`text-[10px] mt-0.5 flex items-center gap-1 ${selectedId === t.id ? "text-blue-100" : "text-muted-foreground"}`}>
                         {formatDate(t.updatedAt)}
+                        {t.linkedChecklistIds.length > 0 && (
+                          <span className={`flex items-center gap-0.5 ${selectedId === t.id ? "text-blue-200" : "text-secondary"}`}>
+                            <Link2 className="h-2.5 w-2.5" />
+                            {t.linkedChecklistIds.length}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </button>
                 )}
-
-                {/* Context actions */}
                 {selectedId === t.id && renamingId !== t.id && (
                   <div className="absolute right-1 top-1.5 hidden group-hover:flex items-center gap-0.5 bg-white/90 rounded-md shadow-sm border border-border p-0.5">
-                    <button title="Rename" onClick={() => startRename(t)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-sidebar">
-                      <Edit3 className="h-3 w-3" />
-                    </button>
-                    <button title="Duplicate" onClick={() => duplicateTemplate(t.id)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-sidebar">
-                      <Copy className="h-3 w-3" />
-                    </button>
-                    <button title="Delete" onClick={() => deleteTemplate(t.id)} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600">
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                    <button title="Rename" onClick={() => startRename(t)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-sidebar"><Edit3 className="h-3 w-3" /></button>
+                    <button title="Duplicate" onClick={() => duplicateTemplate(t.id)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-sidebar"><Copy className="h-3 w-3" /></button>
+                    <button title="Delete" onClick={() => deleteTemplate(t.id)} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600"><Trash2 className="h-3 w-3" /></button>
                   </div>
                 )}
               </div>
@@ -327,46 +536,31 @@ export default function DocTemplates() {
           </div>
         </div>
 
-        {/* ── Center: Document editor / preview ────────────────────────────── */}
+        {/* ── Center: Editor / Preview ──────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0">
           {selected ? (
             <>
               {/* Toolbar */}
               <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-                {/* Mode toggles */}
                 <div className="flex rounded-lg border border-border overflow-hidden bg-card shadow-sm mr-2">
-                  <button
-                    onClick={() => setMode("edit")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${mode === "edit" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}
-                  >
-                    <Edit3 className="h-3.5 w-3.5" />
-                    Edit
+                  <button onClick={() => setMode("edit")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${mode === "edit" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}>
+                    <Edit3 className="h-3.5 w-3.5" />Edit
                   </button>
-                  <button
-                    onClick={() => { saveContent(); setMode("preview"); }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${mode === "preview" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    Preview
+                  <button onClick={() => { saveContent(); setMode("preview"); }} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${mode === "preview" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}>
+                    <Eye className="h-3.5 w-3.5" />Preview
                   </button>
                 </div>
 
                 {mode === "edit" && (
                   <>
-                    {/* Text formatting */}
                     <div className="flex rounded-lg border border-border overflow-hidden bg-card shadow-sm">
-                      <button onClick={() => execCmd("bold")} title="Bold" className="px-2.5 py-1.5 text-xs font-bold hover:bg-muted border-r border-border transition-colors">B</button>
-                      <button onClick={() => execCmd("italic")} title="Italic" className="px-2.5 py-1.5 text-xs italic hover:bg-muted border-r border-border transition-colors">I</button>
-                      <button onClick={() => execCmd("underline")} title="Underline" className="px-2.5 py-1.5 text-xs underline hover:bg-muted transition-colors">U</button>
-                    </div>
-                    <div className="flex rounded-lg border border-border overflow-hidden bg-card shadow-sm">
-                      <button onClick={() => execCmd("justifyLeft")} title="Align left" className="px-2.5 py-1.5 text-xs hover:bg-muted border-r border-border transition-colors">≡</button>
-                      <button onClick={() => execCmd("justifyCenter")} title="Center" className="px-2.5 py-1.5 text-xs hover:bg-muted border-r border-border transition-colors">≡̈</button>
-                      <button onClick={() => execCmd("justifyRight")} title="Align right" className="px-2.5 py-1.5 text-xs hover:bg-muted transition-colors">≡</button>
+                      <button onClick={() => execCmd("bold")} title="Bold" className="px-2.5 py-1.5 text-xs font-bold hover:bg-muted border-r border-border">B</button>
+                      <button onClick={() => execCmd("italic")} title="Italic" className="px-2.5 py-1.5 text-xs italic hover:bg-muted border-r border-border">I</button>
+                      <button onClick={() => execCmd("underline")} title="Underline" className="px-2.5 py-1.5 text-xs underline hover:bg-muted">U</button>
                     </div>
                     <select
                       onChange={e => { if (e.target.value) { execCmd("formatBlock", e.target.value); e.target.value = ""; } }}
-                      className="text-xs rounded-lg border border-border bg-card px-2 py-1.5 shadow-sm focus:outline-none focus:ring-1 focus:ring-secondary/50"
+                      className="text-xs rounded-lg border border-border bg-card px-2 py-1.5 shadow-sm focus:outline-none"
                       defaultValue=""
                     >
                       <option value="" disabled>Style…</option>
@@ -375,75 +569,55 @@ export default function DocTemplates() {
                       <option value="h3">Heading 3</option>
                       <option value="p">Paragraph</option>
                     </select>
-
-                    {/* Background */}
-                    <button
-                      onClick={() => bgInputRef.current?.click()}
-                      title="Upload background / letterhead image"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium hover:bg-muted shadow-sm transition-colors text-muted-foreground"
-                    >
-                      <Image className="h-3.5 w-3.5" />
-                      Background
+                    <button onClick={() => bgInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium hover:bg-muted shadow-sm text-muted-foreground">
+                      <Image className="h-3.5 w-3.5" />Background
                     </button>
                     {selected.backgroundImage && (
-                      <button onClick={clearBg} title="Remove background" className="p-1.5 rounded-lg border border-border bg-card hover:bg-red-50 hover:text-red-600 text-muted-foreground shadow-sm transition-colors">
+                      <button onClick={() => persist(templates.map(t => t.id === selected.id ? { ...t, backgroundImage: undefined } : t))} className="p-1.5 rounded-lg border border-border bg-card hover:bg-red-50 hover:text-red-600 text-muted-foreground shadow-sm">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     )}
                     <input ref={bgInputRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
-
-                    {/* Save */}
-                    <button
-                      onClick={saveContent}
-                      className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all ${
-                        saved
-                          ? "bg-green-50 text-green-700 border border-green-200"
-                          : "bg-secondary text-white hover:bg-secondary/90"
-                      }`}
-                    >
+                    <button onClick={saveContent} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all ${saved ? "bg-green-50 text-green-700 border border-green-200" : "bg-secondary text-white hover:bg-secondary/90"}`}>
                       {saved ? <><Check className="h-3.5 w-3.5" />Saved</> : "Save"}
                     </button>
                   </>
                 )}
+
+                {/* Generate Report button */}
+                <button
+                  onClick={() => setGenerateOpen(true)}
+                  className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0B1933] text-white text-xs font-semibold hover:bg-[#0B1933]/90 transition-colors shadow-sm"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Generate Report
+                  {linkedCount > 0 && (
+                    <span className="ml-1 bg-white/20 text-white text-[10px] rounded-full px-1.5 py-0.5 font-semibold">
+                      {linkedCount} linked
+                    </span>
+                  )}
+                </button>
               </div>
 
-              {/* A4 Document area */}
+              {/* A4 document */}
               <div className="flex-1 overflow-auto bg-muted/30 rounded-xl border border-border p-6 flex justify-center">
                 <div
                   className="relative bg-white shadow-xl"
-                  style={{
-                    width: "794px",
-                    minHeight: "1123px",
-                    fontFamily: "Georgia, serif",
-                    fontSize: "14px",
-                    lineHeight: "1.6",
-                    color: "#1a1a1a",
-                  }}
+                  style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a" }}
                 >
-                  {/* Background image (letterhead) */}
                   {selected.backgroundImage && (
-                    <img
-                      src={selected.backgroundImage}
-                      alt="Background"
-                      className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
-                      style={{ opacity: 0.15 }}
-                    />
+                    <img src={selected.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ opacity: 0.15 }} />
                   )}
-
-                  {/* Editor / Preview area */}
                   <div
                     ref={editorRef}
                     contentEditable={mode === "edit"}
                     suppressContentEditableWarning
                     onBlur={saveContent}
                     style={{ padding: "72px 80px", position: "relative", minHeight: "1123px", outline: "none" }}
-                    className={mode === "edit" ? "focus:ring-0" : ""}
                     dangerouslySetInnerHTML={mode === "preview" ? { __html: highlightTokens(selected.content) } : undefined}
                   />
                   {mode === "edit" && (
-                    <div className="absolute top-2 right-2 text-[10px] text-muted-foreground bg-white/80 rounded px-1.5 py-0.5 pointer-events-none">
-                      Click to edit
-                    </div>
+                    <div className="absolute top-2 right-2 text-[10px] text-muted-foreground bg-white/80 rounded px-1.5 py-0.5 pointer-events-none">Click to edit</div>
                   )}
                 </div>
               </div>
@@ -461,36 +635,97 @@ export default function DocTemplates() {
           )}
         </div>
 
-        {/* ── Right: Field palette ──────────────────────────────────────────── */}
+        {/* ── Right panel: Fields + Linked Checklists ───────────────────────── */}
         {selected && mode === "edit" && (
           <div className="w-52 shrink-0 flex flex-col bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-            <div className="px-3 py-2.5 border-b border-border bg-muted/30">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Data Fields</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Click to insert at cursor</p>
+            {/* Tab bar */}
+            <div className="flex border-b border-border">
+              <button
+                onClick={() => setRightTab("fields")}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors ${rightTab === "fields" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}
+              >
+                <ChevronRight className="h-3 w-3" />
+                Fields
+              </button>
+              <button
+                onClick={() => setRightTab("checklists")}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors relative ${rightTab === "checklists" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}
+              >
+                <Link2 className="h-3 w-3" />
+                Checklists
+                {linkedCount > 0 && (
+                  <span className={`absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${rightTab === "checklists" ? "bg-white text-secondary" : "bg-secondary text-white"}`}>
+                    {linkedCount}
+                  </span>
+                )}
+              </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-3">
-              {FIELD_GROUPS.map(group => (
-                <div key={group.label}>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-1">{group.label}</p>
-                  <div className="space-y-0.5">
-                    {group.fields.map(f => (
-                      <button
-                        key={f.token}
-                        onClick={() => insertToken(f.token)}
-                        title={f.token}
-                        className="w-full text-left px-2 py-1.5 rounded-md text-xs hover:bg-secondary/10 hover:text-secondary transition-colors flex items-center gap-2 group"
-                      >
-                        <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/50 group-hover:text-secondary shrink-0" />
-                        <span className="truncate">{f.label}</span>
-                      </button>
-                    ))}
+
+            {rightTab === "fields" ? (
+              <div className="flex-1 overflow-y-auto p-2 space-y-3">
+                <p className="text-[10px] text-muted-foreground px-1 pt-1">Click a field to insert at cursor</p>
+                {FIELD_GROUPS.map(group => (
+                  <div key={group.label}>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-1">{group.label}</p>
+                    <div className="space-y-0.5">
+                      {group.fields.map(f => (
+                        <button
+                          key={f.token}
+                          onClick={() => insertToken(f.token)}
+                          title={f.token}
+                          className="w-full text-left px-2 py-1.5 rounded-md text-xs hover:bg-secondary/10 hover:text-secondary transition-colors flex items-center gap-2 group"
+                        >
+                          <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/50 group-hover:text-secondary shrink-0" />
+                          <span className="truncate">{f.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-2">
+                <p className="text-[10px] text-muted-foreground px-1 pt-1 pb-2 leading-snug">
+                  Link checklists to filter inspections when generating reports.
+                </p>
+                {!checklistTemplates || checklistTemplates.length === 0 ? (
+                  <div className="text-center py-6">
+                    <ClipboardList className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">No checklists found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-0.5">
+                    {checklistTemplates.map((ct: any) => {
+                      const isLinked = selected.linkedChecklistIds.includes(ct.id);
+                      return (
+                        <button
+                          key={ct.id}
+                          onClick={() => toggleChecklistLink(ct.id)}
+                          className={`w-full text-left px-2 py-2 rounded-lg text-xs transition-colors flex items-start gap-2 ${
+                            isLinked ? "bg-secondary/10 text-secondary" : "hover:bg-muted text-sidebar"
+                          }`}
+                        >
+                          <div className={`mt-0.5 w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center ${isLinked ? "bg-secondary border-secondary" : "border-muted-foreground/40"}`}>
+                            {isLinked && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-medium truncate leading-tight">{ct.name}</div>
+                            <div className="text-muted-foreground text-[10px] mt-0.5 capitalize">{(ct.inspectionType ?? "").replace(/_/g, " ")}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {generateOpen && selected && (
+        <GenerateReportDialog template={selected} onClose={() => setGenerateOpen(false)} />
+      )}
     </AppLayout>
   );
 }
