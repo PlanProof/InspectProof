@@ -596,11 +596,23 @@ function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA }: { ite
     );
   };
 
+  const renderRightActions = (_progress: any, dragX: any) => {
+    const scale = dragX.interpolate({ inputRange: [-80, 0], outputRange: [1, 0.7], extrapolate: "clamp" });
+    return (
+      <Animated.View style={[styles.restoreAction, { transform: [{ scale }] }]}>
+        <Feather name="rotate-ccw" size={18} color="#fff" />
+        <Text style={styles.restoreActionText}>Restore</Text>
+      </Animated.View>
+    );
+  };
+
   return (
     <Swipeable
       ref={swipeRef}
       renderLeftActions={renderLeftActions}
+      renderRightActions={isNA ? renderRightActions : undefined}
       leftThreshold={80}
+      rightThreshold={80}
       friction={2}
       onSwipeableOpen={() => {
         swipeRef.current?.close();
@@ -1239,6 +1251,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   naActionText: { color: "#fff", fontSize: 13, fontFamily: "PlusJakartaSans_700Bold" },
+  restoreAction: {
+    backgroundColor: "#16a34a",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    borderRadius: 10,
+    marginLeft: 4,
+    flexDirection: "row",
+    gap: 5,
+    marginBottom: 8,
+  },
+  restoreActionText: { color: "#fff", fontSize: 13, fontFamily: "PlusJakartaSans_700Bold" },
   resultIndicator: {
     width: 38,
     height: 38,
