@@ -774,10 +774,6 @@ function DocumentsPanel({
         </View>
       ) : (
         <>
-          <View style={panelStyles.panelHint}>
-            <Feather name="info" size={12} color={Colors.secondary} />
-            <Text style={panelStyles.panelHintText}>Tap a plan to open it. Tap Markup to draw on it — annotations save to the project.</Text>
-          </View>
           <ScrollView
             style={panelStyles.scroll}
             contentContainerStyle={[panelStyles.content, { paddingBottom: insets.bottom + 32 }]}
@@ -811,13 +807,6 @@ function DocumentsPanel({
                           {doc.fileSize ? ` · ${Math.round(doc.fileSize / 1024)}KB` : ""}
                         </Text>
                       </View>
-                      <Pressable
-                        style={panelStyles.markupBtn}
-                        onPress={() => openDocument(doc)}
-                      >
-                        <Feather name="edit-2" size={13} color={Colors.secondary} />
-                        <Text style={panelStyles.markupBtnText}>Markup</Text>
-                      </Pressable>
                     </Pressable>
                   );
                 })}
