@@ -11,6 +11,7 @@ import {
   Image,
   Modal,
   Platform,
+  Linking,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
@@ -20,6 +21,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { getSuggestionsForItem } from "@/constants/noteSuggestions";
 
 const RESULT_OPTS = [
   { key: "pass", label: "Pass", icon: "check-circle", color: "#22c55e", bg: "#f0fdf4" },
@@ -56,6 +58,17 @@ interface ChecklistItem {
   orderIndex: number;
 }
 
+interface ProjectDocument {
+  id: number;
+  name: string;
+  fileName: string;
+  fileSize?: number;
+  mimeType?: string;
+  folder: string;
+  fileUrl?: string;
+  includedInInspection: boolean;
+}
+
 export default function ConductInspectionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -69,6 +82,7 @@ export default function ConductInspectionScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [showDocsPanel, setShowDocsPanel] = useState(false);
   const autoCompletedRef = useRef(false);
 
   const fetchWithAuth = useCallback(async (url: string, opts?: RequestInit) => {
@@ -93,6 +107,13 @@ export default function ConductInspectionScreen() {
     queryKey: ["inspection-checklist", id, token],
     queryFn: () => fetchWithAuth(`/api/inspections/${id}/checklist`),
     enabled: !!token && !!id,
+  });
+
+  const { data: projectDocuments = [] } = useQuery<ProjectDocument[]>({
+    queryKey: ["project-documents", inspection?.projectId, token],
+    queryFn: () => fetchWithAuth(`/api/projects/${inspection.projectId}/documents`),
+    enabled: !!token && !!inspection?.projectId,
+    select: (docs: ProjectDocument[]) => docs.filter(d => d.includedInInspection),
   });
 
   useFocusEffect(
@@ -217,6 +238,13 @@ export default function ConductInspectionScreen() {
     });
   };
 
+  const annotateDocument = (doc: ProjectDocument, itemId: number) => {
+    if (!doc.fileUrl) return;
+    const docUrl = `${baseUrl}/api/storage${doc.fileUrl}`;
+    closeModal();
+    navigateToMarkup(docUrl, itemId);
+  };
+
   const uploadPhoto = async () => {
     if (!activeItem) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -328,6 +356,18 @@ export default function ConductInspectionScreen() {
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>{inspection?.projectName}</Text>
         </View>
+        {projectDocuments.length > 0 && (
+          <Pressable
+            onPress={() => setShowDocsPanel(true)}
+            style={styles.docsBtn}
+            hitSlop={8}
+          >
+            <Feather name="folder" size={18} color={Colors.secondary} />
+            <View style={styles.docsBadge}>
+              <Text style={styles.docsBadgeText}>{projectDocuments.length}</Text>
+            </View>
+          </Pressable>
+        )}
         <Pressable
           style={[styles.completeBtn, completing && { opacity: 0.6 }]}
           onPress={completeInspection}
@@ -351,6 +391,14 @@ export default function ConductInspectionScreen() {
             {pendingCount > 0 && <Text style={[styles.resultChip, { color: Colors.textTertiary }]}>⏳ {pendingCount}</Text>}
           </View>
         </View>
+        {/* Documents quick-access row */}
+        {projectDocuments.length > 0 && (
+          <Pressable style={styles.docsQuickRow} onPress={() => setShowDocsPanel(true)}>
+            <Feather name="folder" size={13} color={Colors.secondary} />
+            <Text style={styles.docsQuickText}>{projectDocuments.length} project document{projectDocuments.length !== 1 ? "s" : ""} available</Text>
+            <Feather name="chevron-right" size={13} color={Colors.textTertiary} />
+          </Pressable>
+        )}
       </View>
 
       {/* Checklist */}
@@ -424,6 +472,29 @@ export default function ConductInspectionScreen() {
         </View>
       )}
 
+      {/* Project Documents Panel */}
+      <Modal
+        visible={showDocsPanel}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowDocsPanel(false)}
+      >
+        <DocumentsPanel
+          documents={projectDocuments}
+          baseUrl={baseUrl}
+          insets={insets}
+          onClose={() => setShowDocsPanel(false)}
+          onAnnotate={(doc) => {
+            setShowDocsPanel(false);
+            if (activeItem) {
+              annotateDocument(doc, activeItem.id);
+            } else {
+              Alert.alert("Select a checklist item", "Open a checklist item first, then tap Annotate to attach a marked-up drawing.");
+            }
+          }}
+        />
+      </Modal>
+
       {/* Item Detail Modal */}
       <Modal
         visible={!!activeItem}
@@ -437,6 +508,7 @@ export default function ConductInspectionScreen() {
             result={editResult}
             notes={editNotes}
             baseUrl={baseUrl}
+            documents={projectDocuments}
             onResultChange={setEditResult}
             onNotesChange={setEditNotes}
             onSave={saveItem}
@@ -444,6 +516,7 @@ export default function ConductInspectionScreen() {
             onUploadPhoto={uploadPhoto}
             onTakePhoto={takePhoto}
             onRemovePhoto={removePhoto}
+            onAnnotateDoc={(doc) => annotateDocument(doc, activeItem.id)}
             saving={savingItem}
             uploadingPhoto={uploadingPhoto}
             insets={insets}
@@ -521,17 +594,184 @@ function RiskBadge({ risk }: { risk: string }) {
   );
 }
 
+function getDocIcon(mimeType?: string): string {
+  if (!mimeType) return "file";
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType === "application/pdf") return "file-text";
+  if (mimeType.includes("word") || mimeType.includes("document")) return "file-text";
+  if (mimeType.includes("sheet") || mimeType.includes("excel")) return "grid";
+  return "file";
+}
+
+function DocumentsPanel({
+  documents, baseUrl, insets, onClose, onAnnotate,
+}: {
+  documents: ProjectDocument[];
+  baseUrl: string;
+  insets: any;
+  onClose: () => void;
+  onAnnotate: (doc: ProjectDocument) => void;
+}) {
+  const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
+  const grouped = documents.reduce<Record<string, ProjectDocument[]>>((acc, doc) => {
+    const folder = doc.folder || "General";
+    (acc[folder] = acc[folder] || []).push(doc);
+    return acc;
+  }, {});
+
+  const openDocument = (doc: ProjectDocument) => {
+    if (!doc.fileUrl) return;
+    const isImage = doc.mimeType?.startsWith("image/");
+    if (isImage) {
+      setPreviewDoc(doc);
+    } else {
+      Linking.openURL(`${baseUrl}/api/storage${doc.fileUrl}`).catch(() =>
+        Alert.alert("Cannot open", "Unable to open this file type on your device.")
+      );
+    }
+  };
+
+  if (previewDoc) {
+    return (
+      <View style={[panelStyles.container, { paddingTop: insets.top + 8 }]}>
+        <View style={panelStyles.header}>
+          <Pressable onPress={() => setPreviewDoc(null)} style={panelStyles.closeBtn} hitSlop={12}>
+            <Feather name="arrow-left" size={20} color={Colors.text} />
+          </Pressable>
+          <Text style={panelStyles.headerTitle} numberOfLines={1}>{previewDoc.name}</Text>
+          <Pressable
+            style={panelStyles.annotateBtn}
+            onPress={() => { setPreviewDoc(null); onAnnotate(previewDoc); }}
+          >
+            <Feather name="edit-2" size={14} color="#fff" />
+            <Text style={panelStyles.annotateBtnText}>Annotate</Text>
+          </Pressable>
+        </View>
+        <View style={panelStyles.previewContainer}>
+          <Image
+            source={{ uri: `${baseUrl}/api/storage${previewDoc.fileUrl}` }}
+            style={panelStyles.previewImage}
+            resizeMode="contain"
+          />
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[panelStyles.container, { paddingTop: insets.top + 8 }]}>
+      <View style={panelStyles.header}>
+        <Pressable onPress={onClose} style={panelStyles.closeBtn} hitSlop={12}>
+          <Feather name="x" size={22} color={Colors.text} />
+        </Pressable>
+        <Text style={panelStyles.headerTitle}>Project Documents</Text>
+        <View style={{ width: 36 }} />
+      </View>
+
+      <ScrollView style={panelStyles.scroll} contentContainerStyle={[panelStyles.content, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
+        {documents.length === 0 ? (
+          <View style={panelStyles.empty}>
+            <Feather name="folder" size={40} color={Colors.textTertiary} />
+            <Text style={panelStyles.emptyText}>No documents available</Text>
+          </View>
+        ) : (
+          Object.entries(grouped).map(([folder, docs]) => (
+            <View key={folder} style={panelStyles.folder}>
+              <View style={panelStyles.folderHeader}>
+                <Feather name="folder" size={14} color={Colors.secondary} />
+                <Text style={panelStyles.folderName}>{folder}</Text>
+                <Text style={panelStyles.folderCount}>{docs.length}</Text>
+              </View>
+              {docs.map(doc => {
+                const isImage = doc.mimeType?.startsWith("image/");
+                const icon = getDocIcon(doc.mimeType);
+                return (
+                  <View key={doc.id} style={panelStyles.docRow}>
+                    <View style={panelStyles.docIcon}>
+                      <Feather name={icon as any} size={18} color={Colors.secondary} />
+                    </View>
+                    <View style={panelStyles.docInfo}>
+                      <Text style={panelStyles.docName} numberOfLines={2}>{doc.name}</Text>
+                      <Text style={panelStyles.docMeta}>{doc.mimeType?.split("/")[1]?.toUpperCase() || "File"}</Text>
+                    </View>
+                    <View style={panelStyles.docActions}>
+                      <Pressable
+                        style={panelStyles.docActionBtn}
+                        onPress={() => openDocument(doc)}
+                      >
+                        <Feather name={isImage ? "eye" : "external-link"} size={14} color={Colors.secondary} />
+                        <Text style={panelStyles.docActionText}>{isImage ? "View" : "Open"}</Text>
+                      </Pressable>
+                      {isImage && (
+                        <Pressable
+                          style={[panelStyles.docActionBtn, panelStyles.annotateActionBtn]}
+                          onPress={() => onAnnotate(doc)}
+                        >
+                          <Feather name="edit-2" size={14} color="#fff" />
+                          <Text style={panelStyles.annotateActionText}>Annotate</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ))
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
 function ItemModal({
-  item, result, notes, baseUrl, onResultChange, onNotesChange, onSave, onClose,
-  onUploadPhoto, onTakePhoto, onRemovePhoto, saving, uploadingPhoto, insets,
+  item, result, notes, baseUrl, documents, onResultChange, onNotesChange, onSave, onClose,
+  onUploadPhoto, onTakePhoto, onRemovePhoto, onAnnotateDoc, saving, uploadingPhoto, insets,
 }: {
   item: ChecklistItem; result: ResultKey; notes: string; baseUrl: string;
+  documents: ProjectDocument[];
   onResultChange: (r: ResultKey) => void; onNotesChange: (n: string) => void;
   onSave: () => void; onClose: () => void; onUploadPhoto: () => void;
   onTakePhoto: () => void; onRemovePhoto: (p: string) => void;
+  onAnnotateDoc: (doc: ProjectDocument) => void;
   saving: boolean; uploadingPhoto: boolean; insets: any;
 }) {
   const selectedOpt = RESULT_OPTS.find(r => r.key === result);
+  const suggestions = getSuggestionsForItem(item.category, item.description);
+  const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
+
+  const applySuggestion = (text: string) => {
+    if (!notes.trim()) {
+      onNotesChange(text);
+    } else {
+      onNotesChange(notes.trimEnd() + "\n" + text);
+    }
+  };
+
+  if (previewDoc) {
+    return (
+      <View style={[modalStyles.container, { paddingTop: insets.top + 16 }]}>
+        <View style={modalStyles.header}>
+          <Pressable onPress={() => setPreviewDoc(null)} style={modalStyles.closeBtn} hitSlop={12}>
+            <Feather name="arrow-left" size={20} color={Colors.text} />
+          </Pressable>
+          <Text style={modalStyles.headerTitle} numberOfLines={1}>{previewDoc.name}</Text>
+          <Pressable
+            style={modalStyles.saveBtn}
+            onPress={() => { setPreviewDoc(null); onAnnotateDoc(previewDoc); }}
+          >
+            <Text style={modalStyles.saveBtnText}>Annotate</Text>
+          </Pressable>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Image
+            source={{ uri: `${baseUrl}/api/storage${previewDoc.fileUrl}` }}
+            style={{ flex: 1 }}
+            resizeMode="contain"
+          />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[modalStyles.container, { paddingTop: insets.top + 16 }]}>
@@ -585,6 +825,18 @@ function ItemModal({
         {/* Notes */}
         <View style={modalStyles.section}>
           <Text style={modalStyles.sectionLabel}>Notes</Text>
+          {/* Quick note suggestions */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={modalStyles.suggestionsRow} keyboardShouldPersistTaps="handled">
+            {suggestions.map((s, i) => (
+              <Pressable
+                key={i}
+                style={({ pressed }) => [modalStyles.suggestionChip, pressed && { opacity: 0.7 }]}
+                onPress={() => applySuggestion(s)}
+              >
+                <Text style={modalStyles.suggestionText} numberOfLines={1}>{s}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
           <TextInput
             style={modalStyles.notesInput}
             value={notes}
@@ -666,6 +918,63 @@ function ItemModal({
             </Pressable>
           </View>
         </View>
+
+        {/* Project Documents */}
+        {documents.length > 0 && (
+          <View style={modalStyles.section}>
+            <Text style={modalStyles.sectionLabel}>Project Documents ({documents.length})</Text>
+            <Text style={modalStyles.docsHint}>Tap an image to view full-size, or annotate a drawing to attach it to this item.</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={modalStyles.docsList}>
+              {documents.map(doc => {
+                const isImage = doc.mimeType?.startsWith("image/");
+                const icon = getDocIcon(doc.mimeType);
+                return (
+                  <View key={doc.id} style={modalStyles.docCard}>
+                    {isImage ? (
+                      <Pressable
+                        style={modalStyles.docThumbWrap}
+                        onPress={() => setPreviewDoc(doc)}
+                      >
+                        <Image
+                          source={{ uri: `${baseUrl}/api/storage${doc.fileUrl}` }}
+                          style={modalStyles.docThumb}
+                          resizeMode="cover"
+                        />
+                        <View style={modalStyles.docThumbOverlay}>
+                          <Feather name="eye" size={14} color="#fff" />
+                        </View>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        style={modalStyles.docIconWrap}
+                        onPress={() => {
+                          if (doc.fileUrl) {
+                            Linking.openURL(`${baseUrl}/api/storage${doc.fileUrl}`).catch(() =>
+                              Alert.alert("Cannot open", "Unable to open this file on your device.")
+                            );
+                          }
+                        }}
+                      >
+                        <Feather name={icon as any} size={28} color={Colors.secondary} />
+                        <Feather name="external-link" size={10} color={Colors.textTertiary} style={{ position: "absolute", top: 4, right: 4 }} />
+                      </Pressable>
+                    )}
+                    <Text style={modalStyles.docCardName} numberOfLines={2}>{doc.name}</Text>
+                    {isImage && (
+                      <Pressable
+                        style={modalStyles.docAnnotateBtn}
+                        onPress={() => onAnnotateDoc(doc)}
+                      >
+                        <Feather name="edit-2" size={11} color={Colors.secondary} />
+                        <Text style={modalStyles.docAnnotateBtnText}>Annotate</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -690,6 +999,28 @@ const styles = StyleSheet.create({
   headerCenter: { flex: 1 },
   headerTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   headerSub: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, marginTop: 1 },
+  docsBtn: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    backgroundColor: Colors.borderLight,
+    position: "relative",
+  },
+  docsBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+  },
+  docsBadgeText: { fontSize: 9, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
   completeBtn: {
     backgroundColor: Colors.accent,
     paddingHorizontal: 16,
@@ -714,6 +1045,16 @@ const styles = StyleSheet.create({
   progressText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
   resultChips: { flexDirection: "row", gap: 10 },
   resultChip: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold" },
+  docsQuickRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: Colors.infoLight,
+    borderRadius: 8,
+  },
+  docsQuickText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   scroll: { flex: 1 },
   scrollContent: { padding: 12, gap: 16 },
   emptyState: { alignItems: "center", paddingTop: 60, gap: 12 },
@@ -900,6 +1241,17 @@ const modalStyles = StyleSheet.create({
     borderColor: Colors.border,
   },
   resultLabel: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  suggestionsRow: { paddingBottom: 4, gap: 8 },
+  suggestionChip: {
+    backgroundColor: Colors.infoLight,
+    borderWidth: 1,
+    borderColor: Colors.secondary + "40",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    maxWidth: 220,
+  },
+  suggestionText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   notesInput: {
     backgroundColor: Colors.surface,
     borderWidth: 1,
@@ -954,4 +1306,141 @@ const modalStyles = StyleSheet.create({
     borderStyle: "dashed",
   },
   photoBtnText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  docsHint: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, lineHeight: 16 },
+  docsList: { gap: 10, paddingBottom: 4 },
+  docCard: {
+    width: 110,
+    gap: 6,
+    alignItems: "center",
+  },
+  docThumbWrap: {
+    width: 110,
+    height: 80,
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Colors.border,
+    position: "relative",
+  },
+  docThumb: { width: 110, height: 80 },
+  docThumbOverlay: {
+    position: "absolute",
+    bottom: 4,
+    right: 4,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 4,
+    padding: 3,
+  },
+  docIconWrap: {
+    width: 110,
+    height: 80,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  docCardName: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+    textAlign: "center",
+    lineHeight: 14,
+  },
+  docAnnotateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+    backgroundColor: Colors.infoLight,
+  },
+  docAnnotateBtnText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+});
+
+const panelStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.background },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  headerTitle: { flex: 1, textAlign: "center", fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  annotateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: Colors.secondary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  annotateBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+  scroll: { flex: 1 },
+  content: { padding: 16, gap: 12 },
+  empty: { alignItems: "center", paddingTop: 60, gap: 12 },
+  emptyText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  folder: { gap: 8 },
+  folderHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 4,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  folderName: { flex: 1, fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.6 },
+  folderCount: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  docRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  docIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: Colors.infoLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  docInfo: { flex: 1, gap: 3 },
+  docName: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  docMeta: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  docActions: { flexDirection: "row", gap: 8, alignItems: "center" },
+  docActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
+    backgroundColor: Colors.infoLight,
+  },
+  docActionText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  annotateActionBtn: {
+    backgroundColor: Colors.secondary,
+    borderColor: Colors.secondary,
+  },
+  annotateActionText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+  previewContainer: { flex: 1, backgroundColor: "#000" },
+  previewImage: { flex: 1, width: "100%" },
 });
