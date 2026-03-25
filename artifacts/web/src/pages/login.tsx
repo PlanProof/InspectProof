@@ -31,7 +31,7 @@ export default function Login() {
             <img src={`${import.meta.env.BASE_URL}logo.png`} alt="InspectProof" className="h-10 w-auto" />
           </div>
           <h1 className="text-4xl font-bold text-white max-w-md leading-tight mt-24">
-            Faster inspections.<br />Clear compliance.<br />Better outcomes.
+            Faster inspections.<br />Clear compliance.<br /><span className="text-[#C5D92D]">Better</span> outcomes.
           </h1>
           <p className="text-sidebar-foreground/70 mt-6 text-lg max-w-md">
             All your inspection workflows in one streamlined platform.
