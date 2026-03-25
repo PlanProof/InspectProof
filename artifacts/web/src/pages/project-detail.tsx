@@ -9,7 +9,8 @@ import {
   ArrowLeft, Building, FileText, ClipboardList, CheckSquare, Plus, Upload,
   FolderPlus, Pencil, Trash2, Eye, EyeOff, File, Folder, FolderOpen,
   ChevronRight, Calendar, Clock, CheckCircle, AlertCircle, XCircle, MoreHorizontal,
-  Download, Mail, Loader2, Link2, Unlink, Award, Send, BarChart2
+  Download, Mail, Loader2, Link2, Unlink, Award, Send, BarChart2,
+  Smartphone, X, Info, ZoomIn
 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 
@@ -395,7 +396,10 @@ function DocumentsTab({ projectId }: { projectId: number }) {
   const [uploading, setUploading] = useState(false);
   const [linkingDoc, setLinkingDoc] = useState<ProjectDoc | null>(null);
   const [docLinkCounts, setDocLinkCounts] = useState<Record<number, number>>({});
+  const [isDragging, setIsDragging] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<ProjectDoc | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounterRef = useRef(0);
 
   const loadDocs = useCallback(async () => {
     try {
@@ -518,8 +522,75 @@ function DocumentsTab({ projectId }: { projectId: number }) {
 
   const activeDocs = selectedFolder ? docs.filter(d => d.folder === selectedFolder) : docs;
 
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    if (dragCounterRef.current === 1) setIsDragging(true);
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current === 0) setIsDragging(false);
+  };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+    handleUpload(e.dataTransfer.files);
+  };
+
+  const isImageDoc = (doc: ProjectDoc) => doc.mimeType?.startsWith("image/") ?? false;
+
   return (
-    <div className="flex gap-5 min-h-[500px]">
+    <div
+      className="flex flex-col gap-4"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Mobile inspection info banner */}
+      <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-secondary/10 border border-secondary/20 text-sm text-secondary">
+        <Smartphone className="h-4 w-4 mt-0.5 flex-shrink-0" />
+        <span>
+          Documents uploaded here are available to inspectors in the mobile app during inspections.
+          Toggle the <span className="inline-flex items-center gap-1 font-semibold"><Smartphone className="h-3.5 w-3.5" /> In App</span> icon on each document to control visibility.
+        </span>
+      </div>
+
+      {/* Drag-and-drop overlay */}
+      {isDragging && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-secondary/20 backdrop-blur-sm pointer-events-none">
+          <div className="bg-card border-2 border-dashed border-secondary rounded-2xl px-16 py-12 flex flex-col items-center gap-3 shadow-xl">
+            <Upload className="h-10 w-10 text-secondary animate-bounce" />
+            <p className="text-lg font-semibold text-sidebar">Drop files to upload</p>
+            <p className="text-sm text-muted-foreground">Files will be added to {selectedFolder || "General"}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Image preview modal */}
+      {previewDoc && isImageDoc(previewDoc) && previewDoc.fileUrl && (
+        <Dialog open={true} onOpenChange={() => setPreviewDoc(null)}>
+          <DialogContent className="max-w-4xl p-2 bg-black/90 border-none">
+            <button
+              onClick={() => setPreviewDoc(null)}
+              className="absolute top-3 right-3 z-10 p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <p className="absolute top-3 left-3 z-10 text-white/80 text-sm font-medium truncate max-w-xs">{previewDoc.name}</p>
+            <img
+              src={`${apiBase()}/api/storage${previewDoc.fileUrl}`}
+              alt={previewDoc.name}
+              className="w-full max-h-[80vh] object-contain rounded-lg"
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      <div className="flex gap-5 min-h-[500px]">
       {/* Folder tree */}
       <div className="w-56 flex-shrink-0 bg-card border border-border rounded-xl overflow-hidden">
         <div className="p-3 border-b bg-muted/20 flex items-center justify-between">
@@ -639,7 +710,11 @@ function DocumentsTab({ projectId }: { projectId: number }) {
                   <TableHead>Name</TableHead>
                   <TableHead>Folder</TableHead>
                   <TableHead>Size</TableHead>
-                  <TableHead className="text-center">In Inspection</TableHead>
+                  <TableHead className="text-center">
+                    <span className="flex items-center justify-center gap-1" title="Documents visible in the mobile inspection app">
+                      <Smartphone className="h-3.5 w-3.5" /> In App
+                    </span>
+                  </TableHead>
                   <TableHead>Uploaded</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
@@ -661,7 +736,24 @@ function DocumentsTab({ projectId }: { projectId: number }) {
                         />
                       ) : (
                         <div className="flex items-center gap-2">
-                          <FileTypeIcon mimeType={doc.mimeType} />
+                          {isImageDoc(doc) && doc.fileUrl ? (
+                            <button
+                              onClick={() => setPreviewDoc(doc)}
+                              className="relative flex-shrink-0 group/thumb"
+                              title="Preview image"
+                            >
+                              <img
+                                src={`${apiBase()}/api/storage${doc.fileUrl}`}
+                                alt={doc.name}
+                                className="h-8 w-8 rounded object-cover border border-border"
+                              />
+                              <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/thumb:opacity-100 rounded transition-opacity">
+                                <ZoomIn className="h-3 w-3 text-white" />
+                              </span>
+                            </button>
+                          ) : (
+                            <FileTypeIcon mimeType={doc.mimeType} />
+                          )}
                           <span className="font-medium text-sm text-sidebar">{doc.name}</span>
                         </div>
                       )}
@@ -690,8 +782,8 @@ function DocumentsTab({ projectId }: { projectId: number }) {
                         title={doc.includedInInspection ? "Visible in inspection — click to hide" : "Hidden from inspection — click to show"}
                       >
                         {doc.includedInInspection
-                          ? <Eye className="h-4 w-4 text-green-500" />
-                          : <EyeOff className="h-4 w-4 text-muted-foreground" />}
+                          ? <Smartphone className="h-4 w-4 text-green-500" />
+                          : <Smartphone className="h-4 w-4 text-muted-foreground/40" />}
                       </button>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatDate(doc.createdAt)}</TableCell>
@@ -714,13 +806,22 @@ function DocumentsTab({ projectId }: { projectId: number }) {
                         </button>
                         {/* Other actions - fade in on hover */}
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {isImageDoc(doc) && doc.fileUrl && (
+                            <button
+                              onClick={() => setPreviewDoc(doc)}
+                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar"
+                              title="Preview"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                           {doc.fileUrl && (
                             <a
-                              href={`${apiBase()}/api/storage/objects${doc.fileUrl}`}
+                              href={`${apiBase()}/api/storage${doc.fileUrl}`}
                               target="_blank"
                               rel="noreferrer"
                               className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar"
-                              title="Download"
+                              title="Download / Open"
                             >
                               <Download className="h-3.5 w-3.5" />
                             </a>
@@ -749,6 +850,7 @@ function DocumentsTab({ projectId }: { projectId: number }) {
           </div>
         )}
       </div>
+      </div>{/* end flex gap-5 inner row */}
 
       {/* New Folder Dialog */}
       <Dialog open={newFolderDialogOpen} onOpenChange={setNewFolderDialogOpen}>
