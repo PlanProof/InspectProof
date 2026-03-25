@@ -476,24 +476,77 @@ function CTA() {
 
 function Footer() {
   return (
-    <footer className="bg-[#0B1933] border-t border-white/10 py-10">
+    <footer className="bg-[#0B1933] border-t border-white/10 pt-14 pb-8">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#C5D92D]">
-              <ClipboardList className="h-4 w-4 text-[#0B1933]" />
+
+        {/* Top row */}
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-10 mb-12">
+
+          {/* Brand + pitch */}
+          <div className="max-w-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#C5D92D]">
+                <ClipboardList className="h-4 w-4 text-[#0B1933]" />
+              </div>
+              <span className="text-base text-white" style={{ fontFamily: "'Oddlini', sans-serif", letterSpacing: "0.06em" }}>
+                InspectProof
+              </span>
             </div>
-            <span className="text-sm font-semibold text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              InspectProof
-            </span>
+            <p className="text-sm text-white/50 leading-relaxed">
+              The field inspection platform for building certifiers, structural
+              engineers and plumbing inspectors. Fast, accurate and audit-ready.
+            </p>
           </div>
-          <p className="text-xs text-white/40">
-            © {new Date().getFullYear()} InspectProof. Built for Australian building professionals.
-          </p>
-          <Link to="/login" className="text-xs text-white/50 hover:text-white transition-colors">
-            Sign In →
-          </Link>
+
+          {/* Links */}
+          <div className="flex flex-col sm:flex-row gap-10">
+            <div>
+              <p className="text-xs font-semibold text-white/30 uppercase tracking-widest mb-4">Platform</p>
+              <ul className="space-y-2.5">
+                {NAV_LINKS.map((link) => (
+                  <li key={link.href}>
+                    <a href={link.href} className="text-sm text-white/50 hover:text-white transition-colors">
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+                <li>
+                  <Link to="/login" className="text-sm text-white/50 hover:text-white transition-colors">
+                    Sign In
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-white/30 uppercase tracking-widest mb-4">Contact</p>
+              <ul className="space-y-2.5">
+                <li>
+                  <a href="mailto:contact@inspectproof.com.au" className="text-sm text-white/50 hover:text-white transition-colors">
+                    contact@inspectproof.com.au
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-white/30 uppercase tracking-widest mb-4">Legal</p>
+              <ul className="space-y-2.5">
+                <li>
+                  <a href="/terms" className="text-sm text-white/50 hover:text-white transition-colors">
+                    Terms &amp; Conditions
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
+
+        {/* Bottom row */}
+        <div className="border-t border-white/10 pt-6">
+          <p className="text-xs text-white/30">
+            © {new Date().getFullYear()} InspectProof. All rights reserved.
+          </p>
+        </div>
+
       </div>
     </footer>
   );
