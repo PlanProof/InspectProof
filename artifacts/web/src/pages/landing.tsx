@@ -418,8 +418,8 @@ function Professionals() {
           </div>
           <ul className="space-y-4">
             {p.bullets.map((b) => (
-              <li key={b} className="flex items-start gap-3">
-                <CheckCircle2 className="h-5 w-5 shrink-0 text-[#C5D92D] mt-0.5" />
+              <li key={b} className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-[#C5D92D]" />
                 <span className="text-white/70 text-sm leading-relaxed">{b}</span>
               </li>
             ))}
