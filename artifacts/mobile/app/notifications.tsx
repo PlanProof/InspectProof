@@ -1,0 +1,331 @@
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  Switch,
+  Platform,
+  Alert,
+} from "react-native";
+import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
+import { Colors } from "@/constants/colors";
+import { useNotifications, ReminderMinutes, MapApp } from "@/context/NotificationsContext";
+
+const WEB_TOP = Platform.OS === "web" ? 67 : 0;
+
+const REMINDER_OPTIONS: { value: ReminderMinutes; label: string }[] = [
+  { value: 15, label: "15 minutes before" },
+  { value: 30, label: "30 minutes before" },
+  { value: 60, label: "1 hour before" },
+  { value: 120, label: "2 hours before" },
+];
+
+const MAP_OPTIONS: { value: MapApp; label: string; desc: string; icon: string }[] = [
+  { value: "apple", label: "Apple Maps", desc: "Opens in Apple Maps app", icon: "map" },
+  { value: "google", label: "Google Maps", desc: "Opens in Google Maps app or browser", icon: "navigation" },
+  { value: "ask", label: "Ask each time", desc: "Choose the app whenever you tap an address", icon: "help-circle" },
+];
+
+export default function NotificationsScreen() {
+  const insets = useSafeAreaInsets();
+  const { prefs, updatePrefs, permissionGranted, requestPermission, cancelAllReminders } = useNotifications();
+  const [requesting, setRequesting] = useState(false);
+
+  const handleToggleReminders = async (value: boolean) => {
+    if (value && !permissionGranted) {
+      setRequesting(true);
+      const granted = await requestPermission();
+      setRequesting(false);
+      if (!granted) {
+        Alert.alert(
+          "Permission Required",
+          "Please enable notifications for InspectProof in your device settings to receive inspection reminders.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+    }
+    await updatePrefs({ remindersEnabled: value });
+    if (!value) await cancelAllReminders();
+  };
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + WEB_TOP + 16, paddingBottom: insets.bottom + 40 },
+      ]}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
+        >
+          <Feather name="chevron-left" size={22} color={Colors.primary} />
+        </Pressable>
+        <Text style={styles.title}>Notifications</Text>
+        <View style={{ width: 38 }} />
+      </View>
+
+      {/* Reminders Toggle */}
+      <View style={styles.card}>
+        <View style={styles.cardRow}>
+          <View style={styles.iconWrap}>
+            <Feather name="bell" size={18} color={Colors.secondary} />
+          </View>
+          <View style={styles.rowLabel}>
+            <Text style={styles.rowTitle}>Inspection Reminders</Text>
+            <Text style={styles.rowSub}>
+              Get notified before each scheduled inspection
+            </Text>
+          </View>
+          <Switch
+            value={prefs.remindersEnabled}
+            onValueChange={handleToggleReminders}
+            disabled={requesting}
+            trackColor={{ false: Colors.border, true: Colors.secondary }}
+            thumbColor={prefs.remindersEnabled ? Colors.accent : "#f4f3f4"}
+          />
+        </View>
+
+        {!permissionGranted && (
+          <View style={styles.permBanner}>
+            <Feather name="alert-triangle" size={14} color="#D69E2E" />
+            <Text style={styles.permText}>
+              Notification permission not granted. Tap the toggle to enable.
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Reminder Timing */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Remind me</Text>
+        <View style={styles.optionGroup}>
+          {REMINDER_OPTIONS.map((opt) => {
+            const selected = prefs.reminderMinutesBefore === opt.value;
+            return (
+              <Pressable
+                key={opt.value}
+                onPress={() => updatePrefs({ reminderMinutesBefore: opt.value })}
+                style={({ pressed }) => [
+                  styles.optionRow,
+                  selected && styles.optionRowSelected,
+                  pressed && { opacity: 0.75 },
+                ]}
+              >
+                <View style={[styles.radio, selected && styles.radioSelected]}>
+                  {selected && <View style={styles.radioDot} />}
+                </View>
+                <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
+                  {opt.label}
+                </Text>
+                {selected && <Feather name="check" size={15} color={Colors.secondary} style={{ marginLeft: "auto" }} />}
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.hint}>
+          You'll receive a notification at this interval before each booked inspection.
+        </Text>
+      </View>
+
+      {/* Map App Preference */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Open addresses in</Text>
+        <View style={styles.optionGroup}>
+          {MAP_OPTIONS.map((opt) => {
+            if (opt.value === "apple" && Platform.OS === "android") return null;
+            const selected = prefs.mapApp === opt.value;
+            return (
+              <Pressable
+                key={opt.value}
+                onPress={() => updatePrefs({ mapApp: opt.value })}
+                style={({ pressed }) => [
+                  styles.optionRow,
+                  styles.optionRowTall,
+                  selected && styles.optionRowSelected,
+                  pressed && { opacity: 0.75 },
+                ]}
+              >
+                <View style={[styles.mapIcon, selected && styles.mapIconSelected]}>
+                  <Feather name={opt.icon as any} size={16} color={selected ? Colors.secondary : Colors.textTertiary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
+                    {opt.label}
+                  </Text>
+                  <Text style={styles.optionDesc}>{opt.desc}</Text>
+                </View>
+                {selected && <Feather name="check" size={15} color={Colors.secondary} />}
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.hint}>
+          Tap the navigation icon on any inspection card to open that address on a map.
+        </Text>
+      </View>
+
+      {/* About */}
+      <View style={styles.aboutCard}>
+        <Feather name="info" size={14} color={Colors.textTertiary} />
+        <Text style={styles.aboutText}>
+          Reminders are scheduled locally on your device each time you open the app. No data is sent to any server for notifications.
+        </Text>
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.background },
+  content: { padding: 16, gap: 20 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  backBtn: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  title: {
+    fontSize: 17,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+    letterSpacing: -0.3,
+  },
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: "hidden",
+  },
+  cardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 16,
+  },
+  iconWrap: {
+    width: 38, height: 38, borderRadius: 9,
+    backgroundColor: Colors.infoLight,
+    alignItems: "center", justifyContent: "center",
+  },
+  rowLabel: { flex: 1 },
+  rowTitle: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+  },
+  rowSub: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  permBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FFFFF0",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#ECC94B40",
+  },
+  permText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#D69E2E",
+  },
+  section: { gap: 10 },
+  sectionTitle: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    paddingHorizontal: 4,
+  },
+  optionGroup: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: "hidden",
+  },
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  optionRowTall: { paddingVertical: 13 },
+  optionRowSelected: { backgroundColor: Colors.infoLight },
+  radio: {
+    width: 20, height: 20, borderRadius: 10,
+    borderWidth: 2, borderColor: Colors.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  radioSelected: { borderColor: Colors.secondary },
+  radioDot: {
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: Colors.secondary,
+  },
+  optionText: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+  },
+  optionTextSelected: { color: Colors.secondary },
+  optionDesc: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    marginTop: 1,
+  },
+  mapIcon: {
+    width: 34, height: 34, borderRadius: 8,
+    backgroundColor: Colors.borderLight,
+    alignItems: "center", justifyContent: "center",
+  },
+  mapIconSelected: { backgroundColor: Colors.secondary + "20" },
+  hint: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    paddingHorizontal: 4,
+    lineHeight: 18,
+  },
+  aboutCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: Colors.borderLight,
+    borderRadius: 12,
+    padding: 14,
+  },
+  aboutText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    lineHeight: 18,
+  },
+});

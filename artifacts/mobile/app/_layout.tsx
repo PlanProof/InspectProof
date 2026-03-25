@@ -14,6 +14,7 @@ import { setBaseUrl } from "@workspace/api-client-react";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
+import { NotificationsProvider } from "@/context/NotificationsContext";
 import { Colors } from "@/constants/colors";
 
 // Set base URL at module level for Expo
@@ -91,6 +92,10 @@ function RootLayoutNav() {
         name="inspection/photo-markup"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="notifications"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }
@@ -113,13 +118,15 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <AuthProvider>
-          <QueryClientProvider client={queryClient}>
-            <GestureHandlerRootView>
-              <KeyboardProvider>
-                <RootLayoutNav />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </QueryClientProvider>
+          <NotificationsProvider>
+            <QueryClientProvider client={queryClient}>
+              <GestureHandlerRootView>
+                <KeyboardProvider>
+                  <RootLayoutNav />
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </QueryClientProvider>
+          </NotificationsProvider>
         </AuthProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

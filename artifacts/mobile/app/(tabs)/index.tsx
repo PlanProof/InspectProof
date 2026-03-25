@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
   Pressable,
   RefreshControl,
   Platform,
-  ActivityIndicator,
+  Linking,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,6 +16,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useNotifications } from "@/context/NotificationsContext";
 
 const WEB_TOP = Platform.OS === "web" ? 67 : 0;
 
@@ -38,6 +40,20 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   cancelled: { label: "Cancelled", color: Colors.textTertiary, bg: Colors.borderLight },
 };
 
+const MOCK_TIMES = [
+  "07:30", "08:00", "08:30", "09:00", "09:30", "10:00",
+  "10:30", "11:00", "13:00", "13:30", "14:00", "14:30",
+  "15:00", "15:30", "16:00", "16:30",
+];
+
+function getMockTime(id: number): string {
+  return MOCK_TIMES[id % MOCK_TIMES.length];
+}
+
+function getDisplayTime(insp: any): string {
+  return insp.scheduledTime || getMockTime(insp.id);
+}
+
 function useApiData<T>(url: string) {
   const { token } = useAuth();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
@@ -59,6 +75,12 @@ function toLocalDateStr(date: Date) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function buildMapsUrl(address: string, suburb: string | null, app: "apple" | "google"): string {
+  const query = encodeURIComponent([address, suburb].filter(Boolean).join(", ") + ", Australia");
+  if (app === "apple") return `maps://?q=${query}`;
+  return `https://www.google.com/maps/search/?api=1&query=${query}`;
 }
 
 function WeekStrip({
@@ -134,9 +156,7 @@ const weekStyles = StyleSheet.create({
     borderRadius: 14,
     flex: 1,
   },
-  dayCellSelected: {
-    backgroundColor: Colors.primary,
-  },
+  dayCellSelected: { backgroundColor: Colors.primary },
   dayName: {
     fontSize: 10,
     fontFamily: "PlusJakartaSans_600SemiBold",
@@ -171,6 +191,51 @@ const weekStyles = StyleSheet.create({
   dotPlaceholder: { width: 5, height: 5 },
 });
 
+function MapPinButton({ address, suburb }: { address: string; suburb: string | null }) {
+  const { prefs } = useNotifications();
+
+  const open = async (app: "apple" | "google") => {
+    const url = buildMapsUrl(address, suburb, app);
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        const fallback = buildMapsUrl(address, suburb, "google");
+        await Linking.openURL(fallback);
+      }
+    } catch {
+      const fallback = buildMapsUrl(address, suburb, "google");
+      await Linking.openURL(fallback);
+    }
+  };
+
+  const handlePress = () => {
+    if (prefs.mapApp === "ask") {
+      const buttons: any[] = [
+        { text: "Google Maps", onPress: () => open("google") },
+        { text: "Cancel", style: "cancel" },
+      ];
+      if (Platform.OS === "ios") {
+        buttons.unshift({ text: "Apple Maps", onPress: () => open("apple") });
+      }
+      Alert.alert("Open in Maps", "Choose your maps app", buttons);
+    } else {
+      open(prefs.mapApp === "apple" ? "apple" : "google");
+    }
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      hitSlop={8}
+      style={({ pressed }) => [tlStyles.mapBtn, pressed && { opacity: 0.6 }]}
+    >
+      <Feather name="send" size={13} color={Colors.secondary} />
+    </Pressable>
+  );
+}
+
 function ScheduleTimeline({
   inspections,
   selectedDate,
@@ -189,11 +254,11 @@ function ScheduleTimeline({
     ? "Tomorrow"
     : new Date(selectedDate + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" });
 
-  const sorted = [...inspections].sort((a, b) => {
-    const ta = a.scheduledTime || "00:00";
-    const tb = b.scheduledTime || "00:00";
-    return ta.localeCompare(tb);
-  });
+  const sorted = useMemo(() => {
+    return [...inspections]
+      .map((i) => ({ ...i, displayTime: getDisplayTime(i) }))
+      .sort((a, b) => a.displayTime.localeCompare(b.displayTime));
+  }, [inspections]);
 
   if (sorted.length === 0) {
     return (
@@ -227,6 +292,8 @@ function ScheduleTimeline({
           const cfg = STATUS_CONFIG[insp.status] ?? STATUS_CONFIG.scheduled;
           const typeLabel = INSPECTION_TYPE_LABELS[insp.inspectionType] ?? insp.inspectionType;
           const isLast = idx === sorted.length - 1;
+          const hasAddress = !!(insp.projectAddress);
+          const addressLine = [insp.projectAddress, insp.projectSuburb].filter(Boolean).join(", ");
           return (
             <Pressable
               key={insp.id}
@@ -235,7 +302,7 @@ function ScheduleTimeline({
             >
               {/* Time column */}
               <View style={tlStyles.timeCol}>
-                <Text style={tlStyles.time}>{insp.scheduledTime || "—"}</Text>
+                <Text style={tlStyles.time}>{insp.displayTime}</Text>
                 {!isLast && <View style={tlStyles.connector} />}
               </View>
               {/* Card */}
@@ -250,6 +317,16 @@ function ScheduleTimeline({
                   </View>
                 </View>
                 <Text style={tlStyles.projectName} numberOfLines={1}>{insp.projectName}</Text>
+
+                {/* Address row with map pin */}
+                {hasAddress && (
+                  <View style={tlStyles.addressRow}>
+                    <Feather name="map-pin" size={11} color={Colors.textTertiary} />
+                    <Text style={tlStyles.addressText} numberOfLines={1}>{addressLine}</Text>
+                    <MapPinButton address={insp.projectAddress} suburb={insp.projectSuburb} />
+                  </View>
+                )}
+
                 {insp.inspectorName && (
                   <View style={tlStyles.metaRow}>
                     <Feather name="user" size={11} color={Colors.textTertiary} />
@@ -307,6 +384,27 @@ const tlStyles = StyleSheet.create({
   statusPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, marginLeft: "auto" },
   statusText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold" },
   projectName: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, lineHeight: 19 },
+  addressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  addressText: {
+    flex: 1,
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+  },
+  mapBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    backgroundColor: Colors.secondary + "15",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.secondary + "30",
+  },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   metaText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
   actionBtn: {
@@ -349,6 +447,7 @@ const tlStyles = StyleSheet.create({
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { scheduleInspectionReminders, prefs } = useNotifications();
   const [selectedDate, setSelectedDate] = useState(toLocalDateStr(new Date()));
 
   const { data: inspections = [], isRefetching, refetch } = useApiData<any[]>("/api/inspections");
@@ -372,6 +471,16 @@ export default function HomeScreen() {
   const inspectionsForDay = useMemo(() => {
     return (inspections as any[]).filter((i) => i.scheduledDate === selectedDate);
   }, [inspections, selectedDate]);
+
+  useEffect(() => {
+    if (inspections.length > 0 && prefs.remindersEnabled) {
+      const todayStr = toLocalDateStr(new Date());
+      const upcoming = (inspections as any[]).filter(
+        (i) => i.scheduledDate && i.scheduledDate >= todayStr
+      ).map((i) => ({ ...i, displayTime: getDisplayTime(i) }));
+      scheduleInspectionReminders(upcoming);
+    }
+  }, [inspections, prefs.remindersEnabled]);
 
   const stats = [
     { label: "Active Projects", value: analytics?.activeProjects ?? "—", icon: "folder" as const, color: Colors.secondary },

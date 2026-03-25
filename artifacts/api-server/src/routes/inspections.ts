@@ -16,6 +16,8 @@ async function getInspectionCounts(inspectionId: number) {
 async function formatInspection(i: any) {
   const project = await db.select().from(projectsTable).where(eq(projectsTable.id, i.projectId));
   const pName = project[0]?.name || "Unknown";
+  const pAddress = project[0]?.siteAddress || null;
+  const pSuburb = project[0]?.suburb || null;
 
   let inspectorName = null;
   if (i.inspectorId) {
@@ -29,6 +31,8 @@ async function formatInspection(i: any) {
     id: i.id,
     projectId: i.projectId,
     projectName: pName,
+    projectAddress: pAddress,
+    projectSuburb: pSuburb,
     inspectionType: i.inspectionType,
     status: i.status,
     scheduledDate: i.scheduledDate,
