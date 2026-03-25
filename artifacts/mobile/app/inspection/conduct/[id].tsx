@@ -138,6 +138,23 @@ export default function ConductInspectionScreen() {
     }
   };
 
+  const quickPassAll = async (items: ChecklistItem[]) => {
+    const allPassed = items.every(i => i.result === "pass");
+    const next = allPassed ? "pending" : "pass";
+    try {
+      await Promise.all(items.map(item =>
+        fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ result: next, notes: item.notes || null, photoUrls: item.photoUrls || [] }),
+        })
+      ));
+      await refetchChecklist();
+    } catch {
+      Alert.alert("Error", "Failed to update items. Please try again.");
+    }
+  };
+
   const saveItem = async () => {
     if (!activeItem) return;
     setSavingItem(true);
@@ -344,9 +361,26 @@ export default function ConductInspectionScreen() {
             <View key={category} style={styles.category}>
               <View style={styles.categoryHeader}>
                 <Text style={styles.categoryTitle}>{category}</Text>
-                <Text style={styles.categoryCount}>
-                  {items.filter(i => i.result !== "pending").length}/{items.length}
-                </Text>
+                <View style={styles.categoryRight}>
+                  <Text style={styles.categoryCount}>
+                    {items.filter(i => i.result !== "pending").length}/{items.length}
+                  </Text>
+                  <Pressable
+                    onPress={() => quickPassAll(items)}
+                    hitSlop={10}
+                    style={({ pressed }) => [
+                      styles.masterTick,
+                      items.every(i => i.result === "pass") && styles.masterTickActive,
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Feather
+                      name="check"
+                      size={14}
+                      color={items.every(i => i.result === "pass") ? "#fff" : Colors.textTertiary}
+                    />
+                  </Pressable>
+                </View>
               </View>
               {items.map(item => (
                 <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} />
@@ -661,6 +695,21 @@ const styles = StyleSheet.create({
   },
   categoryTitle: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.8 },
   categoryCount: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  categoryRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  masterTick: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  masterTickActive: {
+    backgroundColor: "#22c55e",
+    borderColor: "#16a34a",
+  },
   checkRow: {
     flexDirection: "row",
     alignItems: "center",
