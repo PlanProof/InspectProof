@@ -25,6 +25,18 @@ async function apiFetch(path: string, opts?: RequestInit) {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+interface ChecklistStroke {
+  points: { x: number; y: number }[];
+  color: string;
+  width: number;
+}
+
+interface ChecklistMarkupData {
+  w: number;
+  h: number;
+  strokes: ChecklistStroke[];
+}
+
 interface ChecklistResult {
   id: number;
   checklistItemId: number;
@@ -34,6 +46,8 @@ interface ChecklistResult {
   riskLevel?: string;
   result: "pass" | "fail" | "na" | null;
   notes?: string;
+  photoUrls?: string[];
+  photoMarkups?: Record<string, ChecklistMarkupData>;
   orderIndex: number;
 }
 
@@ -626,6 +640,59 @@ function ChecklistTab({
                   </div>
                   {item.notes && (
                     <p className="text-xs text-muted-foreground mt-1.5 italic">"{item.notes}"</p>
+                  )}
+                  {/* Photos with markup overlay */}
+                  {item.photoUrls && item.photoUrls.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {item.photoUrls.map((photoPath, pi) => {
+                        const markup = item.photoMarkups?.[photoPath];
+                        return (
+                          <a
+                            key={pi}
+                            href={`${apiBase()}/api/storage${photoPath}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="relative block rounded-md overflow-hidden border border-border hover:border-secondary/60 transition-colors flex-shrink-0"
+                            style={{ width: 72, height: 72 }}
+                          >
+                            <img
+                              src={`${apiBase()}/api/storage${photoPath}`}
+                              alt={`Photo ${pi + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                            {markup && markup.strokes.length > 0 && (
+                              <svg
+                                className="absolute inset-0 w-full h-full"
+                                viewBox={`0 0 ${markup.w} ${markup.h}`}
+                                preserveAspectRatio="xMidYMid meet"
+                              >
+                                {markup.strokes.map((stroke, si) => {
+                                  const d = stroke.points.map((p, pi2) =>
+                                    `${pi2 === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`
+                                  ).join(" ");
+                                  return (
+                                    <path
+                                      key={si}
+                                      d={d}
+                                      stroke={stroke.color}
+                                      strokeWidth={stroke.width}
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      fill="none"
+                                    />
+                                  );
+                                })}
+                              </svg>
+                            )}
+                            {markup && markup.strokes.length > 0 && (
+                              <span className="absolute bottom-1 left-1 bg-secondary text-white text-[8px] px-1 rounded leading-tight font-semibold">
+                                Markup
+                              </span>
+                            )}
+                          </a>
+                        );
+                      })}
+                    </div>
                   )}
                   {/* Linked documents */}
                   {(docsByItem[item.checklistItemId] ?? []).length > 0 && (

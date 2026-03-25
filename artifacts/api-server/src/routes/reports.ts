@@ -65,7 +65,7 @@ Certification No:     ${project.certificationNumber || "—"}
 Building Class:       ${project.buildingClassification}
 Client / Owner:       ${project.clientName}
 Builder:              ${project.builderName || "—"}
-Designer / Architect: ${project.designerName || "—"}
+Designer / Architect:  ${project.designerName || "—"}
 
 ────────────────────────────────────────────────────────
 INSPECTION DETAILS

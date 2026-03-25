@@ -136,6 +136,8 @@ router.get("/:id", async (req, res) => {
       riskLevel: r.item.riskLevel,
       result: r.result.result,
       notes: r.result.notes,
+      photoUrls: r.result.photoUrls ? JSON.parse(r.result.photoUrls) : [],
+      photoMarkups: r.result.photoMarkups ? JSON.parse(r.result.photoMarkups) : {},
       orderIndex: r.item.orderIndex,
     }));
 
@@ -240,6 +242,7 @@ router.get("/:id/checklist", async (req, res) => {
       result: r.result.result,
       notes: r.result.notes,
       photoUrls: r.result.photoUrls ? JSON.parse(r.result.photoUrls) : [],
+      photoMarkups: r.result.photoMarkups ? JSON.parse(r.result.photoMarkups) : {},
       orderIndex: r.item.orderIndex,
     })));
   } catch (err) {
@@ -281,12 +284,13 @@ router.post("/:id/checklist", async (req, res) => {
 router.patch("/:id/checklist/:resultId", async (req, res) => {
   try {
     const resultId = parseInt(req.params.resultId);
-    const { result, notes, photoUrls } = req.body;
+    const { result, notes, photoUrls, photoMarkups } = req.body;
 
     const updateData: any = { updatedAt: new Date() };
     if (result !== undefined) updateData.result = result;
     if (notes !== undefined) updateData.notes = notes;
     if (photoUrls !== undefined) updateData.photoUrls = JSON.stringify(photoUrls);
+    if (photoMarkups !== undefined) updateData.photoMarkups = JSON.stringify(photoMarkups);
 
     const [updated] = await db.update(checklistResultsTable)
       .set(updateData)
@@ -312,6 +316,7 @@ router.patch("/:id/checklist/:resultId", async (req, res) => {
       result: updated.result,
       notes: updated.notes,
       photoUrls: updated.photoUrls ? JSON.parse(updated.photoUrls) : [],
+      photoMarkups: updated.photoMarkups ? JSON.parse(updated.photoMarkups) : {},
       orderIndex: item[0]?.orderIndex,
     });
   } catch (err) {

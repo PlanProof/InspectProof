@@ -85,6 +85,10 @@ function RootLayoutNav() {
         name="inspection/generate-report"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="inspection/photo-markup"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

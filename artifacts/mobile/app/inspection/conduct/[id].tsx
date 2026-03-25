@@ -12,7 +12,8 @@ import {
   Modal,
   Platform,
 } from "react-native";
-import { useLocalSearchParams, router } from "expo-router";
+import Svg, { Path } from "react-native-svg";
+import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +29,18 @@ const RESULT_OPTS = [
 
 type ResultKey = "pass" | "fail" | "na" | "pending";
 
+interface Stroke {
+  points: { x: number; y: number }[];
+  color: string;
+  width: number;
+}
+
+interface MarkupData {
+  w: number;
+  h: number;
+  strokes: Stroke[];
+}
+
 interface ChecklistItem {
   id: number;
   inspectionId: number;
@@ -39,6 +52,7 @@ interface ChecklistItem {
   result: ResultKey;
   notes?: string;
   photoUrls?: string[];
+  photoMarkups?: Record<string, MarkupData>;
   orderIndex: number;
 }
 
@@ -79,6 +93,12 @@ export default function ConductInspectionScreen() {
     queryFn: () => fetchWithAuth(`/api/inspections/${id}/checklist`),
     enabled: !!token && !!id,
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchChecklist();
+    }, [refetchChecklist])
+  );
 
   const grouped = checklistItems.reduce<Record<string, ChecklistItem[]>>((acc, item) => {
     (acc[item.category] = acc[item.category] || []).push(item);
@@ -126,6 +146,17 @@ export default function ConductInspectionScreen() {
     }
   };
 
+  const navigateToMarkup = (photoUri: string, itemId: number) => {
+    router.push({
+      pathname: "/inspection/photo-markup" as any,
+      params: {
+        photoUri,
+        inspectionId: id,
+        itemId: String(itemId),
+      },
+    });
+  };
+
   const uploadPhoto = async () => {
     if (!activeItem) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -136,47 +167,13 @@ export default function ConductInspectionScreen() {
 
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-      allowsEditing: true,
+      quality: 0.8,
     });
 
     if (picked.canceled || !picked.assets[0]) return;
-    const asset = picked.assets[0];
-
-    setUploadingPhoto(true);
-    try {
-      const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: `inspection-photo-${Date.now()}.jpg`,
-          size: asset.fileSize || 0,
-          contentType: "image/jpeg",
-        }),
-      });
-
-      const uploadResponse = await fetch(urlRes.uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": "image/jpeg" },
-        body: await (await fetch(asset.uri)).blob(),
-      });
-
-      if (!uploadResponse.ok) throw new Error("Upload failed");
-
-      const newPhotoUrls = [...(activeItem.photoUrls || []), urlRes.objectPath];
-      setActiveItem(prev => prev ? { ...prev, photoUrls: newPhotoUrls } : null);
-
-      await fetchWithAuth(`/api/inspections/${id}/checklist/${activeItem.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoUrls: newPhotoUrls }),
-      });
-      await refetchChecklist();
-    } catch (e: any) {
-      Alert.alert("Upload failed", "Could not upload photo. Please try again.");
-    } finally {
-      setUploadingPhoto(false);
-    }
+    const itemId = activeItem.id;
+    closeModal();
+    navigateToMarkup(picked.assets[0].uri, itemId);
   };
 
   const takePhoto = async () => {
@@ -188,58 +185,26 @@ export default function ConductInspectionScreen() {
     }
 
     const picked = await ImagePicker.launchCameraAsync({
-      quality: 0.7,
-      allowsEditing: true,
+      quality: 0.8,
     });
 
     if (picked.canceled || !picked.assets[0]) return;
-    const asset = picked.assets[0];
-
-    setUploadingPhoto(true);
-    try {
-      const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: `inspection-photo-${Date.now()}.jpg`,
-          size: asset.fileSize || 0,
-          contentType: "image/jpeg",
-        }),
-      });
-
-      const uploadResponse = await fetch(urlRes.uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": "image/jpeg" },
-        body: await (await fetch(asset.uri)).blob(),
-      });
-
-      if (!uploadResponse.ok) throw new Error("Upload failed");
-
-      const newPhotoUrls = [...(activeItem.photoUrls || []), urlRes.objectPath];
-      setActiveItem(prev => prev ? { ...prev, photoUrls: newPhotoUrls } : null);
-
-      await fetchWithAuth(`/api/inspections/${id}/checklist/${activeItem.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoUrls: newPhotoUrls }),
-      });
-      await refetchChecklist();
-    } catch (e: any) {
-      Alert.alert("Upload failed", "Could not upload photo. Please try again.");
-    } finally {
-      setUploadingPhoto(false);
-    }
+    const itemId = activeItem.id;
+    closeModal();
+    navigateToMarkup(picked.assets[0].uri, itemId);
   };
 
   const removePhoto = async (photoPath: string) => {
     if (!activeItem) return;
     const newPhotoUrls = (activeItem.photoUrls || []).filter(p => p !== photoPath);
-    setActiveItem(prev => prev ? { ...prev, photoUrls: newPhotoUrls } : null);
+    const newMarkups = { ...(activeItem.photoMarkups || {}) };
+    delete newMarkups[photoPath];
+    setActiveItem(prev => prev ? { ...prev, photoUrls: newPhotoUrls, photoMarkups: newMarkups } : null);
     try {
       await fetchWithAuth(`/api/inspections/${id}/checklist/${activeItem.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoUrls: newPhotoUrls }),
+        body: JSON.stringify({ photoUrls: newPhotoUrls, photoMarkups: newMarkups }),
       });
       await refetchChecklist();
     } catch { }
@@ -531,18 +496,51 @@ function ItemModal({
 
           {item.photoUrls && item.photoUrls.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={modalStyles.photoRow}>
-              {item.photoUrls.map((photoPath, idx) => (
-                <View key={idx} style={modalStyles.photoThumb}>
-                  <Image
-                    source={{ uri: `${baseUrl}/api/storage${photoPath}` }}
-                    style={modalStyles.thumbImage}
-                    resizeMode="cover"
-                  />
-                  <Pressable style={modalStyles.removePhoto} onPress={() => onRemovePhoto(photoPath)} hitSlop={4}>
-                    <Feather name="x" size={12} color="#fff" />
-                  </Pressable>
-                </View>
-              ))}
+              {item.photoUrls.map((photoPath, idx) => {
+                const markup: MarkupData | undefined = item.photoMarkups?.[photoPath];
+                const hasMarkup = markup && markup.strokes.length > 0;
+                return (
+                  <View key={idx} style={modalStyles.photoThumb}>
+                    <Image
+                      source={{ uri: `${baseUrl}/api/storage${photoPath}` }}
+                      style={modalStyles.thumbImage}
+                      resizeMode="cover"
+                    />
+                    {hasMarkup && markup && (
+                      <Svg
+                        style={StyleSheet.absoluteFill}
+                        width={80}
+                        height={80}
+                        viewBox={`0 0 ${markup.w} ${markup.h}`}
+                        preserveAspectRatio="xMidYMid meet"
+                      >
+                        {markup.strokes.map((stroke, si) => {
+                          const d = stroke.points.map((p, pi) => `${pi === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+                          return (
+                            <Path
+                              key={si}
+                              d={d}
+                              stroke={stroke.color}
+                              strokeWidth={stroke.width}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              fill="none"
+                            />
+                          );
+                        })}
+                      </Svg>
+                    )}
+                    {hasMarkup && (
+                      <View style={modalStyles.markupBadge}>
+                        <Feather name="edit-2" size={8} color="#fff" />
+                      </View>
+                    )}
+                    <Pressable style={modalStyles.removePhoto} onPress={() => onRemovePhoto(photoPath)} hitSlop={4}>
+                      <Feather name="x" size={12} color="#fff" />
+                    </Pressable>
+                  </View>
+                );
+              })}
             </ScrollView>
           )}
 
@@ -737,6 +735,11 @@ const modalStyles = StyleSheet.create({
     backgroundColor: "#ef4444",
     alignItems: "center",
     justifyContent: "center",
+  },
+  markupBadge: {
+    position: "absolute", bottom: 4, left: 4,
+    backgroundColor: Colors.secondary, borderRadius: 4,
+    width: 16, height: 16, alignItems: "center", justifyContent: "center",
   },
   photoButtons: { flexDirection: "row", gap: 10 },
   photoBtn: {
