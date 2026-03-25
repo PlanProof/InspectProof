@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   Pressable,
   RefreshControl,
   Platform,
+  Animated,
+  PanResponder,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -51,6 +53,24 @@ function getMockTime(id: number): string {
 function getDisplayTime(insp: any): string {
   return insp.scheduledTime || getMockTime(insp.id);
 }
+
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTime(minutes: number): string {
+  const clamped = Math.max(6 * 60, Math.min(20 * 60, minutes));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function snapToGrid(minutes: number): number {
+  return Math.round(minutes / 15) * 15;
+}
+
+const PIXELS_PER_15MIN = 28;
 
 function useApiData<T>(url: string) {
   const { token } = useAuth();
@@ -135,50 +155,18 @@ function WeekStrip({
 }
 
 const weekStyles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 4,
-  },
-  dayCell: {
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-    borderRadius: 14,
-    flex: 1,
-  },
+  row: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 4 },
+  dayCell: { alignItems: "center", gap: 4, paddingVertical: 8, paddingHorizontal: 6, borderRadius: 14, flex: 1 },
   dayCellSelected: { backgroundColor: Colors.primary },
-  dayName: {
-    fontSize: 10,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textTertiary,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
-  },
+  dayName: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.3 },
   dayNameSelected: { color: "rgba(255,255,255,0.65)" },
-  dayNum: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  dayNum: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   dayNumSelected: { backgroundColor: Colors.accent },
   dayNumToday: { borderWidth: 1.5, borderColor: Colors.secondary },
-  dayNumText: {
-    fontSize: 15,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.text,
-  },
+  dayNumText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   dayNumTextSelected: { color: Colors.primary },
   dayNumTextToday: { color: Colors.secondary },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: Colors.secondary,
-  },
+  dot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: Colors.secondary },
   dotSelected: { backgroundColor: Colors.accent },
   dotPlaceholder: { width: 5, height: 5 },
 });
@@ -196,12 +184,158 @@ function MapPinButton({ address, suburb }: { address: string; suburb: string | n
   );
 }
 
+interface DraggableCardProps {
+  insp: any;
+  isLast: boolean;
+  shiftMode: boolean;
+  onTimeChange: (id: number, newTime: string) => void;
+}
+
+function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardProps) {
+  const translateY = useRef(new Animated.Value(0)).current;
+  const [dragging, setDragging] = useState(false);
+  const [previewTime, setPreviewTime] = useState<string | null>(null);
+  const shiftModeRef = useRef(shiftMode);
+  const baseMinutesRef = useRef(timeToMinutes(insp.displayTime));
+
+  useEffect(() => { shiftModeRef.current = shiftMode; }, [shiftMode]);
+  useEffect(() => {
+    baseMinutesRef.current = timeToMinutes(insp.displayTime);
+  }, [insp.displayTime]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => shiftModeRef.current,
+      onMoveShouldSetPanResponder: (_, gs) => shiftModeRef.current && Math.abs(gs.dy) > 4,
+      onPanResponderGrant: () => {
+        setDragging(true);
+        translateY.setOffset((translateY as any).__getValue?.() ?? 0);
+        translateY.setValue(0);
+      },
+      onPanResponderMove: (_, gs) => {
+        translateY.setValue(gs.dy);
+        const deltaSlots = Math.round(gs.dy / PIXELS_PER_15MIN);
+        const newMins = snapToGrid(baseMinutesRef.current + deltaSlots * 15);
+        setPreviewTime(minutesToTime(newMins));
+      },
+      onPanResponderRelease: (_, gs) => {
+        const deltaSlots = Math.round(gs.dy / PIXELS_PER_15MIN);
+        const newMins = snapToGrid(baseMinutesRef.current + deltaSlots * 15);
+        const newTime = minutesToTime(newMins);
+        translateY.flattenOffset();
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 120, friction: 10 }).start();
+        setDragging(false);
+        setPreviewTime(null);
+        onTimeChange(insp.id, newTime);
+      },
+      onPanResponderTerminate: () => {
+        translateY.flattenOffset();
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+        setDragging(false);
+        setPreviewTime(null);
+      },
+    })
+  ).current;
+
+  const cfg = STATUS_CONFIG[insp.status] ?? STATUS_CONFIG.scheduled;
+  const typeLabel = INSPECTION_TYPE_LABELS[insp.inspectionType] ?? insp.inspectionType;
+  const hasAddress = !!(insp.projectAddress);
+  const addressLine = [insp.projectAddress, insp.projectSuburb].filter(Boolean).join(", ");
+  const displayedTime = previewTime || insp.displayTime;
+
+  return (
+    <Animated.View
+      style={[
+        tlStyles.item,
+        { transform: [{ translateY }], zIndex: dragging ? 100 : 1 },
+      ]}
+      {...(shiftMode ? panResponder.panHandlers : {})}
+    >
+      {/* Time column */}
+      <View style={tlStyles.timeCol}>
+        <Text style={[tlStyles.time, previewTime && tlStyles.timePreview]}>
+          {displayedTime}
+        </Text>
+        {!isLast && !dragging && <View style={tlStyles.connector} />}
+      </View>
+
+      {/* Card */}
+      <View style={[
+        tlStyles.card,
+        shiftMode && tlStyles.cardShift,
+        dragging && tlStyles.cardDragging,
+      ]}>
+        {/* Drag handle */}
+        {shiftMode && (
+          <View style={tlStyles.dragHandle}>
+            <Feather name="menu" size={16} color={Colors.secondary + "80"} />
+          </View>
+        )}
+
+        <View style={tlStyles.cardInner}>
+          <View style={tlStyles.cardTop}>
+            <View style={[tlStyles.typePill, { backgroundColor: Colors.infoLight }]}>
+              <Feather name="clipboard" size={11} color={Colors.secondary} />
+              <Text style={tlStyles.typeText}>{typeLabel}</Text>
+            </View>
+            <View style={[tlStyles.statusPill, { backgroundColor: cfg.bg }]}>
+              <Text style={[tlStyles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
+            </View>
+          </View>
+
+          <Text style={tlStyles.projectName} numberOfLines={1}>{insp.projectName}</Text>
+
+          {hasAddress && (
+            <View style={tlStyles.addressRow}>
+              <Feather name="map-pin" size={11} color={Colors.textTertiary} />
+              <Text style={tlStyles.addressText} numberOfLines={1}>{addressLine}</Text>
+              {!shiftMode && <MapPinButton address={insp.projectAddress} suburb={insp.projectSuburb} />}
+            </View>
+          )}
+
+          {insp.inspectorName && (
+            <View style={tlStyles.metaRow}>
+              <Feather name="user" size={11} color={Colors.textTertiary} />
+              <Text style={tlStyles.metaText}>{insp.inspectorName}</Text>
+            </View>
+          )}
+
+          {!shiftMode && (insp.status === "scheduled" || insp.status === "in_progress") && (
+            <Pressable
+              onPress={() => router.push(`/inspection/conduct/${insp.id}` as any)}
+              style={({ pressed }) => [tlStyles.actionBtn, pressed && { opacity: 0.8 }]}
+            >
+              <Feather name={insp.status === "in_progress" ? "play-circle" : "arrow-right"} size={13} color={Colors.primary} />
+              <Text style={tlStyles.actionText}>
+                {insp.status === "in_progress" ? "Continue" : "Start Inspection"}
+              </Text>
+            </Pressable>
+          )}
+
+          {shiftMode && (
+            <View style={tlStyles.shiftHint}>
+              <Feather name="move" size={11} color={Colors.secondary + "99"} />
+              <Text style={tlStyles.shiftHintText}>Drag to reschedule · 15 min intervals</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
 function ScheduleTimeline({
   inspections,
   selectedDate,
+  shiftMode,
+  onToggleShift,
+  onTimeChange,
 }: {
   inspections: any[];
   selectedDate: string;
+  shiftMode: boolean;
+  onToggleShift: () => void;
+  onTimeChange: (id: number, newTime: string) => void;
 }) {
   const today = toLocalDateStr(new Date());
   const isToday = selectedDate === today;
@@ -215,9 +349,7 @@ function ScheduleTimeline({
     : new Date(selectedDate + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" });
 
   const sorted = useMemo(() => {
-    return [...inspections]
-      .map((i) => ({ ...i, displayTime: getDisplayTime(i) }))
-      .sort((a, b) => a.displayTime.localeCompare(b.displayTime));
+    return [...inspections].sort((a, b) => a.displayTime.localeCompare(b.displayTime));
   }, [inspections]);
 
   if (sorted.length === 0) {
@@ -244,84 +376,80 @@ function ScheduleTimeline({
   return (
     <View style={tlStyles.wrap}>
       <View style={tlStyles.headerRow}>
-        <Text style={tlStyles.dateLabel}>{dateLabel}</Text>
-        <Text style={tlStyles.countLabel}>{sorted.length} inspection{sorted.length !== 1 ? "s" : ""}</Text>
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
+          <Text style={tlStyles.dateLabel}>{dateLabel}</Text>
+          <Text style={tlStyles.countLabel}>{sorted.length} inspection{sorted.length !== 1 ? "s" : ""}</Text>
+        </View>
+        <Pressable
+          onPress={onToggleShift}
+          style={({ pressed }) => [
+            tlStyles.shiftToggle,
+            shiftMode && tlStyles.shiftToggleActive,
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Feather name="sliders" size={13} color={shiftMode ? Colors.primary : Colors.textSecondary} />
+          <Text style={[tlStyles.shiftToggleText, shiftMode && tlStyles.shiftToggleTextActive]}>
+            {shiftMode ? "Done" : "Shift"}
+          </Text>
+        </Pressable>
       </View>
+
+      {shiftMode && (
+        <View style={tlStyles.shiftBanner}>
+          <Feather name="info" size={13} color={Colors.secondary} />
+          <Text style={tlStyles.shiftBannerText}>
+            Drag any inspection card up or down to reschedule it. Snaps to 15-minute intervals.
+          </Text>
+        </View>
+      )}
+
       <View style={tlStyles.list}>
-        {sorted.map((insp, idx) => {
-          const cfg = STATUS_CONFIG[insp.status] ?? STATUS_CONFIG.scheduled;
-          const typeLabel = INSPECTION_TYPE_LABELS[insp.inspectionType] ?? insp.inspectionType;
-          const isLast = idx === sorted.length - 1;
-          const hasAddress = !!(insp.projectAddress);
-          const addressLine = [insp.projectAddress, insp.projectSuburb].filter(Boolean).join(", ");
-          return (
-            <Pressable
-              key={insp.id}
-              onPress={() => router.push(`/inspection/${insp.id}` as any)}
-              style={({ pressed }) => [tlStyles.item, pressed && { opacity: 0.8 }]}
-            >
-              {/* Time column */}
-              <View style={tlStyles.timeCol}>
-                <Text style={tlStyles.time}>{insp.displayTime}</Text>
-                {!isLast && <View style={tlStyles.connector} />}
-              </View>
-              {/* Card */}
-              <View style={tlStyles.card}>
-                <View style={tlStyles.cardTop}>
-                  <View style={[tlStyles.typePill, { backgroundColor: Colors.infoLight }]}>
-                    <Feather name="clipboard" size={11} color={Colors.secondary} />
-                    <Text style={tlStyles.typeText}>{typeLabel}</Text>
-                  </View>
-                  <View style={[tlStyles.statusPill, { backgroundColor: cfg.bg }]}>
-                    <Text style={[tlStyles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
-                  </View>
-                </View>
-                <Text style={tlStyles.projectName} numberOfLines={1}>{insp.projectName}</Text>
-
-                {/* Address row with map pin */}
-                {hasAddress && (
-                  <View style={tlStyles.addressRow}>
-                    <Feather name="map-pin" size={11} color={Colors.textTertiary} />
-                    <Text style={tlStyles.addressText} numberOfLines={1}>{addressLine}</Text>
-                    <MapPinButton address={insp.projectAddress} suburb={insp.projectSuburb} />
-                  </View>
-                )}
-
-                {insp.inspectorName && (
-                  <View style={tlStyles.metaRow}>
-                    <Feather name="user" size={11} color={Colors.textTertiary} />
-                    <Text style={tlStyles.metaText}>{insp.inspectorName}</Text>
-                  </View>
-                )}
-                {(insp.status === "scheduled" || insp.status === "in_progress") && (
-                  <Pressable
-                    onPress={() => router.push(`/inspection/conduct/${insp.id}` as any)}
-                    style={({ pressed }) => [tlStyles.actionBtn, pressed && { opacity: 0.8 }]}
-                  >
-                    <Feather name={insp.status === "in_progress" ? "play-circle" : "arrow-right"} size={13} color={Colors.primary} />
-                    <Text style={tlStyles.actionText}>
-                      {insp.status === "in_progress" ? "Continue" : "Start Inspection"}
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            </Pressable>
-          );
-        })}
+        {sorted.map((insp, idx) => (
+          <DraggableCard
+            key={insp.id}
+            insp={insp}
+            isLast={idx === sorted.length - 1}
+            shiftMode={shiftMode}
+            onTimeChange={onTimeChange}
+          />
+        ))}
       </View>
     </View>
   );
 }
 
 const tlStyles = StyleSheet.create({
-  wrap: { gap: 12 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  wrap: { gap: 10 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dateLabel: { fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, letterSpacing: -0.3 },
   countLabel: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  shiftToggle: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
+  },
+  shiftToggleActive: {
+    backgroundColor: Colors.accent, borderColor: Colors.accent,
+  },
+  shiftToggleText: {
+    fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary,
+  },
+  shiftToggleTextActive: { color: Colors.primary },
+  shiftBanner: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: Colors.infoLight, borderRadius: 10, padding: 11,
+    borderWidth: 1, borderColor: Colors.secondary + "30",
+  },
+  shiftBannerText: {
+    flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.secondary, lineHeight: 17,
+  },
   list: { gap: 0 },
-  item: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  item: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 2 },
   timeCol: { width: 46, alignItems: "flex-end", paddingTop: 14 },
   time: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  timePreview: { color: Colors.secondary, fontSize: 13 },
   connector: { width: 1.5, flex: 1, backgroundColor: Colors.borderLight, marginTop: 6, marginBottom: -4, alignSelf: "center" },
   card: {
     flex: 1,
@@ -329,88 +457,78 @@ const tlStyles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 13,
     marginBottom: 10,
-    gap: 6,
+    overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 1,
   },
+  cardShift: {
+    borderColor: Colors.secondary + "40",
+    borderStyle: "dashed",
+  },
+  cardDragging: {
+    borderColor: Colors.secondary,
+    borderStyle: "solid",
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    elevation: 8,
+    backgroundColor: "#FAFEFF",
+  },
+  dragHandle: {
+    alignItems: "center",
+    paddingVertical: 6,
+    backgroundColor: Colors.infoLight,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  cardInner: { padding: 13, gap: 6 },
   cardTop: { flexDirection: "row", gap: 6, alignItems: "center" },
   typePill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
   typeText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   statusPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, marginLeft: "auto" },
   statusText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold" },
   projectName: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, lineHeight: 19 },
-  addressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  addressText: {
-    flex: 1,
-    fontSize: 11,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textTertiary,
-  },
+  addressRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  addressText: { flex: 1, fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
   mapBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
+    width: 26, height: 26, borderRadius: 7,
     backgroundColor: Colors.secondary + "15",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Colors.secondary + "30",
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: Colors.secondary + "30",
   },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   metaText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
   actionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
+    flexDirection: "row", alignItems: "center", gap: 5,
     alignSelf: "flex-start",
     backgroundColor: Colors.accent + "30",
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 7,
-    marginTop: 2,
+    paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, marginTop: 2,
   },
   actionText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  shiftHint: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
+  shiftHintText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary + "99" },
   emptyWrap: { alignItems: "center", paddingVertical: 32, gap: 8 },
-  emptyIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: Colors.borderLight,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
+  emptyIcon: { width: 52, height: 52, borderRadius: 16, backgroundColor: Colors.borderLight, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   emptyTitle: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   emptySub: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, textAlign: "center", maxWidth: 240 },
-  emptyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 8,
-    backgroundColor: Colors.accent,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 10,
-  },
+  emptyBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, backgroundColor: Colors.accent, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10 },
   emptyBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
 });
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { scheduleInspectionReminders, prefs } = useNotifications();
   const [selectedDate, setSelectedDate] = useState(toLocalDateStr(new Date()));
+  const [shiftMode, setShiftMode] = useState(false);
+  const [localTimes, setLocalTimes] = useState<Record<number, string>>({});
 
-  const { data: inspections = [], isRefetching, refetch } = useApiData<any[]>("/api/inspections");
+  const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
+
+  const { data: rawInspections = [], isRefetching, refetch } = useApiData<any[]>("/api/inspections");
   const { data: analytics } = useApiData<any>("/api/analytics/dashboard");
 
   const handleRefresh = useCallback(() => { refetch(); }, [refetch]);
@@ -422,22 +540,41 @@ export default function HomeScreen() {
     return "Good evening";
   };
 
+  const inspections = useMemo(() => {
+    return (rawInspections as any[]).map((i) => ({
+      ...i,
+      displayTime: localTimes[i.id] || getDisplayTime(i),
+    }));
+  }, [rawInspections, localTimes]);
+
   const inspectionDates = useMemo(() => {
     const s = new Set<string>();
-    (inspections as any[]).forEach((i) => { if (i.scheduledDate) s.add(i.scheduledDate); });
+    inspections.forEach((i) => { if (i.scheduledDate) s.add(i.scheduledDate); });
     return s;
   }, [inspections]);
 
   const inspectionsForDay = useMemo(() => {
-    return (inspections as any[]).filter((i) => i.scheduledDate === selectedDate);
+    return inspections.filter((i) => i.scheduledDate === selectedDate);
   }, [inspections, selectedDate]);
+
+  const handleTimeChange = useCallback(async (inspId: number, newTime: string) => {
+    setLocalTimes((prev) => ({ ...prev, [inspId]: newTime }));
+    try {
+      await fetch(`${baseUrl}/api/inspections/${inspId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ scheduledTime: newTime }),
+      });
+    } catch {}
+  }, [baseUrl, token]);
 
   useEffect(() => {
     if (inspections.length > 0 && prefs.remindersEnabled) {
       const todayStr = toLocalDateStr(new Date());
-      const upcoming = (inspections as any[]).filter(
-        (i) => i.scheduledDate && i.scheduledDate >= todayStr
-      ).map((i) => ({ ...i, displayTime: getDisplayTime(i) }));
+      const upcoming = inspections.filter((i) => i.scheduledDate && i.scheduledDate >= todayStr);
       scheduleInspectionReminders(upcoming);
     }
   }, [inspections, prefs.remindersEnabled]);
@@ -451,6 +588,7 @@ export default function HomeScreen() {
       ]}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
       showsVerticalScrollIndicator={false}
+      scrollEnabled={!shiftMode}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -498,7 +636,13 @@ export default function HomeScreen() {
       </View>
 
       {/* Timeline */}
-      <ScheduleTimeline inspections={inspectionsForDay} selectedDate={selectedDate} />
+      <ScheduleTimeline
+        inspections={inspectionsForDay}
+        selectedDate={selectedDate}
+        shiftMode={shiftMode}
+        onToggleShift={() => setShiftMode((v) => !v)}
+        onTimeChange={handleTimeChange}
+      />
 
       {/* Overdue alert */}
       {(analytics?.overdueIssues || 0) > 0 && (
@@ -538,20 +682,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary, alignItems: "center", justifyContent: "center",
   },
   avatarText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.accent },
-  statsRow: { gap: 8, paddingRight: 16 },
-  statChip: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    alignItems: "center",
-    gap: 3,
-    minWidth: 90,
-  },
-  statValue: { fontSize: 18, fontFamily: "PlusJakartaSans_600SemiBold" },
-  statLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, textAlign: "center" },
   calendarCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
