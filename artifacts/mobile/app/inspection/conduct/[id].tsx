@@ -298,27 +298,7 @@ export default function ConductInspectionScreen() {
       });
       queryClient.invalidateQueries({ queryKey: ["inspections"] });
       queryClient.invalidateQueries({ queryKey: ["inspection", id] });
-
-      // Suggest the most appropriate report type based on results
-      const suggestedType = failCount > 0 ? "defect_notice" : "inspection_certificate";
-
-      Alert.alert(
-        failCount > 0 ? "Inspection Complete — Follow-Up Required" : "Inspection Complete",
-        failCount > 0
-          ? `${failCount} item(s) failed. A follow-up will be required.\n\nWould you like to generate a Defect Notice now?`
-          : `All ${passCount} items passed.\n\nWould you like to generate an Inspection Certificate now?`,
-        [
-          {
-            text: "Create Report",
-            onPress: () => router.replace(`/inspection/generate-report?id=${id}&autoType=${suggestedType}` as any),
-          },
-          {
-            text: "Done",
-            style: "cancel",
-            onPress: () => router.replace(`/inspection/${id}` as any),
-          },
-        ]
-      );
+      router.back();
     } catch (e: any) {
       Alert.alert("Error", "Failed to complete inspection.");
     } finally {
@@ -419,20 +399,28 @@ export default function ConductInspectionScreen() {
         )}
       </ScrollView>
 
-      {/* Generate Report — shown when 100% complete */}
+      {/* Bottom action bar — shown when 100% complete */}
       {progress === 1 && total > 0 && (
         <View style={[styles.generateBar, { paddingBottom: insets.bottom + 12 }]}>
-          <Pressable
-            style={({ pressed }) => [styles.generateBtn, pressed && { opacity: 0.85 }]}
-            onPress={() => {
-              const autoType = failCount > 0 ? "defect_notice" : "inspection_certificate";
-              router.push(`/inspection/generate-report?id=${id}&autoType=${autoType}` as any);
-            }}
-          >
-            <Feather name="file-text" size={20} color={Colors.primary} />
-            <Text style={styles.generateBtnText}>Generate Report</Text>
-            <Feather name="arrow-right" size={18} color={Colors.primary} />
-          </Pressable>
+          <View style={styles.generateRow}>
+            <Pressable
+              style={({ pressed }) => [styles.completeOnlyBtn, pressed && { opacity: 0.8 }]}
+              onPress={() => router.back()}
+            >
+              <Feather name="check" size={16} color={Colors.secondary} />
+              <Text style={styles.completeOnlyText}>Mark Complete</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.generateBtn, pressed && { opacity: 0.85 }]}
+              onPress={() => {
+                const autoType = failCount > 0 ? "defect_notice" : "inspection_certificate";
+                router.push(`/inspection/generate-report?id=${id}&autoType=${autoType}` as any);
+              }}
+            >
+              <Feather name="file-text" size={17} color={Colors.primary} />
+              <Text style={styles.generateBtnText}>Generate Report</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -802,22 +790,41 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
-  generateBtn: {
+  generateRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  completeOnlyBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 7,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.secondary,
+    backgroundColor: Colors.surface,
+  },
+  completeOnlyText: {
+    fontSize: 15,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.secondary,
+  },
+  generateBtn: {
+    flex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
     backgroundColor: Colors.accent,
     borderRadius: 14,
-    paddingVertical: 18,
+    paddingVertical: 16,
   },
   generateBtnText: {
-    fontSize: 17,
+    fontSize: 15,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.primary,
-    flex: 1,
-    textAlign: "center",
-    marginLeft: -28,
   },
   cameraBtn: {
     position: "relative",
