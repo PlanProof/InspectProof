@@ -11,6 +11,11 @@ import {
   Building2,
   Wrench,
   Droplets,
+  HardHat,
+  ClipboardCheck,
+  ShieldAlert,
+  Home,
+  Flame,
   BarChart3,
   MapPin,
   Calendar,
@@ -114,8 +119,8 @@ function Hero() {
 
         <p className="mx-auto max-w-2xl text-lg text-white/60 mb-10 leading-relaxed">
           InspectProof is the field inspection platform for building certifiers,
-          structural engineers and plumbing inspectors. Capture, document and
-          report on every inspection — fast, accurate and audit-ready.
+          engineers, builders, WHS officers and site professionals. Capture,
+          document and report on every inspection — fast, accurate and audit-ready.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -290,6 +295,66 @@ const PROFESSIONALS = [
       "Client-facing PDF report delivery",
     ],
   },
+  {
+    icon: HardHat,
+    role: "Builders",
+    description:
+      "Take control of quality on-site without the paperwork. InspectProof gives builders a structured way to record quality checks at every stage, flag non-conformances and maintain a complete audit trail before handover.",
+    bullets: [
+      "Stage-based quality control checklists",
+      "Non-conformance flagging and resolution tracking",
+      "Photo evidence linked to each inspection item",
+      "Pre-handover inspection records for clients",
+    ],
+  },
+  {
+    icon: ClipboardCheck,
+    role: "Site Supervisors",
+    description:
+      "Keep every trade and inspection on track from one place. Schedule inspections, log daily observations, manage hold points and ensure nothing slips through the cracks during construction.",
+    bullets: [
+      "Daily run sheet scheduling and management",
+      "Hold point and inspection gate management",
+      "Daily site diary and observation logging",
+      "Real-time progress visibility across all trades",
+    ],
+  },
+  {
+    icon: ShieldAlert,
+    role: "WHS Officers",
+    description:
+      "Document safety inspections and hazard assessments in the field with the same rigour as any compliance inspection. Raise issues instantly, track corrective actions and produce audit-ready WHS records.",
+    bullets: [
+      "Safety inspection checklists aligned to WHS Act",
+      "Hazard and incident reporting with photo evidence",
+      "Corrective action tracking and close-out",
+      "Audit-ready safety records and reports",
+    ],
+  },
+  {
+    icon: Home,
+    role: "Pre-Purchase Inspectors",
+    description:
+      "Deliver professional building inspection reports faster than ever. Use purpose-built checklists, capture photo evidence on-site and generate branded client reports before you leave the property.",
+    bullets: [
+      "Residential and commercial inspection templates",
+      "Branded PDF report generation from the field",
+      "Photo markup and annotation tools",
+      "Client delivery direct from the app",
+    ],
+  },
+  {
+    icon: Flame,
+    role: "Fire Safety Engineers",
+    description:
+      "Conduct fire safety inspections, document passive and active fire system compliance and issue fire safety certificates — all from a platform built for the rigour of Australian fire safety standards.",
+    bullets: [
+      "Fire safety system inspection checklists",
+      "Passive and active fire protection verification",
+      "Annual fire safety statement support",
+      "Non-conformance and rectification tracking",
+    ],
+  },
 ];
 
 function Professionals() {
@@ -309,7 +374,7 @@ function Professionals() {
             className="text-3xl sm:text-4xl font-normal text-white mb-4"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
-            Supporting the professionals<br />who approve and certify Australia's buildings
+            Supporting the professionals<br />who build, inspect and certify Australia's built environment
           </h2>
         </div>
 
@@ -455,8 +520,8 @@ function CTA() {
               Ready to streamline your inspections?
             </h2>
             <p className="text-white/60 mb-10 max-w-xl mx-auto">
-              Join building certifiers, engineers and plumbing inspectors across
-              Australia who trust InspectProof for defensible, audit-ready records.
+              Join building certifiers, engineers, builders, WHS officers and site
+              professionals across Australia who trust InspectProof for defensible, audit-ready records.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
@@ -492,8 +557,8 @@ function Footer() {
               </span>
             </div>
             <p className="text-sm text-white/50 leading-relaxed">
-              The field inspection platform for building certifiers, structural
-              engineers and plumbing inspectors. Fast, accurate and audit-ready.
+              The field inspection platform for building certifiers, engineers,
+              builders and site professionals. Fast, accurate and audit-ready.
             </p>
           </div>
 
