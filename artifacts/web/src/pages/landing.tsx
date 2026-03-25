@@ -38,7 +38,7 @@ function Header() {
             <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#0B1933]">
               <ClipboardList className="h-5 w-5 text-[#C5D92D]" />
             </div>
-            <span className="text-[22px] text-[#0B1933]" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.04em" }}>
+            <span className="text-[22px] text-[#0B1933]" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.06em" }}>
               InspectProof
             </span>
           </div>
@@ -488,7 +488,7 @@ function Footer() {
               <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#C5D92D]">
                 <ClipboardList className="h-4 w-4 text-[#0B1933]" />
               </div>
-              <span className="text-base text-white" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.04em" }}>
+              <span className="text-base text-white" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.06em" }}>
                 InspectProof
               </span>
             </div>
