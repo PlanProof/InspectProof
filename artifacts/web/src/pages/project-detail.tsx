@@ -1402,6 +1402,24 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
   const inspections = project.inspections || [];
   const [, navigate] = useLocation();
   const [bookOpen, setBookOpen] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmDeleteId) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/inspections/${confirmDeleteId}`, { method: "DELETE" });
+      setConfirmDeleteId(null);
+      onRefresh();
+    } catch (err) {
+      console.error("Delete inspection failed:", err);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const inspectionToDelete = inspections.find(i => i.id === confirmDeleteId);
 
   return (
     <div className="space-y-4">
@@ -1419,6 +1437,33 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
         projectName={project.name}
         onCreated={onRefresh}
       />
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={confirmDeleteId !== null} onOpenChange={open => { if (!open) setConfirmDeleteId(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-4 w-4" /> Delete Inspection
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete the{" "}
+            <span className="font-medium text-sidebar capitalize">
+              {inspectionToDelete?.inspectionType.replace(/_/g, " ")}
+            </span>{" "}
+            inspection? This will also remove all associated checklist results, notes, and issues. This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setConfirmDeleteId(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
+              {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Trash2 className="h-3.5 w-3.5 mr-1.5" />}
+              {deleting ? "Deleting…" : "Delete Inspection"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {inspections.length === 0 ? (
         <div className="bg-card border border-border rounded-xl p-12 flex flex-col items-center gap-4 text-muted-foreground">
@@ -1476,10 +1521,18 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
                         <button
                           className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors"
                           title="Send report"
+                          onClick={e => e.stopPropagation()}
                         >
                           <Mail className="h-3 w-3" /> Send Report
                         </button>
                       )}
+                      <button
+                        className="p-1.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                        title="Delete inspection"
+                        onClick={e => { e.stopPropagation(); setConfirmDeleteId(insp.id); }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </TableCell>
                 </TableRow>

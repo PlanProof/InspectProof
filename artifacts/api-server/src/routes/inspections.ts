@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
-import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable } from "@workspace/db";
+import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable, reportsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -466,6 +466,29 @@ router.patch("/:id/checklist/:resultId", async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Patch checklist result error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const [inspection] = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, id));
+    if (!inspection) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    // Delete child records first (no CASCADE in schema)
+    await db.delete(checklistResultsTable).where(eq(checklistResultsTable.inspectionId, id));
+    await db.delete(notesTable).where(eq(notesTable.inspectionId, id));
+    await db.delete(issuesTable).where(eq(issuesTable.inspectionId, id));
+    await db.delete(reportsTable).where(eq(reportsTable.inspectionId, id));
+    await db.delete(activityLogsTable).where(sql`${activityLogsTable.entityType} = 'inspection' AND ${activityLogsTable.entityId} = ${id}`);
+    await db.delete(inspectionsTable).where(eq(inspectionsTable.id, id));
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Delete inspection error");
     res.status(500).json({ error: "internal_error" });
   }
 });
