@@ -30,26 +30,26 @@ function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 bg-[#0B1933]/95 backdrop-blur border-b border-white/10">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
+    <header className="fixed inset-x-0 top-0 z-50 px-4 sm:px-6 pt-4">
+      <div className="mx-auto max-w-6xl">
+        <div className="flex h-14 items-center justify-between rounded-2xl bg-white px-5 shadow-lg shadow-black/8">
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#C5D92D]">
-              <ClipboardList className="h-5 w-5 text-[#0B1933]" />
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#0B1933]">
+              <ClipboardList className="h-4 w-4 text-[#C5D92D]" />
             </div>
-            <span className="text-lg font-semibold text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <span className="text-[15px] font-semibold text-[#0B1933]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               InspectProof
             </span>
           </div>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-8">
+          <nav className="hidden md:flex items-center gap-7">
             {NAV_LINKS.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
-                className="text-sm text-white/70 hover:text-white transition-colors"
+                className="text-sm text-gray-500 hover:text-[#0B1933] transition-colors"
               >
                 {link.label}
               </a>
@@ -60,19 +60,13 @@ function Header() {
           <div className="flex items-center gap-3">
             <Link
               to="/login"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-white hover:bg-white/10 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0B1933] px-4 py-2 text-sm font-medium text-white hover:bg-[#152540] transition-colors"
             >
               Sign In <ChevronRight className="h-3.5 w-3.5" />
             </Link>
-            <Link
-              to="/login"
-              className="sm:hidden inline-flex items-center gap-1 rounded-md bg-[#C5D92D] px-3 py-2 text-sm font-semibold text-[#0B1933] hover:bg-[#d4e83a] transition-colors"
-            >
-              Sign In
-            </Link>
             {/* Mobile menu button */}
             <button
-              className="md:hidden p-1.5 text-white/70 hover:text-white"
+              className="md:hidden p-1 text-gray-500 hover:text-[#0B1933]"
               onClick={() => setMobileOpen(!mobileOpen)}
             >
               {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -82,12 +76,12 @@ function Header() {
 
         {/* Mobile nav */}
         {mobileOpen && (
-          <div className="md:hidden border-t border-white/10 py-3">
+          <div className="md:hidden mt-1 rounded-2xl bg-white shadow-lg shadow-black/8 px-5 py-3">
             {NAV_LINKS.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
-                className="block py-2 text-sm text-white/70 hover:text-white"
+                className="block py-2.5 text-sm text-gray-500 hover:text-[#0B1933] border-b border-gray-100 last:border-0"
                 onClick={() => setMobileOpen(false)}
               >
                 {link.label}
