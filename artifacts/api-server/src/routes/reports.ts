@@ -1,9 +1,16 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
+import PDFDocument from "pdfkit";
 import {
   db, reportsTable, projectsTable, inspectionsTable, issuesTable,
   usersTable, checklistResultsTable, checklistItemsTable,
 } from "@workspace/db";
+
+// ── Primary colors ─────────────────────────────────────────────────────────
+const COLOR_NAVY  = "#0B1933";
+const COLOR_BLUE  = "#466DB5";
+const COLOR_PEAR  = "#C5D92D";
+const COLOR_GREY  = "#F3F4F6";
 
 const router: IRouter = Router();
 
@@ -360,6 +367,188 @@ router.post("/:id/send", async (req, res) => {
     res.json(await formatReport(updated));
   } catch (err) {
     req.log.error({ err }, "Send report error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── PDF generation ────────────────────────────────────────────────────────────
+
+function buildPdf(report: any, project: any): PDFKit.PDFDocument {
+  const doc = new PDFDocument({ margin: 55, size: "A4", info: { Title: report.title, Author: "InspectProof" } });
+
+  const pageW = doc.page.width;
+  const usableW = pageW - 110;
+
+  // ── Header band ──────────────────────────────────────────────────────────
+  doc.rect(0, 0, pageW, 72).fill(COLOR_NAVY);
+  doc.rect(0, 72, pageW, 5).fill(COLOR_PEAR);
+
+  doc.fillColor("#ffffff").fontSize(18).font("Helvetica-Bold")
+    .text("InspectProof", 55, 22, { continued: false });
+  doc.fillColor(COLOR_PEAR).fontSize(9).font("Helvetica")
+    .text("Certification & Inspection Platform", 55, 44);
+
+  // type label top-right
+  const typeLabel = (report.reportTypeLabel || report.reportType || "Report").toUpperCase();
+  doc.fillColor("#ffffff").fontSize(8).font("Helvetica-Bold")
+    .text(typeLabel, 0, 26, { align: "right", width: pageW - 55 });
+
+  doc.moveDown(0);
+  doc.y = 95;
+
+  // ── Title bar ─────────────────────────────────────────────────────────────
+  doc.fillColor(COLOR_NAVY).fontSize(14).font("Helvetica-Bold")
+    .text(report.title || "Inspection Report", 55, doc.y);
+  doc.moveDown(0.3);
+
+  // status badge strip
+  const statusColors: Record<string, string> = {
+    approved: COLOR_BLUE,
+    sent: "#16A34A",
+    pending_review: "#D97706",
+    draft: "#6B7280",
+  };
+  const statusLabels: Record<string, string> = {
+    approved: "Approved",
+    sent: "Sent to Client",
+    pending_review: "Pending Review",
+    draft: "Draft",
+  };
+  const sc = statusColors[report.status] || "#6B7280";
+  const sl = statusLabels[report.status] || "Draft";
+  doc.roundedRect(55, doc.y, 90, 16, 4).fill(sc);
+  doc.fillColor("#ffffff").fontSize(7.5).font("Helvetica-Bold")
+    .text(sl, 55, doc.y - 14, { width: 90, align: "center" });
+  doc.y += 6;
+  doc.moveDown(0.8);
+
+  // separator
+  doc.moveTo(55, doc.y).lineTo(pageW - 55, doc.y).strokeColor(COLOR_PEAR).lineWidth(1.5).stroke();
+  doc.moveDown(0.6);
+
+  // ── Content section headers via content parsing ────────────────────────────
+  const lines: string[] = (report.content || "").split("\n");
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Section header (all-caps line followed or preceded by ─ divider)
+    if (/^─{10,}$/.test(line)) {
+      // skip pure dividers — the header text follows
+      i++;
+      continue;
+    }
+
+    // Title-case / ALL CAPS block headers (short, no punctuation at end)
+    const isSectionHeader = line.length > 3 && line.length < 60
+      && line === line.toUpperCase()
+      && /[A-Z]/.test(line)
+      && !line.startsWith("─")
+      && !/^[\d\[\(]/.test(line)
+      && i > 0;
+
+    if (isSectionHeader) {
+      if (doc.y > doc.page.height - 120) doc.addPage();
+      doc.moveDown(0.5);
+      doc.rect(55, doc.y, usableW, 18).fill(COLOR_GREY);
+      doc.fillColor(COLOR_NAVY).fontSize(8.5).font("Helvetica-Bold")
+        .text(line, 60, doc.y - 16, { width: usableW - 10 });
+      doc.y += 4;
+      doc.moveDown(0.2);
+      i++;
+      continue;
+    }
+
+    // Key-value lines (contain multiple spaces as alignment padding)
+    const kvMatch = line.match(/^([A-Za-z /&]+):\s{2,}(.+)$/);
+    if (kvMatch) {
+      if (doc.y > doc.page.height - 80) doc.addPage();
+      const key = kvMatch[1].trim();
+      const val = kvMatch[2].trim();
+      doc.fillColor(COLOR_NAVY).fontSize(8).font("Helvetica-Bold").text(key + ":", 60, doc.y, { continued: false, width: 150 });
+      const savedY = doc.y;
+      doc.fillColor("#374151").fontSize(8).font("Helvetica").text(val, 215, savedY - 10, { width: usableW - 160 });
+      doc.y = Math.max(doc.y, savedY) + 2;
+      i++;
+      continue;
+    }
+
+    // Checklist items: "1. [✓ PASS] description"
+    const checkMatch = line.match(/^(\d+)\.\s+\[(.+?)\]\s+(.+)$/);
+    if (checkMatch) {
+      if (doc.y > doc.page.height - 80) doc.addPage();
+      const result = checkMatch[2];
+      const desc = checkMatch[3];
+      const isPass = result.includes("PASS");
+      const isFail = result.includes("FAIL");
+      const dot = isPass ? "●" : isFail ? "●" : "○";
+      const dotColor = isPass ? "#16A34A" : isFail ? "#DC2626" : "#9CA3AF";
+      doc.fillColor(dotColor).fontSize(7).font("Helvetica").text(dot, 60, doc.y + 1);
+      doc.fillColor(isPass ? "#16A34A" : isFail ? "#DC2626" : "#6B7280").fontSize(7).font("Helvetica-Bold")
+        .text(result, 72, doc.y + 1 - 9, { width: 45, continued: false });
+      doc.fillColor("#374151").fontSize(8).font("Helvetica")
+        .text(desc, 120, doc.y - 9, { width: usableW - 65 });
+      doc.y += 2;
+      i++;
+      continue;
+    }
+
+    // Blank line
+    if (line.trim() === "") {
+      doc.moveDown(0.25);
+      i++;
+      continue;
+    }
+
+    // Default: normal body text
+    if (doc.y > doc.page.height - 80) doc.addPage();
+    doc.fillColor("#374151").fontSize(8).font("Helvetica")
+      .text(line, 60, doc.y, { width: usableW });
+    doc.moveDown(0.1);
+    i++;
+  }
+
+  // ── Footer on every page ───────────────────────────────────────────────────
+  const range = doc.bufferedPageRange();
+  for (let p = range.start; p < range.start + range.count; p++) {
+    doc.switchToPage(p);
+    doc.rect(0, doc.page.height - 36, pageW, 36).fill(COLOR_NAVY);
+    doc.fillColor("#9CA3AF").fontSize(7).font("Helvetica")
+      .text(
+        `InspectProof Certification Services  ·  Confidential  ·  Page ${p + 1} of ${range.count}`,
+        55, doc.page.height - 22, { align: "center", width: pageW - 110 },
+      );
+  }
+
+  return doc;
+}
+
+// Download report as PDF
+router.get("/:id/pdf", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const reports = await db.select().from(reportsTable).where(eq(reportsTable.id, id));
+    const report = reports[0];
+    if (!report) { res.status(404).json({ error: "not_found" }); return; }
+
+    const projects = await db.select().from(projectsTable).where(eq(projectsTable.id, report.projectId));
+    const project = projects[0];
+
+    const formatted = await formatReport(report);
+    const doc = buildPdf(formatted, project);
+
+    const safeName = (report.title || "report")
+      .replace(/[^a-z0-9\s\-_]/gi, "")
+      .replace(/\s+/g, "_")
+      .slice(0, 80);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}.pdf"`);
+    doc.pipe(res);
+    doc.end();
+  } catch (err) {
+    req.log.error({ err }, "PDF generation error");
     res.status(500).json({ error: "internal_error" });
   }
 });

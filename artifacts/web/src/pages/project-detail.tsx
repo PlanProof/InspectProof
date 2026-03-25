@@ -1214,6 +1214,23 @@ function ReportsTab({ projectId }: { projectId: number }) {
     }
   };
 
+  const downloadPdf = async (report: any) => {
+    try {
+      const token = localStorage.getItem("inspectproof_token") || "";
+      const res = await fetch(`/api/reports/${report.id}/pdf`, {
+        headers: { Authorization: `Basic ${token}` },
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${report.title?.replace(/[^a-z0-9\s\-_]/gi, "").replace(/\s+/g, "_") || "report"}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground">
@@ -1336,6 +1353,16 @@ function ReportsTab({ projectId }: { projectId: number }) {
                   <Eye className="h-3.5 w-3.5 mr-1.5" />
                   View
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => downloadPdf(report)}
+                  className="text-xs gap-1.5"
+                  title="Download PDF"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  PDF
+                </Button>
               </div>
             </div>
           );
@@ -1378,8 +1405,17 @@ function ReportsTab({ projectId }: { projectId: number }) {
               <div className="text-center py-12 text-muted-foreground">No report content available</div>
             )}
           </div>
-          {selectedReport?.status === "pending_review" && (
-            <div className="flex justify-end gap-2 pt-3 border-t border-border">
+          <div className="flex items-center justify-between gap-2 pt-3 border-t border-border">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => selectedReport && downloadPdf(selectedReport)}
+              className="gap-1.5"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download PDF
+            </Button>
+            {selectedReport?.status === "pending_review" && (
               <Button
                 onClick={async () => {
                   await approveReport(selectedReport);
@@ -1391,8 +1427,8 @@ function ReportsTab({ projectId }: { projectId: number }) {
                 <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
                 {actionBusy ? "Approving…" : "Approve & Mark as Final"}
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

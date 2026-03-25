@@ -6,7 +6,7 @@ import {
   ArrowLeft, Calendar, Clock, User, CloudSun, ClipboardList,
   CheckCircle2, XCircle, MinusCircle, AlertTriangle, MessageSquare,
   Building, Loader2, ChevronRight, FileText, Link2, Paperclip,
-  Award, BarChart2, Send
+  Award, BarChart2, Send, Download
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -183,6 +183,23 @@ export default function InspectionDetail() {
     } finally {
       setSubmittingReport(false);
     }
+  };
+
+  const downloadReportPdf = async (report: any) => {
+    try {
+      const token = localStorage.getItem("inspectproof_token") || "";
+      const res = await fetch(`/api/reports/${report.id}/pdf`, {
+        headers: { Authorization: `Basic ${token}` },
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${report.title?.replace(/[^a-z0-9\s\-_]/gi, "").replace(/\s+/g, "_") || "report"}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
   };
 
   if (loading) {
@@ -396,17 +413,28 @@ export default function InspectionDetail() {
                 <Button variant="outline" size="sm" onClick={() => setGeneratedReport(null)}>
                   ← Choose Different Type
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={submitReport}
-                  disabled={submittingReport}
-                  className="gap-1.5"
-                >
-                  {submittingReport
-                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Approving…</>
-                    : <><Send className="h-3.5 w-3.5" />Approve & Save to Project</>
-                  }
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadReportPdf(generatedReport)}
+                    className="gap-1.5"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download PDF
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={submitReport}
+                    disabled={submittingReport}
+                    className="gap-1.5"
+                  >
+                    {submittingReport
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Approving…</>
+                      : <><Send className="h-3.5 w-3.5" />Approve & Save to Project</>
+                    }
+                  </Button>
+                </div>
               </div>
             </div>
           )}
