@@ -3,7 +3,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, Button } from "@/components/ui";
 import {
   Users, Smartphone, Monitor, Mail, Phone, CheckSquare,
-  UserPlus, Send, MoreVertical, Shield, ChevronDown,
+  UserPlus, Send, Shield, Pencil, X, Check, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +17,7 @@ const MOCK_INSPECTORS = [
     phone: "0412 345 678",
     role: "Inspector",
     status: "active",
-    appAccess: "app_only",      // "app_only" | "full" | "invited" | "none"
+    appAccess: "app_only",
     platformAccess: false,
     lastActive: "Today, 9:14 AM",
     inspectionsCompleted: 34,
@@ -86,6 +86,10 @@ const MOCK_INSPECTORS = [
   },
 ];
 
+type Inspector = (typeof MOCK_INSPECTORS)[0];
+
+const ROLES = ["Inspector", "Certifier", "Staff"];
+
 const ROLE_BADGE: Record<string, string> = {
   Inspector: "bg-blue-50 text-blue-700 border-blue-200",
   Certifier: "bg-violet-50 text-violet-700 border-violet-200",
@@ -93,22 +97,160 @@ const ROLE_BADGE: Record<string, string> = {
   admin: "bg-sidebar/10 text-sidebar border-sidebar/20",
 };
 
-const APP_ACCESS_LABELS: Record<string, { label: string; badge: string; icon: string }> = {
-  app_only: { label: "APP Only", badge: "bg-green-50 text-green-700 border-green-200", icon: "📱" },
-  full:     { label: "APP + Platform", badge: "bg-secondary/10 text-secondary border-secondary/30", icon: "✓" },
-  invited:  { label: "Invite Sent", badge: "bg-amber-50 text-amber-700 border-amber-200", icon: "📧" },
-  none:     { label: "No Access", badge: "bg-red-50 text-red-700 border-red-200", icon: "✕" },
+const APP_ACCESS_LABELS: Record<string, { label: string; badge: string }> = {
+  app_only: { label: "APP Only",       badge: "bg-green-50 text-green-700 border-green-200" },
+  full:     { label: "APP + Platform", badge: "bg-secondary/10 text-secondary border-secondary/30" },
+  invited:  { label: "Invite Sent",    badge: "bg-amber-50 text-amber-700 border-amber-200" },
+  none:     { label: "No Access",      badge: "bg-red-50 text-red-700 border-red-200" },
 };
 
+// ── Edit Inspector Modal ──────────────────────────────────────────────────────
+
+function EditInspectorModal({
+  inspector,
+  onSave,
+  onClose,
+}: {
+  inspector: Inspector;
+  onSave: (updated: Inspector) => void;
+  onClose: () => void;
+}) {
+  const [form, setForm] = useState({
+    firstName: inspector.firstName,
+    lastName:  inspector.lastName,
+    email:     inspector.email,
+    phone:     inspector.phone,
+    role:      inspector.role,
+  });
+  const [saving, setSaving] = useState(false);
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const save = () => {
+    setSaving(true);
+    setTimeout(() => {
+      const initials = (form.firstName[0] ?? "") + (form.lastName[0] ?? "");
+      onSave({ ...inspector, ...form, initials: initials.toUpperCase() });
+      setSaving(false);
+      onClose();
+    }, 400);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40" />
+      <div
+        className="relative z-10 bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div>
+            <h2 className="font-bold text-sidebar text-base">Edit Inspector</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {inspector.firstName} {inspector.lastName}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-sidebar transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="px-6 py-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">First Name</label>
+              <input
+                value={form.firstName}
+                onChange={set("firstName")}
+                className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+                placeholder="First name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Last Name</label>
+              <input
+                value={form.lastName}
+                onChange={set("lastName")}
+                className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+                placeholder="Last name"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Email Address</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={set("email")}
+              className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+              placeholder="name@example.com"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Phone Number</label>
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={set("phone")}
+              className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+              placeholder="04xx xxx xxx"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Role</label>
+            <select
+              value={form.role}
+              onChange={set("role")}
+              className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+            >
+              {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/20 rounded-b-2xl">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:bg-muted/30 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={saving}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-sidebar text-white hover:bg-sidebar/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Inspector Row ─────────────────────────────────────────────────────────────
+
 function InspectorRow({
   inspector,
   onTogglePlatform,
   onSendInvite,
+  onEdit,
 }: {
-  inspector: (typeof MOCK_INSPECTORS)[0];
+  inspector: Inspector;
   onTogglePlatform: (id: number) => void;
   onSendInvite: (id: number) => void;
+  onEdit: (inspector: Inspector) => void;
 }) {
   const appMeta = APP_ACCESS_LABELS[inspector.appAccess] ?? APP_ACCESS_LABELS.none;
   const roleBadge = ROLE_BADGE[inspector.role] ?? ROLE_BADGE.Staff;
@@ -183,7 +325,7 @@ function InspectorRow({
       </div>
 
       {/* Platform Access */}
-      <div className="flex flex-col items-center min-w-[110px] gap-1">
+      <div className="flex flex-col items-center min-w-[100px] gap-1">
         <div className="flex items-center gap-2">
           <button
             role="checkbox"
@@ -210,16 +352,27 @@ function InspectorRow({
           </span>
         </div>
       </div>
+
+      {/* Edit button — visible on hover */}
+      <button
+        onClick={() => onEdit(inspector)}
+        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-secondary/10 text-muted-foreground hover:text-secondary shrink-0"
+        title="Edit inspector"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
 
 // ── Inspectors Page ───────────────────────────────────────────────────────────
+
 export default function Inspectors() {
   const [inspectors, setInspectors] = useState(MOCK_INSPECTORS);
   const [inviteSentFor, setInviteSentFor] = useState<number | null>(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [newEmail, setNewEmail] = useState("");
+  const [editingInspector, setEditingInspector] = useState<Inspector | null>(null);
 
   const togglePlatform = (id: number) => {
     setInspectors(prev =>
@@ -233,6 +386,10 @@ export default function Inspectors() {
       prev.map(i => i.id === id ? { ...i, appAccess: "invited", status: "invited" } : i)
     );
     setTimeout(() => setInviteSentFor(null), 3000);
+  };
+
+  const saveInspector = (updated: Inspector) => {
+    setInspectors(prev => prev.map(i => i.id === updated.id ? updated : i));
   };
 
   const activeCount = inspectors.filter(i => i.status === "active").length;
@@ -333,7 +490,8 @@ export default function Inspectors() {
             <span className="hidden md:block w-[70px] text-center">Inspections</span>
             <span className="hidden lg:block w-[90px] text-center">Last Active</span>
             <span className="w-[110px] text-center">APP Access</span>
-            <span className="w-[110px] text-center">Platform Access</span>
+            <span className="w-[100px] text-center">Platform Access</span>
+            <span className="w-8" />
           </div>
         </div>
 
@@ -345,6 +503,7 @@ export default function Inspectors() {
               inspector={inspector}
               onTogglePlatform={togglePlatform}
               onSendInvite={sendInvite}
+              onEdit={setEditingInspector}
             />
           ))}
         </div>
@@ -375,6 +534,15 @@ export default function Inspectors() {
           </div>
         </div>
       </Card>
+
+      {/* Edit Modal */}
+      {editingInspector && (
+        <EditInspectorModal
+          inspector={editingInspector}
+          onSave={saveInspector}
+          onClose={() => setEditingInspector(null)}
+        />
+      )}
     </AppLayout>
   );
 }
