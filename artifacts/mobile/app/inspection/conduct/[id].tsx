@@ -586,8 +586,8 @@ function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA }: { ite
   const isNA = item.result === "na";
   const photoCount = item.photoUrls?.length || 0;
 
-  const renderLeftActions = (_progress: any, dragX: any) => {
-    const scale = dragX.interpolate({ inputRange: [0, 80], outputRange: [0.7, 1], extrapolate: "clamp" });
+  const renderRightActions = (_progress: any, dragX: any) => {
+    const scale = dragX.interpolate({ inputRange: [-80, 0], outputRange: [1, 0.7], extrapolate: "clamp" });
     return (
       <Animated.View style={[styles.naAction, { transform: [{ scale }] }]}>
         <Feather name="minus-circle" size={18} color="#fff" />
@@ -596,8 +596,8 @@ function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA }: { ite
     );
   };
 
-  const renderRightActions = (_progress: any, dragX: any) => {
-    const scale = dragX.interpolate({ inputRange: [-80, 0], outputRange: [1, 0.7], extrapolate: "clamp" });
+  const renderLeftActions = (_progress: any, dragX: any) => {
+    const scale = dragX.interpolate({ inputRange: [0, 80], outputRange: [0.7, 1], extrapolate: "clamp" });
     return (
       <Animated.View style={[styles.restoreAction, { transform: [{ scale }] }]}>
         <Feather name="rotate-ccw" size={18} color="#fff" />
@@ -609,8 +609,8 @@ function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA }: { ite
   return (
     <Swipeable
       ref={swipeRef}
-      renderLeftActions={renderLeftActions}
-      renderRightActions={isNA ? renderRightActions : undefined}
+      renderRightActions={isNA ? undefined : renderRightActions}
+      renderLeftActions={isNA ? renderLeftActions : undefined}
       leftThreshold={80}
       rightThreshold={80}
       friction={2}
@@ -1245,7 +1245,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: 80,
     borderRadius: 10,
-    marginRight: 4,
+    marginLeft: 4,
     flexDirection: "row",
     gap: 5,
     marginBottom: 8,
@@ -1257,7 +1257,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: 80,
     borderRadius: 10,
-    marginLeft: 4,
+    marginRight: 4,
     flexDirection: "row",
     gap: 5,
     marginBottom: 8,
