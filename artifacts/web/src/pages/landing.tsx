@@ -38,7 +38,7 @@ function Header() {
             <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#466DB5]">
               <ClipboardList className="h-5 w-5 text-[#F2F3F4]" />
             </div>
-            <span className="text-[22px] text-[#466DB5] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>
+            <span className="text-[22px] text-[#0B1933] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>
               InspectProof
             </span>
           </div>
@@ -60,7 +60,7 @@ function Header() {
           <div className="flex flex-1 justify-end items-center gap-3">
             <Link
               to="/login"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#466DB5] px-4 py-2 text-sm font-medium text-white hover:bg-[#3a5c9a] transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0B1933] px-4 py-2 text-sm font-medium text-white hover:bg-[#152540] transition-colors"
             >
               Sign In <ChevronRight className="h-3.5 w-3.5" />
             </Link>
