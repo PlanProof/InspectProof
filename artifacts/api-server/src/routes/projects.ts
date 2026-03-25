@@ -376,7 +376,15 @@ router.patch("/:id/documents/folders/:folderName", async (req, res) => {
 router.get("/:id/inspection-types", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const all = await db.select().from(checklistTemplatesTable)
+    const all = await db.select({
+      id: checklistTemplatesTable.id,
+      name: checklistTemplatesTable.name,
+      inspectionType: checklistTemplatesTable.inspectionType,
+      folder: checklistTemplatesTable.folder,
+      itemCount: sql<number>`cast(count(${checklistItemsTable.id}) as int)`,
+    }).from(checklistTemplatesTable)
+      .leftJoin(checklistItemsTable, eq(checklistItemsTable.templateId, checklistTemplatesTable.id))
+      .groupBy(checklistTemplatesTable.id)
       .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.name} ASC`);
 
     const selected = await db.select().from(projectInspectionTypesTable)

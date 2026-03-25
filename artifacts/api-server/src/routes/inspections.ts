@@ -185,7 +185,6 @@ router.get("/:id", async (req, res) => {
       inspectorId: inspection.inspectorId,
       inspectorName: null,
       duration: inspection.duration,
-      notes: inspection.notes,
       weatherConditions: inspection.weatherConditions,
       checklistTemplateId: inspection.checklistTemplateId,
       ...counts,

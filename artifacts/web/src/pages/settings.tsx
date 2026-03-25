@@ -5,7 +5,8 @@ import { User, Lock, Bell, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Settings() {
-  const { data: user, isLoading } = useGetMe();
+  const { data: _user, isLoading } = useGetMe();
+  const user = _user as any;
   const { toast } = useToast();
 
   const handleSaveProfile = (e: React.FormEvent) => {

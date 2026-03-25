@@ -99,7 +99,7 @@ export default function Issues() {
                     <StatusBadge status={issue.status} />
                   </TableCell>
                   <TableCell className="text-muted-foreground">{issue.projectName}</TableCell>
-                  <TableCell>{issue.assigneeName || <span className="text-muted-foreground italic">Unassigned</span>}</TableCell>
+                  <TableCell>{(issue as any).assigneeName || <span className="text-muted-foreground italic">Unassigned</span>}</TableCell>
                   <TableCell className="text-right text-muted-foreground text-sm">{formatDate(issue.createdAt)}</TableCell>
                 </TableRow>
               ))}
