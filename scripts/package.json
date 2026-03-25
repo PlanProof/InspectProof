@@ -6,11 +6,9 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "seed": "tsx ./src/seed.ts",
-    "push-to-github": "tsx ./src/push-to-github.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@replit/connectors-sdk": "^0.3.0",
     "@workspace/db": "workspace:*",
     "drizzle-orm": "catalog:",
     "pg": "^8.20.0"
