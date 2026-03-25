@@ -416,6 +416,7 @@ export default function ConductInspectionScreen() {
         ref={pageScrollRef}
         horizontal
         pagingEnabled
+        scrollEnabled={false}
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
         nestedScrollEnabled
@@ -450,16 +451,6 @@ export default function ConductInspectionScreen() {
                 {pendingCount > 0 && <Text style={[styles.resultChip, { color: Colors.textTertiary }]}>⏳ {pendingCount}</Text>}
               </View>
             </View>
-            {/* Swipe hint when documents exist */}
-            {projectDocuments.length > 0 && (
-              <Pressable style={styles.swipeHintRow} onPress={() => scrollToPage(1)}>
-                <Feather name="folder" size={13} color={Colors.secondary} />
-                <Text style={styles.swipeHintText}>
-                  {projectDocuments.length} plan{projectDocuments.length !== 1 ? "s" : ""} attached — swipe right to view
-                </Text>
-                <Feather name="chevron-right" size={13} color={Colors.textTertiary} />
-              </Pressable>
-            )}
           </View>
 
           {/* Checklist items */}
@@ -1191,17 +1182,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: Colors.accent,
   },
-  swipeHintRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    backgroundColor: Colors.infoLight,
-    borderRadius: 8,
-    marginTop: 2,
-  },
-  swipeHintText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   scroll: { flex: 1 },
   scrollContent: { padding: 12, gap: 16 },
   emptyState: { alignItems: "center", paddingTop: 60, gap: 12 },
