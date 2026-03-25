@@ -377,7 +377,7 @@ export default function ConductInspectionScreen() {
                     <Feather
                       name="check"
                       size={14}
-                      color={items.every(i => i.result === "pass") ? "#fff" : Colors.textTertiary}
+                      color={items.every(i => i.result === "pass") ? "#22c55e" : Colors.textTertiary}
                     />
                   </Pressable>
                 </View>
@@ -724,8 +724,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   masterTickActive: {
-    backgroundColor: "#22c55e",
-    borderColor: "#16a34a",
+    backgroundColor: "#f0fdf4",
+    borderColor: "#86efac",
   },
   checkRow: {
     flexDirection: "row",
