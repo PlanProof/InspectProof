@@ -277,7 +277,8 @@ export default function InspectionDetail() {
   }
 
   const total = inspection.passCount + inspection.failCount + inspection.naCount;
-  const passRate = total > 0 ? Math.round((inspection.passCount / (total - inspection.naCount || 1)) * 100) : null;
+  const scored = inspection.passCount + inspection.failCount;
+  const passRate = scored > 0 ? Math.round((inspection.passCount / scored) * 100) : null;
 
   return (
     <AppLayout>
@@ -623,10 +624,9 @@ function OverviewTab({ inspection }: { inspection: Inspection }) {
               {[
                 { label: "Pass", count: inspection.passCount, color: "text-green-600", bg: "bg-green-500" },
                 { label: "Fail", count: inspection.failCount, color: "text-red-600", bg: "bg-red-500" },
-                { label: "N/A", count: inspection.naCount, color: "text-gray-500", bg: "bg-gray-300" },
               ].map(({ label, count, color, bg }) => {
-                const total = inspection.passCount + inspection.failCount + inspection.naCount;
-                const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                const scoredItems = inspection.passCount + inspection.failCount;
+                const pct = scoredItems > 0 ? Math.round((count / scoredItems) * 100) : 0;
                 return (
                   <div key={label}>
                     <div className="flex justify-between text-xs mb-1">
@@ -639,6 +639,14 @@ function OverviewTab({ inspection }: { inspection: Inspection }) {
                   </div>
                 );
               })}
+              {inspection.naCount > 0 && (
+                <div className="pt-1 border-t border-border/50">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">N/A <span className="text-muted-foreground/60">(not scored)</span></span>
+                    <span className="font-semibold text-gray-400">{inspection.naCount}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

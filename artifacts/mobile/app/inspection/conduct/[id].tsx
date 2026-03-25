@@ -132,6 +132,9 @@ export default function ConductInspectionScreen() {
   const pendingCount = checklistItems.filter(i => i.result === "pending").length;
   const total = checklistItems.length;
   const progress = total > 0 ? ((total - pendingCount) / total) : 0;
+  // Score only counts pass/fail — N/A items are excluded
+  const scored = passCount + failCount;
+  const passRate = scored > 0 ? passCount / scored : null;
 
   // Auto-mark as completed/follow_up_required when 100% checked off
   useEffect(() => {
@@ -382,11 +385,20 @@ export default function ConductInspectionScreen() {
           <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
         </View>
         <View style={styles.progressStats}>
-          <Text style={styles.progressText}>{Math.round(progress * 100)}% complete</Text>
+          <View style={styles.scoreCol}>
+            {passRate !== null ? (
+              <>
+                <Text style={styles.progressText}>{Math.round(passRate * 100)}% pass rate</Text>
+                <Text style={styles.progressSubText}>{Math.round(progress * 100)}% complete</Text>
+              </>
+            ) : (
+              <Text style={styles.progressText}>{Math.round(progress * 100)}% complete</Text>
+            )}
+          </View>
           <View style={styles.resultChips}>
             <Text style={[styles.resultChip, { color: "#22c55e" }]}>✓ {passCount}</Text>
             <Text style={[styles.resultChip, { color: "#ef4444" }]}>✗ {failCount}</Text>
-            <Text style={[styles.resultChip, { color: "#94a3b8" }]}>— {naCount}</Text>
+            {naCount > 0 && <Text style={[styles.resultChip, { color: "#94a3b8" }]}>— {naCount}</Text>}
             {pendingCount > 0 && <Text style={[styles.resultChip, { color: Colors.textTertiary }]}>⏳ {pendingCount}</Text>}
           </View>
         </View>
@@ -1062,7 +1074,9 @@ const styles = StyleSheet.create({
   progressBar: { height: 6, backgroundColor: Colors.border, borderRadius: 3, overflow: "hidden" },
   progressFill: { height: 6, backgroundColor: Colors.accent, borderRadius: 3 },
   progressStats: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  scoreCol: { flexDirection: "column", gap: 1 },
   progressText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  progressSubText: { fontSize: 10, color: Colors.textTertiary },
   resultChips: { flexDirection: "row", gap: 10 },
   resultChip: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold" },
   docsQuickRow: {
