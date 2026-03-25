@@ -1,0 +1,5 @@
+{
+  "outputDirectory": "artifacts/web/dist/public",
+  "buildCommand": "pnpm run build",
+  "installCommand": "pnpm install"
+}
