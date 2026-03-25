@@ -407,7 +407,7 @@ export default function ConductInspectionScreen() {
               style={({ pressed }) => [styles.completeOnlyBtn, pressed && { opacity: 0.8 }]}
               onPress={() => router.back()}
             >
-              <Feather name="check" size={16} color={Colors.secondary} />
+              <Feather name="check" size={16} color={Colors.primary} />
               <Text style={styles.completeOnlyText}>Mark Complete</Text>
             </Pressable>
             <Pressable
@@ -802,14 +802,12 @@ const styles = StyleSheet.create({
     gap: 7,
     paddingVertical: 16,
     borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: Colors.secondary,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.accent,
   },
   completeOnlyText: {
     fontSize: 15,
     fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.secondary,
+    color: Colors.primary,
   },
   generateBtn: {
     flex: 2,
