@@ -373,152 +373,213 @@ router.post("/:id/send", async (req, res) => {
 
 // ── PDF generation ────────────────────────────────────────────────────────────
 
-function buildPdf(report: any, project: any): PDFKit.PDFDocument {
-  const doc = new PDFDocument({ margin: 55, size: "A4", info: { Title: report.title, Author: "InspectProof" } });
+const MARGIN = 50;
+const FOOTER_H = 40;
+
+function addPageHeader(doc: PDFKit.PDFDocument, typeLabel: string) {
+  const pageW = doc.page.width;
+  doc.save();
+  doc.rect(0, 0, pageW, 68).fill(COLOR_NAVY);
+  doc.rect(0, 68, pageW, 4).fill(COLOR_PEAR);
+  doc.fillColor("#ffffff").fontSize(16).font("Helvetica-Bold").text("InspectProof", MARGIN, 18);
+  doc.fillColor(COLOR_PEAR).fontSize(8).font("Helvetica").text("Certification & Inspection Platform", MARGIN, 40);
+  doc.fillColor("#ffffff").fontSize(7.5).font("Helvetica-Bold")
+    .text(typeLabel.toUpperCase(), 0, 28, { align: "right", width: pageW - MARGIN });
+  doc.restore();
+}
+
+function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number) {
+  const pageW = doc.page.width;
+  const pageH = doc.page.height;
+  doc.save();
+  doc.rect(0, pageH - FOOTER_H, pageW, FOOTER_H).fill(COLOR_NAVY);
+  doc.fillColor("#9CA3AF").fontSize(7).font("Helvetica")
+    .text(
+      `InspectProof Certification Services  ·  Confidential  ·  Page ${pageNum} of ${totalPages}`,
+      MARGIN, pageH - FOOTER_H + 15,
+      { align: "center", width: pageW - MARGIN * 2 },
+    );
+  doc.restore();
+}
+
+function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
+  const doc = new PDFDocument({
+    size: "A4",
+    margins: { top: 88, bottom: FOOTER_H + 20, left: MARGIN, right: MARGIN },
+    bufferPages: true,
+    info: { Title: report.title || "Report", Author: "InspectProof" },
+  });
 
   const pageW = doc.page.width;
-  const usableW = pageW - 110;
-
-  // ── Header band ──────────────────────────────────────────────────────────
-  doc.rect(0, 0, pageW, 72).fill(COLOR_NAVY);
-  doc.rect(0, 72, pageW, 5).fill(COLOR_PEAR);
-
-  doc.fillColor("#ffffff").fontSize(18).font("Helvetica-Bold")
-    .text("InspectProof", 55, 22, { continued: false });
-  doc.fillColor(COLOR_PEAR).fontSize(9).font("Helvetica")
-    .text("Certification & Inspection Platform", 55, 44);
-
-  // type label top-right
+  const contentW = pageW - MARGIN * 2;
   const typeLabel = (report.reportTypeLabel || report.reportType || "Report").toUpperCase();
-  doc.fillColor("#ffffff").fontSize(8).font("Helvetica-Bold")
-    .text(typeLabel, 0, 26, { align: "right", width: pageW - 55 });
 
-  doc.moveDown(0);
-  doc.y = 95;
+  // Header on first page
+  addPageHeader(doc, typeLabel);
 
-  // ── Title bar ─────────────────────────────────────────────────────────────
-  doc.fillColor(COLOR_NAVY).fontSize(14).font("Helvetica-Bold")
-    .text(report.title || "Inspection Report", 55, doc.y);
-  doc.moveDown(0.3);
+  // ── Document title ─────────────────────────────────────────────────────────
+  doc.fillColor(COLOR_NAVY).fontSize(13).font("Helvetica-Bold")
+    .text(report.title || "Inspection Report", { width: contentW });
 
-  // status badge strip
-  const statusColors: Record<string, string> = {
-    approved: COLOR_BLUE,
-    sent: "#16A34A",
-    pending_review: "#D97706",
-    draft: "#6B7280",
-  };
+  doc.moveDown(0.4);
+
+  // Status pill (inline text)
   const statusLabels: Record<string, string> = {
-    approved: "Approved",
-    sent: "Sent to Client",
-    pending_review: "Pending Review",
-    draft: "Draft",
+    approved: "APPROVED", sent: "SENT TO CLIENT",
+    pending_review: "PENDING REVIEW", draft: "DRAFT",
   };
+  const statusColors: Record<string, string> = {
+    approved: COLOR_BLUE, sent: "#16A34A",
+    pending_review: "#D97706", draft: "#6B7280",
+  };
+  const sl = statusLabels[report.status] || "DRAFT";
   const sc = statusColors[report.status] || "#6B7280";
-  const sl = statusLabels[report.status] || "Draft";
-  doc.roundedRect(55, doc.y, 90, 16, 4).fill(sc);
-  doc.fillColor("#ffffff").fontSize(7.5).font("Helvetica-Bold")
-    .text(sl, 55, doc.y - 14, { width: 90, align: "center" });
-  doc.y += 6;
+
+  const pillX = doc.x;
+  const pillY = doc.y;
+  doc.roundedRect(pillX, pillY, 88, 15, 3).fill(sc);
+  doc.fillColor("#ffffff").fontSize(7).font("Helvetica-Bold")
+    .text(sl, pillX, pillY + 4, { width: 88, align: "center" });
+  doc.y = pillY + 22;
+
+  // Separator line
+  doc.moveTo(MARGIN, doc.y)
+    .lineTo(pageW - MARGIN, doc.y)
+    .strokeColor(COLOR_PEAR).lineWidth(1.5).stroke();
   doc.moveDown(0.8);
 
-  // separator
-  doc.moveTo(55, doc.y).lineTo(pageW - 55, doc.y).strokeColor(COLOR_PEAR).lineWidth(1.5).stroke();
-  doc.moveDown(0.6);
+  // ── Parse and render content ───────────────────────────────────────────────
+  const lines = (report.content || "").split("\n");
+  const bottomLimit = doc.page.height - FOOTER_H - 30;
 
-  // ── Content section headers via content parsing ────────────────────────────
-  const lines: string[] = (report.content || "").split("\n");
+  const checkPageBreak = (needed = 20) => {
+    if (doc.y + needed > bottomLimit) {
+      doc.addPage();
+      addPageHeader(doc, typeLabel);
+    }
+  };
 
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const line = raw.trimEnd();
 
-    // Section header (all-caps line followed or preceded by ─ divider)
-    if (/^─{10,}$/.test(line)) {
-      // skip pure dividers — the header text follows
-      i++;
+    // Skip pure divider lines
+    if (/^─{5,}$/.test(line.trim())) continue;
+
+    // Blank line → small gap
+    if (line.trim() === "") {
+      doc.moveDown(0.3);
       continue;
     }
 
-    // Title-case / ALL CAPS block headers (short, no punctuation at end)
-    const isSectionHeader = line.length > 3 && line.length < 60
-      && line === line.toUpperCase()
-      && /[A-Z]/.test(line)
-      && !line.startsWith("─")
-      && !/^[\d\[\(]/.test(line)
-      && i > 0;
+    // Section header: ALL CAPS, short, comes after or before a divider line
+    const prevIsDivider = i > 0 && /^─{5,}$/.test(lines[i - 1].trim());
+    const nextIsDivider = i + 1 < lines.length && /^─{5,}$/.test(lines[i + 1].trim());
+    const looksLikeHeader = line.trim().length > 2 && line.trim().length < 65
+      && line.trim() === line.trim().toUpperCase()
+      && /[A-Z]/.test(line.trim())
+      && !/^[\d\[\(✓✗—]/.test(line.trim())
+      && (prevIsDivider || nextIsDivider);
 
-    if (isSectionHeader) {
-      if (doc.y > doc.page.height - 120) doc.addPage();
+    if (looksLikeHeader) {
+      checkPageBreak(32);
       doc.moveDown(0.5);
-      doc.rect(55, doc.y, usableW, 18).fill(COLOR_GREY);
-      doc.fillColor(COLOR_NAVY).fontSize(8.5).font("Helvetica-Bold")
-        .text(line, 60, doc.y - 16, { width: usableW - 10 });
-      doc.y += 4;
-      doc.moveDown(0.2);
-      i++;
+      const headerY = doc.y;
+      doc.rect(MARGIN, headerY, contentW, 17).fill("#E8ECF2");
+      doc.fillColor(COLOR_NAVY).fontSize(8).font("Helvetica-Bold")
+        .text(line.trim(), MARGIN + 6, headerY + 5, { width: contentW - 12 });
+      doc.y = headerY + 22;
       continue;
     }
 
-    // Key-value lines (contain multiple spaces as alignment padding)
-    const kvMatch = line.match(/^([A-Za-z /&]+):\s{2,}(.+)$/);
+    // Key-value: "Label:   value" (2+ spaces after colon used for alignment)
+    const kvMatch = line.match(/^([A-Za-z][A-Za-z 0-9\/\-&]+?):\s{2,}(.+)$/);
     if (kvMatch) {
-      if (doc.y > doc.page.height - 80) doc.addPage();
+      checkPageBreak(14);
       const key = kvMatch[1].trim();
       const val = kvMatch[2].trim();
-      doc.fillColor(COLOR_NAVY).fontSize(8).font("Helvetica-Bold").text(key + ":", 60, doc.y, { continued: false, width: 150 });
-      const savedY = doc.y;
-      doc.fillColor("#374151").fontSize(8).font("Helvetica").text(val, 215, savedY - 10, { width: usableW - 160 });
-      doc.y = Math.max(doc.y, savedY) + 2;
-      i++;
+      const rowY = doc.y;
+      // Key column
+      doc.fillColor(COLOR_NAVY).fontSize(8).font("Helvetica-Bold")
+        .text(key + ":", MARGIN, rowY, { width: 145, lineBreak: false });
+      // Value column — start at fixed x offset
+      doc.fillColor("#1F2937").fontSize(8).font("Helvetica")
+        .text(val, MARGIN + 150, rowY, { width: contentW - 150 });
+      // Advance past the taller of the two columns
+      doc.moveDown(0.15);
       continue;
     }
 
-    // Checklist items: "1. [✓ PASS] description"
-    const checkMatch = line.match(/^(\d+)\.\s+\[(.+?)\]\s+(.+)$/);
+    // Checklist item: "1. [✓ PASS] description" or "1. [✗ FAIL] ..."
+    const checkMatch = line.match(/^(\d+)\.\s+\[(.+?)\]\s+(.*)$/);
     if (checkMatch) {
-      if (doc.y > doc.page.height - 80) doc.addPage();
-      const result = checkMatch[2];
-      const desc = checkMatch[3];
-      const isPass = result.includes("PASS");
-      const isFail = result.includes("FAIL");
-      const dot = isPass ? "●" : isFail ? "●" : "○";
-      const dotColor = isPass ? "#16A34A" : isFail ? "#DC2626" : "#9CA3AF";
-      doc.fillColor(dotColor).fontSize(7).font("Helvetica").text(dot, 60, doc.y + 1);
-      doc.fillColor(isPass ? "#16A34A" : isFail ? "#DC2626" : "#6B7280").fontSize(7).font("Helvetica-Bold")
-        .text(result, 72, doc.y + 1 - 9, { width: 45, continued: false });
-      doc.fillColor("#374151").fontSize(8).font("Helvetica")
-        .text(desc, 120, doc.y - 9, { width: usableW - 65 });
-      doc.y += 2;
-      i++;
+      checkPageBreak(14);
+      const resultStr = checkMatch[2].trim();
+      const desc = checkMatch[3].trim();
+      const isPass = resultStr.includes("PASS");
+      const isFail = resultStr.includes("FAIL");
+      const badgeColor = isPass ? "#16A34A" : isFail ? "#DC2626" : "#9CA3AF";
+      const badgeBg = isPass ? "#F0FDF4" : isFail ? "#FEF2F2" : "#F9FAFB";
+      const badgeBorder = isPass ? "#BBF7D0" : isFail ? "#FECACA" : "#E5E7EB";
+      const badgeText = isPass ? "PASS" : isFail ? "FAIL" : "N/A";
+
+      const rowY = doc.y;
+      // Badge box
+      doc.roundedRect(MARGIN, rowY, 32, 12, 2).fillAndStroke(badgeBg, badgeBorder);
+      doc.fillColor(badgeColor).fontSize(6.5).font("Helvetica-Bold")
+        .text(badgeText, MARGIN, rowY + 3, { width: 32, align: "center", lineBreak: false });
+      // Description
+      doc.fillColor("#1F2937").fontSize(8).font("Helvetica")
+        .text(desc, MARGIN + 38, rowY, { width: contentW - 38 });
+      doc.moveDown(0.2);
       continue;
     }
 
-    // Blank line
-    if (line.trim() === "") {
-      doc.moveDown(0.25);
-      i++;
+    // Sub-detail lines (indented with spaces, e.g. "   Code Ref: ...")
+    if (/^\s{2,}/.test(raw)) {
+      checkPageBreak(12);
+      const subText = line.trim();
+      const subKv = subText.match(/^([A-Za-z][A-Za-z 0-9\/]+?):\s+(.+)$/);
+      if (subKv) {
+        const rowY = doc.y;
+        doc.fillColor("#6B7280").fontSize(7.5).font("Helvetica-Bold")
+          .text(subKv[1] + ":", MARGIN + 38, rowY, { width: 90, lineBreak: false });
+        doc.fillColor("#374151").fontSize(7.5).font("Helvetica")
+          .text(subKv[2], MARGIN + 130, rowY, { width: contentW - 130 });
+        doc.moveDown(0.15);
+      } else {
+        doc.fillColor("#374151").fontSize(8).font("Helvetica")
+          .text(subText, MARGIN + 38, doc.y, { width: contentW - 38 });
+        doc.moveDown(0.1);
+      }
       continue;
     }
 
-    // Default: normal body text
-    if (doc.y > doc.page.height - 80) doc.addPage();
-    doc.fillColor("#374151").fontSize(8).font("Helvetica")
-      .text(line, 60, doc.y, { width: usableW });
+    // Numbered items without brackets: "Item 1: ..." or "1. description"
+    const numberedMatch = line.match(/^(Item \d+|[\d]+\.)\s+(.+)$/);
+    if (numberedMatch) {
+      checkPageBreak(14);
+      doc.fillColor(COLOR_NAVY).fontSize(8).font("Helvetica-Bold")
+        .text(numberedMatch[1], MARGIN, doc.y, { width: 45, lineBreak: false });
+      doc.fillColor("#1F2937").fontSize(8).font("Helvetica")
+        .text(numberedMatch[2], MARGIN + 48, doc.y - doc.currentLineHeight(), { width: contentW - 48 });
+      doc.moveDown(0.2);
+      continue;
+    }
+
+    // Default body text
+    checkPageBreak(14);
+    doc.fillColor("#1F2937").fontSize(8.5).font("Helvetica")
+      .text(line.trim(), MARGIN, doc.y, { width: contentW });
     doc.moveDown(0.1);
-    i++;
   }
 
-  // ── Footer on every page ───────────────────────────────────────────────────
+  // ── Footers on all pages ───────────────────────────────────────────────────
   const range = doc.bufferedPageRange();
-  for (let p = range.start; p < range.start + range.count; p++) {
-    doc.switchToPage(p);
-    doc.rect(0, doc.page.height - 36, pageW, 36).fill(COLOR_NAVY);
-    doc.fillColor("#9CA3AF").fontSize(7).font("Helvetica")
-      .text(
-        `InspectProof Certification Services  ·  Confidential  ·  Page ${p + 1} of ${range.count}`,
-        55, doc.page.height - 22, { align: "center", width: pageW - 110 },
-      );
+  const totalPages = range.count;
+  for (let p = 0; p < totalPages; p++) {
+    doc.switchToPage(range.start + p);
+    addPageFooter(doc, p + 1, totalPages);
   }
 
   return doc;
