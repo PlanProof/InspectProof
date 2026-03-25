@@ -255,12 +255,31 @@ router.put("/:id", async (req, res) => {
 router.get("/:id/checklist", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const results = await db.select({
+    let results = await db.select({
       result: checklistResultsTable,
       item: checklistItemsTable,
     }).from(checklistResultsTable)
       .innerJoin(checklistItemsTable, eq(checklistResultsTable.checklistItemId, checklistItemsTable.id))
       .where(eq(checklistResultsTable.inspectionId, id));
+
+    // Auto-initialise results from template if none exist yet
+    if (results.length === 0) {
+      const [inspection] = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, id));
+      if (inspection?.checklistTemplateId) {
+        const templateItems = await db.select().from(checklistItemsTable)
+          .where(eq(checklistItemsTable.templateId, inspection.checklistTemplateId));
+        if (templateItems.length > 0) {
+          const inserted = await db.insert(checklistResultsTable)
+            .values(templateItems.map(item => ({
+              inspectionId: id,
+              checklistItemId: item.id,
+              result: "pending" as const,
+              notes: null,
+            }))).returning();
+          results = inserted.map((r, i) => ({ result: r, item: templateItems[i] }));
+        }
+      }
+    }
 
     res.json(results.map(r => ({
       id: r.result.id,
