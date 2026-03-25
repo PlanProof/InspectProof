@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
@@ -8,7 +8,7 @@ import {
 import {
   ArrowLeft, Building, FileText, ClipboardList, CheckSquare, Plus, Upload,
   FolderPlus, Pencil, Trash2, Eye, EyeOff, File, Folder, FolderOpen,
-  ChevronRight, Calendar, Clock, CheckCircle, AlertCircle, XCircle, MoreHorizontal,
+  ChevronRight, ChevronDown, Calendar, Clock, CheckCircle, AlertCircle, XCircle, MoreHorizontal,
   Download, Mail, Loader2, Link2, Unlink, Award, Send, BarChart2,
   Smartphone, X, Info, ZoomIn, User
 } from "lucide-react";
@@ -230,6 +230,105 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// ── Building Classification multi-select ──────────────────────────────────────
+
+const BUILDING_CLASSES = [
+  { value: "Class 1a",  label: "Class 1a",  description: "Single dwelling — detached house, townhouse, villa" },
+  { value: "Class 1b",  label: "Class 1b",  description: "Small boarding house, hostel, or bed & breakfast" },
+  { value: "Class 2",   label: "Class 2",   description: "Apartment / multi-residential (2+ sole-occupancy units above each other)" },
+  { value: "Class 3",   label: "Class 3",   description: "Residential — motel, backpacker, dormitory, residential care" },
+  { value: "Class 4",   label: "Class 4",   description: "Sole occupancy unit within a non-residential building" },
+  { value: "Class 5",   label: "Class 5",   description: "Office building" },
+  { value: "Class 6",   label: "Class 6",   description: "Shop, retail, café, or restaurant" },
+  { value: "Class 7a",  label: "Class 7a",  description: "Carpark" },
+  { value: "Class 7b",  label: "Class 7b",  description: "Storage building or warehouse" },
+  { value: "Class 8",   label: "Class 8",   description: "Laboratory, factory, or production facility" },
+  { value: "Class 9a",  label: "Class 9a",  description: "Health care building — hospital, day surgery" },
+  { value: "Class 9b",  label: "Class 9b",  description: "Assembly — theatre, school, stadium, gym" },
+  { value: "Class 9c",  label: "Class 9c",  description: "Aged care residential building" },
+  { value: "Class 10a", label: "Class 10a", description: "Private garage, carport, or shed" },
+  { value: "Class 10b", label: "Class 10b", description: "Fence, mast, antenna, retaining wall, swimming pool" },
+  { value: "Class 10c", label: "Class 10c", description: "Private bushfire shelter" },
+];
+
+function BuildingClassSelect({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const toggle = (cls: string) =>
+    onChange(value.includes(cls) ? value.filter(v => v !== cls) : [...value, cls]);
+
+  return (
+    <div ref={ref} className="relative">
+      {/* Use div (not button) as trigger to avoid nested-button HTML violation */}
+      <div
+        role="combobox"
+        aria-expanded={open}
+        tabIndex={0}
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(o => !o); } }}
+        className={`flex min-h-9 w-full cursor-pointer items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring select-none ${open ? "ring-2 ring-ring" : ""}`}
+      >
+        <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+          {value.length === 0 ? (
+            <span className="text-muted-foreground text-sm">Select building class(es)…</span>
+          ) : (
+            value.map(cls => (
+              <span key={cls} className="inline-flex items-center gap-1 bg-secondary/15 text-secondary border border-secondary/30 rounded px-1.5 py-0.5 text-xs font-semibold leading-none">
+                {cls}
+                <button type="button" onClick={e => { e.stopPropagation(); onChange(value.filter(v => v !== cls)); }} className="hover:text-red-500 transition-colors ml-0.5">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 ml-2 transition-transform ${open ? "rotate-180" : ""}`} />
+      </div>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-xl overflow-hidden">
+          <div className="max-h-64 overflow-y-auto py-1">
+            {BUILDING_CLASSES.map(cls => {
+              const selected = value.includes(cls.value);
+              return (
+                <button key={cls.value} type="button" onClick={() => toggle(cls.value)}
+                  className={`flex items-start gap-3 w-full px-3 py-2 text-left hover:bg-muted/40 transition-colors ${selected ? "bg-secondary/8" : ""}`}
+                >
+                  <span className={`mt-0.5 h-4 w-4 shrink-0 rounded border flex items-center justify-center transition-colors ${selected ? "bg-secondary border-secondary" : "border-muted-foreground/40"}`}>
+                    {selected && (
+                      <svg viewBox="0 0 12 12" className="h-3 w-3 fill-none stroke-white stroke-[2]">
+                        <polyline points="1.5,6 4.5,9 10.5,3" />
+                      </svg>
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <span className="text-sm font-semibold text-sidebar">{cls.label}</span>
+                    <p className="text-xs text-muted-foreground leading-snug mt-0.5">{cls.description}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {value.length > 0 && (
+            <div className="border-t border-border/50 px-3 py-2 flex items-center justify-between bg-muted/20">
+              <span className="text-xs text-muted-foreground">{value.length} selected</span>
+              <button type="button" onClick={() => onChange([])} className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors">Clear all</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Overview Tab ─────────────────────────────────────────────────────────────
 
 function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () => void }) {
@@ -238,12 +337,17 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
   const [, navigate] = useLocation();
   const [bookOpen, setBookOpen] = useState(false);
 
+  const [editingClasses, setEditingClasses] = useState<string[]>(
+    project.buildingClassification ? project.buildingClassification.split(",").map(s => s.trim()).filter(Boolean) : []
+  );
+
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaving(true);
     const fd = new FormData(e.currentTarget);
     const data: any = {};
-    fd.forEach((v, k) => { data[k] = v; });
+    fd.forEach((v, k) => { data[k] = v === "" ? null : v; });
+    data.buildingClassification = editingClasses.join(", ");
     try {
       await apiFetch(`/api/projects/${project.id}`, {
         method: "PUT",
@@ -252,7 +356,8 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
       });
       onRefresh();
       setEditing(false);
-    } catch {
+    } catch (err) {
+      console.error("handleSave failed:", err);
     } finally {
       setSaving(false);
     }
@@ -264,7 +369,12 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
       <div className="lg:col-span-2 bg-card border border-border rounded-xl p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-semibold text-sidebar">Project Details</h2>
-          <Button size="sm" variant={editing ? "outline" : "default"} onClick={() => setEditing(!editing)}>
+          <Button size="sm" variant={editing ? "outline" : "default"} onClick={() => {
+            if (editing) {
+              setEditingClasses(project.buildingClassification ? project.buildingClassification.split(",").map(s => s.trim()).filter(Boolean) : []);
+            }
+            setEditing(!editing);
+          }}>
             {editing ? "Cancel" : <><Pencil className="h-3.5 w-3.5 mr-1" /> Edit</>}
           </Button>
         </div>
@@ -279,7 +389,6 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
                 { label: "Designer Name", name: "designerName", defaultValue: project.designerName },
                 { label: "DA Number", name: "daNumber", defaultValue: project.daNumber },
                 { label: "Certification Number", name: "certificationNumber", defaultValue: project.certificationNumber },
-                { label: "Building Classification", name: "buildingClassification", defaultValue: project.buildingClassification },
                 { label: "Start Date", name: "startDate", defaultValue: project.startDate, type: "date" },
               ].map(f => (
                 <div key={f.name} className="space-y-1.5">
@@ -310,9 +419,18 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
                 </select>
               </div>
             </div>
+
+            {/* Building Classification — full width multi-select */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Building Classification</Label>
+              <BuildingClassSelect value={editingClasses} onChange={setEditingClasses} />
+              {editingClasses.length === 0 && (
+                <p className="text-xs text-amber-600">Please select at least one classification.</p>
+              )}
+            </div>
             <div className="flex gap-2 pt-2">
               <Button type="submit" size="sm" disabled={saving}>{saving ? "Saving…" : "Save Changes"}</Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => { setEditing(false); setEditingClasses(project.buildingClassification ? project.buildingClassification.split(",").map(s => s.trim()).filter(Boolean) : []); }}>Cancel</Button>
             </div>
           </form>
         ) : (
@@ -322,7 +440,6 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
               { label: "Builder", value: project.builderName || "—" },
               { label: "Designer", value: project.designerName || "—" },
               { label: "Project Type", value: project.projectType },
-              { label: "Building Classification", value: project.buildingClassification },
               { label: "DA Number", value: project.daNumber || "—" },
               { label: "Certification Number", value: project.certificationNumber || "—" },
               { label: "Stage", value: project.stage?.replace("_", " ") },
@@ -334,6 +451,18 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
                 <div className="font-medium text-sidebar capitalize">{value}</div>
               </div>
             ))}
+            {/* Building Classification — full width row with pill badges */}
+            <div className="col-span-2">
+              <div className="text-xs text-muted-foreground mb-1.5">Building Classification</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(project.buildingClassification || "").split(",").map(s => s.trim()).filter(Boolean).map(cls => (
+                  <span key={cls} className="inline-flex items-center bg-secondary/15 text-secondary border border-secondary/30 rounded px-2 py-0.5 text-xs font-semibold">
+                    {cls}
+                  </span>
+                ))}
+                {!project.buildingClassification && <span className="text-muted-foreground">—</span>}
+              </div>
+            </div>
           </div>
         )}
       </div>
