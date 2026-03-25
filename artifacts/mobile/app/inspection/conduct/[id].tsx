@@ -392,7 +392,7 @@ function ChecklistRow({ item, onPress, onCamera, onQuickPass }: { item: Checklis
   const photoCount = item.photoUrls?.length || 0;
 
   return (
-    <Pressable style={[styles.checkRow, isPending && styles.checkRowPending, item.result === "pass" && styles.checkRowPass]} onPress={onPress}>
+    <Pressable style={[styles.checkRow, isPending && styles.checkRowPending, item.result === "pass" && styles.checkRowPass, item.result === "fail" && styles.checkRowFail]} onPress={onPress}>
       <Pressable
         onPress={e => { e.stopPropagation?.(); onQuickPass(); }}
         hitSlop={8}
@@ -673,6 +673,7 @@ const styles = StyleSheet.create({
   },
   checkRowPending: { borderColor: Colors.border, opacity: 0.9 },
   checkRowPass: { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" },
+  checkRowFail: { backgroundColor: "#fff5f5", borderColor: "#fecaca" },
   resultIndicator: {
     width: 38,
     height: 38,
