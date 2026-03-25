@@ -246,14 +246,14 @@ export default function InspectionDetailScreen() {
           )}
         </View>
 
-        {inspection.status !== "completed" && inspection.status !== "follow_up_required" && inspection.status !== "cancelled" && (
+        {inspection.status !== "completed" && inspection.status !== "cancelled" && (
           <Pressable
             style={styles.conductBtn}
             onPress={() => router.push(`/inspection/conduct/${inspection.id}` as any)}
           >
             <Feather name="play-circle" size={18} color={Colors.primary} />
             <Text style={styles.conductBtnText}>
-              {inspection.status === "in_progress" ? "Continue Inspection" : "Conduct Inspection"}
+              {inspection.status === "in_progress" ? "Continue Inspection" : "Start Inspection"}
             </Text>
             <Feather name="arrow-right" size={16} color={Colors.primary} />
           </Pressable>

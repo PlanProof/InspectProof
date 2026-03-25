@@ -359,7 +359,7 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
             </View>
           )}
 
-          {!shiftMode && (insp.status === "scheduled" || insp.status === "in_progress") && (
+          {!shiftMode && insp.status !== "completed" && insp.status !== "cancelled" && (
             <Pressable
               onPress={() => router.push(`/inspection/conduct/${insp.id}` as any)}
               style={({ pressed }) => [tlStyles.actionBtn, pressed && { opacity: 0.8 }]}
