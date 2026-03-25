@@ -89,6 +89,69 @@ export default function InspectionDetailScreen() {
   const [detailsError, setDetailsError] = useState("");
   const [statusPickerOpen, setStatusPickerOpen] = useState(false);
 
+  // ── Reschedule modal state ─────────────────────────────────────────────────
+  const [rescheduleVisible, setRescheduleVisible] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [rescheduleTime, setRescheduleTime] = useState("");
+  const [rescheduleSaving, setRescheduleSaving] = useState(false);
+
+  const RESCHEDULE_TIMES = [
+    "07:00","07:30","08:00","08:30","09:00","09:30",
+    "10:00","10:30","11:00","11:30","12:00","12:30",
+    "13:00","13:30","14:00","14:30","15:00","15:30",
+    "16:00","16:30","17:00",
+  ];
+
+  const toDisplayDate = (iso: string) => {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  };
+  const toApiDate = (display: string): string | null => {
+    const p = display.split("/");
+    if (p.length !== 3 || p[2].length !== 4) return null;
+    return `${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`;
+  };
+
+  const openReschedule = () => {
+    setRescheduleDate(inspection?.scheduledDate ? toDisplayDate(inspection.scheduledDate) : "");
+    setRescheduleTime(inspection?.scheduledTime ?? "09:00");
+    setRescheduleVisible(true);
+  };
+
+  const saveReschedule = async () => {
+    const apiDate = toApiDate(rescheduleDate);
+    if (!apiDate) { Alert.alert("Invalid date", "Please enter date as DD/MM/YYYY"); return; }
+    setRescheduleSaving(true);
+    try {
+      await fetchWithAuth(`/api/inspections/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          scheduledDate: apiDate,
+          scheduledTime: rescheduleTime || null,
+          status: inspection?.status === "cancelled" ? "scheduled" : inspection?.status,
+        }),
+      });
+      setRescheduleVisible(false);
+      refetch();
+    } catch {
+      Alert.alert("Error", "Failed to reschedule. Please try again.");
+    } finally {
+      setRescheduleSaving(false);
+    }
+  };
+
+  const restoreInspection = async () => {
+    try {
+      await fetchWithAuth(`/api/inspections/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ status: "scheduled" }),
+      });
+      refetch();
+    } catch {
+      Alert.alert("Error", "Failed to restore inspection.");
+    }
+  };
+
   const openEdit = () => {
     setDetailForm({
       status: inspection?.status ?? "",
@@ -268,11 +331,33 @@ export default function InspectionDetailScreen() {
             <Feather name="arrow-right" size={16} color={Colors.surface} />
           </Pressable>
         )}
+        {/* Cancelled state: restore + reschedule side by side */}
+        {inspection.status === "cancelled" && (
+          <View style={styles.cancelledActions}>
+            <Pressable style={styles.restoreBtn} onPress={restoreInspection}>
+              <Feather name="refresh-cw" size={14} color={Colors.secondary} />
+              <Text style={styles.restoreBtnText}>Restore</Text>
+            </Pressable>
+            <Pressable style={styles.rescheduleBtn} onPress={openReschedule}>
+              <Feather name="calendar" size={14} color={Colors.secondary} />
+              <Text style={styles.rescheduleBtnText}>Reschedule</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Active inspections: reschedule + cancel as text links */}
         {inspection.status !== "cancelled" && inspection.status !== "completed" && (
-          <Pressable style={styles.cancelInspBtn} onPress={cancelInspection}>
-            <Feather name="x-circle" size={14} color="#dc2626" />
-            <Text style={styles.cancelInspBtnText}>Cancel Inspection</Text>
-          </Pressable>
+          <View style={styles.secondaryActions}>
+            <Pressable style={styles.rescheduleLink} onPress={openReschedule}>
+              <Feather name="calendar" size={13} color={Colors.secondary} />
+              <Text style={styles.rescheduleLinkText}>Reschedule</Text>
+            </Pressable>
+            <Text style={styles.actionDivider}>·</Text>
+            <Pressable style={styles.cancelInspBtn} onPress={cancelInspection}>
+              <Feather name="x-circle" size={13} color="#dc2626" />
+              <Text style={styles.cancelInspBtnText}>Cancel</Text>
+            </Pressable>
+          </View>
         )}
       </View>
 
@@ -592,6 +677,58 @@ export default function InspectionDetailScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* ── Reschedule Modal ── */}
+      <Modal visible={rescheduleVisible} transparent animationType="slide" onRequestClose={() => setRescheduleVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setRescheduleVisible(false)}>
+          <Pressable style={[styles.rescheduleSheet, { paddingBottom: Math.max(36, insets.bottom + 16) }]} onPress={e => e.stopPropagation()}>
+            <View style={styles.rescheduleHeader}>
+              <Text style={styles.rescheduleTitle}>Reschedule Inspection</Text>
+              <Pressable onPress={() => setRescheduleVisible(false)} hitSlop={12}>
+                <Feather name="x" size={20} color={Colors.textSecondary} />
+              </Pressable>
+            </View>
+
+            {/* Date input */}
+            <View style={styles.rescheduleField}>
+              <Text style={styles.rescheduleLabel}>Date</Text>
+              <TextInput
+                style={styles.rescheduleInput}
+                value={rescheduleDate}
+                onChangeText={setRescheduleDate}
+                placeholder="DD/MM/YYYY"
+                placeholderTextColor={Colors.textTertiary}
+                keyboardType="numeric"
+                maxLength={10}
+              />
+            </View>
+
+            {/* Time chips */}
+            <View style={styles.rescheduleField}>
+              <Text style={styles.rescheduleLabel}>Time</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timeChips}>
+                {RESCHEDULE_TIMES.map(t => (
+                  <Pressable
+                    key={t}
+                    style={[styles.timeChip, rescheduleTime === t && styles.timeChipSelected]}
+                    onPress={() => setRescheduleTime(t)}
+                  >
+                    <Text style={[styles.timeChipText, rescheduleTime === t && styles.timeChipTextSelected]}>{t}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+
+            <Pressable
+              style={[styles.rescheduleSaveBtn, rescheduleSaving && { opacity: 0.6 }]}
+              onPress={saveReschedule}
+              disabled={rescheduleSaving}
+            >
+              <Text style={styles.rescheduleSaveBtnText}>{rescheduleSaving ? "Saving…" : "Confirm Reschedule"}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -629,9 +766,56 @@ const styles = StyleSheet.create({
   reportBtnText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.surface },
   cancelInspBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    paddingVertical: 10, marginTop: 4,
+    paddingVertical: 6,
   },
   cancelInspBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "#dc2626" },
+
+  // Secondary actions row (reschedule · cancel)
+  secondaryActions: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12, marginTop: 4 },
+  actionDivider: { fontSize: 13, color: Colors.textTertiary },
+  rescheduleLink: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 6 },
+  rescheduleLinkText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+
+  // Cancelled state: restore + reschedule buttons
+  cancelledActions: { flexDirection: "row", gap: 10, marginTop: 6 },
+  restoreBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    borderWidth: 1.5, borderColor: Colors.secondary, borderRadius: 10, paddingVertical: 11,
+  },
+  restoreBtnText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  rescheduleBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    borderWidth: 1.5, borderColor: Colors.secondary, borderRadius: 10, paddingVertical: 11,
+  },
+  rescheduleBtnText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+
+  // Reschedule modal
+  rescheduleSheet: {
+    backgroundColor: Colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 24, paddingBottom: 36, gap: 20,
+  },
+  rescheduleHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  rescheduleTitle: { fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  rescheduleField: { gap: 8 },
+  rescheduleLabel: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  rescheduleInput: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingHorizontal: 14,
+    paddingVertical: 12, fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text,
+  },
+  timeChips: { flexDirection: "row", gap: 8 },
+  timeChip: {
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8,
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background,
+  },
+  timeChipSelected: { backgroundColor: Colors.secondary, borderColor: Colors.secondary },
+  timeChipText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  timeChipTextSelected: { color: "#fff" },
+  rescheduleSaveBtn: {
+    backgroundColor: Colors.secondary, borderRadius: 12, paddingVertical: 15,
+    alignItems: "center", marginTop: 4,
+  },
+  rescheduleSaveBtnText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+
   projectName: { fontSize: 18, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, lineHeight: 24 },
   projectAddress: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
   metaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 4 },
