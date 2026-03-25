@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -21,8 +22,13 @@ router.post("/login", async (req, res) => {
       return;
     }
 
-    // Simple password check (demo: password === "password123")
-    if (password !== "password123" && user.passwordHash !== password) {
+    const storedHash = user.passwordHash;
+    const isBcryptHash = storedHash.startsWith("$2a$") || storedHash.startsWith("$2b$");
+    const passwordMatch = isBcryptHash
+      ? await bcrypt.compare(password, storedHash)
+      : storedHash === password;
+
+    if (!passwordMatch) {
       res.status(401).json({ error: "unauthorized", message: "Invalid credentials" });
       return;
     }
@@ -69,9 +75,11 @@ router.post("/register", async (req, res) => {
       return;
     }
 
+    const passwordHash = await bcrypt.hash(password, 12);
+
     const [newUser] = await db.insert(usersTable).values({
       email: email.toLowerCase().trim(),
-      passwordHash: password,
+      passwordHash,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       role: role || "inspector",
