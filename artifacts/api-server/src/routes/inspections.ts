@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
-import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable } from "@workspace/db";
+import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -27,6 +27,12 @@ async function formatInspection(i: any) {
 
   const counts = await getInspectionCounts(i.id);
 
+  let checklistTemplateName: string | null = null;
+  if (i.checklistTemplateId) {
+    const tmpl = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, i.checklistTemplateId));
+    checklistTemplateName = tmpl[0]?.name || null;
+  }
+
   return {
     id: i.id,
     projectId: i.projectId,
@@ -44,6 +50,7 @@ async function formatInspection(i: any) {
     notes: i.notes,
     weatherConditions: i.weatherConditions,
     checklistTemplateId: i.checklistTemplateId,
+    checklistTemplateName,
     ...counts,
     createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : i.createdAt,
   };
