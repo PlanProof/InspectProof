@@ -7,8 +7,6 @@ import {
   Pressable,
   RefreshControl,
   Platform,
-  Linking,
-  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -75,12 +73,6 @@ function toLocalDateStr(date: Date) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-function buildMapsUrl(address: string, suburb: string | null, app: "apple" | "google"): string {
-  const query = encodeURIComponent([address, suburb].filter(Boolean).join(", ") + ", Australia");
-  if (app === "apple") return `maps://?q=${query}`;
-  return `https://www.google.com/maps/search/?api=1&query=${query}`;
 }
 
 function WeekStrip({
@@ -192,42 +184,10 @@ const weekStyles = StyleSheet.create({
 });
 
 function MapPinButton({ address, suburb }: { address: string; suburb: string | null }) {
-  const { prefs } = useNotifications();
-
-  const open = async (app: "apple" | "google") => {
-    const url = buildMapsUrl(address, suburb, app);
-    try {
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) {
-        await Linking.openURL(url);
-      } else {
-        const fallback = buildMapsUrl(address, suburb, "google");
-        await Linking.openURL(fallback);
-      }
-    } catch {
-      const fallback = buildMapsUrl(address, suburb, "google");
-      await Linking.openURL(fallback);
-    }
-  };
-
-  const handlePress = () => {
-    if (prefs.mapApp === "ask") {
-      const buttons: any[] = [
-        { text: "Google Maps", onPress: () => open("google") },
-        { text: "Cancel", style: "cancel" },
-      ];
-      if (Platform.OS === "ios") {
-        buttons.unshift({ text: "Apple Maps", onPress: () => open("apple") });
-      }
-      Alert.alert("Open in Maps", "Choose your maps app", buttons);
-    } else {
-      open(prefs.mapApp === "apple" ? "apple" : "google");
-    }
-  };
-
+  const { openAddressInMaps } = useNotifications();
   return (
     <Pressable
-      onPress={handlePress}
+      onPress={() => openAddressInMaps(address, suburb)}
       hitSlop={8}
       style={({ pressed }) => [tlStyles.mapBtn, pressed && { opacity: 0.6 }]}
     >

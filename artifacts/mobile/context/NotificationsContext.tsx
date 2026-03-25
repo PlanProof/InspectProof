@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
-import * as Notifications from "expo-notifications";
+import { Platform, Linking, Alert } from "react-native";
 
 const PREFS_KEY = "inspectproof_notification_prefs";
 
@@ -27,9 +26,69 @@ interface NotificationsContextValue {
   cancelAllReminders: () => Promise<void>;
   permissionGranted: boolean;
   requestPermission: () => Promise<boolean>;
+  openAddressInMaps: (address: string, suburb: string | null) => void;
 }
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(null);
+
+async function tryScheduleNative(inspections: any[], prefs: NotificationPrefs): Promise<void> {
+  try {
+    const Notifications = await import("expo-notifications");
+    await Notifications.cancelAllScheduledNotificationsAsync();
+
+    const now = new Date();
+    for (const insp of inspections) {
+      if (!insp.scheduledDate || !insp.displayTime) continue;
+      const [hh, mm] = insp.displayTime.split(":").map(Number);
+      const inspDate = new Date(insp.scheduledDate + "T00:00:00");
+      inspDate.setHours(hh, mm, 0, 0);
+      const triggerTime = new Date(inspDate.getTime() - prefs.reminderMinutesBefore * 60 * 1000);
+      if (triggerTime <= now) continue;
+
+      const typeLabel = (insp.inspectionType || "Inspection").replace(/_/g, " ");
+      const addr = insp.projectAddress ? `, ${insp.projectAddress}` : "";
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `Inspection in ${prefs.reminderMinutesBefore} min`,
+          body: `${typeLabel} — ${insp.projectName}${addr}`,
+          data: { inspectionId: insp.id },
+        },
+        trigger: {
+          type: (Notifications as any).SchedulableTriggerInputTypes?.DATE ?? "date",
+          date: triggerTime,
+        } as any,
+      });
+    }
+  } catch {
+  }
+}
+
+async function tryRequestNativePermission(): Promise<boolean> {
+  try {
+    const Notifications = await import("expo-notifications");
+    const { status } = await Notifications.requestPermissionsAsync();
+    return status === "granted";
+  } catch {
+    return false;
+  }
+}
+
+async function tryGetNativePermission(): Promise<boolean> {
+  try {
+    const Notifications = await import("expo-notifications");
+    const { status } = await Notifications.getPermissionsAsync();
+    return status === "granted";
+  } catch {
+    return false;
+  }
+}
+
+function buildMapsUrl(address: string, suburb: string | null, app: "apple" | "google"): string {
+  const query = encodeURIComponent([address, suburb].filter(Boolean).join(", ") + ", Australia");
+  if (app === "apple") return `maps://?q=${query}`;
+  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+}
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
@@ -38,34 +97,21 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(PREFS_KEY).then((raw) => {
       if (raw) {
-        try {
-          setPrefs({ ...DEFAULT_PREFS, ...JSON.parse(raw) });
-        } catch {}
+        try { setPrefs({ ...DEFAULT_PREFS, ...JSON.parse(raw) }); } catch {}
       }
     });
     checkPermission();
-    if (Platform.OS !== "web") {
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: true,
-          shouldShowBanner: true,
-          shouldShowList: true,
-        }),
-      });
-    }
   }, []);
 
   const checkPermission = async () => {
     if (Platform.OS === "web") {
-      const perm = (typeof Notification !== "undefined") ? Notification.permission : "denied";
+      const perm = typeof Notification !== "undefined" ? Notification.permission : "denied";
       setPermissionGranted(perm === "granted");
       return perm === "granted";
     }
-    const { status } = await Notifications.getPermissionsAsync();
-    setPermissionGranted(status === "granted");
-    return status === "granted";
+    const granted = await tryGetNativePermission();
+    setPermissionGranted(granted);
+    return granted;
   };
 
   const requestPermission = async (): Promise<boolean> => {
@@ -76,8 +122,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       setPermissionGranted(granted);
       return granted;
     }
-    const { status } = await Notifications.requestPermissionsAsync();
-    const granted = status === "granted";
+    const granted = await tryRequestNativePermission();
     setPermissionGranted(granted);
     return granted;
   };
@@ -89,51 +134,44 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [prefs]);
 
   const cancelAllReminders = useCallback(async () => {
-    if (Platform.OS !== "web") {
+    if (Platform.OS === "web") return;
+    try {
+      const Notifications = await import("expo-notifications");
       await Notifications.cancelAllScheduledNotificationsAsync();
-    }
+    } catch {}
   }, []);
 
   const scheduleInspectionReminders = useCallback(async (inspections: any[]) => {
-    if (!prefs.remindersEnabled) return;
-
+    if (!prefs.remindersEnabled || Platform.OS === "web") return;
     const hasPermission = await checkPermission();
     if (!hasPermission) return;
+    await tryScheduleNative(inspections, prefs);
+  }, [prefs]);
 
-    if (Platform.OS === "web") return;
+  const openAddressInMaps = useCallback((address: string, suburb: string | null) => {
+    const open = async (app: "apple" | "google") => {
+      const url = buildMapsUrl(address, suburb, app);
+      try {
+        const canOpen = await Linking.canOpenURL(url);
+        await Linking.openURL(canOpen ? url : buildMapsUrl(address, suburb, "google"));
+      } catch {
+        await Linking.openURL(buildMapsUrl(address, suburb, "google"));
+      }
+    };
 
-    await cancelAllReminders();
-
-    const now = new Date();
-    for (const insp of inspections) {
-      if (!insp.scheduledDate) continue;
-      const timeStr = insp.displayTime || insp.scheduledTime;
-      if (!timeStr) continue;
-
-      const [hh, mm] = timeStr.split(":").map(Number);
-      const inspDate = new Date(insp.scheduledDate + "T00:00:00");
-      inspDate.setHours(hh, mm, 0, 0);
-
-      const triggerTime = new Date(inspDate.getTime() - prefs.reminderMinutesBefore * 60 * 1000);
-      if (triggerTime <= now) continue;
-
-      const typeLabel = insp.inspectionType?.replace(/_/g, " ") || "Inspection";
-      const address = insp.projectAddress ? `, ${insp.projectAddress}` : "";
-
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `Inspection in ${prefs.reminderMinutesBefore} min`,
-          body: `${typeLabel} — ${insp.projectName}${address}`,
-          data: { inspectionId: insp.id },
-          sound: true,
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: triggerTime,
-        },
-      });
+    if (prefs.mapApp === "ask") {
+      const buttons: any[] = [
+        { text: "Google Maps", onPress: () => open("google") },
+        { text: "Cancel", style: "cancel" },
+      ];
+      if (Platform.OS === "ios") {
+        buttons.unshift({ text: "Apple Maps", onPress: () => open("apple") });
+      }
+      Alert.alert("Open in Maps", "Choose your maps app", buttons);
+    } else {
+      open(prefs.mapApp === "apple" ? "apple" : "google");
     }
-  }, [prefs, cancelAllReminders]);
+  }, [prefs.mapApp]);
 
   return (
     <NotificationsContext.Provider value={{
@@ -143,6 +181,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       cancelAllReminders,
       permissionGranted,
       requestPermission,
+      openAddressInMaps,
     }}>
       {children}
     </NotificationsContext.Provider>
