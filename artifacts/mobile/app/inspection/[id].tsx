@@ -12,11 +12,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { Badge } from "@/components/ui/Badge";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -130,6 +131,31 @@ export default function InspectionDetailScreen() {
     }
   };
 
+  const cancelInspection = () => {
+    Alert.alert(
+      "Cancel Inspection",
+      "Are you sure you want to cancel this inspection?",
+      [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Cancel Inspection",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await fetchWithAuth(`/api/inspections/${id}`, {
+                method: "PUT",
+                body: JSON.stringify({ status: "cancelled" }),
+              });
+              refetch();
+            } catch {
+              Alert.alert("Error", "Failed to cancel. Please try again.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const addWeatherPick = (w: string) => {
     setDetailForm(f => ({
       ...f,
@@ -220,14 +246,14 @@ export default function InspectionDetailScreen() {
           )}
         </View>
 
-        {inspection.status !== "completed" && inspection.status !== "follow_up_required" && (
+        {inspection.status !== "completed" && inspection.status !== "follow_up_required" && inspection.status !== "cancelled" && (
           <Pressable
             style={styles.conductBtn}
             onPress={() => router.push(`/inspection/conduct/${inspection.id}` as any)}
           >
             <Feather name="play-circle" size={18} color={Colors.primary} />
             <Text style={styles.conductBtnText}>
-              {inspection.status === "in_progress" ? "Continue Inspection" : "Start Inspection"}
+              {inspection.status === "in_progress" ? "Continue Inspection" : "Conduct Inspection"}
             </Text>
             <Feather name="arrow-right" size={16} color={Colors.primary} />
           </Pressable>
@@ -240,6 +266,12 @@ export default function InspectionDetailScreen() {
             <Feather name="file-text" size={18} color={Colors.surface} />
             <Text style={styles.reportBtnText}>Generate Report</Text>
             <Feather name="arrow-right" size={16} color={Colors.surface} />
+          </Pressable>
+        )}
+        {inspection.status !== "cancelled" && inspection.status !== "completed" && (
+          <Pressable style={styles.cancelInspBtn} onPress={cancelInspection}>
+            <Feather name="x-circle" size={14} color="#dc2626" />
+            <Text style={styles.cancelInspBtnText}>Cancel Inspection</Text>
           </Pressable>
         )}
       </View>
@@ -595,6 +627,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary, paddingVertical: 13, borderRadius: 10, marginTop: 6,
   },
   reportBtnText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.surface },
+  cancelInspBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingVertical: 10, marginTop: 4,
+  },
+  cancelInspBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "#dc2626" },
   projectName: { fontSize: 18, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, lineHeight: 24 },
   projectAddress: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
   metaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 4 },

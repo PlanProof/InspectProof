@@ -121,7 +121,7 @@ function WeekStrip({
     const arr: { date: Date; str: string }[] = [];
     const start = new Date();
     start.setDate(start.getDate() - 2);
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 33; i++) {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       arr.push({ date: d, str: toLocalDateStr(d) });
