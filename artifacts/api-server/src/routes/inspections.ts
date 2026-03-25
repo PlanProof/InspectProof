@@ -109,6 +109,27 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.post("/run-sheet/send", async (req, res) => {
+  try {
+    const { date, inspectorIds, inspectorNames } = req.body;
+    if (!date || !inspectorNames?.length) {
+      res.status(400).json({ error: "date and inspectorNames are required" });
+      return;
+    }
+    await db.insert(activityLogsTable).values({
+      entityType: "run_sheet",
+      entityId: 0,
+      action: "sent",
+      description: `Run sheet for ${date} sent to: ${(inspectorNames as string[]).join(", ")}`,
+      userId: 1,
+    });
+    res.json({ success: true, sentTo: inspectorNames });
+  } catch (err) {
+    req.log.error({ err }, "Send run sheet error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);

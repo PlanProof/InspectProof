@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useGetDashboardAnalytics } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
+import { Card, CardContent, CardHeader, CardTitle, Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
   FolderOpen, CheckSquare, AlertTriangle, FileText, ArrowRight,
   ChevronLeft, ChevronRight, Calendar, Clock, MapPin, User, CalendarDays,
+  Send, CheckCircle2, Users,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -46,9 +47,260 @@ function InspectorAvatar({ name }: { name: string }) {
   );
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function apiBase() {
+  return import.meta.env.BASE_URL.replace(/\/$/, "");
+}
+
+// ── Send Run Sheet Dialog ─────────────────────────────────────────────────────
+function SendRunSheetDialog({
+  open, onClose, day, inspections,
+}: {
+  open: boolean;
+  onClose: () => void;
+  day: Date;
+  inspections: any[];
+}) {
+  // Gather unique inspectors for that day
+  const inspectorMap: Record<string, { name: string; inspections: any[] }> = {};
+  for (const insp of inspections) {
+    const name: string = insp.inspectorName || "Unassigned";
+    if (!inspectorMap[name]) inspectorMap[name] = { name, inspections: [] };
+    inspectorMap[name].inspections.push(insp);
+  }
+  const inspectors = Object.values(inspectorMap);
+  const assignedInspectors = inspectors.filter(i => i.name !== "Unassigned");
+  const hasUnassigned = inspectors.some(i => i.name === "Unassigned");
+
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(assignedInspectors.map(i => i.name)));
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sentNames, setSentNames] = useState<string[]>([]);
+
+  const allSelected = assignedInspectors.length > 0 && assignedInspectors.every(i => selected.has(i.name));
+
+  const toggleAll = () => {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(assignedInspectors.map(i => i.name)));
+  };
+
+  const toggle = (name: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const handleSend = async () => {
+    if (selected.size === 0) return;
+    setSending(true);
+    const names = [...selected];
+    try {
+      const token = localStorage.getItem("inspectproof_token") || "";
+      await fetch(`${apiBase()}/api/inspections/run-sheet/send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          date: format(day, "yyyy-MM-dd"),
+          inspectorNames: names,
+        }),
+      });
+      setSentNames(names);
+      setSent(true);
+    } catch {
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleClose = () => {
+    setSent(false);
+    setSentNames([]);
+    setSelected(new Set(assignedInspectors.map(i => i.name)));
+    onClose();
+  };
+
+  const dateLabel = format(day, "EEEE d MMMM yyyy");
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send className="h-4 w-4 text-secondary" />
+            Send Run Sheet
+          </DialogTitle>
+        </DialogHeader>
+
+        {sent ? (
+          /* ── Success state ──────────────────────────────────────────── */
+          <div className="py-6 flex flex-col items-center text-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center">
+              <CheckCircle2 className="h-7 w-7 text-green-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-sidebar text-base">Run sheet sent!</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Sent to {sentNames.length === 1 ? sentNames[0] : `${sentNames.length} inspectors`}
+              </p>
+              {sentNames.length > 1 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {sentNames.join(", ")}
+                </p>
+              )}
+            </div>
+            <Button onClick={handleClose} className="mt-2 w-full">Done</Button>
+          </div>
+        ) : (
+          /* ── Selection state ─────────────────────────────────────────── */
+          <div className="space-y-4">
+            {/* Date label */}
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/50 border border-muted">
+              <CalendarDays className="h-4 w-4 text-secondary shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-sidebar">{dateLabel}</p>
+                <p className="text-xs text-muted-foreground">
+                  {inspections.length} inspection{inspections.length !== 1 ? "s" : ""} scheduled
+                </p>
+              </div>
+            </div>
+
+            {/* Recipient selection */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Send to</p>
+
+              {assignedInspectors.length === 0 ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">
+                  <User className="h-6 w-6 mx-auto mb-2 opacity-40" />
+                  No assigned inspectors for this day
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Select all toggle */}
+                  <button
+                    onClick={toggleAll}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors text-left ${
+                      allSelected
+                        ? "bg-secondary/8 border-secondary/30"
+                        : "bg-card border-muted hover:bg-muted/40"
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                      allSelected ? "bg-secondary border-secondary" : "border-muted-foreground/40"
+                    }`}>
+                      {allSelected && <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={3} />}
+                    </div>
+                    <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-semibold text-sidebar">
+                      All inspectors ({assignedInspectors.length})
+                    </span>
+                  </button>
+
+                  {/* Individual inspectors */}
+                  {assignedInspectors.map(inspector => {
+                    const isChecked = selected.has(inspector.name);
+                    return (
+                      <button
+                        key={inspector.name}
+                        onClick={() => toggle(inspector.name)}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors text-left ${
+                          isChecked
+                            ? "bg-secondary/8 border-secondary/30"
+                            : "bg-card border-muted hover:bg-muted/40"
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                          isChecked ? "bg-secondary border-secondary" : "border-muted-foreground/40"
+                        }`}>
+                          {isChecked && <CheckCircle2 className="h-3 w-3 text-white" strokeWidth={3} />}
+                        </div>
+                        <InspectorAvatar name={inspector.name} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-sidebar truncate">{inspector.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {inspector.inspections.length} inspection{inspector.inspections.length !== 1 ? "s" : ""}
+                            {inspector.inspections.map(i => ` · ${typeLabel(i.inspectionType)}`).join("")}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {hasUnassigned && (
+                <p className="text-xs text-amber-600 mt-2 flex items-center gap-1.5">
+                  <AlertTriangle className="h-3 w-3" />
+                  {inspectors.find(i => i.name === "Unassigned")?.inspections.length} inspection(s) have no assigned inspector
+                </p>
+              )}
+            </div>
+
+            {/* Run sheet preview */}
+            {inspections.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Preview</p>
+                <div className="rounded-lg border border-muted bg-muted/30 divide-y divide-muted max-h-40 overflow-y-auto">
+                  {inspections.map(insp => (
+                    <div key={insp.id} className="px-3 py-2 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-sidebar truncate">{insp.projectName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {insp.scheduledTime ?? "TBC"} · {typeLabel(insp.inspectionType)}
+                          {insp.siteAddress ? ` · ${insp.siteAddress}` : ""}
+                        </p>
+                      </div>
+                      {insp.inspectorName ? (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <InspectorAvatar name={insp.inspectorName} />
+                          <span className="text-[10px] text-muted-foreground hidden sm:inline">{insp.inspectorName.split(" ")[0]}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-amber-500 shrink-0 font-medium">Unassigned</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" onClick={handleClose} className="flex-1">
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSend}
+                disabled={selected.size === 0 || sending}
+                className="flex-1 gap-2"
+              >
+                {sending ? (
+                  <>Sending…</>
+                ) : (
+                  <>
+                    <Send className="h-3.5 w-3.5" />
+                    Send{selected.size > 0 ? ` to ${selected.size === assignedInspectors.length ? "All" : selected.size}` : ""}
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Day Run Sheet ─────────────────────────────────────────────────────────────
 function DayRunSheet({ day, inspections }: { day: Date; inspections: any[] }) {
   const [, navigate] = useLocation();
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+
   const dayInspections = inspections
     .filter(i => { try { return isSameDay(parseISO(i.scheduledDate), day); } catch { return false; } })
     .sort((a, b) => {
@@ -62,21 +314,55 @@ function DayRunSheet({ day, inspections }: { day: Date; inspections: any[] }) {
   const dayLabel = isThisToday ? "Today" : format(day, "EEEE");
   const dateLabel = format(day, "d MMMM yyyy");
 
+  // Distinct assigned inspectors for the button label
+  const assignedInspectors = [...new Set(dayInspections.filter(i => i.inspectorName).map(i => i.inspectorName as string))];
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-5 pt-4 pb-3 border-b border-muted/50">
-        <div className="flex items-center gap-2 mb-0.5">
-          <CalendarDays className="h-4 w-4 text-secondary" />
-          <h3 className="font-bold text-sidebar text-base">{dayLabel}</h3>
+        <div className="flex items-start justify-between gap-2 mb-0.5">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-secondary" />
+            <h3 className="font-bold text-sidebar text-base">{dayLabel}</h3>
+          </div>
+          {dayInspections.length > 0 && (
+            <button
+              onClick={() => setSendDialogOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary text-white text-xs font-semibold hover:bg-secondary/90 transition-colors shrink-0 shadow-sm"
+            >
+              <Send className="h-3 w-3" />
+              Send
+            </button>
+          )}
         </div>
         <p className="text-xs text-muted-foreground ml-6">{dateLabel}</p>
         {dayInspections.length > 0 && (
-          <p className="text-xs font-semibold text-secondary ml-6 mt-1">
-            {dayInspections.length} inspection{dayInspections.length !== 1 ? "s" : ""} scheduled
-          </p>
+          <div className="ml-6 mt-1 flex items-center gap-2 flex-wrap">
+            <p className="text-xs font-semibold text-secondary">
+              {dayInspections.length} inspection{dayInspections.length !== 1 ? "s" : ""} scheduled
+            </p>
+            {assignedInspectors.length > 0 && (
+              <div className="flex items-center gap-1">
+                {assignedInspectors.slice(0, 3).map(name => (
+                  <InspectorAvatar key={name} name={name} />
+                ))}
+                {assignedInspectors.length > 3 && (
+                  <span className="text-[10px] text-muted-foreground font-medium">+{assignedInspectors.length - 3}</span>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
+
+      <SendRunSheetDialog
+        key={day.toISOString()}
+        open={sendDialogOpen}
+        onClose={() => setSendDialogOpen(false)}
+        day={day}
+        inspections={dayInspections}
+      />
 
       {/* Inspection list */}
       <div className="flex-1 overflow-y-auto">
