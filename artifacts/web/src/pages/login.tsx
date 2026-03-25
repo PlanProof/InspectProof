@@ -31,10 +31,10 @@ export default function Login() {
             <img src={`${import.meta.env.BASE_URL}logo.png`} alt="InspectProof" className="h-10 w-auto" />
           </div>
           <h1 className="text-4xl font-bold text-white max-w-md leading-tight mt-24">
-            Government-grade inspection platform for Australian certifiers.
+            Faster inspections. Clearer compliance. Better outcomes.
           </h1>
           <p className="text-sidebar-foreground/70 mt-6 text-lg max-w-md">
-            Streamline your field inspections, issue tracking, and compliance reporting in one secure place.
+            All your inspection workflows in one streamlined platform.
           </p>
         </div>
         
