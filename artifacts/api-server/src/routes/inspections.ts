@@ -184,6 +184,20 @@ router.get("/:id", async (req, res) => {
 
     const counts = await getInspectionCounts(id);
 
+    // Resolve inspector name
+    let inspectorNameResolved: string | null = null;
+    if (inspection.inspectorId) {
+      const inspUsers = await db.select().from(usersTable).where(eq(usersTable.id, inspection.inspectorId));
+      if (inspUsers[0]) inspectorNameResolved = `${inspUsers[0].firstName} ${inspUsers[0].lastName}`;
+    }
+
+    // Resolve checklist template name
+    let checklistTemplateName: string | null = null;
+    if (inspection.checklistTemplateId) {
+      const tmpl = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, inspection.checklistTemplateId));
+      checklistTemplateName = tmpl[0]?.name ?? null;
+    }
+
     res.json({
       id: inspection.id,
       projectId: inspection.projectId,
@@ -194,10 +208,11 @@ router.get("/:id", async (req, res) => {
       scheduledTime: inspection.scheduledTime,
       completedDate: inspection.completedDate,
       inspectorId: inspection.inspectorId,
-      inspectorName: null,
+      inspectorName: inspectorNameResolved,
       duration: inspection.duration,
       weatherConditions: inspection.weatherConditions,
       checklistTemplateId: inspection.checklistTemplateId,
+      checklistTemplateName,
       ...counts,
       createdAt: inspection.createdAt instanceof Date ? inspection.createdAt.toISOString() : inspection.createdAt,
       checklistResults: formattedResults,
@@ -327,6 +342,84 @@ router.post("/:id/checklist", async (req, res) => {
     res.json({ success: true, message: "Checklist results saved" });
   } catch (err) {
     req.log.error({ err }, "Save checklist error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// Apply a checklist template to an inspection (replaces pending items)
+router.post("/:id/apply-checklist", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { templateId } = req.body;
+
+    if (!templateId) {
+      res.status(400).json({ error: "templateId required" });
+      return;
+    }
+
+    // Verify inspection exists
+    const [inspection] = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, id));
+    if (!inspection) { res.status(404).json({ error: "not_found" }); return; }
+
+    // Delete existing pending results only (preserve pass/fail/na that were already scored)
+    const existingResults = await db.select().from(checklistResultsTable).where(eq(checklistResultsTable.inspectionId, id));
+    const pendingIds = existingResults.filter(r => r.result === "pending").map(r => r.id);
+    if (pendingIds.length > 0) {
+      for (const rid of pendingIds) {
+        await db.delete(checklistResultsTable).where(eq(checklistResultsTable.id, rid));
+      }
+    }
+
+    // If switching to a different template, remove ALL old results
+    if (inspection.checklistTemplateId && inspection.checklistTemplateId !== templateId) {
+      await db.delete(checklistResultsTable).where(eq(checklistResultsTable.inspectionId, id));
+    }
+
+    // Load template items
+    const items = await db.select().from(checklistItemsTable)
+      .where(eq(checklistItemsTable.templateId, templateId))
+      .orderBy(checklistItemsTable.orderIndex);
+
+    if (items.length === 0) {
+      res.status(400).json({ error: "template_has_no_items" });
+      return;
+    }
+
+    // Check if results already exist for this template (in case of partial re-apply)
+    const existingAfterClean = await db.select().from(checklistResultsTable)
+      .where(eq(checklistResultsTable.inspectionId, id));
+    const existingItemIds = new Set(existingAfterClean.map(r => r.checklistItemId));
+
+    const newItems = items.filter(item => !existingItemIds.has(item.id));
+    if (newItems.length > 0) {
+      await db.insert(checklistResultsTable).values(
+        newItems.map(item => ({
+          inspectionId: id,
+          checklistItemId: item.id,
+          result: "pending" as const,
+          notes: null,
+        }))
+      );
+    }
+
+    // Update the inspection's checklistTemplateId
+    const [updated] = await db.update(inspectionsTable)
+      .set({ checklistTemplateId: templateId, updatedAt: new Date() })
+      .where(eq(inspectionsTable.id, id))
+      .returning();
+
+    await db.insert(activityLogsTable).values({
+      entityType: "inspection",
+      entityId: id,
+      action: "checklist_applied",
+      description: `Checklist template applied to inspection`,
+      userId: 1,
+    });
+
+    const formatted = await formatInspection(updated);
+    res.json({ ...formatted, itemCount: items.length });
+  } catch (err) {
+    req.log.error({ err }, "Apply checklist error");
     res.status(500).json({ error: "internal_error" });
   }
 });

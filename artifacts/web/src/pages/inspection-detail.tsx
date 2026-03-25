@@ -1,12 +1,15 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useParams, Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Badge, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
-  ArrowLeft, Calendar, Clock, User, CloudSun, ClipboardList,
+  Calendar, Clock, User, CloudSun, ClipboardList,
   CheckCircle2, XCircle, MinusCircle, AlertTriangle, MessageSquare,
-  Building, Loader2, ChevronRight, FileText, Link2, Paperclip,
-  Award, BarChart2, Send, Download, Zap, X
+  Building, Loader2, ChevronRight, FileText, Paperclip,
+  Award, BarChart2, Send, Download, Zap, X,
+  UserCheck, ChevronDown, FolderOpen, Upload, File,
+  FileImage, FileSpreadsheet, CheckSquare, PencilLine,
+  RefreshCw, Eye,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -18,7 +21,14 @@ function apiBase() {
 }
 
 async function apiFetch(path: string, opts?: RequestInit) {
-  const res = await fetch(`${apiBase()}${path}`, opts);
+  const token = localStorage.getItem("inspectproof_token") || "";
+  const res = await fetch(`${apiBase()}${path}`, {
+    ...opts,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(opts?.headers ?? {}),
+    },
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -85,11 +95,40 @@ interface Inspection {
   notes: Note[];
   weatherConditions?: string;
   checklistTemplateId?: number;
+  checklistTemplateName?: string;
   passCount: number;
   failCount: number;
   naCount: number;
   checklistResults: ChecklistResult[];
   issues: Issue[];
+}
+
+interface Inspector {
+  id: number;
+  firstName: string;
+  lastName: string;
+  role: string;
+  email: string;
+}
+
+interface ChecklistTemplate {
+  id: number;
+  name: string;
+  folder: string;
+  discipline: string;
+  itemCount: number;
+  inspectionType?: string;
+}
+
+interface ProjectDocument {
+  id: number;
+  name: string;
+  fileUrl: string;
+  mimeType?: string;
+  fileSize?: number;
+  folder?: string;
+  uploadedByName?: string;
+  createdAt: string;
 }
 
 // ── Status / severity helpers ─────────────────────────────────────────────────
@@ -115,7 +154,7 @@ function severityColors(sev: string) {
   return map[sev] ?? "bg-gray-50 text-gray-500 border-gray-200";
 }
 
-const TABS = ["Overview", "Checklist", "Issues"] as const;
+const TABS = ["Overview", "Checklist", "Issues", "Documents"] as const;
 type Tab = typeof TABS[number];
 
 // ── Report type suggestion ────────────────────────────────────────────────────
@@ -164,6 +203,11 @@ export default function InspectionDetail() {
   const [generatedReport, setGeneratedReport] = useState<any>(null);
   const [submittingReport, setSubmittingReport] = useState(false);
 
+  // Inspector / checklist / documents data
+  const [inspectors, setInspectors] = useState<Inspector[]>([]);
+  const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
+  const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>([]);
+
   const openReportDialog = useCallback((inspection: Inspection) => {
     const suggested = getSuggestedReportType(inspection);
     setSelectedReportType(suggested);
@@ -177,22 +221,28 @@ export default function InspectionDetail() {
       const data = await apiFetch(`/api/inspections/${inspId}`);
       setInspection(data);
 
-      // Load documents linked to checklist items for this project
-      if (data.projectId) {
-        const docsWithLinks = await apiFetch(`/api/projects/${data.projectId}/documents-with-links`).catch(() => []);
-        const byItem: Record<number, { id: number; name: string; mimeType?: string }[]> = {};
-        for (const doc of docsWithLinks) {
-          for (const itemId of (doc.linkedItemIds ?? [])) {
-            if (!byItem[itemId]) byItem[itemId] = [];
-            byItem[itemId].push({ id: doc.id, name: doc.name, mimeType: doc.mimeType });
-          }
-        }
-        setDocsByItem(byItem);
-      }
+      // Parallel loads
+      const [docsWithLinks, reports, users, tmpls, projDocs] = await Promise.all([
+        data.projectId ? apiFetch(`/api/projects/${data.projectId}/documents-with-links`).catch(() => []) : Promise.resolve([]),
+        apiFetch(`/api/reports?inspectionId=${inspId}`).catch(() => []),
+        apiFetch("/api/users").catch(() => []),
+        apiFetch("/api/checklist-templates").catch(() => []),
+        data.projectId ? apiFetch(`/api/projects/${data.projectId}/documents`).catch(() => []) : Promise.resolve([]),
+      ]);
 
-      // Check if any reports exist for this inspection
-      const reports = await apiFetch(`/api/reports?inspectionId=${inspId}`).catch(() => []);
+      // Build docsByItem map
+      const byItem: Record<number, { id: number; name: string; mimeType?: string }[]> = {};
+      for (const doc of docsWithLinks) {
+        for (const itemId of (doc.linkedItemIds ?? [])) {
+          if (!byItem[itemId]) byItem[itemId] = [];
+          byItem[itemId].push({ id: doc.id, name: doc.name, mimeType: doc.mimeType });
+        }
+      }
+      setDocsByItem(byItem);
       setExistingReportCount(reports.length);
+      setInspectors(users);
+      setTemplates(tmpls);
+      setProjectDocuments(projDocs);
     } catch {
       setError("Failed to load inspection");
     } finally {
@@ -436,9 +486,24 @@ export default function InspectionDetail() {
         ))}
       </div>
 
-      {tab === "Overview" && <OverviewTab inspection={inspection} />}
+      {tab === "Overview" && (
+        <OverviewTab
+          inspection={inspection}
+          inspectors={inspectors}
+          templates={templates}
+          onReload={load}
+        />
+      )}
       {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults} docsByItem={docsByItem} />}
       {tab === "Issues" && <IssuesTab issues={inspection.issues} />}
+      {tab === "Documents" && (
+        <DocumentsTab
+          documents={projectDocuments}
+          projectId={inspection.projectId}
+          inspectionId={inspection.id}
+          onReload={load}
+        />
+      )}
 
       {/* ── Generate Report Dialog ── */}
       <Dialog open={reportDialogOpen} onOpenChange={o => { setReportDialogOpen(o); if (!o) setGeneratedReport(null); }}>
@@ -560,11 +625,99 @@ export default function InspectionDetail() {
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
 
-function OverviewTab({ inspection }: { inspection: Inspection }) {
+function OverviewTab({
+  inspection,
+  inspectors,
+  templates,
+  onReload,
+}: {
+  inspection: Inspection;
+  inspectors: Inspector[];
+  templates: ChecklistTemplate[];
+  onReload: () => void;
+}) {
+  // Inspector assignment state
+  const [assigningInspector, setAssigningInspector] = useState(false);
+  const [selectedInspectorId, setSelectedInspectorId] = useState<string>(
+    inspection.inspectorId ? String(inspection.inspectorId) : ""
+  );
+  const [savingInspector, setSavingInspector] = useState(false);
+  const [inspectorSaved, setInspectorSaved] = useState(false);
+
+  // Checklist template state
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
+    inspection.checklistTemplateId ? String(inspection.checklistTemplateId) : ""
+  );
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [templateApplied, setTemplateApplied] = useState(false);
+  const [templateError, setTemplateError] = useState("");
+  const [confirmReplaceOpen, setConfirmReplaceOpen] = useState(false);
+
+  const saveInspector = async () => {
+    setSavingInspector(true);
+    try {
+      await apiFetch(`/api/inspections/${inspection.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inspectorId: selectedInspectorId ? parseInt(selectedInspectorId) : null }),
+      });
+      setAssigningInspector(false);
+      setInspectorSaved(true);
+      onReload();
+      setTimeout(() => setInspectorSaved(false), 3000);
+    } catch {
+    } finally {
+      setSavingInspector(false);
+    }
+  };
+
+  const applyTemplate = async () => {
+    if (!selectedTemplateId) return;
+    setApplyingTemplate(true);
+    setTemplateError("");
+    setConfirmReplaceOpen(false);
+    try {
+      await apiFetch(`/api/inspections/${inspection.id}/apply-checklist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: parseInt(selectedTemplateId) }),
+      });
+      setTemplateApplied(true);
+      onReload();
+      setTimeout(() => setTemplateApplied(false), 3500);
+    } catch (err: any) {
+      setTemplateError("Failed to apply template. It may have no items.");
+    } finally {
+      setApplyingTemplate(false);
+    }
+  };
+
+  const handleApplyClick = () => {
+    // If there are already scored results, confirm before overwriting
+    const scored = inspection.passCount + inspection.failCount;
+    if (scored > 0 && inspection.checklistTemplateId && parseInt(selectedTemplateId) !== inspection.checklistTemplateId) {
+      setConfirmReplaceOpen(true);
+    } else {
+      applyTemplate();
+    }
+  };
+
+  const selectedTemplate = templates.find(t => t.id === parseInt(selectedTemplateId));
+
+  // Group templates by folder for the select
+  const templatesByFolder: Record<string, ChecklistTemplate[]> = {};
+  for (const t of templates) {
+    const folder = t.folder || "Other";
+    if (!templatesByFolder[folder]) templatesByFolder[folder] = [];
+    templatesByFolder[folder].push(t);
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Details card */}
+      {/* ── Left (main) column ── */}
       <div className="lg:col-span-2 space-y-6">
+
+        {/* Inspection Details */}
         <div className="bg-card border border-border rounded-xl p-6">
           <h2 className="font-semibold text-sidebar mb-4 flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" /> Inspection Details
@@ -577,7 +730,6 @@ function OverviewTab({ inspection }: { inspection: Inspection }) {
               { label: "Scheduled Date", value: formatDate(inspection.scheduledDate) },
               { label: "Scheduled Time", value: inspection.scheduledTime ?? "TBC" },
               { label: "Completed Date", value: inspection.completedDate ? formatDate(inspection.completedDate) : "—" },
-              { label: "Inspector", value: inspection.inspectorName ?? "Unassigned" },
               { label: "Duration", value: inspection.duration ? `${inspection.duration} minutes` : "—" },
               { label: "Weather", value: inspection.weatherConditions ?? "—" },
             ].map(({ label, value }) => (
@@ -589,7 +741,157 @@ function OverviewTab({ inspection }: { inspection: Inspection }) {
           </div>
         </div>
 
-        {/* Notes */}
+        {/* ── Inspector Assignment Card ── */}
+        <div className="bg-card border border-border rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-sidebar flex items-center gap-2">
+              <UserCheck className="h-4 w-4 text-muted-foreground" /> Assigned Inspector
+            </h2>
+            {!assigningInspector && (
+              <button
+                onClick={() => setAssigningInspector(true)}
+                className="text-xs text-secondary hover:text-secondary/80 font-medium flex items-center gap-1 transition-colors"
+              >
+                <PencilLine className="h-3.5 w-3.5" />
+                {inspection.inspectorId ? "Change" : "Assign"}
+              </button>
+            )}
+          </div>
+
+          {!assigningInspector ? (
+            <div className="flex items-center gap-3">
+              {inspection.inspectorId ? (
+                <>
+                  <div className="h-10 w-10 rounded-full bg-secondary/20 text-secondary flex items-center justify-center text-sm font-bold shrink-0">
+                    {(inspection.inspectorName ?? "?").split(" ").map(n => n[0]).join("").slice(0, 2)}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sidebar text-sm">{inspection.inspectorName}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {inspectors.find(i => i.id === inspection.inspectorId)?.role?.replace(/_/g, " ") ?? "Inspector"}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-3 py-2">
+                  <div className="h-10 w-10 rounded-full border-2 border-dashed border-muted flex items-center justify-center">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">No inspector assigned</p>
+                    <p className="text-xs text-muted-foreground/70 mt-0.5">Click "Assign" to allocate an inspector.</p>
+                  </div>
+                </div>
+              )}
+              {inspectorSaved && (
+                <span className="ml-auto flex items-center gap-1 text-xs text-green-600 font-medium">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <select
+                value={selectedInspectorId}
+                onChange={e => setSelectedInspectorId(e.target.value)}
+                className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+              >
+                <option value="">— Unassigned —</option>
+                {inspectors.map(i => (
+                  <option key={i.id} value={String(i.id)}>
+                    {i.firstName} {i.lastName} ({i.role?.replace(/_/g, " ") ?? "Inspector"})
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={saveInspector}
+                  disabled={savingInspector}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-sidebar text-white hover:bg-sidebar/90 disabled:opacity-50 transition-colors"
+                >
+                  {savingInspector ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                  Save
+                </button>
+                <button
+                  onClick={() => { setAssigningInspector(false); setSelectedInspectorId(inspection.inspectorId ? String(inspection.inspectorId) : ""); }}
+                  className="text-xs text-muted-foreground hover:text-sidebar transition-colors px-2 py-1.5"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Checklist Template Card ── */}
+        <div className="bg-card border border-border rounded-xl p-6">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="font-semibold text-sidebar flex items-center gap-2">
+              <ClipboardList className="h-4 w-4 text-muted-foreground" /> Checklist Template
+            </h2>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            Select a template and apply it to load the checklist items for this inspection. Re-applying a different template on an inspection with scored results will ask for confirmation.
+          </p>
+
+          {/* Current template badge */}
+          {inspection.checklistTemplateName && (
+            <div className="flex items-center gap-2 mb-4 p-3 rounded-lg bg-secondary/8 border border-secondary/20">
+              <CheckSquare className="h-4 w-4 text-secondary shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-secondary">Currently applied</p>
+                <p className="text-sm text-sidebar font-medium">{inspection.checklistTemplateName}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <select
+              value={selectedTemplateId}
+              onChange={e => setSelectedTemplateId(e.target.value)}
+              className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+            >
+              <option value="">— Select a checklist template —</option>
+              {Object.entries(templatesByFolder).map(([folder, tmplList]) => (
+                <optgroup key={folder} label={folder}>
+                  {tmplList.map(t => (
+                    <option key={t.id} value={String(t.id)}>
+                      {t.name} ({t.itemCount} items)
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+
+            {selectedTemplate && (
+              <div className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2">
+                <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                <span>{selectedTemplate.folder} · {selectedTemplate.discipline} · {selectedTemplate.itemCount} items</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleApplyClick}
+                disabled={!selectedTemplateId || applyingTemplate}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-sidebar text-white hover:bg-sidebar/90 disabled:opacity-40 transition-colors"
+              >
+                {applyingTemplate
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Applying…</>
+                  : <><RefreshCw className="h-3.5 w-3.5" /> Apply Template</>
+                }
+              </button>
+              {templateApplied && (
+                <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Template applied — checklist updated
+                </span>
+              )}
+              {templateError && <span className="text-xs text-red-500">{templateError}</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* Field Notes */}
         {inspection.notes.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-6">
             <h2 className="font-semibold text-sidebar mb-4 flex items-center gap-2">
@@ -612,7 +914,7 @@ function OverviewTab({ inspection }: { inspection: Inspection }) {
         )}
       </div>
 
-      {/* Right sidebar */}
+      {/* ── Right sidebar ── */}
       <div className="space-y-4">
         {/* Results summary */}
         <div className="bg-card border border-border rounded-xl p-5">
@@ -662,16 +964,42 @@ function OverviewTab({ inspection }: { inspection: Inspection }) {
               <Building className="h-3.5 w-3.5" /> View Project
             </Link>
             {inspection.issues.length > 0 && (
-              <button
-                className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 transition-colors"
-                onClick={() => {}}
-              >
+              <div className="flex items-center gap-2 text-sm text-red-600">
                 <AlertTriangle className="h-3.5 w-3.5" /> {inspection.issues.length} Open {inspection.issues.length === 1 ? "Issue" : "Issues"}
-              </button>
+              </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Confirm replace checklist dialog */}
+      <Dialog open={confirmReplaceOpen} onOpenChange={setConfirmReplaceOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-700">
+              <AlertTriangle className="h-4 w-4" /> Replace Checklist?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            This inspection already has <strong>{inspection.passCount + inspection.failCount}</strong> scored items. Switching to a different template will remove all existing checklist results and replace them with the new template items.
+          </p>
+          <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              onClick={() => setConfirmReplaceOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-muted-foreground border border-border rounded-lg hover:bg-muted/30 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={applyTemplate}
+              className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+            >
+              Yes, Replace
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -827,6 +1155,183 @@ function ChecklistTab({
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Documents Tab ─────────────────────────────────────────────────────────────
+
+function fileIcon(mimeType?: string) {
+  if (!mimeType) return <File className="h-5 w-5 text-muted-foreground" />;
+  if (mimeType.startsWith("image/")) return <FileImage className="h-5 w-5 text-blue-500" />;
+  if (mimeType === "application/pdf") return <FileText className="h-5 w-5 text-red-500" />;
+  if (mimeType.includes("spreadsheet") || mimeType.includes("excel") || mimeType.includes("csv"))
+    return <FileSpreadsheet className="h-5 w-5 text-green-600" />;
+  return <File className="h-5 w-5 text-muted-foreground" />;
+}
+
+function formatBytes(bytes?: number) {
+  if (!bytes) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function DocumentsTab({
+  documents,
+  projectId,
+  inspectionId,
+  onReload,
+}: {
+  documents: ProjectDocument[];
+  projectId: number;
+  inspectionId: number;
+  onReload: () => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadDocument = async (file: File) => {
+    setUploadError("");
+    setUploading(true);
+    try {
+      // 1. Get a pre-signed upload URL
+      const { uploadURL, objectPath } = await apiFetch("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+
+      // 2. Upload to signed URL
+      const putRes = await fetch(uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!putRes.ok) throw new Error("Upload failed");
+
+      // 3. Register document with project
+      await apiFetch(`/api/projects/${projectId}/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: file.name,
+          fileUrl: objectPath,
+          mimeType: file.type,
+          fileSize: file.size,
+          folder: "Inspection Documents",
+          uploadedById: 1,
+        }),
+      });
+
+      onReload();
+    } catch {
+      setUploadError("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Group by folder
+  const byFolder: Record<string, ProjectDocument[]> = {};
+  for (const doc of documents) {
+    const folder = doc.folder || "General";
+    if (!byFolder[folder]) byFolder[folder] = [];
+    byFolder[folder].push(doc);
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Upload bar */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            {documents.length === 0 ? "No documents yet." : `${documents.length} document${documents.length !== 1 ? "s" : ""} attached to this project.`}
+          </p>
+        </div>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-sidebar text-white rounded-lg hover:bg-sidebar/90 disabled:opacity-50 transition-colors"
+        >
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {uploading ? "Uploading…" : "Upload Document"}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={e => {
+            const file = e.target.files?.[0];
+            if (file) uploadDocument(file);
+            e.target.value = "";
+          }}
+        />
+      </div>
+
+      {uploadError && <p className="text-sm text-red-500">{uploadError}</p>}
+
+      {documents.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground border-2 border-dashed border-muted rounded-xl">
+          <FolderOpen className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">No documents uploaded</p>
+          <p className="text-sm mt-1">Upload drawings, specs, or approval documents to keep them alongside this project.</p>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-sidebar text-white rounded-lg hover:bg-sidebar/90 transition-colors"
+          >
+            <Upload className="h-4 w-4" /> Upload First Document
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {Object.entries(byFolder).map(([folder, docs]) => (
+            <div key={folder}>
+              <div className="flex items-center gap-2 mb-3">
+                <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold text-sidebar">{folder}</span>
+                <span className="text-xs text-muted-foreground">({docs.length})</span>
+              </div>
+              <div className="space-y-2">
+                {docs.map(doc => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center gap-3 p-3.5 rounded-xl border border-border bg-card hover:border-secondary/40 transition-colors group"
+                  >
+                    <div className="shrink-0">{fileIcon(doc.mimeType)}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-sidebar truncate">{doc.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                        {doc.uploadedByName && <span>{doc.uploadedByName}</span>}
+                        {doc.fileSize && <span>· {formatBytes(doc.fileSize)}</span>}
+                        <span>· {formatDate(doc.createdAt)}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <a
+                        href={`${apiBase()}/api/storage${doc.fileUrl}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-secondary border border-secondary/30 rounded-lg hover:bg-secondary/8 transition-colors"
+                      >
+                        <Eye className="h-3.5 w-3.5" /> View
+                      </a>
+                      <a
+                        href={`${apiBase()}/api/storage${doc.fileUrl}`}
+                        download={doc.name}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:bg-muted/30 transition-colors"
+                      >
+                        <Download className="h-3.5 w-3.5" /> Download
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
