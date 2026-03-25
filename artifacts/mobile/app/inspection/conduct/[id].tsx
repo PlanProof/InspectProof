@@ -124,6 +124,20 @@ export default function ConductInspectionScreen() {
     setEditResult("pending");
   };
 
+  const quickPass = async (item: ChecklistItem) => {
+    const next = item.result === "pass" ? "pending" : "pass";
+    try {
+      await fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ result: next, notes: item.notes || null, photoUrls: item.photoUrls || [] }),
+      });
+      await refetchChecklist();
+    } catch {
+      Alert.alert("Error", "Failed to update. Please try again.");
+    }
+  };
+
   const saveItem = async () => {
     if (!activeItem) return;
     setSavingItem(true);
@@ -335,7 +349,7 @@ export default function ConductInspectionScreen() {
                 </Text>
               </View>
               {items.map(item => (
-                <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} />
+                <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} />
               ))}
             </View>
           ))
@@ -372,20 +386,24 @@ export default function ConductInspectionScreen() {
   );
 }
 
-function ChecklistRow({ item, onPress, onCamera }: { item: ChecklistItem; onPress: () => void; onCamera: () => void }) {
+function ChecklistRow({ item, onPress, onCamera, onQuickPass }: { item: ChecklistItem; onPress: () => void; onCamera: () => void; onQuickPass: () => void }) {
   const resultOpt = RESULT_OPTS.find(r => r.key === item.result);
   const isPending = item.result === "pending";
   const photoCount = item.photoUrls?.length || 0;
 
   return (
     <Pressable style={[styles.checkRow, isPending && styles.checkRowPending]} onPress={onPress}>
-      <View style={[styles.resultIndicator, { backgroundColor: resultOpt?.bg || "#f8fafc" }]}>
+      <Pressable
+        onPress={e => { e.stopPropagation?.(); onQuickPass(); }}
+        hitSlop={8}
+        style={({ pressed }) => [styles.resultIndicator, { backgroundColor: resultOpt?.bg || "#f8fafc", opacity: pressed ? 0.7 : 1 }]}
+      >
         <Feather
           name={resultOpt?.icon as any || "circle"}
           size={18}
           color={resultOpt?.color || Colors.textTertiary}
         />
-      </View>
+      </Pressable>
       <View style={styles.checkInfo}>
         <Text style={styles.checkDesc} numberOfLines={2}>{item.description}</Text>
         <View style={styles.checkMeta}>
