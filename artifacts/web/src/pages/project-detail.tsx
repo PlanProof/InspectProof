@@ -388,7 +388,7 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
                 { label: "Builder Name", name: "builderName", defaultValue: project.builderName },
                 { label: "Designer Name", name: "designerName", defaultValue: project.designerName },
                 { label: "DA Number", name: "daNumber", defaultValue: project.daNumber },
-                { label: "Certification Number", name: "certificationNumber", defaultValue: project.certificationNumber },
+                { label: "Certification / Development Application Number", name: "certificationNumber", defaultValue: project.certificationNumber },
                 { label: "Start Date", name: "startDate", defaultValue: project.startDate, type: "date" },
               ].map(f => (
                 <div key={f.name} className="space-y-1.5">
@@ -441,7 +441,7 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
               { label: "Designer", value: project.designerName || "—" },
               { label: "Project Type", value: project.projectType },
               { label: "DA Number", value: project.daNumber || "—" },
-              { label: "Certification Number", value: project.certificationNumber || "—" },
+              { label: "Certification / DA Number", value: project.certificationNumber || "—" },
               { label: "Stage", value: project.stage?.replace("_", " ") },
               { label: "Start Date", value: project.startDate ? formatDate(project.startDate) : "—" },
               { label: "Expected Completion", value: project.expectedCompletionDate ? formatDate(project.expectedCompletionDate) : "—" },
