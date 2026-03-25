@@ -38,7 +38,7 @@ export function Sidebar() {
           <rect x="10" y="21" width="20" height="2" rx="1" fill="#C5D92D"/>
           <rect x="10" y="26" width="20" height="2" rx="1" fill="#C5D92D"/>
         </svg>
-        <span className="text-[#F2F3F4] font-semibold text-base tracking-tight leading-none" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>InspectProof</span>
+        <span className="text-[#F2F3F4] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
       </div>
 
       <div className="flex flex-1 flex-col overflow-y-auto pt-6 px-4 pb-4">
