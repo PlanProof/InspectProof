@@ -104,8 +104,8 @@ function Hero() {
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
         <h1
-          className="text-3xl sm:text-4xl lg:text-5xl font-normal text-white leading-tight mb-6"
-          style={{ fontFamily: "'Unbounded', sans-serif" }}
+          className="text-4xl sm:text-5xl lg:text-6xl font-normal text-white leading-tight mb-6"
+          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
           Inspection records that
           <br />
@@ -219,8 +219,8 @@ function Features() {
             </span>
           </div>
           <h2
-            className="text-2xl sm:text-3xl font-normal text-[#0B1933] mb-4"
-            style={{ fontFamily: "'Unbounded', sans-serif" }}
+            className="text-3xl sm:text-4xl font-normal text-[#0B1933] mb-4"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             Everything you need in the field
           </h2>
@@ -307,8 +307,8 @@ function Professionals() {
             </span>
           </div>
           <h2
-            className="text-2xl sm:text-3xl font-normal text-white mb-4"
-            style={{ fontFamily: "'Unbounded', sans-serif" }}
+            className="text-3xl sm:text-4xl font-normal text-white mb-4"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             Supporting the professionals<br />who approve and certify Australia's buildings
           </h2>
@@ -339,8 +339,8 @@ function Professionals() {
               <p.icon className="h-6 w-6 text-[#C5D92D]" />
             </div>
             <h3
-              className="text-xl font-normal text-white mb-4"
-              style={{ fontFamily: "'Unbounded', sans-serif" }}
+              className="text-2xl font-normal text-white mb-4"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               {p.role}
             </h3>
@@ -404,8 +404,8 @@ function HowItWorks() {
             </span>
           </div>
           <h2
-            className="text-2xl sm:text-3xl font-normal text-[#0B1933] mb-4"
-            style={{ fontFamily: "'Unbounded', sans-serif" }}
+            className="text-3xl sm:text-4xl font-normal text-[#0B1933] mb-4"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             From site to certificate in four steps
           </h2>
@@ -419,7 +419,7 @@ function HowItWorks() {
           {steps.map((step) => (
             <div key={step.number} className="relative">
               <div className="relative z-10">
-                <div className="mb-4 text-4xl font-normal text-[#0B1933]/10" style={{ fontFamily: "'Unbounded', sans-serif" }}>
+                <div className="mb-4 text-4xl font-normal text-[#0B1933]/10" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   {step.number}
                 </div>
                 <div className="mb-3 h-0.5 w-12 bg-[#C5D92D]" />
@@ -450,8 +450,8 @@ function CTA() {
 
           <div className="relative">
             <h2
-              className="text-2xl sm:text-3xl font-normal text-white mb-4"
-              style={{ fontFamily: "'Unbounded', sans-serif" }}
+              className="text-3xl sm:text-4xl font-normal text-white mb-4"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               Ready to streamline your inspections?
             </h2>
