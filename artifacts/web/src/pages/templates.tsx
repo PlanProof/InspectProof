@@ -323,7 +323,7 @@ function TemplateDetail({
     );
   }
   if (!data) {
-    return <div className="flex-1 flex items-center justify-center text-muted-foreground">Template not found.</div>;
+    return <div className="flex-1 flex items-center justify-center text-muted-foreground">Checklist not found.</div>;
   }
 
   const meta = typeMeta(data.inspectionType);
@@ -355,7 +355,7 @@ function TemplateDetail({
                 value={templateName}
                 onChange={e => setTemplateName(e.target.value)}
                 className="w-full text-xl font-bold text-sidebar bg-transparent border-b-2 border-secondary outline-none py-0.5"
-                placeholder="Template name"
+                placeholder="Checklist name"
               />
               <input
                 value={templateDesc}
@@ -829,11 +829,11 @@ export default function Templates() {
     <AppLayout>
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-3xl font-bold text-sidebar tracking-tight">Templates</h1>
-          <p className="text-muted-foreground mt-1">Manage inspection checklist templates organised by NCC building classification.</p>
+          <h1 className="text-3xl font-bold text-sidebar tracking-tight">Checklists</h1>
+          <p className="text-muted-foreground mt-1">Manage inspection checklists organised by NCC building classification.</p>
         </div>
         <Button className="shadow-lg shadow-primary/20 gap-2">
-          <Plus className="h-4 w-4" /> New Template
+          <Plus className="h-4 w-4" /> New Checklist
         </Button>
       </div>
 
@@ -867,7 +867,7 @@ export default function Templates() {
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search templates…"
+                  placeholder="Search checklists…"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-2 text-sm rounded-md border border-muted/60 bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
@@ -882,7 +882,7 @@ export default function Templates() {
                 </div>
               )}
               {!isLoading && folderKeys.length === 0 && (
-                <div className="px-4 py-8 text-center text-sm text-muted-foreground">No templates found.</div>
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">No checklists found.</div>
               )}
 
               {folderKeys.map(folder => {
@@ -963,7 +963,7 @@ export default function Templates() {
             </div>
 
             <div className="border-t border-muted/50 px-4 py-2 text-xs text-muted-foreground flex items-center gap-2">
-              <span>{templates.length} templates</span>
+              <span>{templates.length} checklists</span>
               <span className="text-muted-foreground/40">·</span>
               <span>{folderKeys.length} classes</span>
               <span className="text-muted-foreground/40">·</span>
@@ -987,8 +987,8 @@ export default function Templates() {
               <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-4 px-8">
                 <ClipboardList className="h-14 w-14 opacity-20" />
                 <div className="text-center">
-                  <p className="font-semibold text-sidebar">Select a template</p>
-                  <p className="text-sm mt-1">Click any template to view and edit its checklist items.</p>
+                  <p className="font-semibold text-sidebar">Select a checklist</p>
+                  <p className="text-sm mt-1">Click any checklist to view and edit its items.</p>
                   <p className="text-xs mt-3 text-muted-foreground/70">Hover a row to reorder (↑↓) or duplicate it</p>
                 </div>
               </div>
