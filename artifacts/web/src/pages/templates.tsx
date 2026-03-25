@@ -22,6 +22,7 @@ const NCC_CLASSES: Record<string, string> = {
   "Class 6":   "Class 6 — Shop or commercial premises",
   "Class 7a":  "Class 7a — Carpark",
   "Class 7b":  "Class 7b — Storage or display of goods by wholesale",
+  "Class 7c":  "Class 7c — Storage or display of goods by retail",
   "Class 8":   "Class 8 — Laboratory or production/assembly building",
   "Class 9a":  "Class 9a — Health-care building",
   "Class 9b":  "Class 9b — Assembly building",
@@ -801,7 +802,8 @@ export default function Templates() {
 
   const classOrder = Object.keys(NCC_CLASSES);
   const folderKeys = [
-    ...classOrder.filter(f => grouped[f]),
+    // When not searching, always show all NCC classes (even empty); when searching, only show matching classes
+    ...classOrder.filter(f => !search || grouped[f] || NCC_CLASSES[f]?.toLowerCase().includes(search.toLowerCase())),
     ...Object.keys(grouped).filter(f => !classOrder.includes(f)),
   ];
 
@@ -910,6 +912,12 @@ export default function Templates() {
                     {isOpen && NCC_CLASSES[folder] && (
                       <div className="mx-4 mb-1 px-2 py-1 text-[10px] text-muted-foreground bg-muted/30 rounded italic leading-snug">
                         {NCC_CLASSES[folder]}
+                      </div>
+                    )}
+
+                    {isOpen && items.length === 0 && (
+                      <div className="pl-10 pr-4 py-2 text-xs text-muted-foreground/60 italic">
+                        No checklists — create one above
                       </div>
                     )}
 
