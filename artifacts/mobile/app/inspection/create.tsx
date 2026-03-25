@@ -44,6 +44,7 @@ export default function CreateInspectionScreen() {
   const [selectedInspection, setSelectedInspection] = useState<any>(null);
   const [selectedTemplate, setSelectedTemplate]     = useState<any>(null);
 
+  const [projectSearch, setProjectSearch]  = useState("");
   const [scheduledDate, setScheduledDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [scheduledTime, setScheduledTime] = useState("09:00");
   const [reason, setReason]               = useState("");
@@ -190,11 +191,41 @@ export default function CreateInspectionScreen() {
             <Text style={styles.stepSub}>
               Choose the project for this inspection, or start a standalone custom inspection.
             </Text>
+            {/* Search */}
+            <View style={styles.searchWrap}>
+              <Feather name="search" size={15} color={Colors.textTertiary} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                value={projectSearch}
+                onChangeText={setProjectSearch}
+                placeholder="Search projects…"
+                placeholderTextColor={Colors.textTertiary}
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+              />
+              {projectSearch.length > 0 && (
+                <Pressable onPress={() => setProjectSearch("")} hitSlop={10}>
+                  <Feather name="x-circle" size={15} color={Colors.textTertiary} />
+                </Pressable>
+              )}
+            </View>
+
             {loadingProjects ? (
               <ActivityIndicator color={Colors.secondary} style={{ marginTop: 32 }} />
             ) : (
               <View style={styles.cardList}>
-                {projects.filter((p: any) => p.status === "active").map((p: any) => (
+                {projects
+                  .filter((p: any) => p.status === "active")
+                  .filter((p: any) => {
+                    const q = projectSearch.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      p.name?.toLowerCase().includes(q) ||
+                      p.siteAddress?.toLowerCase().includes(q) ||
+                      p.suburb?.toLowerCase().includes(q)
+                    );
+                  })
+                  .map((p: any) => (
                   <Pressable
                     key={p.id}
                     style={[styles.projectCard, selectedProject?.id === p.id && mode === "project" && styles.cardSelected]}
@@ -212,6 +243,18 @@ export default function CreateInspectionScreen() {
                     )}
                   </Pressable>
                 ))}
+
+                {/* No results message */}
+                {projectSearch.trim().length > 0 &&
+                  projects.filter((p: any) => p.status === "active").filter((p: any) => {
+                    const q = projectSearch.trim().toLowerCase();
+                    return p.name?.toLowerCase().includes(q) || p.siteAddress?.toLowerCase().includes(q) || p.suburb?.toLowerCase().includes(q);
+                  }).length === 0 && (
+                  <View style={styles.searchEmpty}>
+                    <Feather name="search" size={16} color={Colors.textTertiary} />
+                    <Text style={styles.searchEmptyText}>No projects match "{projectSearch.trim()}"</Text>
+                  </View>
+                )}
 
                 {/* Custom Inspection option */}
                 <Pressable
@@ -532,6 +575,39 @@ const styles = StyleSheet.create({
   stepSub: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, lineHeight: 20 },
 
   cardList: { gap: 10 },
+
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+    height: 42,
+  },
+  searchIcon: { opacity: 0.6 },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+    height: 42,
+  },
+  searchEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  searchEmptyText: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+  },
 
   projectCard: {
     flexDirection: "row", alignItems: "center", gap: 12,
