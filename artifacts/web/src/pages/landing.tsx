@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Building2,
   Wrench,
-  HardHat,
   Droplets,
   BarChart3,
   MapPin,
@@ -279,18 +278,6 @@ function Features() {
 
 const PROFESSIONALS = [
   {
-    icon: HardHat,
-    role: "Building Certifiers",
-    description:
-      "Manage your entire certification practice from a single platform. Conduct structured inspections against NCC requirements, generate Certificates of Classification, and maintain a complete audit trail for every development you certify.",
-    bullets: [
-      "NCC-aligned inspection checklists for all 17 building classes",
-      "Certificate of inspection and occupancy report templates",
-      "Defect register and show-cause notice tracking",
-      "Full audit history per site and per inspector",
-    ],
-  },
-  {
     icon: Building2,
     role: "Structural Engineers",
     description:
@@ -318,7 +305,7 @@ const PROFESSIONALS = [
     icon: Wrench,
     role: "Private Certifiers & Surveyors",
     description:
-      "Handle the full volume of a private practice. InspectProof scales with your workload, giving you a professional system for every job — from minor works to Class 8 industrial.",
+      "Handle the full volume of a private practice. InspectProof scales with your workload, giving you a professional system for every job — from minor works to complex developments.",
     bullets: [
       "Unlimited projects and inspection records",
       "Multi-inspector team with role-based access",
@@ -451,11 +438,8 @@ function HowItWorks() {
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {steps.map((step, i) => (
+          {steps.map((step) => (
             <div key={step.number} className="relative">
-              {i < steps.length - 1 && (
-                <div className="hidden lg:block absolute top-6 left-full w-full h-px bg-gradient-to-r from-[#466DB5]/40 to-transparent z-0" />
-              )}
               <div className="relative z-10">
                 <div className="mb-4 text-4xl font-bold text-[#0B1933]/10" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   {step.number}
