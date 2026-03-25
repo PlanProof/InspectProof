@@ -40,11 +40,28 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const data = req.body;
+
+    // Resolve author from Authorization header if not provided
+    let authorId = data.authorId;
+    if (!authorId) {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith("Bearer ")) {
+        const decoded = Buffer.from(authHeader.slice(7), "base64").toString("utf-8");
+        const parsedId = parseInt(decoded.split(":")[0]);
+        if (!isNaN(parsedId)) authorId = parsedId;
+      }
+    }
+
+    if (!authorId) {
+      res.status(400).json({ error: "bad_request", message: "Author required" });
+      return;
+    }
+
     const [note] = await db.insert(notesTable).values({
       projectId: data.projectId,
       inspectionId: data.inspectionId,
       content: data.content,
-      authorId: data.authorId,
+      authorId,
     }).returning();
 
     let authorName = "Unknown";

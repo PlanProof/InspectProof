@@ -636,7 +636,89 @@ function OverviewTab({
   templates: ChecklistTemplate[];
   onReload: () => void;
 }) {
-  // Inspector assignment state
+  // ── Pre-inspection Details edit state ──
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [detailForm, setDetailForm] = useState({
+    status: inspection.status,
+    scheduledDate: inspection.scheduledDate,
+    scheduledTime: inspection.scheduledTime ?? "",
+    completedDate: inspection.completedDate ?? "",
+    duration: inspection.duration ? String(inspection.duration) : "",
+    weatherConditions: inspection.weatherConditions ?? "",
+  });
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [detailsSaved, setDetailsSaved] = useState(false);
+  const [detailsError, setDetailsError] = useState("");
+
+  const saveDetails = async () => {
+    setSavingDetails(true);
+    setDetailsError("");
+    try {
+      await apiFetch(`/api/inspections/${inspection.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: detailForm.status,
+          scheduledDate: detailForm.scheduledDate,
+          scheduledTime: detailForm.scheduledTime || null,
+          completedDate: detailForm.completedDate || null,
+          duration: detailForm.duration ? parseInt(detailForm.duration) : null,
+          weatherConditions: detailForm.weatherConditions || null,
+        }),
+      });
+      setEditingDetails(false);
+      setDetailsSaved(true);
+      onReload();
+      setTimeout(() => setDetailsSaved(false), 3000);
+    } catch {
+      setDetailsError("Failed to save. Please try again.");
+    } finally {
+      setSavingDetails(false);
+    }
+  };
+
+  const cancelDetailsEdit = () => {
+    setDetailForm({
+      status: inspection.status,
+      scheduledDate: inspection.scheduledDate,
+      scheduledTime: inspection.scheduledTime ?? "",
+      completedDate: inspection.completedDate ?? "",
+      duration: inspection.duration ? String(inspection.duration) : "",
+      weatherConditions: inspection.weatherConditions ?? "",
+    });
+    setDetailsError("");
+    setEditingDetails(false);
+  };
+
+  // ── Preliminary note state ──
+  const [noteText, setNoteText] = useState("");
+  const [addingNote, setAddingNote] = useState(false);
+  const [noteSaved, setNoteSaved] = useState(false);
+
+  const submitNote = async () => {
+    if (!noteText.trim()) return;
+    setAddingNote(true);
+    try {
+      await apiFetch("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inspectionId: inspection.id,
+          projectId: inspection.projectId,
+          content: noteText.trim(),
+        }),
+      });
+      setNoteText("");
+      setNoteSaved(true);
+      onReload();
+      setTimeout(() => setNoteSaved(false), 3000);
+    } catch {
+    } finally {
+      setAddingNote(false);
+    }
+  };
+
+  // ── Inspector assignment state ──
   const [assigningInspector, setAssigningInspector] = useState(false);
   const [selectedInspectorId, setSelectedInspectorId] = useState<string>(
     inspection.inspectorId ? String(inspection.inspectorId) : ""
@@ -717,28 +799,174 @@ function OverviewTab({
       {/* ── Left (main) column ── */}
       <div className="lg:col-span-2 space-y-6">
 
-        {/* Inspection Details */}
+        {/* ── Pre-Inspection Details Card ── */}
         <div className="bg-card border border-border rounded-xl p-6">
-          <h2 className="font-semibold text-sidebar mb-4 flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" /> Inspection Details
-          </h2>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-            {[
-              { label: "Project", value: inspection.projectName },
-              { label: "Type", value: inspection.inspectionType.replace(/_/g, " ") },
-              { label: "Status", value: inspection.status.replace(/_/g, " ") },
-              { label: "Scheduled Date", value: formatDate(inspection.scheduledDate) },
-              { label: "Scheduled Time", value: inspection.scheduledTime ?? "TBC" },
-              { label: "Completed Date", value: inspection.completedDate ? formatDate(inspection.completedDate) : "—" },
-              { label: "Duration", value: inspection.duration ? `${inspection.duration} minutes` : "—" },
-              { label: "Weather", value: inspection.weatherConditions ?? "—" },
-            ].map(({ label, value }) => (
-              <div key={label}>
-                <div className="text-xs text-muted-foreground mb-0.5">{label}</div>
-                <div className="font-medium text-sidebar capitalize">{value}</div>
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-sidebar flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" /> Inspection Details
+            </h2>
+            <div className="flex items-center gap-2">
+              {detailsSaved && !editingDetails && (
+                <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+                </span>
+              )}
+              {!editingDetails && (
+                <button
+                  onClick={() => setEditingDetails(true)}
+                  className="text-xs text-secondary hover:text-secondary/80 font-medium flex items-center gap-1 transition-colors"
+                >
+                  <PencilLine className="h-3.5 w-3.5" /> Edit Details
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Static read view */}
+          {!editingDetails && (
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+              {[
+                { label: "Project", value: inspection.projectName },
+                { label: "Type", value: inspection.inspectionType.replace(/_/g, " ") },
+                { label: "Status", value: inspection.status.replace(/_/g, " ") },
+                { label: "Scheduled Date", value: formatDate(inspection.scheduledDate) },
+                { label: "Scheduled Time", value: inspection.scheduledTime ?? "TBC" },
+                { label: "Completed Date", value: inspection.completedDate ? formatDate(inspection.completedDate) : "—" },
+                { label: "Duration", value: inspection.duration ? `${inspection.duration} min` : "—" },
+                { label: "Weather", value: inspection.weatherConditions ?? "—" },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <div className="text-xs text-muted-foreground mb-0.5">{label}</div>
+                  <div className="font-medium text-sidebar capitalize">{value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Edit form */}
+          {editingDetails && (
+            <div className="space-y-4">
+              {/* Status */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Status</label>
+                  <select
+                    value={detailForm.status}
+                    onChange={e => setDetailForm(f => ({ ...f, status: e.target.value }))}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="scheduled">Scheduled</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="failed">Failed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Completed Date</label>
+                  <input
+                    type="date"
+                    value={detailForm.completedDate}
+                    onChange={e => setDetailForm(f => ({ ...f, completedDate: e.target.value }))}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </div>
+              </div>
+
+              {/* Date + Time */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Scheduled Date</label>
+                  <input
+                    type="date"
+                    value={detailForm.scheduledDate}
+                    onChange={e => setDetailForm(f => ({ ...f, scheduledDate: e.target.value }))}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Scheduled Time</label>
+                  <input
+                    type="time"
+                    value={detailForm.scheduledTime}
+                    onChange={e => setDetailForm(f => ({ ...f, scheduledTime: e.target.value }))}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </div>
+              </div>
+
+              {/* Duration + Weather */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Duration
+                    <span className="ml-1 font-normal text-muted-foreground/70">(minutes)</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={1}
+                      max={600}
+                      placeholder="e.g. 90"
+                      value={detailForm.duration}
+                      onChange={e => setDetailForm(f => ({ ...f, duration: e.target.value }))}
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring pr-12"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">min</span>
+                  </div>
+                  {detailForm.duration && (
+                    <p className="text-xs text-muted-foreground">
+                      = {Math.floor(parseInt(detailForm.duration) / 60)}h {parseInt(detailForm.duration) % 60}m
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Weather Conditions</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Fine, 22°C"
+                    value={detailForm.weatherConditions}
+                    onChange={e => setDetailForm(f => ({ ...f, weatherConditions: e.target.value }))}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  {/* Quick weather picks */}
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {["Fine", "Partly Cloudy", "Overcast", "Light Rain", "Heavy Rain", "Windy"].map(w => (
+                      <button
+                        key={w}
+                        type="button"
+                        onClick={() => setDetailForm(f => ({ ...f, weatherConditions: f.weatherConditions ? `${f.weatherConditions}, ${w}` : w }))}
+                        className="text-xs px-2 py-0.5 rounded-full border border-border hover:border-secondary/50 hover:bg-secondary/8 text-muted-foreground hover:text-secondary transition-colors"
+                      >
+                        {w}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {detailsError && (
+                <p className="text-xs text-red-500">{detailsError}</p>
+              )}
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={saveDetails}
+                  disabled={savingDetails}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-sidebar text-white hover:bg-sidebar/90 disabled:opacity-50 transition-colors"
+                >
+                  {savingDetails ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                  Save Details
+                </button>
+                <button
+                  onClick={cancelDetailsEdit}
+                  className="text-sm text-muted-foreground hover:text-sidebar transition-colors px-2 py-2"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Inspector Assignment Card ── */}
@@ -891,13 +1119,18 @@ function OverviewTab({
           </div>
         </div>
 
-        {/* Field Notes */}
-        {inspection.notes.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6">
-            <h2 className="font-semibold text-sidebar mb-4 flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-muted-foreground" /> Field Notes
-            </h2>
-            <div className="space-y-3">
+        {/* Field Notes + Note Composer */}
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h2 className="font-semibold text-sidebar mb-4 flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-muted-foreground" /> Field Notes
+          </h2>
+
+          {inspection.notes.length === 0 && (
+            <p className="text-sm text-muted-foreground mb-4">No notes yet. Add a preliminary observation below.</p>
+          )}
+
+          {inspection.notes.length > 0 && (
+            <div className="space-y-3 mb-5">
               {inspection.notes.map(note => (
                 <div key={note.id} className="bg-muted/30 rounded-lg p-4 border border-muted/50">
                   <p className="text-sm text-sidebar leading-relaxed">{note.content}</p>
@@ -910,8 +1143,43 @@ function OverviewTab({
                 </div>
               ))}
             </div>
+          )}
+
+          {/* Inline note composer */}
+          <div className="border-t border-border/50 pt-4 space-y-2">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Send className="h-3 w-3" /> Add a note or preliminary observation
+            </label>
+            <textarea
+              value={noteText}
+              onChange={e => setNoteText(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitNote(); }}
+              placeholder="e.g. Site access confirmed. Builder's rep on-site. Will review drawings before commencing…"
+              rows={3}
+              className="w-full text-sm border border-input rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-secondary/30 bg-background leading-relaxed placeholder:text-muted-foreground/60"
+            />
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Tip: <kbd className="px-1 py-0.5 text-xs border border-border rounded bg-muted">⌘↵</kbd> to submit quickly
+              </p>
+              <div className="flex items-center gap-2">
+                {noteSaved && (
+                  <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Note added
+                  </span>
+                )}
+                <button
+                  onClick={submitNote}
+                  disabled={!noteText.trim() || addingNote}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-sidebar text-white hover:bg-sidebar/90 disabled:opacity-40 transition-colors"
+                >
+                  {addingNote ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  Add Note
+                </button>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* ── Right sidebar ── */}
