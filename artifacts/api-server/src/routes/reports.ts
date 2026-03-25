@@ -3,11 +3,13 @@ import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 
-const FONT_DIR = path.join(__dirname, "..", "fonts");
+const FONT_DIR     = path.join(__dirname, "..", "fonts");
 const FONT_REGULAR = path.join(FONT_DIR, "PlusJakartaSans-Regular.ttf");
 const FONT_BOLD    = path.join(FONT_DIR, "PlusJakartaSans-Bold.ttf");
-const F = "PJS";
-const FB = "PJS-Bold";
+const FONT_ODDLINI = path.join(FONT_DIR, "Oddlini-Medium.ttf");
+const F        = "PJS";
+const FB       = "PJS-Bold";
+const FODDLINI = "Oddlini";
 import {
   db, reportsTable, projectsTable, inspectionsTable, issuesTable,
   usersTable, checklistResultsTable, checklistItemsTable,
@@ -395,37 +397,45 @@ function addPageHeader(doc: PDFKit.PDFDocument, typeLabel: string) {
   doc.rect(0, 0, pageW, 68).fill(COLOR_NAVY);
   doc.rect(0, 68, pageW, 4).fill(COLOR_PEAR);
 
-  // ── Logo badge (pear rounded rect with "IP") ─────────────────────────────
+  // ── Logo badge — pear rounded square matching the landing page icon ───────
   const badgeX = MARGIN;
-  const badgeY = 15;
-  const badgeW = 36;
-  const badgeH = 38;
-  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 5).fill(COLOR_PEAR);
+  const badgeY = 14;
+  const badgeS = 40; // square
+  doc.roundedRect(badgeX, badgeY, badgeS, badgeS, 6).fill(COLOR_PEAR);
 
-  // Vertical bar accent inside badge (left edge)
-  doc.rect(badgeX + 5, badgeY + 6, 3, badgeH - 12).fill(COLOR_NAVY);
+  // Clipboard body (navy) — sits inside the pear badge
+  const cbX = badgeX + 7;
+  const cbY = badgeY + 11;
+  const cbW = badgeS - 14;
+  const cbH = badgeS - 15;
+  doc.roundedRect(cbX, cbY, cbW, cbH, 2).fill(COLOR_NAVY);
 
-  // "IP" centred in badge
-  doc.fillColor(COLOR_NAVY).fontSize(13).font(FB)
-    .text("IP", badgeX + 8, badgeY + 12, { width: badgeW - 8, align: "center", lineBreak: false });
+  // Clip at top centre (navy, overlapping top edge of body)
+  const clipW = 10;
+  const clipH = 5;
+  const clipX = badgeX + (badgeS - clipW) / 2;
+  const clipY = badgeY + 7;
+  doc.roundedRect(clipX, clipY, clipW, clipH, 1.5).fill(COLOR_NAVY);
 
-  // ── Brand text ────────────────────────────────────────────────────────────
-  const textX = badgeX + badgeW + 9;
-  doc.fillColor("#ffffff").fontSize(15).font(FB)
-    .text("InspectProof", textX, 19, { lineBreak: false });
-  doc.fillColor(COLOR_PEAR).fontSize(7.5).font(F)
-    .text("Certification & Inspection Platform", textX, 40, { lineBreak: false });
+  // Three list lines (pear) inside the clipboard body
+  const lineX = cbX + 3;
+  const lineW = cbW - 6;
+  for (let i = 0; i < 3; i++) {
+    doc.rect(lineX, cbY + 4 + i * 5, lineW, 1.5).fill(COLOR_PEAR);
+  }
+
+  // ── Brand name — Oddlini, centred vertically in the 68px bar ─────────────
+  const textX = badgeX + badgeS + 10;
+  doc.fillColor("#ffffff").fontSize(16).font(FODDLINI)
+    .text("InspectProof", textX, 25, { lineBreak: false });
 
   // ── Report type label (right-aligned) ────────────────────────────────────
-  doc.fillColor("rgba(255,255,255,0.75)").fontSize(7.5).font(FB)
+  doc.fillColor("rgba(255,255,255,0.6)").fontSize(7.5).font(F)
     .text(typeLabel.toUpperCase(), 0, 28, { align: "right", width: pageW - MARGIN, lineBreak: false });
 
   doc.restore();
 
-  // ── CRITICAL: reset cursor below the header ───────────────────────────────
-  // doc.save()/restore() preserves PDF graphics state but NOT the JS cursor.
-  // Without this, content starts at wherever the last text() call landed (~y=28),
-  // which is inside the navy bar and causes text/header overlap.
+  // ── Reset cursor below the header ────────────────────────────────────────
   doc.x = MARGIN;
   doc.y = CONTENT_TOP;
 }
@@ -452,8 +462,9 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
     info: { Title: report.title || "Report", Author: "InspectProof" },
   });
 
-  doc.registerFont(F,  FONT_REGULAR);
-  doc.registerFont(FB, FONT_BOLD);
+  doc.registerFont(F,        FONT_REGULAR);
+  doc.registerFont(FB,       FONT_BOLD);
+  doc.registerFont(FODDLINI, FONT_ODDLINI);
 
   const pageW = doc.page.width;
   const contentW = pageW - MARGIN * 2;
