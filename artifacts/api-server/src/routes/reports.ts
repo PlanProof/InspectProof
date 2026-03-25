@@ -202,7 +202,7 @@ Inspector Signature: {{SIGNATURE}}
 Name: ${inspector ? `${inspector.firstName} ${inspector.lastName}` : "—"}
 Date: ${formatDate(inspection?.completedDate || new Date().toISOString().split("T")[0])}
 
-This document is issued by InspectProof Certification Services.
+This document is issued by InspectProof.
 `;
 
   return content;
@@ -471,7 +471,7 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
   doc.rect(0, pageH - FOOTER_H, pageW, FOOTER_H).fill(COLOR_NAVY);
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
     .text(
-      `InspectProof Certification Services  ·  Confidential  ·  Page ${pageNum} of ${totalPages}`,
+      `InspectProof  ·  Confidential  ·  Page ${pageNum} of ${totalPages}`,
       MARGIN, pageH - FOOTER_H + 15,
       { align: "center", width: pageW - MARGIN * 2 },
     );
