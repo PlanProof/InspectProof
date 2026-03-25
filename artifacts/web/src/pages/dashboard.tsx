@@ -318,9 +318,9 @@ function DayRunSheet({ day, inspections }: { day: Date; inspections: any[] }) {
   const assignedInspectors = [...new Set(dayInspections.filter(i => i.inspectorName).map(i => i.inspectorName as string))];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Header */}
-      <div className="px-5 pt-4 pb-3 border-b border-muted/50">
+      <div className="px-5 pt-4 pb-3 border-b border-muted/50 shrink-0">
         <div className="flex items-center gap-2 mb-0.5">
           <CalendarDays className="h-4 w-4 text-secondary" />
           <h3 className="font-bold text-sidebar text-base">{dayLabel}</h3>
@@ -354,7 +354,7 @@ function DayRunSheet({ day, inspections }: { day: Date; inspections: any[] }) {
       />
 
       {/* Inspection list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {dayInspections.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-10 text-center px-5">
             <Calendar className="h-10 w-10 text-muted-foreground/25 mb-3" />
@@ -429,7 +429,7 @@ function DayRunSheet({ day, inspections }: { day: Date; inspections: any[] }) {
       </div>
 
       {/* Footer link + Send button */}
-      <div className="border-t border-muted/50 px-4 py-3 flex items-center justify-between gap-2">
+      <div className="border-t border-muted/50 px-4 py-3 flex items-center justify-between gap-2 shrink-0">
         <Link href="/inspections" className="flex items-center gap-1.5 text-xs font-medium text-secondary hover:underline">
           View all inspections <ArrowRight className="h-3.5 w-3.5" />
         </Link>
@@ -479,9 +479,9 @@ function CalendarWidget({
   }
 
   return (
-    <div className="flex flex-col gap-0">
+    <div className="flex flex-col h-full">
       {/* Month nav */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-3">
+      <div className="flex items-center justify-between px-5 pt-4 pb-3 shrink-0">
         <button
           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
           className="p-1.5 rounded-md hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground"
@@ -500,7 +500,7 @@ function CalendarWidget({
       </div>
 
       {/* Day-of-week headers */}
-      <div className="grid grid-cols-7 border-t border-b border-muted/50">
+      <div className="grid grid-cols-7 border-t border-b border-muted/50 shrink-0">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => (
           <div key={d} className="py-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             {d}
@@ -508,8 +508,8 @@ function CalendarWidget({
         ))}
       </div>
 
-      {/* Calendar grid */}
-      <div className="grid grid-cols-7">
+      {/* Calendar grid — flex-1 so it fills remaining card height; auto-rows-fr distributes rows evenly */}
+      <div className="grid grid-cols-7 auto-rows-fr flex-1 min-h-0">
         {weeks.map((week, wi) =>
           week.map((d, di) => {
             const dayInspections = inspectionsOn(d);
@@ -522,7 +522,7 @@ function CalendarWidget({
                 key={`${wi}-${di}`}
                 onClick={() => onDaySelect(d)}
                 className={[
-                  "relative flex flex-col items-center pt-2 pb-1.5 min-h-[56px] border-b border-r border-muted/40 transition-colors",
+                  "relative flex flex-col items-center pt-2 pb-1.5 border-b border-r border-muted/40 transition-colors",
                   di === 0 ? "border-l" : "",
                   isSelected ? "bg-primary/[0.07] ring-inset ring-1 ring-primary/20" : "hover:bg-muted/30",
                   !isCurrentMonth ? "opacity-35" : "",
@@ -583,10 +583,10 @@ export default function Dashboard() {
         <StatCard title="Reports Pending" value={data.reportsPending} icon={FileText} trend="Requires review" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:h-[600px]">
         {/* Calendar */}
-        <Card className="lg:col-span-2 shadow-md border-muted/60 overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 border-b">
+        <Card className="lg:col-span-2 shadow-md border-muted/60 overflow-hidden flex flex-col">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 border-b shrink-0">
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <CardTitle>Inspection Calendar</CardTitle>
@@ -595,7 +595,7 @@ export default function Dashboard() {
               View all <ArrowRight className="ml-1 h-4 w-4" />
             </Link>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 flex-1 overflow-hidden flex flex-col min-h-0">
             <CalendarWidget
               inspections={allInspections}
               selectedDay={selectedDay}
@@ -606,11 +606,11 @@ export default function Dashboard() {
 
         {/* Day Run Sheet (right panel) */}
         <Card className="shadow-md border-muted/60 overflow-hidden flex flex-col">
-          <CardHeader className="pb-2 border-b flex flex-row items-center gap-2">
+          <CardHeader className="pb-2 border-b flex flex-row items-center gap-2 shrink-0">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
             <CardTitle>Day Run Sheet</CardTitle>
           </CardHeader>
-          <CardContent className="p-0 flex-1 overflow-hidden flex flex-col">
+          <CardContent className="p-0 flex-1 overflow-hidden flex flex-col min-h-0">
             {selectedDay ? (
               <DayRunSheet day={selectedDay} inspections={allInspections} />
             ) : (
