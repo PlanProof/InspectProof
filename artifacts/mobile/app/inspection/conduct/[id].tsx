@@ -178,20 +178,19 @@ export default function ConductInspectionScreen() {
 
   const takePhoto = async () => {
     if (!activeItem) return;
+    await takePhotoForItem(activeItem);
+  };
+
+  const takePhotoForItem = async (item: ChecklistItem) => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
       Alert.alert("Permission needed", "Please allow camera access to take photos.");
       return;
     }
-
-    const picked = await ImagePicker.launchCameraAsync({
-      quality: 0.8,
-    });
-
+    const picked = await ImagePicker.launchCameraAsync({ quality: 0.8 });
     if (picked.canceled || !picked.assets[0]) return;
-    const itemId = activeItem.id;
-    closeModal();
-    navigateToMarkup(picked.assets[0].uri, itemId);
+    if (activeItem) closeModal();
+    navigateToMarkup(picked.assets[0].uri, item.id);
   };
 
   const removePhoto = async (photoPath: string) => {
@@ -336,7 +335,7 @@ export default function ConductInspectionScreen() {
                 </Text>
               </View>
               {items.map(item => (
-                <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} />
+                <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} />
               ))}
             </View>
           ))
@@ -373,10 +372,10 @@ export default function ConductInspectionScreen() {
   );
 }
 
-function ChecklistRow({ item, onPress }: { item: ChecklistItem; onPress: () => void }) {
+function ChecklistRow({ item, onPress, onCamera }: { item: ChecklistItem; onPress: () => void; onCamera: () => void }) {
   const resultOpt = RESULT_OPTS.find(r => r.key === item.result);
   const isPending = item.result === "pending";
-  const hasPhotos = (item.photoUrls?.length || 0) > 0;
+  const photoCount = item.photoUrls?.length || 0;
 
   return (
     <Pressable style={[styles.checkRow, isPending && styles.checkRowPending]} onPress={onPress}>
@@ -396,12 +395,6 @@ function ChecklistRow({ item, onPress }: { item: ChecklistItem; onPress: () => v
             </View>
           )}
           <RiskBadge risk={item.riskLevel} />
-          {hasPhotos && (
-            <View style={styles.photoBadge}>
-              <Feather name="camera" size={10} color={Colors.secondary} />
-              <Text style={styles.photoBadgeText}>{item.photoUrls!.length}</Text>
-            </View>
-          )}
           {item.notes && (
             <View style={styles.notesBadge}>
               <Feather name="file-text" size={10} color={Colors.textSecondary} />
@@ -409,7 +402,22 @@ function ChecklistRow({ item, onPress }: { item: ChecklistItem; onPress: () => v
           )}
         </View>
       </View>
-      <Feather name="chevron-right" size={16} color={Colors.textTertiary} />
+
+      {/* Camera quick-action button */}
+      <Pressable
+        onPress={e => { e.stopPropagation?.(); onCamera(); }}
+        hitSlop={10}
+        style={({ pressed }) => [styles.cameraBtn, pressed && { opacity: 0.6 }]}
+      >
+        <Feather name="camera" size={15} color={photoCount > 0 ? Colors.secondary : Colors.textTertiary} />
+        {photoCount > 0 && (
+          <View style={styles.cameraBadge}>
+            <Text style={styles.cameraBadgeText}>{photoCount}</Text>
+          </View>
+        )}
+      </Pressable>
+
+      <Feather name="chevron-right" size={16} color={Colors.textTertiary} style={{ marginLeft: 2 }} />
     </Pressable>
   );
 }
@@ -672,6 +680,28 @@ const styles = StyleSheet.create({
   photoBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: Colors.infoLight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   photoBadgeText: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   notesBadge: { backgroundColor: Colors.background, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  cameraBtn: {
+    position: "relative",
+    padding: 6,
+    marginLeft: 4,
+    borderRadius: 8,
+    backgroundColor: Colors.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cameraBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+  },
+  cameraBadgeText: { fontSize: 9, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
 });
 
 const modalStyles = StyleSheet.create({
