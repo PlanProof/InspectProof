@@ -401,6 +401,7 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
                 { label: "DA Number", name: "daNumber", defaultValue: project.daNumber },
                 { label: "Certification / Development Application Number", name: "certificationNumber", defaultValue: project.certificationNumber },
                 { label: "Start Date", name: "startDate", defaultValue: project.startDate, type: "date" },
+                { label: "Expected Completion", name: "expectedCompletionDate", defaultValue: project.expectedCompletionDate, type: "date" },
               ].map(f => (
                 <div key={f.name} className="space-y-1.5">
                   <Label className="text-xs">{f.label}</Label>
