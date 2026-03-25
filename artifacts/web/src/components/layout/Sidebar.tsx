@@ -30,10 +30,10 @@ export function Sidebar() {
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl">
       <div className="flex h-16 shrink-0 items-center px-5 gap-3 border-b border-white/10">
-        <div className="flex items-center justify-center w-8 h-8 rounded-md bg-brand-pear shrink-0">
-          <span className="text-sidebar font-black text-sm leading-none">IP</span>
+        <div className="flex items-center justify-center w-8 h-8 rounded-md bg-[#466DB5] shrink-0">
+          <span className="text-[#F2F3F4] font-black text-sm leading-none">IP</span>
         </div>
-        <span className="text-white font-semibold text-base tracking-tight leading-none" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>InspectProof</span>
+        <span className="text-[#F2F3F4] font-semibold text-base tracking-tight leading-none" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>InspectProof</span>
       </div>
 
       <div className="flex flex-1 flex-col overflow-y-auto pt-6 px-4 pb-4">

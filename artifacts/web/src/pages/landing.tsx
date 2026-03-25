@@ -35,10 +35,10 @@ function Header() {
         <div className="relative flex h-14 items-center rounded-2xl bg-white px-5 shadow-lg shadow-black/8">
           {/* Logo */}
           <div className="flex flex-1 items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#0B1933]">
-              <ClipboardList className="h-5 w-5 text-[#C5D92D]" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#466DB5]">
+              <ClipboardList className="h-5 w-5 text-[#F2F3F4]" />
             </div>
-            <span className="text-[22px] text-[#0B1933] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>
+            <span className="text-[22px] text-[#466DB5] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>
               InspectProof
             </span>
           </div>
@@ -484,10 +484,10 @@ function Footer() {
           {/* Brand + pitch */}
           <div className="max-w-sm">
             <div className="flex items-center gap-2 mb-4">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#C5D92D]">
-                <ClipboardList className="h-4 w-4 text-[#0B1933]" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#F2F3F4]">
+                <ClipboardList className="h-4 w-4 text-[#466DB5]" />
               </div>
-              <span className="text-base text-white" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em" }}>
+              <span className="text-base text-[#F2F3F4]" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em" }}>
                 InspectProof
               </span>
             </div>
