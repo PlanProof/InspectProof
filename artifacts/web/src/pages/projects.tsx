@@ -127,6 +127,7 @@ function NewProjectDialog({ open, onOpenChange, onSuccess }: { open: boolean, on
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const daNumber = (fd.get('daNumber') as string)?.trim();
     mutation.mutate({
       data: {
         name: fd.get('name') as string,
@@ -137,6 +138,7 @@ function NewProjectDialog({ open, onOpenChange, onSuccess }: { open: boolean, on
         clientName: fd.get('clientName') as string,
         buildingClassification: fd.get('buildingClassification') as string,
         projectType: fd.get('projectType') as any,
+        ...(daNumber ? { daNumber } : {}),
       }
     });
   };
@@ -188,7 +190,19 @@ function NewProjectDialog({ open, onOpenChange, onSuccess }: { open: boolean, on
               <Input name="buildingClassification" required placeholder="e.g. Class 1a" />
             </div>
           </div>
-          <div className="flex justify-end gap-2 pt-4">
+
+          <div className="border-t pt-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Application Details</p>
+            <div className="space-y-2 max-w-sm">
+              <Label>
+                Development Application Number
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input name="daNumber" placeholder="e.g. DA2024/1234" />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={mutation.isPending}>
               {mutation.isPending ? "Creating..." : "Create Project"}
