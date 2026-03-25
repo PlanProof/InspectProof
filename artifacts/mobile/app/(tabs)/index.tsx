@@ -389,9 +389,15 @@ function ScheduleTimeline({
     ? "Tomorrow"
     : new Date(selectedDate + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" });
 
-  const sorted = useMemo(() => {
-    return [...inspections].sort((a, b) => a.displayTime.localeCompare(b.displayTime));
+  const { active, completed } = useMemo(() => {
+    const all = [...inspections].sort((a, b) => a.displayTime.localeCompare(b.displayTime));
+    return {
+      active:    all.filter(i => i.status !== "completed" && i.status !== "cancelled"),
+      completed: all.filter(i => i.status === "completed" || i.status === "cancelled"),
+    };
   }, [inspections]);
+
+  const sorted = [...active, ...completed];
 
   if (sorted.length === 0) {
     return (
@@ -419,7 +425,7 @@ function ScheduleTimeline({
       <View style={tlStyles.headerRow}>
         <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
           <Text style={tlStyles.dateLabel}>{dateLabel}</Text>
-          <Text style={tlStyles.countLabel}>{sorted.length} inspection{sorted.length !== 1 ? "s" : ""}</Text>
+          <Text style={tlStyles.countLabel}>{active.length} inspection{active.length !== 1 ? "s" : ""}</Text>
         </View>
         <Pressable
           onPress={onToggleShift}
@@ -445,17 +451,49 @@ function ScheduleTimeline({
         </View>
       )}
 
-      <View style={tlStyles.list}>
-        {sorted.map((insp, idx) => (
-          <DraggableCard
-            key={insp.id}
-            insp={insp}
-            isLast={idx === sorted.length - 1}
-            shiftMode={shiftMode}
-            onTimeChange={onTimeChange}
-          />
-        ))}
-      </View>
+      {/* Active inspections */}
+      {active.length > 0 && (
+        <View style={tlStyles.list}>
+          {active.map((insp, idx) => (
+            <DraggableCard
+              key={insp.id}
+              insp={insp}
+              isLast={idx === active.length - 1}
+              shiftMode={shiftMode}
+              onTimeChange={onTimeChange}
+            />
+          ))}
+        </View>
+      )}
+
+      {active.length === 0 && !shiftMode && (
+        <View style={tlStyles.allDoneBox}>
+          <Feather name="check-circle" size={15} color={Colors.success} />
+          <Text style={tlStyles.allDoneText}>All done for {dateLabel.toLowerCase()}!</Text>
+        </View>
+      )}
+
+      {/* Completed section */}
+      {completed.length > 0 && (
+        <View style={tlStyles.completedSection}>
+          <View style={tlStyles.completedHeader}>
+            <Feather name="check-circle" size={13} color={Colors.success} />
+            <Text style={tlStyles.completedHeading}>Completed</Text>
+            <Text style={tlStyles.completedCount}>{completed.length}</Text>
+          </View>
+          <View style={tlStyles.list}>
+            {completed.map((insp, idx) => (
+              <DraggableCard
+                key={insp.id}
+                insp={insp}
+                isLast={idx === completed.length - 1}
+                shiftMode={shiftMode}
+                onTimeChange={onTimeChange}
+              />
+            ))}
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -578,6 +616,22 @@ const tlStyles = StyleSheet.create({
   emptySub: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, textAlign: "center", maxWidth: 240 },
   emptyBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, backgroundColor: Colors.accent, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10 },
   emptyBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  allDoneBox: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+    backgroundColor: Colors.successLight,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
+  },
+  allDoneText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.success },
+  completedSection: { gap: 10, marginTop: 6 },
+  completedHeader: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+  },
+  completedHeading: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  completedCount: {
+    fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.success,
+    backgroundColor: Colors.successLight,
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5,
+  },
 });
 
 export default function HomeScreen() {
