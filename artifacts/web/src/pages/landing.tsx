@@ -103,13 +103,6 @@ function Hero() {
       </div>
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[#C5D92D]/30 bg-[#C5D92D]/10 px-4 py-1.5 mb-8">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#C5D92D]" />
-          <span className="text-xs font-medium text-[#C5D92D] tracking-wide uppercase">
-            Built for Australian Building Professionals
-          </span>
-        </div>
-
         <h1
           className="text-4xl sm:text-5xl lg:text-6xl font-normal text-white leading-tight mb-6"
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
