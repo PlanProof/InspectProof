@@ -156,7 +156,8 @@ router.get("/:id", async (req, res) => {
       item: checklistItemsTable,
     }).from(checklistResultsTable)
       .innerJoin(checklistItemsTable, eq(checklistResultsTable.checklistItemId, checklistItemsTable.id))
-      .where(eq(checklistResultsTable.inspectionId, id));
+      .where(eq(checklistResultsTable.inspectionId, id))
+      .orderBy(checklistItemsTable.orderIndex);
 
     const formattedResults = checklistResults.map(r => ({
       id: r.result.id,
@@ -275,7 +276,8 @@ router.get("/:id/checklist", async (req, res) => {
       item: checklistItemsTable,
     }).from(checklistResultsTable)
       .innerJoin(checklistItemsTable, eq(checklistResultsTable.checklistItemId, checklistItemsTable.id))
-      .where(eq(checklistResultsTable.inspectionId, id));
+      .where(eq(checklistResultsTable.inspectionId, id))
+      .orderBy(checklistItemsTable.orderIndex);
 
     // Auto-initialise results from template if none exist yet
     if (results.length === 0) {

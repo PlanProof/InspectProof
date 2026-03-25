@@ -121,7 +121,8 @@ export default function ConductInspectionScreen() {
     }, [refetchChecklist])
   );
 
-  const grouped = checklistItems.reduce<Record<string, ChecklistItem[]>>((acc, item) => {
+  const sortedItems = [...checklistItems].sort((a, b) => a.orderIndex - b.orderIndex);
+  const grouped = sortedItems.reduce<Record<string, ChecklistItem[]>>((acc, item) => {
     (acc[item.category] = acc[item.category] || []).push(item);
     return acc;
   }, {});
