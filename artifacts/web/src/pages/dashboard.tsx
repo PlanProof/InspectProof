@@ -321,20 +321,9 @@ function DayRunSheet({ day, inspections }: { day: Date; inspections: any[] }) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-5 pt-4 pb-3 border-b border-muted/50">
-        <div className="flex items-start justify-between gap-2 mb-0.5">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="h-4 w-4 text-secondary" />
-            <h3 className="font-bold text-sidebar text-base">{dayLabel}</h3>
-          </div>
-          {dayInspections.length > 0 && (
-            <button
-              onClick={() => setSendDialogOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary text-white text-xs font-semibold hover:bg-secondary/90 transition-colors shrink-0 shadow-sm"
-            >
-              <Send className="h-3 w-3" />
-              Send
-            </button>
-          )}
+        <div className="flex items-center gap-2 mb-0.5">
+          <CalendarDays className="h-4 w-4 text-secondary" />
+          <h3 className="font-bold text-sidebar text-base">{dayLabel}</h3>
         </div>
         <p className="text-xs text-muted-foreground ml-6">{dateLabel}</p>
         {dayInspections.length > 0 && (
@@ -439,11 +428,20 @@ function DayRunSheet({ day, inspections }: { day: Date; inspections: any[] }) {
         )}
       </div>
 
-      {/* Footer link */}
-      <div className="border-t border-muted/50 px-4 py-3">
-        <Link href="/inspections" className="flex items-center justify-center gap-1.5 text-xs font-medium text-secondary hover:underline">
+      {/* Footer link + Send button */}
+      <div className="border-t border-muted/50 px-4 py-3 flex items-center justify-between gap-2">
+        <Link href="/inspections" className="flex items-center gap-1.5 text-xs font-medium text-secondary hover:underline">
           View all inspections <ArrowRight className="h-3.5 w-3.5" />
         </Link>
+        {dayInspections.length > 0 && (
+          <button
+            onClick={() => setSendDialogOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary text-white text-xs font-semibold hover:bg-secondary/90 transition-colors shrink-0 shadow-sm"
+          >
+            <Send className="h-3 w-3" />
+            Send
+          </button>
+        )}
       </div>
     </div>
   );
