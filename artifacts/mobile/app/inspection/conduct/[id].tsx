@@ -586,12 +586,10 @@ function ItemModal({
           )}
 
           <View style={modalStyles.photoButtons}>
-            {Platform.OS !== "web" && (
-              <Pressable style={modalStyles.photoBtn} onPress={onTakePhoto} disabled={uploadingPhoto}>
-                <Feather name="camera" size={18} color={Colors.secondary} />
-                <Text style={modalStyles.photoBtnText}>Take Photo</Text>
-              </Pressable>
-            )}
+            <Pressable style={modalStyles.photoBtnCamera} onPress={onTakePhoto} disabled={uploadingPhoto}>
+              <Feather name="camera" size={18} color="#fff" />
+              <Text style={modalStyles.photoBtnCameraText}>Take Photo</Text>
+            </Pressable>
             <Pressable style={modalStyles.photoBtn} onPress={onUploadPhoto} disabled={uploadingPhoto}>
               {uploadingPhoto ? (
                 <ActivityIndicator size="small" color={Colors.secondary} />
@@ -804,9 +802,18 @@ const modalStyles = StyleSheet.create({
     backgroundColor: Colors.secondary, borderRadius: 4,
     width: 16, height: 16, alignItems: "center", justifyContent: "center",
   },
-  photoButtons: { flexDirection: "row", gap: 10 },
+  photoButtons: { flexDirection: "column", gap: 10 },
+  photoBtnCamera: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: Colors.secondary,
+  },
+  photoBtnCameraText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
   photoBtn: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
