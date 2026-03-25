@@ -12,7 +12,9 @@ import {
   Modal,
   Platform,
   useWindowDimensions,
+  Animated,
 } from "react-native";
+import Swipeable from "react-native-gesture-handler/Swipeable";
 import Svg, { Path } from "react-native-svg";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -213,6 +215,20 @@ export default function ConductInspectionScreen() {
       await refetchChecklist();
     } catch {
       Alert.alert("Error", "Failed to update items. Please try again.");
+    }
+  };
+
+  const quickNA = async (item: ChecklistItem) => {
+    const next = item.result === "na" ? "pending" : "na";
+    try {
+      await fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ result: next, notes: item.notes || null, photoUrls: item.photoUrls || [] }),
+      });
+      await refetchChecklist();
+    } catch {
+      Alert.alert("Error", "Failed to update. Please try again.");
     }
   };
 
@@ -486,7 +502,7 @@ export default function ConductInspectionScreen() {
                     </View>
                   </View>
                   {items.map(item => (
-                    <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} />
+                    <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} onQuickNA={() => quickNA(item)} />
                   ))}
                 </View>
               ))
@@ -572,55 +588,87 @@ export default function ConductInspectionScreen() {
   );
 }
 
-function ChecklistRow({ item, onPress, onCamera, onQuickPass }: { item: ChecklistItem; onPress: () => void; onCamera: () => void; onQuickPass: () => void }) {
+function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA }: { item: ChecklistItem; onPress: () => void; onCamera: () => void; onQuickPass: () => void; onQuickNA: () => void }) {
+  const swipeRef = useRef<Swipeable>(null);
   const resultOpt = RESULT_OPTS.find(r => r.key === item.result);
   const isPending = item.result === "pending";
+  const isNA = item.result === "na";
   const photoCount = item.photoUrls?.length || 0;
 
-  return (
-    <Pressable style={[styles.checkRow, isPending && styles.checkRowPending, item.result === "pass" && styles.checkRowPass, item.result === "fail" && styles.checkRowFail]} onPress={onPress}>
-      <Pressable
-        onPress={e => { e.stopPropagation?.(); onQuickPass(); }}
-        hitSlop={8}
-        style={({ pressed }) => [styles.resultIndicator, { backgroundColor: resultOpt?.bg || "#f8fafc", opacity: pressed ? 0.7 : 1 }]}
-      >
-        <Feather
-          name={resultOpt?.icon as any || "circle"}
-          size={18}
-          color={resultOpt?.color || Colors.textTertiary}
-        />
-      </Pressable>
-      <View style={styles.checkInfo}>
-        <Text style={styles.checkDesc} numberOfLines={2}>{item.description}</Text>
-        <View style={styles.checkMeta}>
-          {item.codeReference && (
-            <View style={styles.codeRef}>
-              <Text style={styles.codeRefText}>{item.codeReference}</Text>
-            </View>
-          )}
-          <RiskBadge risk={item.riskLevel} />
-          {item.notes && (
-            <View style={styles.notesBadge}>
-              <Feather name="file-text" size={10} color={Colors.textSecondary} />
-            </View>
-          )}
-        </View>
-      </View>
+  const renderLeftActions = (_progress: any, dragX: any) => {
+    const scale = dragX.interpolate({ inputRange: [0, 80], outputRange: [0.7, 1], extrapolate: "clamp" });
+    return (
+      <Animated.View style={[styles.naAction, { transform: [{ scale }] }]}>
+        <Feather name="minus-circle" size={18} color="#fff" />
+        <Text style={styles.naActionText}>N/A</Text>
+      </Animated.View>
+    );
+  };
 
-      {/* Camera quick-action button */}
+  return (
+    <Swipeable
+      ref={swipeRef}
+      renderLeftActions={renderLeftActions}
+      leftThreshold={80}
+      friction={2}
+      onSwipeableOpen={() => {
+        swipeRef.current?.close();
+        onQuickNA();
+      }}
+    >
       <Pressable
-        onPress={e => { e.stopPropagation?.(); onCamera(); }}
-        hitSlop={12}
-        style={({ pressed }) => [styles.cameraBtn, pressed && { opacity: 0.6 }]}
+        style={[
+          styles.checkRow,
+          isNA && styles.checkRowNA,
+          !isNA && isPending && styles.checkRowPending,
+          !isNA && item.result === "pass" && styles.checkRowPass,
+          !isNA && item.result === "fail" && styles.checkRowFail,
+        ]}
+        onPress={onPress}
       >
-        <Feather name="camera" size={22} color={photoCount > 0 ? Colors.secondary : Colors.textTertiary} />
-        {photoCount > 0 && (
-          <View style={styles.cameraBadge}>
-            <Text style={styles.cameraBadgeText}>{photoCount}</Text>
+        <Pressable
+          onPress={e => { e.stopPropagation?.(); onQuickPass(); }}
+          hitSlop={8}
+          style={({ pressed }) => [styles.resultIndicator, { backgroundColor: resultOpt?.bg || "#f8fafc", opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Feather
+            name={resultOpt?.icon as any || "circle"}
+            size={18}
+            color={resultOpt?.color || Colors.textTertiary}
+          />
+        </Pressable>
+        <View style={styles.checkInfo}>
+          <Text style={[styles.checkDesc, isNA && styles.checkDescNA]} numberOfLines={2}>{item.description}</Text>
+          <View style={styles.checkMeta}>
+            {item.codeReference && (
+              <View style={styles.codeRef}>
+                <Text style={styles.codeRefText}>{item.codeReference}</Text>
+              </View>
+            )}
+            <RiskBadge risk={item.riskLevel} />
+            {item.notes && (
+              <View style={styles.notesBadge}>
+                <Feather name="file-text" size={10} color={Colors.textSecondary} />
+              </View>
+            )}
           </View>
-        )}
+        </View>
+
+        {/* Camera quick-action button */}
+        <Pressable
+          onPress={e => { e.stopPropagation?.(); onCamera(); }}
+          hitSlop={12}
+          style={({ pressed }) => [styles.cameraBtn, pressed && { opacity: 0.6 }]}
+        >
+          <Feather name="camera" size={22} color={photoCount > 0 ? Colors.secondary : Colors.textTertiary} />
+          {photoCount > 0 && (
+            <View style={styles.cameraBadge}>
+              <Text style={styles.cameraBadgeText}>{photoCount}</Text>
+            </View>
+          )}
+        </Pressable>
       </Pressable>
-    </Pressable>
+    </Swipeable>
   );
 }
 
@@ -1197,6 +1245,20 @@ const styles = StyleSheet.create({
   checkRowPending: { borderColor: Colors.border, opacity: 0.9 },
   checkRowPass: { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" },
   checkRowFail: { backgroundColor: "#fff5f5", borderColor: "#fecaca" },
+  checkRowNA: { backgroundColor: "#f8fafc", borderColor: "#e2e8f0", opacity: 0.6 },
+  checkDescNA: { textDecorationLine: "line-through", color: Colors.textTertiary },
+  naAction: {
+    backgroundColor: "#94a3b8",
+    justifyContent: "center",
+    alignItems: "center",
+    width: 80,
+    borderRadius: 10,
+    marginRight: 4,
+    flexDirection: "row",
+    gap: 5,
+    marginBottom: 8,
+  },
+  naActionText: { color: "#fff", fontSize: 13, fontFamily: "PlusJakartaSans_700Bold" },
   resultIndicator: {
     width: 38,
     height: 38,

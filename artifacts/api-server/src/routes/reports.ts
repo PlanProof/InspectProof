@@ -100,9 +100,10 @@ Pass Rate:            ${passRate !== null ? `${passRate}%` : "—"}
 Overall Result:       ${overallResult}
 `;
 
-    if (checklistResults.length > 0) {
+    const reportableItems = checklistResults.filter(i => i.result !== "na");
+    if (reportableItems.length > 0) {
       const grouped: Record<string, any[]> = {};
-      checklistResults.forEach(item => {
+      reportableItems.forEach(item => {
         const cat = item.category || "General";
         if (!grouped[cat]) grouped[cat] = [];
         grouped[cat].push(item);
