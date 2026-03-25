@@ -334,6 +334,7 @@ function BuildingClassSelect({ value, onChange }: { value: string[]; onChange: (
 function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () => void }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [, navigate] = useLocation();
   const [bookOpen, setBookOpen] = useState(false);
 
@@ -354,8 +355,10 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      onRefresh();
+      await onRefresh();
       setEditing(false);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error("handleSave failed:", err);
     } finally {
@@ -368,7 +371,15 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
       {/* Main details */}
       <div className="lg:col-span-2 bg-card border border-border rounded-xl p-6">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="font-semibold text-sidebar">Project Details</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="font-semibold text-sidebar">Project Details</h2>
+            {saveSuccess && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1 animate-in fade-in slide-in-from-left-2 duration-200">
+                <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="1.5,6 4.5,9 10.5,3" /></svg>
+                Changes saved
+              </span>
+            )}
+          </div>
           <Button size="sm" variant={editing ? "outline" : "default"} onClick={() => {
             if (editing) {
               setEditingClasses(project.buildingClassification ? project.buildingClassification.split(",").map(s => s.trim()).filter(Boolean) : []);
