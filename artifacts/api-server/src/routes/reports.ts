@@ -375,17 +375,51 @@ router.post("/:id/send", async (req, res) => {
 
 const MARGIN = 50;
 const FOOTER_H = 40;
+const HEADER_H = 72;    // 68px navy + 4px pear accent
+const CONTENT_TOP = 90; // cursor reset after header
 
 function addPageHeader(doc: PDFKit.PDFDocument, typeLabel: string) {
   const pageW = doc.page.width;
+
   doc.save();
+
+  // ── Background bars ──────────────────────────────────────────────────────
   doc.rect(0, 0, pageW, 68).fill(COLOR_NAVY);
   doc.rect(0, 68, pageW, 4).fill(COLOR_PEAR);
-  doc.fillColor("#ffffff").fontSize(16).font("Helvetica-Bold").text("InspectProof", MARGIN, 18);
-  doc.fillColor(COLOR_PEAR).fontSize(8).font("Helvetica").text("Certification & Inspection Platform", MARGIN, 40);
-  doc.fillColor("#ffffff").fontSize(7.5).font("Helvetica-Bold")
-    .text(typeLabel.toUpperCase(), 0, 28, { align: "right", width: pageW - MARGIN });
+
+  // ── Logo badge (pear rounded rect with "IP") ─────────────────────────────
+  const badgeX = MARGIN;
+  const badgeY = 15;
+  const badgeW = 36;
+  const badgeH = 38;
+  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 5).fill(COLOR_PEAR);
+
+  // Vertical bar accent inside badge (left edge)
+  doc.rect(badgeX + 5, badgeY + 6, 3, badgeH - 12).fill(COLOR_NAVY);
+
+  // "IP" centred in badge
+  doc.fillColor(COLOR_NAVY).fontSize(13).font("Helvetica-Bold")
+    .text("IP", badgeX + 8, badgeY + 12, { width: badgeW - 8, align: "center", lineBreak: false });
+
+  // ── Brand text ────────────────────────────────────────────────────────────
+  const textX = badgeX + badgeW + 9;
+  doc.fillColor("#ffffff").fontSize(15).font("Helvetica-Bold")
+    .text("InspectProof", textX, 19, { lineBreak: false });
+  doc.fillColor(COLOR_PEAR).fontSize(7.5).font("Helvetica")
+    .text("Certification & Inspection Platform", textX, 40, { lineBreak: false });
+
+  // ── Report type label (right-aligned) ────────────────────────────────────
+  doc.fillColor("rgba(255,255,255,0.75)").fontSize(7.5).font("Helvetica-Bold")
+    .text(typeLabel.toUpperCase(), 0, 28, { align: "right", width: pageW - MARGIN, lineBreak: false });
+
   doc.restore();
+
+  // ── CRITICAL: reset cursor below the header ───────────────────────────────
+  // doc.save()/restore() preserves PDF graphics state but NOT the JS cursor.
+  // Without this, content starts at wherever the last text() call landed (~y=28),
+  // which is inside the navy bar and causes text/header overlap.
+  doc.x = MARGIN;
+  doc.y = CONTENT_TOP;
 }
 
 function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number) {
