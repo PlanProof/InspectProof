@@ -56,9 +56,16 @@ export default function MoreScreen() {
 
   const roleLabel: Record<string, string> = {
     admin: "Administrator",
-    certifier: "Building Certifier",
+    certifier: "Building Certifier / Surveyor",
     inspector: "Inspector",
     staff: "Staff",
+    engineer: "Structural Engineer",
+    plumber: "Plumbing Inspector",
+    builder: "Builder",
+    supervisor: "Site Supervisor",
+    whs: "WHS Officer",
+    pre_purchase: "Pre-Purchase Inspector",
+    fire_engineer: "Fire Safety Engineer",
   };
 
   return (

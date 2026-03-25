@@ -20,10 +20,18 @@ interface DocTemplate {
 }
 
 const REPORT_TYPE_OPTIONS = [
-  { value: "inspection_certificate", label: "Inspection Certificate" },
-  { value: "compliance_report",      label: "Compliance Report" },
-  { value: "defect_notice",          label: "Defect Notice" },
-  { value: "non_compliance_notice",  label: "Non-Compliance Notice" },
+  { value: "inspection_certificate",    label: "Inspection Certificate" },
+  { value: "compliance_report",         label: "Compliance Report" },
+  { value: "defect_notice",             label: "Defect Notice" },
+  { value: "non_compliance_notice",     label: "Non-Compliance Notice" },
+  { value: "quality_control_report",    label: "Quality Control Report" },
+  { value: "non_conformance_report",    label: "Non-Conformance Report" },
+  { value: "safety_inspection_report",  label: "Safety Inspection Report" },
+  { value: "hazard_assessment_report",  label: "Hazard Assessment Report" },
+  { value: "corrective_action_report",  label: "Corrective Action Report" },
+  { value: "pre_purchase_report",       label: "Pre-Purchase Building Report" },
+  { value: "annual_fire_safety",        label: "Annual Fire Safety Statement" },
+  { value: "fire_inspection_report",    label: "Fire Safety Inspection Report" },
 ];
 
 // ── Data fields available for insertion ───────────────────────────────────────

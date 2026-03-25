@@ -10,14 +10,56 @@ import { formatDate } from "@/lib/utils";
 import { useLocation } from "wouter";
 
 const INSPECTION_TYPES = [
-  { value: "slab", label: "Slab" },
-  { value: "frame", label: "Frame" },
-  { value: "final", label: "Final" },
-  { value: "footings", label: "Footings" },
-  { value: "pool_barrier", label: "Pool Barrier" },
-  { value: "special", label: "Special" },
-  { value: "pre_plaster", label: "Pre-Plaster" },
-  { value: "waterproofing", label: "Waterproofing" },
+  { group: "Building Certification", items: [
+    { value: "footings",        label: "Footings" },
+    { value: "slab",            label: "Slab" },
+    { value: "frame",           label: "Frame" },
+    { value: "pre_plaster",     label: "Pre-Plaster" },
+    { value: "waterproofing",   label: "Waterproofing" },
+    { value: "lock_up",         label: "Lock-Up" },
+    { value: "pool_barrier",    label: "Pool Barrier" },
+    { value: "final",           label: "Final" },
+    { value: "special",         label: "Special" },
+  ]},
+  { group: "Builder / Quality Control", items: [
+    { value: "qc_footing",      label: "QC — Footings" },
+    { value: "qc_frame",        label: "QC — Frame" },
+    { value: "qc_fitout",       label: "QC — Fit-Out" },
+    { value: "qc_pre_handover", label: "QC — Pre-Handover" },
+    { value: "non_conformance", label: "Non-Conformance" },
+  ]},
+  { group: "Site Supervision", items: [
+    { value: "hold_point",      label: "Hold Point" },
+    { value: "daily_site",      label: "Daily Site Diary" },
+    { value: "trade_inspection",label: "Trade Inspection" },
+  ]},
+  { group: "WHS", items: [
+    { value: "safety_inspection",  label: "Safety Inspection" },
+    { value: "hazard_assessment",  label: "Hazard Assessment" },
+    { value: "incident_inspection",label: "Incident Investigation" },
+    { value: "toolbox",            label: "Toolbox Talk Record" },
+  ]},
+  { group: "Pre-Purchase", items: [
+    { value: "pre_purchase_building", label: "Building Inspection" },
+    { value: "pre_purchase_pest",     label: "Pest Inspection" },
+    { value: "pre_purchase_combined", label: "Combined Building & Pest" },
+  ]},
+  { group: "Fire Safety", items: [
+    { value: "fire_active",     label: "Active Systems Inspection" },
+    { value: "fire_passive",    label: "Passive Systems Inspection" },
+    { value: "annual_fire_safety", label: "Annual Fire Safety Statement" },
+    { value: "fire_egress",     label: "Egress & Evacuation" },
+  ]},
+  { group: "Structural Engineering", items: [
+    { value: "structural_footing", label: "Structural — Footings" },
+    { value: "structural_frame",   label: "Structural — Frame" },
+    { value: "structural_final",   label: "Structural — Final" },
+  ]},
+  { group: "Plumbing", items: [
+    { value: "plumbing",        label: "Plumbing" },
+    { value: "drainage",        label: "Drainage" },
+    { value: "pressure_test",   label: "Pressure Test" },
+  ]},
 ];
 
 const STATUS_FILTERS = ["all", "scheduled", "in_progress", "completed"] as const;
@@ -126,8 +168,12 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
                 className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-sidebar focus:outline-none focus:ring-2 focus:ring-secondary/50 pr-9"
               >
                 <option value="">Select type…</option>
-                {INSPECTION_TYPES.map(t => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
+                {INSPECTION_TYPES.map(group => (
+                  <optgroup key={group.group} label={group.group}>
+                    {group.items.map(t => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />

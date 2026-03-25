@@ -32,11 +32,25 @@ const NCC_CLASSES: Record<string, string> = {
   "Class 10c": "Class 10c — Private bushfire shelter",
 };
 
-const DISCIPLINE_ORDER = ["Building Surveyor", "Structural Engineer", "Plumbing Officer"];
+const DISCIPLINE_ORDER = [
+  "Building Surveyor",
+  "Structural Engineer",
+  "Plumbing Officer",
+  "Builder / QC",
+  "Site Supervisor",
+  "WHS Officer",
+  "Pre-Purchase Inspector",
+  "Fire Safety Engineer",
+];
 const DISCIPLINE_META: Record<string, { active: string; accent: string }> = {
-  "Building Surveyor":  { active: "bg-sidebar text-white", accent: "text-secondary border-secondary" },
-  "Structural Engineer":{ active: "bg-blue-700 text-white", accent: "text-blue-700 border-blue-700" },
-  "Plumbing Officer":   { active: "bg-teal-700 text-white", accent: "text-teal-700 border-teal-700" },
+  "Building Surveyor":     { active: "bg-sidebar text-white",    accent: "text-secondary border-secondary" },
+  "Structural Engineer":   { active: "bg-blue-700 text-white",   accent: "text-blue-700 border-blue-700" },
+  "Plumbing Officer":      { active: "bg-teal-700 text-white",   accent: "text-teal-700 border-teal-700" },
+  "Builder / QC":          { active: "bg-amber-700 text-white",  accent: "text-amber-700 border-amber-700" },
+  "Site Supervisor":       { active: "bg-orange-600 text-white", accent: "text-orange-600 border-orange-600" },
+  "WHS Officer":           { active: "bg-red-700 text-white",    accent: "text-red-700 border-red-700" },
+  "Pre-Purchase Inspector":{ active: "bg-purple-700 text-white", accent: "text-purple-700 border-purple-700" },
+  "Fire Safety Engineer":  { active: "bg-rose-700 text-white",   accent: "text-rose-700 border-rose-700" },
 };
 
 const TYPE_META: Record<string, { label: string; color: string; dot: string }> = {

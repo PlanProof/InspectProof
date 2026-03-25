@@ -21,15 +21,22 @@ import { useNotifications } from "@/context/NotificationsContext";
 const WEB_TOP = Platform.OS === "web" ? 67 : 0;
 
 const INSPECTION_TYPE_LABELS: Record<string, string> = {
-  frame: "Frame",
-  footings: "Footings",
-  slab: "Slab",
-  final: "Final",
-  pool_barrier: "Pool Barrier",
-  special: "Special",
-  plumbing: "Plumbing",
+  footings: "Footings", slab: "Slab", frame: "Frame", pre_plaster: "Pre-Plaster",
+  waterproofing: "Waterproofing", lock_up: "Lock-Up", pool_barrier: "Pool Barrier",
+  final: "Final", special: "Special",
+  qc_footing: "QC — Footings", qc_frame: "QC — Frame", qc_fitout: "QC — Fit-Out",
+  qc_pre_handover: "QC — Pre-Handover", non_conformance: "Non-Conformance",
+  hold_point: "Hold Point", daily_site: "Daily Site Diary", trade_inspection: "Trade Inspection",
+  safety_inspection: "Safety Inspection", hazard_assessment: "Hazard Assessment",
+  incident_inspection: "Incident Investigation", toolbox: "Toolbox Talk",
+  pre_purchase_building: "Building Inspection", pre_purchase_pest: "Pest Inspection",
+  pre_purchase_combined: "Building & Pest",
+  fire_active: "Active Systems", fire_passive: "Passive Systems",
+  annual_fire_safety: "Annual Fire Safety", fire_egress: "Egress & Evacuation",
+  structural_footing: "Structural — Footings", structural_frame: "Structural — Frame",
+  structural_final: "Structural — Final",
+  plumbing: "Plumbing", drainage: "Drainage", pressure_test: "Pressure Test",
   electrical: "Electrical",
-  fire: "Fire Safety",
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -43,13 +50,24 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 const INSPECTION_REPORT_TYPE: Record<string, string> = {
   final: "inspection_certificate",
   pool_barrier: "compliance_report",
-  frame: "compliance_report",
-  footings: "compliance_report",
-  slab: "compliance_report",
-  plumbing: "compliance_report",
-  electrical: "compliance_report",
-  fire: "compliance_report",
-  special: "compliance_report",
+  frame: "compliance_report", footings: "compliance_report", slab: "compliance_report",
+  pre_plaster: "compliance_report", waterproofing: "compliance_report",
+  lock_up: "compliance_report", special: "compliance_report",
+  qc_footing: "quality_control_report", qc_frame: "quality_control_report",
+  qc_fitout: "quality_control_report", qc_pre_handover: "quality_control_report",
+  non_conformance: "non_conformance_report",
+  hold_point: "compliance_report", daily_site: "compliance_report",
+  trade_inspection: "compliance_report",
+  safety_inspection: "safety_inspection_report", hazard_assessment: "hazard_assessment_report",
+  incident_inspection: "safety_inspection_report", toolbox: "safety_inspection_report",
+  pre_purchase_building: "pre_purchase_report", pre_purchase_pest: "pre_purchase_report",
+  pre_purchase_combined: "pre_purchase_report",
+  fire_active: "fire_inspection_report", fire_passive: "fire_inspection_report",
+  annual_fire_safety: "annual_fire_safety", fire_egress: "fire_inspection_report",
+  structural_footing: "compliance_report", structural_frame: "compliance_report",
+  structural_final: "inspection_certificate",
+  plumbing: "compliance_report", drainage: "compliance_report",
+  pressure_test: "compliance_report", electrical: "compliance_report",
 };
 
 const MOCK_TIMES = [

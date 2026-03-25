@@ -27,11 +27,33 @@ const router: IRouter = Router();
 // ── Report content generator ──────────────────────────────────────────────────
 
 const REPORT_TYPE_LABELS: Record<string, string> = {
-  inspection_certificate: "Inspection Certificate",
-  compliance_report: "Compliance Report",
-  defect_notice: "Defect Notice",
-  non_compliance_notice: "Non-Compliance Notice",
-  summary: "Inspection Summary",
+  inspection_certificate:   "Inspection Certificate",
+  compliance_report:        "Compliance Report",
+  defect_notice:            "Defect Notice",
+  non_compliance_notice:    "Non-Compliance Notice",
+  summary:                  "Inspection Summary",
+  quality_control_report:   "Quality Control Report",
+  non_conformance_report:   "Non-Conformance Report",
+  safety_inspection_report: "Safety Inspection Report",
+  hazard_assessment_report: "Hazard Assessment Report",
+  corrective_action_report: "Corrective Action Report",
+  pre_purchase_report:      "Pre-Purchase Building Report",
+  annual_fire_safety:       "Annual Fire Safety Statement",
+  fire_inspection_report:   "Fire Safety Inspection Report",
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  admin:        "Administrator",
+  certifier:    "Building Certifier / Surveyor",
+  inspector:    "Inspector",
+  staff:        "Staff",
+  engineer:     "Structural Engineer",
+  plumber:      "Plumbing Inspector",
+  builder:      "Builder",
+  supervisor:   "Site Supervisor",
+  whs:          "WHS Officer",
+  pre_purchase: "Pre-Purchase Inspector",
+  fire_engineer:"Fire Safety Engineer",
 };
 
 async function generateReportContent(
@@ -63,7 +85,7 @@ ${"=".repeat(typeLabel.length)}
 DOCUMENT REFERENCE: ${project.certificationNumber || "—"}
 DATE ISSUED: ${formatDate(inspection?.completedDate || new Date().toISOString().split("T")[0])}
 PREPARED BY: ${inspector ? `${inspector.firstName} ${inspector.lastName}` : "—"}
-INSPECTOR QUALIFICATIONS: ${inspector?.role || "Building Certifier"}
+INSPECTOR QUALIFICATIONS: ${ROLE_LABELS[inspector?.role ?? ""] || inspector?.role || "Built Environment Professional"}
 
 ────────────────────────────────────────────────────────
 PROJECT DETAILS
