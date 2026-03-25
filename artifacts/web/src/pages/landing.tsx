@@ -35,10 +35,10 @@ function Header() {
         <div className="flex h-14 items-center justify-between rounded-2xl bg-white px-5 shadow-lg shadow-black/8">
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#0B1933]">
-              <ClipboardList className="h-4 w-4 text-[#C5D92D]" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#0B1933]">
+              <ClipboardList className="h-5 w-5 text-[#C5D92D]" />
             </div>
-            <span className="text-[17px] text-[#0B1933]" style={{ fontFamily: "'Oddlini', sans-serif", fontWeight: 500 }}>
+            <span className="text-[22px] text-[#0B1933]" style={{ fontFamily: "'Oddlini', sans-serif", fontWeight: 500 }}>
               InspectProof
             </span>
           </div>
