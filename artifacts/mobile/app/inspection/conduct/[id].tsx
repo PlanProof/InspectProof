@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -69,6 +69,7 @@ export default function ConductInspectionScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const autoCompletedRef = useRef(false);
 
   const fetchWithAuth = useCallback(async (url: string, opts?: RequestInit) => {
     const res = await fetch(`${baseUrl}${url}`, {
@@ -111,6 +112,34 @@ export default function ConductInspectionScreen() {
   const pendingCount = checklistItems.filter(i => i.result === "pending").length;
   const total = checklistItems.length;
   const progress = total > 0 ? ((total - pendingCount) / total) : 0;
+
+  // Auto-mark as completed/follow_up_required when 100% checked off
+  useEffect(() => {
+    if (
+      total > 0 &&
+      progress === 1 &&
+      !autoCompletedRef.current &&
+      inspection &&
+      inspection.status !== "completed" &&
+      inspection.status !== "follow_up_required"
+    ) {
+      autoCompletedRef.current = true;
+      const newStatus = failCount > 0 ? "follow_up_required" : "completed";
+      fetchWithAuth(`/api/inspections/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: newStatus,
+          completedDate: new Date().toISOString().split("T")[0],
+        }),
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["inspections"] });
+        queryClient.invalidateQueries({ queryKey: ["inspection", id] });
+      }).catch(() => {
+        autoCompletedRef.current = false;
+      });
+    }
+  }, [progress, total, inspection?.status]);
 
   const openItemModal = (item: ChecklistItem) => {
     setActiveItem(item);
