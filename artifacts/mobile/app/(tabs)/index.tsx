@@ -107,6 +107,10 @@ function toLocalDateStr(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
+const WEEK_CELL_WIDTH = 52;
+const WEEK_CARD_PAD = 14;
+const TODAY_INDEX = 2; // start is 2 days before today
+
 function WeekStrip({
   selectedDate,
   onSelect,
@@ -117,10 +121,12 @@ function WeekStrip({
   inspectionDates: Set<string>;
 }) {
   const today = toLocalDateStr(new Date());
+  const scrollRef = useRef<ScrollView>(null);
+
   const days = useMemo(() => {
     const arr: { date: Date; str: string }[] = [];
     const start = new Date();
-    start.setDate(start.getDate() - 2);
+    start.setDate(start.getDate() - TODAY_INDEX);
     for (let i = 0; i < 33; i++) {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
@@ -129,9 +135,21 @@ function WeekStrip({
     return arr;
   }, []);
 
+  // On mount: scroll so today is roughly centred
+  useEffect(() => {
+    const offset = Math.max(0, TODAY_INDEX * WEEK_CELL_WIDTH - WEEK_CELL_WIDTH * 2);
+    setTimeout(() => scrollRef.current?.scrollTo({ x: offset, animated: false }), 50);
+  }, []);
+
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   return (
-    <View style={weekStyles.row}>
+    <ScrollView
+      ref={scrollRef}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{ marginHorizontal: -WEEK_CARD_PAD }}
+      contentContainerStyle={{ paddingHorizontal: WEEK_CARD_PAD, gap: 2 }}
+    >
       {days.map(({ date, str }) => {
         const isSelected = str === selectedDate;
         const isToday = str === today;
@@ -162,13 +180,13 @@ function WeekStrip({
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
 const weekStyles = StyleSheet.create({
-  row: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 4 },
-  dayCell: { alignItems: "center", gap: 4, paddingVertical: 8, paddingHorizontal: 6, borderRadius: 14, flex: 1 },
+  row: { flexDirection: "row", paddingHorizontal: 4 },
+  dayCell: { alignItems: "center", gap: 4, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 14, width: WEEK_CELL_WIDTH },
   dayCellSelected: { backgroundColor: Colors.primary },
   dayName: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.3 },
   dayNameSelected: { color: "rgba(255,255,255,0.65)" },
