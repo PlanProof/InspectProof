@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform, Linking, Alert } from "react-native";
+import Constants from "expo-constants";
+
+// expo-notifications crashes in Expo Go SDK 53 — skip all push/schedule features there
+const IS_EXPO_GO = Constants.appOwnership === "expo";
 
 const PREFS_KEY = "inspectproof_notification_prefs";
 
@@ -32,6 +36,7 @@ interface NotificationsContextValue {
 const NotificationsContext = createContext<NotificationsContextValue | null>(null);
 
 async function tryScheduleNative(inspections: any[], prefs: NotificationPrefs): Promise<void> {
+  if (IS_EXPO_GO) return;
   try {
     const Notifications = await import("expo-notifications");
     await Notifications.cancelAllScheduledNotificationsAsync();
@@ -65,6 +70,7 @@ async function tryScheduleNative(inspections: any[], prefs: NotificationPrefs): 
 }
 
 async function tryRequestNativePermission(): Promise<boolean> {
+  if (IS_EXPO_GO) return false;
   try {
     const Notifications = await import("expo-notifications");
     const { status } = await Notifications.requestPermissionsAsync();
@@ -75,6 +81,7 @@ async function tryRequestNativePermission(): Promise<boolean> {
 }
 
 async function tryGetNativePermission(): Promise<boolean> {
+  if (IS_EXPO_GO) return false;
   try {
     const Notifications = await import("expo-notifications");
     const { status } = await Notifications.getPermissionsAsync();
@@ -134,7 +141,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [prefs]);
 
   const cancelAllReminders = useCallback(async () => {
-    if (Platform.OS === "web") return;
+    if (Platform.OS === "web" || IS_EXPO_GO) return;
     try {
       const Notifications = await import("expo-notifications");
       await Notifications.cancelAllScheduledNotificationsAsync();
