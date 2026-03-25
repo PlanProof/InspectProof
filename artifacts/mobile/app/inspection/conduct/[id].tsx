@@ -403,7 +403,7 @@ export default function ConductInspectionScreen() {
         <Pressable style={[styles.tab, activePage === 1 && styles.tabActive]} onPress={() => scrollToPage(1)}>
           <Feather name="folder" size={13} color={activePage === 1 ? Colors.secondary : Colors.textTertiary} />
           <Text style={[styles.tabText, activePage === 1 && styles.tabTextActive]}>
-            Plans{projectDocuments.length > 0 ? ` (${projectDocuments.length})` : ""}
+            Documents{projectDocuments.length > 0 ? ` (${projectDocuments.length})` : ""}
           </Text>
           {projectDocuments.length > 0 && activePage !== 1 && (
             <View style={styles.tabBadgeDot} />
@@ -769,8 +769,8 @@ function DocumentsPanel({
       {documents.length === 0 ? (
         <View style={panelStyles.empty}>
           <Feather name="folder" size={48} color={Colors.textTertiary} />
-          <Text style={panelStyles.emptyText}>No plans attached</Text>
-          <Text style={panelStyles.emptySubText}>Upload plans to this project from the desktop to view them here.</Text>
+          <Text style={panelStyles.emptyText}>No documents attached</Text>
+          <Text style={panelStyles.emptySubText}>Upload documents to this project from the desktop to view them here.</Text>
         </View>
       ) : (
         <>
