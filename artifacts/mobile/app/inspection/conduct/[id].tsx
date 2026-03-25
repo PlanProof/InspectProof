@@ -228,22 +228,37 @@ export default function ConductInspectionScreen() {
   const doComplete = async () => {
     setCompleting(true);
     try {
+      const newStatus = failCount > 0 ? "follow_up_required" : "completed";
       await fetchWithAuth(`/api/inspections/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          status: failCount > 0 ? "follow_up_required" : "completed",
+          status: newStatus,
           completedDate: new Date().toISOString().split("T")[0],
         }),
       });
       queryClient.invalidateQueries({ queryKey: ["inspections"] });
       queryClient.invalidateQueries({ queryKey: ["inspection", id] });
+
+      // Suggest the most appropriate report type based on results
+      const suggestedType = failCount > 0 ? "defect_notice" : "inspection_certificate";
+
       Alert.alert(
         failCount > 0 ? "Inspection Complete — Follow-Up Required" : "Inspection Complete",
         failCount > 0
-          ? `${failCount} item(s) failed. A follow-up will be required.`
-          : `All ${passCount} items passed. Inspection completed successfully.`,
-        [{ text: "Done", onPress: () => router.replace(`/inspection/${id}` as any) }]
+          ? `${failCount} item(s) failed. A follow-up will be required.\n\nWould you like to generate a Defect Notice now?`
+          : `All ${passCount} items passed.\n\nWould you like to generate an Inspection Certificate now?`,
+        [
+          {
+            text: "Create Report",
+            onPress: () => router.replace(`/inspection/generate-report?id=${id}&autoType=${suggestedType}` as any),
+          },
+          {
+            text: "Done",
+            style: "cancel",
+            onPress: () => router.replace(`/inspection/${id}` as any),
+          },
+        ]
       );
     } catch (e: any) {
       Alert.alert("Error", "Failed to complete inspection.");

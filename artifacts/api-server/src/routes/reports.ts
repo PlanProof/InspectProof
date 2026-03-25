@@ -210,11 +210,12 @@ async function formatReport(r: any) {
 
 router.get("/", async (req, res) => {
   try {
-    const { projectId } = req.query;
+    const { projectId, inspectionId } = req.query;
     let reports = await db.select().from(reportsTable)
       .orderBy(sql`${reportsTable.createdAt} DESC`);
 
     if (projectId) reports = reports.filter(r => r.projectId === parseInt(projectId as string));
+    if (inspectionId) reports = reports.filter(r => r.inspectionId === parseInt(inspectionId as string));
 
     const result = await Promise.all(reports.map(formatReport));
     res.json(result);

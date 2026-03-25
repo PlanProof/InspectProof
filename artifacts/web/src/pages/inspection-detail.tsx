@@ -6,7 +6,7 @@ import {
   ArrowLeft, Calendar, Clock, User, CloudSun, ClipboardList,
   CheckCircle2, XCircle, MinusCircle, AlertTriangle, MessageSquare,
   Building, Loader2, ChevronRight, FileText, Link2, Paperclip,
-  Award, BarChart2, Send, Download
+  Award, BarChart2, Send, Download, Zap, X
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -118,6 +118,34 @@ function severityColors(sev: string) {
 const TABS = ["Overview", "Checklist", "Issues"] as const;
 type Tab = typeof TABS[number];
 
+// ── Report type suggestion ────────────────────────────────────────────────────
+
+const REPORT_TYPE_LABELS_MAP: Record<string, string> = {
+  inspection_certificate: "Inspection Certificate",
+  compliance_report: "Compliance Report",
+  defect_notice: "Defect Notice",
+  non_compliance_notice: "Non-Compliance Notice",
+};
+
+function getSuggestedReportType(inspection: Inspection): string {
+  // 1. Check doc templates linked to this inspection's checklist template
+  try {
+    const raw = localStorage.getItem("inspectproof_doc_templates");
+    if (raw) {
+      const docTemplates: Array<{ defaultReportType?: string; linkedChecklistIds: number[] }> = JSON.parse(raw);
+      const linked = docTemplates.find(
+        dt => dt.defaultReportType && dt.linkedChecklistIds.includes(inspection.checklistTemplateId as number)
+      );
+      if (linked?.defaultReportType) return linked.defaultReportType;
+    }
+  } catch {}
+
+  // 2. Heuristic fallback based on results
+  if (inspection.failCount > 0) return "defect_notice";
+  if (inspection.passCount > 0) return "inspection_certificate";
+  return "compliance_report";
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 export default function InspectionDetail() {
@@ -128,17 +156,27 @@ export default function InspectionDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [docsByItem, setDocsByItem] = useState<Record<number, { id: number; name: string; mimeType?: string }[]>>({});
+  const [existingReportCount, setExistingReportCount] = useState<number | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState("inspection_certificate");
   const [generatingReport, setGeneratingReport] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<any>(null);
   const [submittingReport, setSubmittingReport] = useState(false);
 
+  const openReportDialog = useCallback((inspection: Inspection) => {
+    const suggested = getSuggestedReportType(inspection);
+    setSelectedReportType(suggested);
+    setGeneratedReport(null);
+    setReportDialogOpen(true);
+  }, []);
+
   const load = useCallback(async () => {
     try {
       setLoading(true);
       const data = await apiFetch(`/api/inspections/${inspId}`);
       setInspection(data);
+
       // Load documents linked to checklist items for this project
       if (data.projectId) {
         const docsWithLinks = await apiFetch(`/api/projects/${data.projectId}/documents-with-links`).catch(() => []);
@@ -151,6 +189,10 @@ export default function InspectionDetail() {
         }
         setDocsByItem(byItem);
       }
+
+      // Check if any reports exist for this inspection
+      const reports = await apiFetch(`/api/reports?inspectionId=${inspId}`).catch(() => []);
+      setExistingReportCount(reports.length);
     } catch {
       setError("Failed to load inspection");
     } finally {
@@ -315,7 +357,7 @@ export default function InspectionDetail() {
             {(inspection.status === "completed" || inspection.status === "follow_up_required") && (
               <Button
                 size="sm"
-                onClick={() => { setGeneratedReport(null); setReportDialogOpen(true); }}
+                onClick={() => openReportDialog(inspection)}
                 className="gap-1.5 bg-brand-pear hover:bg-brand-pear/90 text-sidebar font-semibold"
               >
                 <FileText className="h-3.5 w-3.5" />
@@ -325,6 +367,46 @@ export default function InspectionDetail() {
           </div>
         </div>
       </div>
+
+      {/* ── Report creation prompt banner ── */}
+      {(inspection.status === "completed" || inspection.status === "follow_up_required")
+        && existingReportCount === 0
+        && !bannerDismissed && (
+        <div className="mb-5 rounded-xl border border-brand-pear/40 bg-sidebar text-white px-5 py-4 flex items-center gap-4 shadow-sm">
+          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-brand-pear shrink-0">
+            <Zap className="h-4.5 w-4.5 text-sidebar" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm leading-snug">
+              {inspection.status === "follow_up_required"
+                ? "Inspection complete — follow-up required"
+                : "Inspection complete — ready to generate your report"}
+            </p>
+            <p className="text-xs text-white/65 mt-0.5">
+              {inspection.failCount > 0
+                ? `${inspection.failCount} item${inspection.failCount !== 1 ? "s" : ""} failed. A Defect Notice has been pre-selected — you can change it.`
+                : "An Inspection Certificate has been pre-selected based on your results."}
+              {" "}Linked template defaults can be configured in Templates.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              onClick={() => openReportDialog(inspection)}
+              className="gap-1.5 bg-brand-pear hover:bg-brand-pear/90 text-sidebar font-bold shadow-sm"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Create Report
+            </Button>
+            <button
+              onClick={() => setBannerDismissed(true)}
+              className="p-1.5 rounded-md text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Tabs ── */}
       <div className="flex gap-0 border-b mb-6">
@@ -370,12 +452,24 @@ export default function InspectionDetail() {
           {!generatedReport ? (
             <>
               <div className="overflow-auto space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Select a report type to auto-fill with inspection results, project details, and checklist items.
-                </p>
+                {inspection && (() => {
+                  const suggested = getSuggestedReportType(inspection);
+                  return (
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-sidebar text-white text-xs">
+                      <Zap className="h-3.5 w-3.5 text-brand-pear shrink-0" />
+                      <span>
+                        <span className="font-semibold text-brand-pear">{REPORT_TYPE_LABELS_MAP[suggested]}</span>
+                        {" "}has been pre-selected based on your results
+                        {inspection.checklistTemplateId ? " and linked template settings" : ""}.
+                        You can change it below.
+                      </span>
+                    </div>
+                  );
+                })()}
                 <div className="space-y-2">
                   {REPORT_TYPES_DESKTOP.map(rt => {
                     const Icon = rt.icon;
+                    const isRecommended = inspection ? rt.key === getSuggestedReportType(inspection) : false;
                     return (
                       <label
                         key={rt.key}
@@ -398,9 +492,14 @@ export default function InspectionDetail() {
                         <span className={cn("text-sm font-medium", selectedReportType === rt.key ? "text-sidebar" : "text-muted-foreground")}>
                           {rt.label}
                         </span>
-                        {selectedReportType === rt.key && (
-                          <span className="ml-auto text-xs text-sidebar font-semibold">Selected</span>
-                        )}
+                        <div className="ml-auto flex items-center gap-2">
+                          {isRecommended && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-pear text-sidebar">Recommended</span>
+                          )}
+                          {selectedReportType === rt.key && (
+                            <span className="text-xs text-sidebar font-semibold">Selected</span>
+                          )}
+                        </div>
                       </label>
                     );
                   })}

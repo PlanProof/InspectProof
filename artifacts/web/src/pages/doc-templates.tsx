@@ -14,9 +14,17 @@ interface DocTemplate {
   content: string;
   backgroundImage?: string;
   linkedChecklistIds: number[];
+  defaultReportType?: string;
   createdAt: string;
   updatedAt: string;
 }
+
+const REPORT_TYPE_OPTIONS = [
+  { value: "inspection_certificate", label: "Inspection Certificate" },
+  { value: "compliance_report",      label: "Compliance Report" },
+  { value: "defect_notice",          label: "Defect Notice" },
+  { value: "non_compliance_notice",  label: "Non-Compliance Notice" },
+];
 
 // ── Data fields available for insertion ───────────────────────────────────────
 const FIELD_GROUPS = [
@@ -684,10 +692,28 @@ export default function DocTemplates() {
                 ))}
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto p-2">
-                <p className="text-[10px] text-muted-foreground px-1 pt-1 pb-2 leading-snug">
-                  Link checklists to filter inspections when generating reports.
+              <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
+                <p className="text-[10px] text-muted-foreground px-1 pt-1 pb-1 leading-snug">
+                  Link checklists — the Default Report Type will be auto-selected when this inspection completes.
                 </p>
+                {/* Default report type selector */}
+                <div className="px-1 pb-1">
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Default Report Type</label>
+                  <select
+                    value={selected.defaultReportType ?? ""}
+                    onChange={e => persist(templates.map(t => t.id === selected.id
+                      ? { ...t, defaultReportType: e.target.value || undefined, updatedAt: new Date().toISOString() }
+                      : t
+                    ))}
+                    className="w-full text-xs rounded-md border border-border bg-background text-sidebar px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-secondary/30"
+                  >
+                    <option value="">— None (auto-detect) —</option>
+                    {REPORT_TYPE_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="border-t border-muted/50 pt-1" />
                 {!checklistTemplates || checklistTemplates.length === 0 ? (
                   <div className="text-center py-6">
                     <ClipboardList className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />

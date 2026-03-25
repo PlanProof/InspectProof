@@ -59,13 +59,16 @@ const REPORT_TYPES = [
 type ReportTypeKey = typeof REPORT_TYPES[number]["key"];
 
 export default function GenerateReportScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, autoType } = useLocalSearchParams<{ id: string; autoType?: string }>();
   const insets = useSafeAreaInsets();
   const { token, user } = useAuth();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   const [step, setStep] = useState<"select" | "preview" | "action">("select");
-  const [selectedType, setSelectedType] = useState<ReportTypeKey | null>(null);
+  // Pre-select the suggested type if passed via navigation params
+  const [selectedType, setSelectedType] = useState<ReportTypeKey | null>(
+    (autoType && REPORT_TYPES.some(t => t.key === autoType) ? autoType as ReportTypeKey : null)
+  );
   const [generating, setGenerating] = useState(false);
   const [report, setReport] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -210,13 +213,22 @@ export default function GenerateReportScreen() {
 
       {step === "select" && (
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
-          <Text style={styles.sectionTitle}>Choose a report template</Text>
+          <Text style={styles.sectionTitle}>Choose a report type</Text>
           <Text style={styles.sectionSub}>
             The report will be auto-filled with inspection results, project details, and checklist items.
           </Text>
+          {autoType && (
+            <View style={styles.recommendedBanner}>
+              <Feather name="zap" size={13} color="#C5D92D" />
+              <Text style={styles.recommendedBannerText}>
+                A report type has been pre-selected based on your inspection results. You can change it below.
+              </Text>
+            </View>
+          )}
           <View style={styles.typeList}>
             {REPORT_TYPES.map(type => {
               const isSelected = selectedType === type.key;
+              const isRecommended = type.key === autoType;
               return (
                 <Pressable
                   key={type.key}
@@ -230,7 +242,14 @@ export default function GenerateReportScreen() {
                     <Feather name={type.icon as any} size={22} color={isSelected ? type.color : Colors.textSecondary} />
                   </View>
                   <View style={styles.typeInfo}>
-                    <Text style={[styles.typeLabel, isSelected && { color: type.color }]}>{type.label}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={[styles.typeLabel, isSelected && { color: type.color }]}>{type.label}</Text>
+                      {isRecommended && (
+                        <View style={styles.recommendedBadge}>
+                          <Text style={styles.recommendedBadgeText}>Recommended</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.typeDesc}>{type.desc}</Text>
                   </View>
                   <View style={[styles.typeRadio, isSelected && { borderColor: type.color }]}>
@@ -391,6 +410,35 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16, gap: 12 },
   sectionTitle: { fontSize: 18, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, marginBottom: 4 },
   sectionSub: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, lineHeight: 20, marginBottom: 8 },
+  recommendedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#0B1933",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 4,
+  },
+  recommendedBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#C5D92D",
+    lineHeight: 17,
+  },
+  recommendedBadge: {
+    backgroundColor: "#C5D92D",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  recommendedBadgeText: {
+    fontSize: 10,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#0B1933",
+    letterSpacing: 0.3,
+  },
   typeList: { gap: 12 },
   typeCard: {
     flexDirection: "row",
