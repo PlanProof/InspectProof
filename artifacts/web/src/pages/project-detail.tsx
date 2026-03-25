@@ -123,10 +123,13 @@ type Tab = typeof TABS[number];
 export default function ProjectDetail() {
   const params = useParams<{ id: string }>();
   const projectId = parseInt(params.id || "0");
+  const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("Overview");
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const loadProject = useCallback(async () => {
     try {
@@ -141,6 +144,16 @@ export default function ProjectDetail() {
   }, [projectId]);
 
   useState(() => { loadProject(); });
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/projects/${projectId}`, { method: "DELETE" });
+      navigate("/projects");
+    } catch {
+      setDeleting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -178,11 +191,20 @@ export default function ProjectDetail() {
               {project.siteAddress}, {project.suburb} {project.state} {project.postcode}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <div className="text-right text-sm">
               <div className="font-medium text-sidebar">{project.totalInspections} Inspections</div>
               <div className="text-muted-foreground">{project.openIssues} open issues</div>
             </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-400"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Delete Project
+            </Button>
           </div>
         </div>
       </div>
@@ -210,6 +232,47 @@ export default function ProjectDetail() {
       {tab === "Inspections" && <InspectionsTab project={project} onRefresh={loadProject} />}
       {tab === "Inspection Types" && <InspectionTypesTab projectId={projectId} />}
       {tab === "Reports" && <ReportsTab projectId={projectId} />}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={open => { if (!deleting) setDeleteOpen(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Delete Project
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              You are about to permanently delete{" "}
+              <span className="font-semibold text-sidebar">"{project.name}"</span>.
+            </p>
+            <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 space-y-1">
+              <p className="font-semibold">This will permanently remove:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-xs">
+                <li>All inspections and their checklist results</li>
+                <li>All issues and notes</li>
+                <li>All uploaded documents</li>
+                <li>All reports and activity history</li>
+              </ul>
+            </div>
+            <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Deleting…</> : <><Trash2 className="h-3.5 w-3.5 mr-1.5" />Delete Permanently</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, sql, and } from "drizzle-orm";
-import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable } from "@workspace/db";
+import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
+import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -231,10 +231,43 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    await db.update(projectsTable)
-      .set({ status: "archived", updatedAt: new Date() })
-      .where(eq(projectsTable.id, id));
-    res.json({ success: true, message: "Project archived" });
+
+    // Confirm project exists
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+    if (!project) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+
+    // Get all inspection IDs for this project
+    const inspections = await db.select({ id: inspectionsTable.id })
+      .from(inspectionsTable).where(eq(inspectionsTable.projectId, id));
+    const inspectionIds = inspections.map(i => i.id);
+
+    if (inspectionIds.length > 0) {
+      // Delete checklist results, notes, reports, and activity logs for inspections
+      await db.delete(checklistResultsTable).where(inArray(checklistResultsTable.inspectionId, inspectionIds));
+      await db.delete(notesTable).where(inArray(notesTable.inspectionId, inspectionIds));
+      await db.delete(reportsTable).where(inArray(reportsTable.inspectionId, inspectionIds));
+      await db.delete(issuesTable).where(inArray(issuesTable.inspectionId, inspectionIds));
+    }
+
+    // Delete all inspections for this project
+    await db.delete(inspectionsTable).where(eq(inspectionsTable.projectId, id));
+
+    // Delete document–checklist links, documents, project-level issues
+    await db.delete(documentChecklistLinksTable).where(eq(documentChecklistLinksTable.projectId, id));
+    await db.delete(documentsTable).where(eq(documentsTable.projectId, id));
+    await db.delete(issuesTable).where(eq(issuesTable.projectId, id));
+
+    // Delete project inspection type assignments and activity logs
+    await db.delete(projectInspectionTypesTable).where(eq(projectInspectionTypesTable.projectId, id));
+    await db.delete(activityLogsTable).where(sql`${activityLogsTable.entityType} = 'project' AND ${activityLogsTable.entityId} = ${id}`);
+
+    // Finally delete the project
+    await db.delete(projectsTable).where(eq(projectsTable.id, id));
+
+    res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Delete project error");
     res.status(500).json({ error: "internal_error" });
