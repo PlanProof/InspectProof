@@ -38,7 +38,7 @@ function Header() {
             <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#0B1933]">
               <ClipboardList className="h-5 w-5 text-[#C5D92D]" />
             </div>
-            <span className="text-[22px] text-[#0B1933]" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em" }}>
+            <span className="text-[22px] text-[#0B1933] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>
               InspectProof
             </span>
           </div>
@@ -134,11 +134,10 @@ function Hero() {
         </div>
 
         {/* Stats strip */}
-        <div className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-6">
           {[
             { value: "100%", label: "NCC class coverage" },
             { value: "< 2 min", label: "Average report time" },
-            { value: "17", label: "NCC building classes" },
             { value: "Zero", label: "Paper checklists needed" },
           ].map((stat) => (
             <div key={stat.label} className="rounded-xl border border-white/10 bg-white/5 px-4 py-5">
