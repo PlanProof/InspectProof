@@ -40,6 +40,18 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   cancelled: { label: "Cancelled", color: Colors.textTertiary, bg: Colors.borderLight },
 };
 
+const INSPECTION_REPORT_TYPE: Record<string, string> = {
+  final: "inspection_certificate",
+  pool_barrier: "compliance_report",
+  frame: "compliance_report",
+  footings: "compliance_report",
+  slab: "compliance_report",
+  plumbing: "compliance_report",
+  electrical: "compliance_report",
+  fire: "compliance_report",
+  special: "compliance_report",
+};
+
 const MOCK_TIMES = [
   "07:30", "08:00", "08:30", "09:00", "09:30", "10:00",
   "10:30", "11:00", "13:00", "13:30", "14:00", "14:30",
@@ -262,6 +274,7 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
       {/* Card */}
       <View style={[
         tlStyles.card,
+        insp.status === "completed" && tlStyles.cardCompleted,
         shiftMode && tlStyles.cardShift,
         dragging && tlStyles.cardDragging,
       ]}>
@@ -278,12 +291,16 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
               <Feather name="clipboard" size={11} color={Colors.secondary} />
               <Text style={tlStyles.typeText}>{typeLabel}</Text>
             </View>
-            <View style={[tlStyles.statusPill, { backgroundColor: cfg.bg }]}>
+            <View style={[tlStyles.statusPill, { backgroundColor: cfg.bg, flexDirection: "row", alignItems: "center", gap: 3 }]}>
+              {insp.status === "completed" && <Feather name="check-circle" size={10} color={cfg.color} />}
               <Text style={[tlStyles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
             </View>
           </View>
 
-          <Text style={tlStyles.projectName} numberOfLines={1}>{insp.projectName}</Text>
+          <Text
+            style={[tlStyles.projectName, insp.status === "completed" && { color: Colors.textSecondary }]}
+            numberOfLines={1}
+          >{insp.projectName}</Text>
 
           {hasAddress && (
             <View style={tlStyles.addressRow}>
@@ -297,6 +314,30 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
             <View style={tlStyles.metaRow}>
               <Feather name="user" size={11} color={Colors.textTertiary} />
               <Text style={tlStyles.metaText}>{insp.inspectorName}</Text>
+            </View>
+          )}
+
+          {!shiftMode && insp.status === "completed" && (
+            <View style={tlStyles.completedActions}>
+              <Pressable
+                onPress={() => router.push({
+                  pathname: "/inspection/generate-report",
+                  params: {
+                    id: String(insp.id),
+                    autoType: INSPECTION_REPORT_TYPE[insp.inspectionType] || "compliance_report",
+                  },
+                } as any)}
+                style={({ pressed }) => [tlStyles.reportBtn, pressed && { opacity: 0.8 }]}
+              >
+                <Feather name="file-text" size={13} color="#FFFFFF" />
+                <Text style={tlStyles.reportBtnText}>Generate Report</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push(`/inspection/${insp.id}` as any)}
+                style={({ pressed }) => [tlStyles.viewBtn, pressed && { opacity: 0.8 }]}
+              >
+                <Text style={tlStyles.viewBtnText}>View Results</Text>
+              </Pressable>
             </View>
           )}
 
@@ -477,6 +518,11 @@ const tlStyles = StyleSheet.create({
     elevation: 8,
     backgroundColor: "#FAFEFF",
   },
+  cardCompleted: {
+    backgroundColor: "#F4F5F6",
+    borderColor: "#D8DADD",
+    shadowOpacity: 0.02,
+  },
   dragHandle: {
     alignItems: "center",
     paddingVertical: 6,
@@ -508,6 +554,22 @@ const tlStyles = StyleSheet.create({
     paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, marginTop: 2,
   },
   actionText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  completedActions: {
+    flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2,
+  },
+  reportBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: Colors.secondary,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 7,
+  },
+  reportBtnText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#FFFFFF" },
+  viewBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "transparent",
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7,
+  },
+  viewBtnText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
   shiftHint: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
   shiftHintText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary + "99" },
   emptyWrap: { alignItems: "center", paddingVertical: 32, gap: 8 },
