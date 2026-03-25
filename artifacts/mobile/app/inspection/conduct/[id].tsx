@@ -347,7 +347,7 @@ export default function ConductInspectionScreen() {
       {/* Checklist */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + (progress === 1 ? 130 : 80) }]}
         showsVerticalScrollIndicator={false}
       >
         {total === 0 ? (
@@ -389,6 +389,23 @@ export default function ConductInspectionScreen() {
           ))
         )}
       </ScrollView>
+
+      {/* Generate Report — shown when 100% complete */}
+      {progress === 1 && total > 0 && (
+        <View style={[styles.generateBar, { paddingBottom: insets.bottom + 12 }]}>
+          <Pressable
+            style={({ pressed }) => [styles.generateBtn, pressed && { opacity: 0.85 }]}
+            onPress={() => {
+              const autoType = failCount > 0 ? "defect_notice" : "inspection_certificate";
+              router.push(`/inspection/generate-report?id=${id}&autoType=${autoType}` as any);
+            }}
+          >
+            <Feather name="file-text" size={20} color={Colors.primary} />
+            <Text style={styles.generateBtnText}>Generate Report</Text>
+            <Feather name="arrow-right" size={18} color={Colors.primary} />
+          </Pressable>
+        </View>
+      )}
 
       {/* Item Detail Modal */}
       <Modal
@@ -745,6 +762,34 @@ const styles = StyleSheet.create({
   photoBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: Colors.infoLight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   photoBadgeText: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   notesBadge: { backgroundColor: Colors.background, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  generateBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: Colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  generateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    paddingVertical: 18,
+  },
+  generateBtnText: {
+    fontSize: 17,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.primary,
+    flex: 1,
+    textAlign: "center",
+    marginLeft: -28,
+  },
   cameraBtn: {
     position: "relative",
     padding: 10,
