@@ -11,7 +11,6 @@ import {
   Image,
   Modal,
   Platform,
-  Linking,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
@@ -483,6 +482,8 @@ export default function ConductInspectionScreen() {
           documents={projectDocuments}
           baseUrl={baseUrl}
           insets={insets}
+          inspectionId={id}
+          activeItemId={activeItem?.id}
           onClose={() => setShowDocsPanel(false)}
           onAnnotate={(doc) => {
             setShowDocsPanel(false);
@@ -520,6 +521,7 @@ export default function ConductInspectionScreen() {
             saving={savingItem}
             uploadingPhoto={uploadingPhoto}
             insets={insets}
+            inspectionId={id}
           />
         )}
       </Modal>
@@ -604,13 +606,15 @@ function getDocIcon(mimeType?: string): string {
 }
 
 function DocumentsPanel({
-  documents, baseUrl, insets, onClose, onAnnotate,
+  documents, baseUrl, insets, onClose, onAnnotate, inspectionId, activeItemId,
 }: {
   documents: ProjectDocument[];
   baseUrl: string;
   insets: any;
   onClose: () => void;
   onAnnotate: (doc: ProjectDocument) => void;
+  inspectionId?: string;
+  activeItemId?: number;
 }) {
   const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
   const grouped = documents.reduce<Record<string, ProjectDocument[]>>((acc, doc) => {
@@ -625,9 +629,16 @@ function DocumentsPanel({
     if (isImage) {
       setPreviewDoc(doc);
     } else {
-      Linking.openURL(`${baseUrl}/api/storage${doc.fileUrl}`).catch(() =>
-        Alert.alert("Cannot open", "Unable to open this file type on your device.")
-      );
+      onClose();
+      router.push({
+        pathname: "/inspection/document-viewer" as any,
+        params: {
+          url: `${baseUrl}/api/storage${doc.fileUrl}`,
+          name: doc.name,
+          mimeType: doc.mimeType || "application/octet-stream",
+          ...(inspectionId && activeItemId ? { inspectionId, itemId: String(activeItemId) } : {}),
+        },
+      });
     }
   };
 
@@ -726,6 +737,7 @@ function DocumentsPanel({
 function ItemModal({
   item, result, notes, baseUrl, documents, onResultChange, onNotesChange, onSave, onClose,
   onUploadPhoto, onTakePhoto, onRemovePhoto, onAnnotateDoc, saving, uploadingPhoto, insets,
+  inspectionId,
 }: {
   item: ChecklistItem; result: ResultKey; notes: string; baseUrl: string;
   documents: ProjectDocument[];
@@ -734,6 +746,7 @@ function ItemModal({
   onTakePhoto: () => void; onRemovePhoto: (p: string) => void;
   onAnnotateDoc: (doc: ProjectDocument) => void;
   saving: boolean; uploadingPhoto: boolean; insets: any;
+  inspectionId?: string;
 }) {
   const selectedOpt = RESULT_OPTS.find(r => r.key === result);
   const suggestions = getSuggestionsForItem(item.category, item.description);
@@ -949,14 +962,21 @@ function ItemModal({
                         style={modalStyles.docIconWrap}
                         onPress={() => {
                           if (doc.fileUrl) {
-                            Linking.openURL(`${baseUrl}/api/storage${doc.fileUrl}`).catch(() =>
-                              Alert.alert("Cannot open", "Unable to open this file on your device.")
-                            );
+                            onClose();
+                            router.push({
+                              pathname: "/inspection/document-viewer" as any,
+                              params: {
+                                url: `${baseUrl}/api/storage${doc.fileUrl}`,
+                                name: doc.name,
+                                mimeType: doc.mimeType || "application/octet-stream",
+                                ...(inspectionId && item?.id ? { inspectionId, itemId: String(item.id) } : {}),
+                              },
+                            });
                           }
                         }}
                       >
                         <Feather name={icon as any} size={28} color={Colors.secondary} />
-                        <Feather name="external-link" size={10} color={Colors.textTertiary} style={{ position: "absolute", top: 4, right: 4 }} />
+                        <Feather name="edit-2" size={10} color={Colors.secondary} style={{ position: "absolute", top: 4, right: 4 }} />
                       </Pressable>
                     )}
                     <Text style={modalStyles.docCardName} numberOfLines={2}>{doc.name}</Text>
