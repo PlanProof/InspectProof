@@ -397,7 +397,7 @@ function Professionals() {
         </div>
 
         {/* Content panel */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-8 md:p-12 grid md:grid-cols-2 gap-10 items-start">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-8 md:p-12 grid md:grid-cols-2 gap-10 items-center">
           <div>
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[#C5D92D]/15 border border-[#C5D92D]/30">
               <p.icon className="h-6 w-6 text-[#C5D92D]" />
@@ -416,14 +416,16 @@ function Professionals() {
               Get Started <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-          <ul className="space-y-4">
-            {p.bullets.map((b) => (
-              <li key={b} className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 shrink-0 text-[#C5D92D]" />
-                <span className="text-white/70 text-sm leading-relaxed">{b}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="flex flex-col items-center justify-center">
+            <ul className="space-y-4">
+              {p.bullets.map((b) => (
+                <li key={b} className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-[#C5D92D]" />
+                  <span className="text-white/70 text-sm leading-relaxed">{b}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </section>
