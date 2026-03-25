@@ -424,18 +424,16 @@ function ChecklistRow({ item, onPress, onCamera, onQuickPass }: { item: Checklis
       {/* Camera quick-action button */}
       <Pressable
         onPress={e => { e.stopPropagation?.(); onCamera(); }}
-        hitSlop={10}
+        hitSlop={12}
         style={({ pressed }) => [styles.cameraBtn, pressed && { opacity: 0.6 }]}
       >
-        <Feather name="camera" size={15} color={photoCount > 0 ? Colors.secondary : Colors.textTertiary} />
+        <Feather name="camera" size={22} color={photoCount > 0 ? Colors.secondary : Colors.textTertiary} />
         {photoCount > 0 && (
           <View style={styles.cameraBadge}>
             <Text style={styles.cameraBadgeText}>{photoCount}</Text>
           </View>
         )}
       </Pressable>
-
-      <Feather name="chevron-right" size={16} color={Colors.textTertiary} style={{ marginLeft: 2 }} />
     </Pressable>
   );
 }
@@ -699,9 +697,9 @@ const styles = StyleSheet.create({
   notesBadge: { backgroundColor: Colors.background, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   cameraBtn: {
     position: "relative",
-    padding: 6,
+    padding: 10,
     marginLeft: 4,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: Colors.borderLight,
     alignItems: "center",
     justifyContent: "center",
