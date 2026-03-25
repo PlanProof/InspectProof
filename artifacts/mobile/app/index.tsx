@@ -1,15 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   Pressable,
-  KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   ScrollView,
-  Image,
+  Animated,
+  ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,299 +15,275 @@ import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
-const logoImage = require("@/assets/images/logo.png");
+const WEB_TOP = Platform.OS === "web" ? 67 : 0;
 
-export default function LoginScreen() {
-  const { user, isLoading, login } = useAuth();
+const FEATURES = [
+  {
+    icon: "clipboard" as const,
+    title: "Digital Inspection Forms",
+    desc: "NCC 2022 & BCA-compliant checklists for every building class, stage, and trade.",
+  },
+  {
+    icon: "camera" as const,
+    title: "Photo Evidence with Markup",
+    desc: "Capture, annotate, and attach photos directly to checklist items on site.",
+  },
+  {
+    icon: "file-text" as const,
+    title: "One-Tap Certificates",
+    desc: "Generate Inspection Certificates, Defect Notices, and Compliance Reports instantly.",
+  },
+  {
+    icon: "shield" as const,
+    title: "Issue Tracking",
+    desc: "Log defects, assign responsibility, and track resolution through to sign-off.",
+  },
+];
+
+const WHO_FOR = [
+  { icon: "briefcase" as const, label: "Building Certifiers" },
+  { icon: "tool" as const, label: "Site Inspectors" },
+  { icon: "bar-chart-2" as const, label: "Project Managers" },
+  { icon: "droplet" as const, label: "Plumbing Inspectors" },
+];
+
+export default function WelcomeScreen() {
+  const { user, isLoading } = useAuth();
   const insets = useSafeAreaInsets();
-  const [email, setEmail] = useState("admin@inspectproof.com.au");
-  const [password, setPassword] = useState("password123");
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(24)).current;
 
   useEffect(() => {
     if (!isLoading && user) {
       router.replace("/(tabs)");
+      return;
     }
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+    ]).start();
   }, [user, isLoading]);
 
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color={Colors.secondary} />
+        <ActivityIndicator size="large" color={Colors.accent} />
       </View>
     );
   }
 
-  const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      setError("Please enter your email and password.");
-      return;
-    }
-    setError("");
-    setSubmitting(true);
-    try {
-      await login(email.trim(), password);
-      router.replace("/(tabs)");
-    } catch (e: any) {
-      setError(e.message || "Login failed. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  if (user) return null;
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + WEB_TOP + 24, paddingBottom: insets.bottom + 32 },
+      ]}
+      showsVerticalScrollIndicator={false}
     >
-      <ScrollView
-        contentContainerStyle={[
-          styles.container,
-          { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 40), paddingBottom: insets.bottom + 24 },
-        ]}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Logo & Brand */}
-        <View style={styles.brand}>
-          <Image source={logoImage} style={styles.logoImage} resizeMode="contain" />
+      <Animated.View style={[{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }, styles.inner]}>
+
+        {/* Hero */}
+        <View style={styles.hero}>
+          {/* Logo badge */}
+          <View style={styles.logoBadge}>
+            <Feather name="clipboard" size={28} color={Colors.primary} />
+          </View>
           <Text style={styles.brandName}>InspectProof</Text>
-          <Text style={styles.brandTagline}>Building Inspection Platform</Text>
+          <Text style={styles.tagline}>
+            Australia's building certification{"\n"}and inspection platform
+          </Text>
+          <Text style={styles.subTagline}>
+            Built for certifiers, surveyors and engineers who demand accuracy on site and speed in the office.
+          </Text>
         </View>
 
-        {/* Login Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Sign In</Text>
-          <Text style={styles.cardSubtitle}>Access your inspection workspace</Text>
-
-          {error ? (
-            <View style={styles.errorBox}>
-              <Feather name="alert-circle" size={14} color={Colors.danger} />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Email Address</Text>
-            <View style={styles.inputWrapper}>
-              <Feather name="mail" size={16} color={Colors.textTertiary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@inspectproof.com.au"
-                placeholderTextColor={Colors.textTertiary}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.inputWrapper}>
-              <Feather name="lock" size={16} color={Colors.textTertiary} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="••••••••"
-                placeholderTextColor={Colors.textTertiary}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-              />
-              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                <Feather name={showPassword ? "eye-off" : "eye"} size={16} color={Colors.textTertiary} />
-              </Pressable>
-            </View>
-          </View>
-
+        {/* CTA Buttons */}
+        <View style={styles.ctaRow}>
           <Pressable
-            onPress={handleLogin}
-            disabled={submitting}
-            style={({ pressed }) => [
-              styles.loginButton,
-              pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
-              submitting && { opacity: 0.7 },
-            ]}
+            onPress={() => router.push("/register" as any)}
+            style={({ pressed }) => [styles.ctaPrimary, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}
           >
-            {submitting ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.loginButtonText}>Sign In</Text>
-                <Feather name="arrow-right" size={16} color="#fff" />
-              </>
-            )}
+            <Text style={styles.ctaPrimaryText}>Get Started Free</Text>
+            <Feather name="arrow-right" size={16} color={Colors.primary} />
           </Pressable>
+          <Pressable
+            onPress={() => router.push("/login" as any)}
+            style={({ pressed }) => [styles.ctaSecondary, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.ctaSecondaryText}>Sign In</Text>
+          </Pressable>
+        </View>
 
-          <View style={styles.demoNote}>
-            <Feather name="info" size={12} color={Colors.textTertiary} />
-            <Text style={styles.demoText}>Demo credentials pre-filled</Text>
+        {/* Stats Strip */}
+        <View style={styles.statsStrip}>
+          {[
+            { n: "10+", label: "Inspection\nTypes" },
+            { n: "NCC\n2022", label: "Compliant" },
+            { n: "AU", label: "Built for\nAustralia" },
+          ].map((s) => (
+            <View key={s.label} style={styles.statItem}>
+              <Text style={styles.statN}>{s.n}</Text>
+              <Text style={styles.statLabel}>{s.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Features */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Everything you need on site</Text>
+          <View style={styles.featureList}>
+            {FEATURES.map((f) => (
+              <View key={f.title} style={styles.featureCard}>
+                <View style={styles.featureIcon}>
+                  <Feather name={f.icon} size={18} color={Colors.accent} />
+                </View>
+                <View style={styles.featureText}>
+                  <Text style={styles.featureTitle}>{f.title}</Text>
+                  <Text style={styles.featureDesc}>{f.desc}</Text>
+                </View>
+              </View>
+            ))}
           </View>
+        </View>
+
+        {/* Who It's For */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Built for professionals</Text>
+          <View style={styles.whoGrid}>
+            {WHO_FOR.map((w) => (
+              <View key={w.label} style={styles.whoChip}>
+                <Feather name={w.icon} size={15} color={Colors.accent} />
+                <Text style={styles.whoLabel}>{w.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Divider */}
+        <View style={styles.divider} />
+
+        {/* Bottom CTA */}
+        <View style={styles.bottomCta}>
+          <Text style={styles.bottomCtaText}>Ready to modernise your inspection workflow?</Text>
+          <Pressable
+            onPress={() => router.push("/register" as any)}
+            style={({ pressed }) => [styles.ctaPrimary, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={styles.ctaPrimaryText}>Create Free Account</Text>
+            <Feather name="arrow-right" size={16} color={Colors.primary} />
+          </Pressable>
+          <Pressable onPress={() => router.push("/login" as any)}>
+            <Text style={styles.alreadyHave}>Already have an account? <Text style={styles.signInLink}>Sign In</Text></Text>
+          </Pressable>
         </View>
 
         {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            InspectProof v1.0 · Australian Building Inspection Platform
-          </Text>
-          <Text style={styles.footerSub}>NCC 2022 · BCA · AS Standards Compatible</Text>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <Text style={styles.footerText}>InspectProof · contact@inspectproof.com.au</Text>
+        <Text style={styles.footerSub}>NCC 2022 · BCA · AS Standards Compatible</Text>
+      </Animated.View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  container: {
-    flexGrow: 1,
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 24,
-    gap: 32,
-    alignItems: "center",
-  },
-  brand: {
-    alignItems: "center",
-    gap: 8,
-    paddingTop: 20,
-  },
-  logoImage: {
-    width: 90,
-    height: 90,
-    marginBottom: 4,
+  loadingContainer: { flex: 1, backgroundColor: Colors.primary, alignItems: "center", justifyContent: "center" },
+  container: { flex: 1, backgroundColor: Colors.primary },
+  content: { paddingHorizontal: 24 },
+  inner: { gap: 28 },
+
+  hero: { alignItems: "center", gap: 10, paddingTop: 8 },
+  logoBadge: {
+    width: 68, height: 68, borderRadius: 20,
+    backgroundColor: Colors.accent,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: Colors.accent, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
   },
   brandName: {
-    fontSize: 32,
-    fontFamily: "PlusJakartaSans_600SemiBold",
+    fontSize: 34,
     color: "#FFFFFF",
-    letterSpacing: -1,
-  },
-  brandTagline: {
-    fontSize: 13,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: "rgba(255,255,255,0.5)",
-    textAlign: "center",
-    maxWidth: 260,
-  },
-  card: {
-    width: "100%",
-    maxWidth: 400,
-    backgroundColor: Colors.surface,
-    borderRadius: 20,
-    padding: 24,
-    gap: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-    elevation: 8,
-  },
-  cardTitle: {
-    fontSize: 22,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.text,
     letterSpacing: -0.5,
-  },
-  cardSubtitle: {
-    fontSize: 14,
     fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textSecondary,
-    marginTop: -8,
   },
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.dangerLight,
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: Colors.dangerBorder,
+  tagline: {
+    fontSize: 17,
+    color: "rgba(255,255,255,0.85)",
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    textAlign: "center",
+    lineHeight: 24,
   },
-  errorText: {
+  subTagline: {
     fontSize: 13,
+    color: "rgba(255,255,255,0.5)",
     fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.danger,
-    flex: 1,
+    textAlign: "center",
+    lineHeight: 19,
+    maxWidth: 300,
   },
-  field: {
-    gap: 6,
+
+  ctaRow: { gap: 10 },
+  ctaPrimary: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: Colors.accent, borderRadius: 14, paddingVertical: 16,
+    shadowColor: Colors.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4,
   },
-  label: {
-    fontSize: 13,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.text,
+  ctaPrimaryText: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  ctaSecondary: {
+    alignItems: "center", justifyContent: "center",
+    borderRadius: 14, paddingVertical: 14,
+    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)",
   },
-  inputWrapper: {
+  ctaSecondaryText: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.8)" },
+
+  statsStrip: {
     flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    backgroundColor: Colors.background,
-    paddingHorizontal: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+    paddingVertical: 16,
   },
-  inputIcon: {
-    marginRight: 8,
+  statItem: { flex: 1, alignItems: "center", gap: 3 },
+  statN: { fontSize: 18, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.accent, lineHeight: 22, textAlign: "center" },
+  statLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.45)", textAlign: "center", lineHeight: 13 },
+
+  section: { gap: 14 },
+  sectionTitle: { fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: "#FFFFFF" },
+  featureList: { gap: 10 },
+  featureCard: {
+    flexDirection: "row", gap: 14, alignItems: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
   },
-  input: {
-    flex: 1,
-    paddingVertical: 13,
-    fontSize: 15,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.text,
+  featureIcon: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: "rgba(197,217,45,0.15)",
+    alignItems: "center", justifyContent: "center",
+    flexShrink: 0,
   },
-  eyeButton: {
-    padding: 4,
+  featureText: { flex: 1, gap: 3 },
+  featureTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: "#FFFFFF" },
+  featureDesc: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.5)", lineHeight: 17 },
+
+  whoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  whoChip: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
   },
-  loginButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: Colors.secondary,
-    borderRadius: 12,
-    paddingVertical: 15,
-    marginTop: 4,
+  whoLabel: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.8)" },
+
+  divider: { height: 1, backgroundColor: "rgba(255,255,255,0.08)" },
+
+  bottomCta: { alignItems: "center", gap: 12 },
+  bottomCtaText: {
+    fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#FFFFFF", textAlign: "center", lineHeight: 22,
   },
-  loginButtonText: {
-    fontSize: 16,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: "#FFFFFF",
-  },
-  demoNote: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  demoText: {
-    fontSize: 12,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textTertiary,
-  },
-  footer: {
-    alignItems: "center",
-    gap: 4,
-    paddingBottom: 8,
-  },
-  footerText: {
-    fontSize: 12,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: "rgba(255,255,255,0.35)",
-  },
-  footerSub: {
-    fontSize: 11,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: "rgba(255,255,255,0.2)",
-  },
+  alreadyHave: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.45)" },
+  signInLink: { color: Colors.accent },
+
+  footerText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.25)", textAlign: "center" },
+  footerSub: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.15)", textAlign: "center" },
 });

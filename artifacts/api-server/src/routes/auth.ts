@@ -49,6 +49,57 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.post("/register", async (req, res) => {
+  try {
+    const { email, password, firstName, lastName, role, organization, plan } = req.body;
+
+    if (!email || !password || !firstName || !lastName) {
+      res.status(400).json({ error: "bad_request", message: "First name, last name, email and password are required." });
+      return;
+    }
+    if (password.length < 8) {
+      res.status(400).json({ error: "bad_request", message: "Password must be at least 8 characters." });
+      return;
+    }
+
+    const existing = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim()));
+    if (existing.length > 0) {
+      res.status(409).json({ error: "conflict", message: "An account with this email already exists." });
+      return;
+    }
+
+    const [newUser] = await db.insert(usersTable).values({
+      email: email.toLowerCase().trim(),
+      passwordHash: password,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      role: role || "inspector",
+      isActive: true,
+    }).returning();
+
+    const token = Buffer.from(`${newUser.id}:${newUser.email}:${Date.now()}`).toString("base64");
+
+    res.status(201).json({
+      token,
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        role: newUser.role,
+        phone: newUser.phone,
+        avatar: newUser.avatar,
+        isActive: newUser.isActive,
+        createdAt: newUser.createdAt.toISOString(),
+      },
+      plan: plan || "starter",
+    });
+  } catch (err) {
+    req.log.error({ err }, "Register error");
+    res.status(500).json({ error: "internal_error", message: "Server error" });
+  }
+});
+
 router.get("/me", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
