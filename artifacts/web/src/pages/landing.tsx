@@ -38,7 +38,7 @@ function Header() {
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#0B1933]">
               <ClipboardList className="h-4 w-4 text-[#C5D92D]" />
             </div>
-            <span className="text-[15px] font-semibold text-[#0B1933]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <span className="text-[18px] font-semibold text-[#0B1933]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               InspectProof
             </span>
           </div>
