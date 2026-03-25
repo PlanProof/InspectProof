@@ -24,12 +24,12 @@ window.fetch = async (input, init) => {
     const token = localStorage.getItem('inspectproof_token');
     if (token) {
       init = init || {};
-      init.headers = {
-        ...init.headers,
-        'Authorization': `Basic ${token}`
-      };
-      // Allow credentials for cross-origin if needed, though we use same origin
-      init.credentials = "include";
+      // Merge headers safely — handle Headers instance, plain object, or array
+      const merged = new Headers(init.headers);
+      if (!merged.has('Authorization')) {
+        merged.set('Authorization', `Basic ${token}`);
+      }
+      init = { ...init, headers: merged, credentials: "include" };
     }
   }
   const response = await originalFetch(input, init);
