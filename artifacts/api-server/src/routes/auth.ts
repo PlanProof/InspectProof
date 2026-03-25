@@ -39,6 +39,7 @@ router.post("/login", async (req, res) => {
         role: user.role,
         phone: user.phone,
         avatar: user.avatar,
+        signatureUrl: user.signatureUrl ?? null,
         isActive: user.isActive,
         createdAt: user.createdAt.toISOString(),
       },
@@ -89,6 +90,7 @@ router.post("/register", async (req, res) => {
         role: newUser.role,
         phone: newUser.phone,
         avatar: newUser.avatar,
+        signatureUrl: newUser.signatureUrl ?? null,
         isActive: newUser.isActive,
         createdAt: newUser.createdAt.toISOString(),
       },
@@ -134,6 +136,7 @@ router.get("/me", async (req, res) => {
       role: user.role,
       phone: user.phone,
       avatar: user.avatar,
+      signatureUrl: user.signatureUrl ?? null,
       isActive: user.isActive,
       createdAt: user.createdAt.toISOString(),
     });

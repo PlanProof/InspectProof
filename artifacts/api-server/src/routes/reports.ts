@@ -2,6 +2,7 @@ import path from "path";
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import PDFDocument from "pdfkit";
+import { ObjectStorageService } from "../lib/objectStorage";
 
 const FONT_DIR        = path.join(__dirname, "..", "fonts");
 const FONT_REGULAR    = path.join(FONT_DIR, "PlusJakartaSans-Regular.ttf");
@@ -174,7 +175,7 @@ CERTIFICATION
 
   content += `
 
-Inspector Signature: ___________________________
+Inspector Signature: {{SIGNATURE}}
 Name: ${inspector ? `${inspector.firstName} ${inspector.lastName}` : "—"}
 Date: ${formatDate(inspection?.completedDate || new Date().toISOString().split("T")[0])}
 
@@ -454,7 +455,7 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
   doc.restore();
 }
 
-function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
+function buildPdf(report: any, _project: any, signatureBuffer?: Buffer): PDFKit.PDFDocument {
   const doc = new PDFDocument({
     size: "A4",
     margins: { top: 88, bottom: FOOTER_H + 20, left: MARGIN, right: MARGIN },
@@ -623,6 +624,35 @@ function buildPdf(report: any, _project: any): PDFKit.PDFDocument {
       continue;
     }
 
+    // Signature line: "Inspector Signature: {{SIGNATURE}}"
+    if (line.includes("{{SIGNATURE}}")) {
+      checkPageBreak(70);
+      const sigLabelY = doc.y;
+      doc.fillColor(COLOR_NAVY).fontSize(9).font(FB)
+        .text("Inspector Signature:", MARGIN, sigLabelY, { width: contentW, lineBreak: false });
+      doc.y = sigLabelY + 16;
+
+      if (signatureBuffer) {
+        try {
+          const sigH = 48;
+          doc.image(signatureBuffer, MARGIN, doc.y, { height: sigH, fit: [200, sigH] });
+          doc.y = doc.y + sigH + 4;
+        } catch {
+          // fallback if image fails
+          doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 200, doc.y + 2)
+            .strokeColor("#9CA3AF").lineWidth(0.75).stroke();
+          doc.y = doc.y + 16;
+        }
+      } else {
+        // Blank signature line
+        doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 200, doc.y + 2)
+          .strokeColor("#9CA3AF").lineWidth(0.75).stroke();
+        doc.y = doc.y + 16;
+      }
+      doc.moveDown(0.3);
+      continue;
+    }
+
     // Default body text
     checkPageBreak(18);
     doc.fillColor("#1F2937").fontSize(9.5).font(F)
@@ -652,8 +682,40 @@ router.get("/:id/pdf", async (req, res) => {
     const projects = await db.select().from(projectsTable).where(eq(projectsTable.id, report.projectId));
     const project = projects[0];
 
+    // Fetch inspector's signature if available
+    let signatureBuffer: Buffer | undefined;
+    if (report.inspectionId) {
+      try {
+        const inspections = await db.select().from(inspectionsTable)
+          .where(eq(inspectionsTable.id, report.inspectionId));
+        const inspectorId = inspections[0]?.inspectorId;
+        if (inspectorId) {
+          const users = await db.select().from(usersTable).where(eq(usersTable.id, inspectorId));
+          const signatureUrl = users[0]?.signatureUrl;
+          if (signatureUrl) {
+            const storageService = new ObjectStorageService();
+            const file = await storageService.getObjectEntityFile(signatureUrl);
+            const response = await storageService.downloadObject(file);
+            if (response.body) {
+              const chunks: Buffer[] = [];
+              const reader = response.body.getReader();
+              let done = false;
+              while (!done) {
+                const result = await reader.read();
+                done = result.done;
+                if (result.value) chunks.push(Buffer.from(result.value));
+              }
+              signatureBuffer = Buffer.concat(chunks);
+            }
+          }
+        }
+      } catch (sigErr) {
+        req.log.warn({ sigErr }, "Could not load signature — omitting from PDF");
+      }
+    }
+
     const formatted = await formatReport(report);
-    const doc = buildPdf(formatted, project);
+    const doc = buildPdf(formatted, project, signatureBuffer);
 
     const safeName = (report.title || "report")
       .replace(/[^a-z0-9\s\-_]/gi, "")

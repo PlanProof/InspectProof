@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useAuth } from "@/hooks/use-auth";
 import {
   User, Lock, Bell, Building2, Palette, Loader2,
   CheckCircle2, ChevronRight, Shield, Database, Download,
-  ToggleLeft,
+  ToggleLeft, Upload, Trash2, PenLine,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -217,12 +217,20 @@ function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
   const [licenceNumber, setLicenceNumber] = useState("");
   const [title, setTitle] = useState("");
 
+  // Signature state
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+  const [sigUploading, setSigUploading] = useState(false);
+  const [sigError, setSigError] = useState("");
+  const [sigSaved, setSigSaved] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (user) {
-      setName(user.name ?? "");
+      setName(user.name ?? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim());
       setPhone(user.phone ?? "");
       setLicenceNumber(user.licenceNumber ?? "");
       setTitle(user.title ?? "");
+      setSignatureUrl(user.signatureUrl ?? null);
     }
   }, [user]);
 
@@ -231,6 +239,79 @@ function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
   const save = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
+  };
+
+  const uploadSignature = async (file: File) => {
+    setSigError("");
+    setSigUploading(true);
+    try {
+      // 1. Request a pre-signed upload URL
+      const { uploadURL, objectPath } = await apiFetch("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+
+      // 2. PUT the file to the signed URL
+      const putRes = await fetch(uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!putRes.ok) throw new Error("Upload failed");
+
+      // 3. Save objectPath on the user record
+      await apiFetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signatureUrl: objectPath }),
+      });
+
+      setSignatureUrl(objectPath);
+      setSigSaved(true);
+      setTimeout(() => setSigSaved(false), 3000);
+    } catch (err: any) {
+      setSigError("Upload failed. Please try again.");
+    } finally {
+      setSigUploading(false);
+    }
+  };
+
+  const removeSignature = async () => {
+    setSigError("");
+    setSigUploading(true);
+    try {
+      await apiFetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signatureUrl: null }),
+      });
+      setSignatureUrl(null);
+      setSigSaved(true);
+      setTimeout(() => setSigSaved(false), 3000);
+    } catch {
+      setSigError("Could not remove signature. Please try again.");
+    } finally {
+      setSigUploading(false);
+    }
+  };
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setSigError("Please upload an image file (PNG, JPG, or SVG).");
+      return;
+    }
+    uploadSignature(file);
+    // Reset input so same file can be re-selected
+    e.target.value = "";
+  };
+
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) uploadSignature(file);
   };
 
   if (loading) return (
@@ -278,6 +359,118 @@ function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
           <SaveBanner show={saved} />
           <Button onClick={save}>Save Profile</Button>
         </div>
+      </SectionCard>
+
+      {/* ── Digital Signature ─────────────────────────────────────────────── */}
+      <SectionCard
+        title="Digital Signature"
+        description="Your signature is automatically embedded in the certification section of all generated PDF reports."
+      >
+        <div className="space-y-4">
+          {/* Signature preview or upload area */}
+          {signatureUrl ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start gap-4">
+                {/* Preview box */}
+                <div className="flex-1 min-w-0 border border-border rounded-xl bg-white p-4 flex items-center justify-center min-h-[80px]">
+                  <img
+                    src={`${apiBase()}/api/storage${signatureUrl}`}
+                    alt="Your signature"
+                    className="max-h-16 max-w-full object-contain"
+                    onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                </div>
+                {/* Actions */}
+                <div className="flex flex-col gap-2 shrink-0">
+                  <Button
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={sigUploading}
+                    className="text-xs"
+                  >
+                    {sigUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                    Replace
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={removeSignature}
+                    disabled={sigUploading}
+                    className="text-xs"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remove
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-green-600 flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Signature saved — it will appear on all future PDF reports.
+              </p>
+            </div>
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => !sigUploading && fileInputRef.current?.click()}
+              onKeyDown={e => e.key === "Enter" && fileInputRef.current?.click()}
+              onDrop={onDrop}
+              onDragOver={e => e.preventDefault()}
+              className={cn(
+                "border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer",
+                sigUploading
+                  ? "border-secondary/30 bg-secondary/5"
+                  : "border-border hover:border-secondary/50 hover:bg-secondary/5"
+              )}
+            >
+              {sigUploading ? (
+                <div className="flex flex-col items-center gap-2 text-secondary">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <p className="text-sm font-medium">Uploading…</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                  <div className="h-12 w-12 rounded-xl bg-muted/50 flex items-center justify-center">
+                    <PenLine className="h-6 w-6 text-secondary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-sidebar">Upload your signature</p>
+                    <p className="text-xs mt-0.5">Drag & drop or click to browse — PNG or JPG recommended</p>
+                  </div>
+                  <Button variant="outline" className="text-xs pointer-events-none">
+                    <Upload className="h-3.5 w-3.5" /> Choose File
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tips */}
+          <div className="rounded-lg bg-muted/40 border border-border px-4 py-3 space-y-1">
+            <p className="text-xs font-semibold text-sidebar">Tips for a clean signature</p>
+            <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
+              <li>Sign on white paper with a dark pen, then photograph or scan it.</li>
+              <li>PNG with a transparent background looks best on the PDF.</li>
+              <li>Crop tightly around your signature before uploading.</li>
+            </ul>
+          </div>
+
+          {sigError && <p className="text-sm text-red-500">{sigError}</p>}
+          {sigSaved && (
+            <p className="text-sm text-green-600 flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4" />
+              {signatureUrl ? "Signature updated successfully." : "Signature removed."}
+            </p>
+          )}
+        </div>
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={onFileChange}
+        />
       </SectionCard>
     </>
   );
