@@ -32,9 +32,9 @@ function Header() {
   return (
     <header className="fixed inset-x-0 top-0 z-50 px-4 sm:px-6 pt-4">
       <div className="mx-auto max-w-6xl">
-        <div className="flex h-14 items-center justify-between rounded-2xl bg-white px-5 shadow-lg shadow-black/8">
+        <div className="relative flex h-14 items-center rounded-2xl bg-white px-5 shadow-lg shadow-black/8">
           {/* Logo */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-1 items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#0B1933]">
               <ClipboardList className="h-5 w-5 text-[#C5D92D]" />
             </div>
@@ -43,8 +43,8 @@ function Header() {
             </span>
           </div>
 
-          {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-7">
+          {/* Desktop nav — absolutely centred */}
+          <nav className="absolute left-1/2 hidden -translate-x-1/2 md:flex items-center gap-7">
             {NAV_LINKS.map((link) => (
               <a
                 key={link.href}
@@ -57,7 +57,7 @@ function Header() {
           </nav>
 
           {/* Sign In */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-1 justify-end items-center gap-3">
             <Link
               to="/login"
               className="inline-flex items-center gap-1.5 rounded-xl bg-[#0B1933] px-4 py-2 text-sm font-medium text-white hover:bg-[#152540] transition-colors"
