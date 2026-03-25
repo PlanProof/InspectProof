@@ -60,7 +60,7 @@ function Header() {
           <div className="flex flex-1 justify-end items-center gap-3">
             <Link
               to="/login"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0B1933] px-4 py-2 text-sm font-medium text-white hover:bg-[#152540] transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#466DB5] px-4 py-2 text-sm font-medium text-white hover:bg-[#3a5c9a] transition-colors"
             >
               Sign In <ChevronRight className="h-3.5 w-3.5" />
             </Link>
