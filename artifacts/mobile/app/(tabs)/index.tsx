@@ -442,13 +442,6 @@ export default function HomeScreen() {
     }
   }, [inspections, prefs.remindersEnabled]);
 
-  const stats = [
-    { label: "Active Projects", value: analytics?.activeProjects ?? "—", icon: "folder" as const, color: Colors.secondary },
-    { label: "Open Issues", value: analytics?.openIssues ?? "—", icon: "alert-circle" as const, color: analytics?.criticalIssues > 0 ? Colors.danger : Colors.warning },
-    { label: "This Month", value: analytics?.inspectionsThisMonth ?? "—", icon: "check-circle" as const, color: Colors.success },
-    { label: "Pending Reports", value: analytics?.reportsPending ?? "—", icon: "file-text" as const, color: "#DD6B20" },
-  ];
-
   return (
     <ScrollView
       style={styles.container}
@@ -482,17 +475,6 @@ export default function HomeScreen() {
           </Pressable>
         </View>
       </View>
-
-      {/* Stats Row */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsRow}>
-        {stats.map((s) => (
-          <View key={s.label} style={styles.statChip}>
-            <Feather name={s.icon} size={14} color={s.color} />
-            <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
-            <Text style={styles.statLabel}>{s.label}</Text>
-          </View>
-        ))}
-      </ScrollView>
 
       {/* Calendar Section */}
       <View style={styles.calendarCard}>
