@@ -12,6 +12,7 @@ import Inspections from "@/pages/inspections";
 import InspectionDetail from "@/pages/inspection-detail";
 import Analytics from "@/pages/analytics";
 import Templates from "@/pages/templates";
+import DocTemplates from "@/pages/doc-templates";
 import Inspectors from "@/pages/inspectors";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
@@ -61,6 +62,7 @@ function Router() {
       <Route path="/inspections/:id" component={InspectionDetail} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/templates" component={Templates} />
+      <Route path="/doc-templates" component={DocTemplates} />
       <Route path="/inspectors" component={Inspectors} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
