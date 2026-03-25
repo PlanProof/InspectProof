@@ -11,6 +11,7 @@ import {
   Image,
   Modal,
   Platform,
+  useWindowDimensions,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
@@ -75,14 +76,21 @@ export default function ConductInspectionScreen() {
   const queryClient = useQueryClient();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
+  const { width: screenW } = useWindowDimensions();
   const [activeItem, setActiveItem] = useState<ChecklistItem | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [editResult, setEditResult] = useState<ResultKey>("pending");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [showDocsPanel, setShowDocsPanel] = useState(false);
+  const [activePage, setActivePage] = useState(0);
+  const pageScrollRef = useRef<ScrollView>(null);
   const autoCompletedRef = useRef(false);
+
+  const scrollToPage = useCallback((page: number) => {
+    pageScrollRef.current?.scrollTo({ x: page * screenW, animated: true });
+    setActivePage(page);
+  }, [screenW]);
 
   const fetchWithAuth = useCallback(async (url: string, opts?: RequestInit) => {
     const res = await fetch(`${baseUrl}${url}`, {
@@ -359,18 +367,6 @@ export default function ConductInspectionScreen() {
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>{inspection?.projectName}</Text>
         </View>
-        {projectDocuments.length > 0 && (
-          <Pressable
-            onPress={() => setShowDocsPanel(true)}
-            style={styles.docsBtn}
-            hitSlop={8}
-          >
-            <Feather name="folder" size={18} color={Colors.secondary} />
-            <View style={styles.docsBadge}>
-              <Text style={styles.docsBadgeText}>{projectDocuments.length}</Text>
-            </View>
-          </Pressable>
-        )}
         <Pressable
           style={[styles.completeBtn, completing && { opacity: 0.6 }]}
           onPress={completeInspection}
@@ -380,134 +376,168 @@ export default function ConductInspectionScreen() {
         </Pressable>
       </View>
 
-      {/* Progress bar */}
-      <View style={styles.progressSection}>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-        </View>
-        <View style={styles.progressStats}>
-          <View style={styles.scoreCol}>
-            {passRate !== null ? (
-              <>
-                <Text style={styles.progressText}>{Math.round(passRate * 100)}% pass rate</Text>
-                <Text style={styles.progressSubText}>{Math.round(progress * 100)}% complete</Text>
-              </>
-            ) : (
-              <Text style={styles.progressText}>{Math.round(progress * 100)}% complete</Text>
-            )}
-          </View>
-          <View style={styles.resultChips}>
-            <Text style={[styles.resultChip, { color: "#22c55e" }]}>✓ {passCount}</Text>
-            <Text style={[styles.resultChip, { color: "#ef4444" }]}>✗ {failCount}</Text>
-            {naCount > 0 && <Text style={[styles.resultChip, { color: "#94a3b8" }]}>— {naCount}</Text>}
-            {pendingCount > 0 && <Text style={[styles.resultChip, { color: Colors.textTertiary }]}>⏳ {pendingCount}</Text>}
-          </View>
-        </View>
-        {/* Documents quick-access row */}
-        {projectDocuments.length > 0 && (
-          <Pressable style={styles.docsQuickRow} onPress={() => setShowDocsPanel(true)}>
-            <Feather name="folder" size={13} color={Colors.secondary} />
-            <Text style={styles.docsQuickText}>{projectDocuments.length} project document{projectDocuments.length !== 1 ? "s" : ""} available</Text>
-            <Feather name="chevron-right" size={13} color={Colors.textTertiary} />
-          </Pressable>
-        )}
+      {/* Tab bar */}
+      <View style={styles.tabBar}>
+        <Pressable style={[styles.tab, activePage === 0 && styles.tabActive]} onPress={() => scrollToPage(0)}>
+          <Feather name="list" size={13} color={activePage === 0 ? Colors.secondary : Colors.textTertiary} />
+          <Text style={[styles.tabText, activePage === 0 && styles.tabTextActive]}>
+            Checklist {total > 0 ? `(${total - pendingCount}/${total})` : ""}
+          </Text>
+        </Pressable>
+        <Pressable style={[styles.tab, activePage === 1 && styles.tabActive]} onPress={() => scrollToPage(1)}>
+          <Feather name="folder" size={13} color={activePage === 1 ? Colors.secondary : Colors.textTertiary} />
+          <Text style={[styles.tabText, activePage === 1 && styles.tabTextActive]}>
+            Plans{projectDocuments.length > 0 ? ` (${projectDocuments.length})` : ""}
+          </Text>
+          {projectDocuments.length > 0 && activePage !== 1 && (
+            <View style={styles.tabBadgeDot} />
+          )}
+        </Pressable>
       </View>
 
-      {/* Checklist */}
+      {/* Horizontal paged content */}
       <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + (progress === 1 ? 130 : 80) }]}
-        showsVerticalScrollIndicator={false}
+        ref={pageScrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        nestedScrollEnabled
+        style={{ flex: 1 }}
+        onMomentumScrollEnd={(e) => {
+          const page = Math.round(e.nativeEvent.contentOffset.x / screenW);
+          setActivePage(page);
+        }}
       >
-        {total === 0 ? (
-          <View style={styles.emptyState}>
-            <Feather name="clipboard" size={48} color={Colors.textTertiary} />
-            <Text style={styles.emptyTitle}>No checklist items</Text>
-            <Text style={styles.emptySub}>This inspection has no checklist template attached.</Text>
-          </View>
-        ) : (
-          Object.entries(grouped).map(([category, items]) => (
-            <View key={category} style={styles.category}>
-              <View style={styles.categoryHeader}>
-                <Text style={styles.categoryTitle}>{category}</Text>
-                <View style={styles.categoryRight}>
-                  <Text style={styles.categoryCount}>
-                    {items.filter(i => i.result !== "pending").length}/{items.length}
-                  </Text>
-                  <Pressable
-                    onPress={() => quickPassAll(items)}
-                    hitSlop={10}
-                    style={({ pressed }) => [
-                      styles.masterTick,
-                      items.every(i => i.result === "pass") && styles.masterTickActive,
-                      pressed && { opacity: 0.7 },
-                    ]}
-                  >
-                    <Feather
-                      name="check"
-                      size={14}
-                      color={items.every(i => i.result === "pass") ? "#22c55e" : Colors.textTertiary}
-                    />
-                  </Pressable>
-                </View>
-              </View>
-              {items.map(item => (
-                <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} />
-              ))}
+        {/* ── Page 0: Checklist ── */}
+        <View style={{ width: screenW, flex: 1 }}>
+          {/* Progress bar */}
+          <View style={styles.progressSection}>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
             </View>
-          ))
-        )}
-      </ScrollView>
-
-      {/* Bottom action bar — shown when 100% complete */}
-      {progress === 1 && total > 0 && (
-        <View style={[styles.generateBar, { paddingBottom: insets.bottom + 12 }]}>
-          <View style={styles.generateRow}>
-            <Pressable
-              style={({ pressed }) => [styles.completeOnlyBtn, pressed && { opacity: 0.8 }]}
-              onPress={() => router.back()}
-            >
-              <Feather name="check" size={16} color={Colors.primary} />
-              <Text style={styles.completeOnlyText}>Mark Complete</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.generateBtn, pressed && { opacity: 0.85 }]}
-              onPress={() => {
-                const autoType = failCount > 0 ? "defect_notice" : "inspection_certificate";
-                router.push(`/inspection/generate-report?id=${id}&autoType=${autoType}` as any);
-              }}
-            >
-              <Feather name="file-text" size={17} color={Colors.primary} />
-              <Text style={styles.generateBtnText}>Generate Report</Text>
-            </Pressable>
+            <View style={styles.progressStats}>
+              <View style={styles.scoreCol}>
+                {passRate !== null ? (
+                  <>
+                    <Text style={styles.progressText}>{Math.round(passRate * 100)}% pass rate</Text>
+                    <Text style={styles.progressSubText}>{Math.round(progress * 100)}% complete</Text>
+                  </>
+                ) : (
+                  <Text style={styles.progressText}>{Math.round(progress * 100)}% complete</Text>
+                )}
+              </View>
+              <View style={styles.resultChips}>
+                <Text style={[styles.resultChip, { color: "#22c55e" }]}>✓ {passCount}</Text>
+                <Text style={[styles.resultChip, { color: "#ef4444" }]}>✗ {failCount}</Text>
+                {naCount > 0 && <Text style={[styles.resultChip, { color: "#94a3b8" }]}>— {naCount}</Text>}
+                {pendingCount > 0 && <Text style={[styles.resultChip, { color: Colors.textTertiary }]}>⏳ {pendingCount}</Text>}
+              </View>
+            </View>
+            {/* Swipe hint when documents exist */}
+            {projectDocuments.length > 0 && (
+              <Pressable style={styles.swipeHintRow} onPress={() => scrollToPage(1)}>
+                <Feather name="folder" size={13} color={Colors.secondary} />
+                <Text style={styles.swipeHintText}>
+                  {projectDocuments.length} plan{projectDocuments.length !== 1 ? "s" : ""} attached — swipe right to view
+                </Text>
+                <Feather name="chevron-right" size={13} color={Colors.textTertiary} />
+              </Pressable>
+            )}
           </View>
-        </View>
-      )}
 
-      {/* Project Documents Panel */}
-      <Modal
-        visible={showDocsPanel}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowDocsPanel(false)}
-      >
-        <DocumentsPanel
-          documents={projectDocuments}
-          baseUrl={baseUrl}
-          insets={insets}
-          inspectionId={id}
-          activeItemId={activeItem?.id}
-          onClose={() => setShowDocsPanel(false)}
-          onAnnotate={(doc) => {
-            setShowDocsPanel(false);
-            if (activeItem) {
-              annotateDocument(doc, activeItem.id);
-            } else {
-              Alert.alert("Select a checklist item", "Open a checklist item first, then tap Annotate to attach a marked-up drawing.");
-            }
-          }}
-        />
-      </Modal>
+          {/* Checklist items */}
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + (progress === 1 ? 130 : 80) }]}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+          >
+            {total === 0 ? (
+              <View style={styles.emptyState}>
+                <Feather name="clipboard" size={48} color={Colors.textTertiary} />
+                <Text style={styles.emptyTitle}>No checklist items</Text>
+                <Text style={styles.emptySub}>This inspection has no checklist template attached.</Text>
+              </View>
+            ) : (
+              Object.entries(grouped).map(([category, items]) => (
+                <View key={category} style={styles.category}>
+                  <View style={styles.categoryHeader}>
+                    <Text style={styles.categoryTitle}>{category}</Text>
+                    <View style={styles.categoryRight}>
+                      <Text style={styles.categoryCount}>
+                        {items.filter(i => i.result !== "pending").length}/{items.length}
+                      </Text>
+                      <Pressable
+                        onPress={() => quickPassAll(items)}
+                        hitSlop={10}
+                        style={({ pressed }) => [
+                          styles.masterTick,
+                          items.every(i => i.result === "pass") && styles.masterTickActive,
+                          pressed && { opacity: 0.7 },
+                        ]}
+                      >
+                        <Feather
+                          name="check"
+                          size={14}
+                          color={items.every(i => i.result === "pass") ? "#22c55e" : Colors.textTertiary}
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+                  {items.map(item => (
+                    <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} />
+                  ))}
+                </View>
+              ))
+            )}
+          </ScrollView>
+
+          {/* Bottom action bar — shown when 100% complete */}
+          {progress === 1 && total > 0 && (
+            <View style={[styles.generateBar, { paddingBottom: insets.bottom + 12 }]}>
+              <View style={styles.generateRow}>
+                <Pressable
+                  style={({ pressed }) => [styles.completeOnlyBtn, pressed && { opacity: 0.8 }]}
+                  onPress={() => router.back()}
+                >
+                  <Feather name="check" size={16} color={Colors.primary} />
+                  <Text style={styles.completeOnlyText}>Mark Complete</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.generateBtn, pressed && { opacity: 0.85 }]}
+                  onPress={() => {
+                    const autoType = failCount > 0 ? "defect_notice" : "inspection_certificate";
+                    router.push(`/inspection/generate-report?id=${id}&autoType=${autoType}` as any);
+                  }}
+                >
+                  <Feather name="file-text" size={17} color={Colors.primary} />
+                  <Text style={styles.generateBtnText}>Generate Report</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* ── Page 1: Project Documents ── */}
+        <View style={{ width: screenW, flex: 1 }}>
+          <DocumentsPanel
+            documents={projectDocuments}
+            baseUrl={baseUrl}
+            insets={insets}
+            inspectionId={id}
+            projectId={inspection?.projectId ? String(inspection.projectId) : undefined}
+            activeItemId={activeItem?.id}
+            onAnnotate={(doc) => {
+              if (activeItem) {
+                annotateDocument(doc, activeItem.id);
+              } else {
+                Alert.alert("Select a checklist item first", "Go back to the checklist, open an item, then annotate a document to attach it.");
+              }
+            }}
+          />
+        </View>
+      </ScrollView>
 
       {/* Item Detail Modal */}
       <Modal
@@ -619,14 +649,14 @@ function getDocIcon(mimeType?: string): string {
 }
 
 function DocumentsPanel({
-  documents, baseUrl, insets, onClose, onAnnotate, inspectionId, activeItemId,
+  documents, baseUrl, insets, onAnnotate, inspectionId, projectId, activeItemId,
 }: {
   documents: ProjectDocument[];
   baseUrl: string;
   insets: any;
-  onClose: () => void;
   onAnnotate: (doc: ProjectDocument) => void;
   inspectionId?: string;
+  projectId?: string;
   activeItemId?: number;
 }) {
   const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
@@ -642,13 +672,14 @@ function DocumentsPanel({
     if (isImage) {
       setPreviewDoc(doc);
     } else {
-      onClose();
       router.push({
         pathname: "/inspection/document-viewer" as any,
         params: {
           url: `${baseUrl}/api/storage${doc.fileUrl}`,
           name: doc.name,
           mimeType: doc.mimeType || "application/octet-stream",
+          documentId: String(doc.id),
+          ...(projectId ? { projectId } : {}),
           ...(inspectionId && activeItemId ? { inspectionId, itemId: String(activeItemId) } : {}),
         },
       });
@@ -657,8 +688,8 @@ function DocumentsPanel({
 
   if (previewDoc) {
     return (
-      <View style={[panelStyles.container, { paddingTop: insets.top + 8 }]}>
-        <View style={panelStyles.header}>
+      <View style={panelStyles.container}>
+        <View style={panelStyles.previewHeader}>
           <Pressable onPress={() => setPreviewDoc(null)} style={panelStyles.closeBtn} hitSlop={12}>
             <Feather name="arrow-left" size={20} color={Colors.text} />
           </Pressable>
@@ -683,66 +714,67 @@ function DocumentsPanel({
   }
 
   return (
-    <View style={[panelStyles.container, { paddingTop: insets.top + 8 }]}>
-      <View style={panelStyles.header}>
-        <Pressable onPress={onClose} style={panelStyles.closeBtn} hitSlop={12}>
-          <Feather name="x" size={22} color={Colors.text} />
-        </Pressable>
-        <Text style={panelStyles.headerTitle}>Project Documents</Text>
-        <View style={{ width: 36 }} />
-      </View>
-
-      <ScrollView style={panelStyles.scroll} contentContainerStyle={[panelStyles.content, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
-        {documents.length === 0 ? (
-          <View style={panelStyles.empty}>
-            <Feather name="folder" size={40} color={Colors.textTertiary} />
-            <Text style={panelStyles.emptyText}>No documents available</Text>
+    <View style={panelStyles.container}>
+      {documents.length === 0 ? (
+        <View style={panelStyles.empty}>
+          <Feather name="folder" size={48} color={Colors.textTertiary} />
+          <Text style={panelStyles.emptyText}>No plans attached</Text>
+          <Text style={panelStyles.emptySubText}>Upload plans to this project from the desktop to view them here.</Text>
+        </View>
+      ) : (
+        <>
+          <View style={panelStyles.panelHint}>
+            <Feather name="info" size={12} color={Colors.secondary} />
+            <Text style={panelStyles.panelHintText}>Tap a plan to open it. Tap Markup to draw on it — annotations save to the project.</Text>
           </View>
-        ) : (
-          Object.entries(grouped).map(([folder, docs]) => (
-            <View key={folder} style={panelStyles.folder}>
-              <View style={panelStyles.folderHeader}>
-                <Feather name="folder" size={14} color={Colors.secondary} />
-                <Text style={panelStyles.folderName}>{folder}</Text>
-                <Text style={panelStyles.folderCount}>{docs.length}</Text>
-              </View>
-              {docs.map(doc => {
-                const isImage = doc.mimeType?.startsWith("image/");
-                const icon = getDocIcon(doc.mimeType);
-                return (
-                  <View key={doc.id} style={panelStyles.docRow}>
-                    <View style={panelStyles.docIcon}>
-                      <Feather name={icon as any} size={18} color={Colors.secondary} />
-                    </View>
-                    <View style={panelStyles.docInfo}>
-                      <Text style={panelStyles.docName} numberOfLines={2}>{doc.name}</Text>
-                      <Text style={panelStyles.docMeta}>{doc.mimeType?.split("/")[1]?.toUpperCase() || "File"}</Text>
-                    </View>
-                    <View style={panelStyles.docActions}>
+          <ScrollView
+            style={panelStyles.scroll}
+            contentContainerStyle={[panelStyles.content, { paddingBottom: insets.bottom + 32 }]}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+          >
+            {Object.entries(grouped).map(([folder, docs]) => (
+              <View key={folder} style={panelStyles.folder}>
+                <View style={panelStyles.folderHeader}>
+                  <Feather name="folder" size={14} color={Colors.secondary} />
+                  <Text style={panelStyles.folderName}>{folder}</Text>
+                  <Text style={panelStyles.folderCount}>{docs.length} file{docs.length !== 1 ? "s" : ""}</Text>
+                </View>
+                {docs.map(doc => {
+                  const isImage = doc.mimeType?.startsWith("image/");
+                  const isPdf = doc.mimeType === "application/pdf";
+                  const icon = getDocIcon(doc.mimeType);
+                  return (
+                    <Pressable
+                      key={doc.id}
+                      style={({ pressed }) => [panelStyles.docRow, pressed && { opacity: 0.85 }]}
+                      onPress={() => openDocument(doc)}
+                    >
+                      <View style={[panelStyles.docIconWrap, isPdf && panelStyles.docIconWrapPdf]}>
+                        <Feather name={icon as any} size={20} color={isPdf ? Colors.secondary : Colors.textSecondary} />
+                      </View>
+                      <View style={panelStyles.docInfo}>
+                        <Text style={panelStyles.docName} numberOfLines={2}>{doc.name}</Text>
+                        <Text style={panelStyles.docMeta}>
+                          {doc.mimeType?.split("/")[1]?.toUpperCase() || "File"}
+                          {doc.fileSize ? ` · ${Math.round(doc.fileSize / 1024)}KB` : ""}
+                        </Text>
+                      </View>
                       <Pressable
-                        style={panelStyles.docActionBtn}
+                        style={panelStyles.markupBtn}
                         onPress={() => openDocument(doc)}
                       >
-                        <Feather name={isImage ? "eye" : "external-link"} size={14} color={Colors.secondary} />
-                        <Text style={panelStyles.docActionText}>{isImage ? "View" : "Open"}</Text>
+                        <Feather name="edit-2" size={13} color={Colors.secondary} />
+                        <Text style={panelStyles.markupBtnText}>Markup</Text>
                       </Pressable>
-                      {isImage && (
-                        <Pressable
-                          style={[panelStyles.docActionBtn, panelStyles.annotateActionBtn]}
-                          onPress={() => onAnnotate(doc)}
-                        >
-                          <Feather name="edit-2" size={14} color="#fff" />
-                          <Text style={panelStyles.annotateActionText}>Annotate</Text>
-                        </Pressable>
-                      )}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          ))
-        )}
-      </ScrollView>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+          </ScrollView>
+        </>
+      )}
     </View>
   );
 }
@@ -1080,16 +1112,48 @@ const styles = StyleSheet.create({
   progressSubText: { fontSize: 10, color: Colors.textTertiary },
   resultChips: { flexDirection: "row", gap: 10 },
   resultChip: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold" },
-  docsQuickRow: {
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+    position: "relative",
+  },
+  tabActive: {
+    borderBottomColor: Colors.secondary,
+  },
+  tabText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  tabTextActive: { color: Colors.secondary },
+  tabBadgeDot: {
+    position: "absolute",
+    top: 8,
+    right: 22,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Colors.accent,
+  },
+  swipeHintRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 6,
+    paddingVertical: 7,
     paddingHorizontal: 10,
     backgroundColor: Colors.infoLight,
     borderRadius: 8,
+    marginTop: 2,
   },
-  docsQuickText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  swipeHintText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   scroll: { flex: 1 },
   scrollContent: { padding: 12, gap: 16 },
   emptyState: { alignItems: "center", paddingTop: 60, gap: 12 },
@@ -1400,17 +1464,18 @@ const modalStyles = StyleSheet.create({
 
 const panelStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  header: {
+  previewHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    gap: 8,
   },
   closeBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  headerTitle: { flex: 1, textAlign: "center", fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  headerTitle: { flex: 1, fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   annotateBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1421,22 +1486,34 @@ const panelStyles = StyleSheet.create({
     borderRadius: 8,
   },
   annotateBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+  panelHint: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: Colors.infoLight,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  panelHintText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary, lineHeight: 16 },
   scroll: { flex: 1 },
-  content: { padding: 16, gap: 12 },
-  empty: { alignItems: "center", paddingTop: 60, gap: 12 },
-  emptyText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  content: { padding: 16, gap: 16 },
+  empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 },
+  emptyText: { fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, textAlign: "center" },
+  emptySubText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, textAlign: "center", lineHeight: 18 },
   folder: { gap: 8 },
   folderHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
     paddingHorizontal: 4,
-    paddingBottom: 4,
+    paddingBottom: 6,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  folderName: { flex: 1, fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.6 },
-  folderCount: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  folderName: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.8 },
+  folderCount: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
   docRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1447,35 +1524,32 @@ const panelStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  docIcon: {
-    width: 40,
-    height: 40,
+  docIconWrap: {
+    width: 44,
+    height: 44,
     borderRadius: 10,
-    backgroundColor: Colors.infoLight,
+    backgroundColor: Colors.borderLight,
     alignItems: "center",
     justifyContent: "center",
   },
+  docIconWrapPdf: {
+    backgroundColor: Colors.infoLight,
+  },
   docInfo: { flex: 1, gap: 3 },
-  docName: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  docName: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, lineHeight: 18 },
   docMeta: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
-  docActions: { flexDirection: "row", gap: 8, alignItems: "center" },
-  docActionBtn: {
+  markupBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 7,
-    borderWidth: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1.5,
     borderColor: Colors.secondary,
     backgroundColor: Colors.infoLight,
   },
-  docActionText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
-  annotateActionBtn: {
-    backgroundColor: Colors.secondary,
-    borderColor: Colors.secondary,
-  },
-  annotateActionText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+  markupBtnText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   previewContainer: { flex: 1, backgroundColor: "#000" },
   previewImage: { flex: 1, width: "100%" },
 });

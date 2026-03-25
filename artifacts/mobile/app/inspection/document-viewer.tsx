@@ -37,12 +37,14 @@ function pointsToPath(points: { x: number; y: number }[]): string {
 // ── Screen ───────────────────────────────────────────────────────────────────
 
 export default function DocumentViewerScreen() {
-  const { url, name, mimeType, inspectionId, itemId } = useLocalSearchParams<{
+  const { url, name, mimeType, inspectionId, itemId, projectId, documentId } = useLocalSearchParams<{
     url: string;
     name: string;
     mimeType: string;
     inspectionId: string;
     itemId: string;
+    projectId: string;
+    documentId: string;
   }>();
 
   const insets = useSafeAreaInsets();
@@ -119,8 +121,8 @@ export default function DocumentViewerScreen() {
   }, [baseUrl, token]);
 
   const saveMarkup = async () => {
-    if (!inspectionId || !itemId) { router.back(); return; }
     if (strokes.length === 0) { router.back(); return; }
+    if (!inspectionId && !projectId) { router.back(); return; }
 
     setUploading(true);
     try {
@@ -132,30 +134,52 @@ export default function DocumentViewerScreen() {
       });
 
       // 2. Upload captured image
+      const markupFileName = `markup-${(name || "doc").replace(/[^a-z0-9]/gi, "-").toLowerCase()}-${Date.now()}.jpg`;
       const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: `doc-markup-${Date.now()}.jpg`, size: 0, contentType: "image/jpeg" }),
+        body: JSON.stringify({ name: markupFileName, size: 0, contentType: "image/jpeg" }),
       });
 
       const blob = await (await fetch(capturedUri)).blob();
       await fetch(urlRes.uploadURL, { method: "PUT", headers: { "Content-Type": "image/jpeg" }, body: blob });
       const objectPath: string = urlRes.objectPath;
 
-      // 3. Attach to checklist item
-      const currentItem = await fetchWithAuth(`/api/inspections/${inspectionId}/checklist`);
-      const item = Array.isArray(currentItem)
-        ? currentItem.find((i: any) => i.id === parseInt(itemId))
-        : null;
+      if (inspectionId && itemId) {
+        // 3a. Attach to checklist item as a photo
+        const currentItem = await fetchWithAuth(`/api/inspections/${inspectionId}/checklist`);
+        const item = Array.isArray(currentItem)
+          ? currentItem.find((i: any) => i.id === parseInt(itemId))
+          : null;
 
-      const existingUrls: string[] = item?.photoUrls || [];
-      await fetchWithAuth(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoUrls: [...existingUrls, objectPath] }),
-      });
+        const existingUrls: string[] = item?.photoUrls || [];
+        await fetchWithAuth(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ photoUrls: [...existingUrls, objectPath] }),
+        });
 
-      Alert.alert("Saved", "Your markup has been attached to the checklist item.");
+        Alert.alert("Saved", "Markup attached to the checklist item.");
+      } else if (projectId) {
+        // 3b. Save as a new document in the project (visible on the desktop)
+        const docName = `${name || "Plan"} — Markup`;
+        await fetchWithAuth(`/api/projects/${projectId}/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: docName,
+            fileName: markupFileName,
+            fileSize: 0,
+            mimeType: "image/jpeg",
+            fileUrl: objectPath,
+            folder: "Markups",
+            includedInInspection: true,
+          }),
+        });
+
+        Alert.alert("Markup saved", `"${docName}" has been saved to the project's Markups folder and is visible on the desktop.`);
+      }
+
       router.back();
     } catch {
       Alert.alert("Save failed", "Could not save the markup. Please try again.");
@@ -175,13 +199,16 @@ export default function DocumentViewerScreen() {
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>{name || "Document"}</Text>
         <View style={styles.headerActions}>
-          {inspectionId && itemId && (
+          {(inspectionId && itemId || projectId) && (
             <Pressable
               onPress={() => {
                 if (drawing && strokes.length > 0) {
+                  const saveTarget = (inspectionId && itemId)
+                    ? "attach it to the checklist item"
+                    : "save it to the project";
                   Alert.alert(
                     "Save markup?",
-                    "Save your drawings and attach them to this checklist item.",
+                    `Save your drawings and ${saveTarget}.`,
                     [
                       { text: "Cancel", style: "cancel" },
                       { text: "Save", onPress: saveMarkup },
@@ -336,7 +363,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 12,
-    backgroundColor: Colors.sidebar,
+    backgroundColor: Colors.primary,
     gap: 8,
   },
   headerTitle: {
@@ -369,7 +396,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     gap: 10,
-    backgroundColor: Colors.sidebar,
+    backgroundColor: Colors.primary,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "rgba(255,255,255,0.1)",
   },

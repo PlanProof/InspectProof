@@ -1,0 +1,80 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]
+   /Resources << /Font << /F1 4 0 R /F2 6 0 R >> >>
+   /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 1652 >>
+stream
+0 g
+BT /F2 11 Tf 165 750 Td (INSPECTPROOF - SAMPLE BUILDING PLANS) Tj ET
+BT /F1 10 Tf 195 732 Td (Electrical Services Plan - Sheet E101) Tj ET
+BT /F1 8 Tf 50 714 Td (Project: Sample Residential Development | Rev: 3 | Date: March 2026) Tj ET
+1.5 w 50 710 m 562 710 l S
+0.8 G
+1 w 80 150 m 80 650 l S
+1 w 80 650 m 530 650 l S
+1 w 530 650 m 530 150 l S
+1 w 80 150 m 530 150 l S
+1 w 280 150 m 280 450 l S
+1 w 80 450 m 530 450 l S
+1 w 280 550 m 530 550 l S
+1 w 400 450 m 400 650 l S
+0.5 g
+BT /F1 9 Tf 140 290 Td (LIVING / DINING) Tj ET
+BT /F1 9 Tf 350 540 Td (KITCHEN) Tj ET
+BT /F1 9 Tf 320 390 Td (BEDROOM 1) Tj ET
+BT /F1 9 Tf 415 390 Td (BEDROOM 2) Tj ET
+BT /F1 8 Tf 130 540 Td (BATHROOM) Tj ET
+BT /F1 8 Tf 130 390 Td (LAUNDRY) Tj ET
+0 g
+BT /F1 8 Tf 180 380 Td ([GPO]) Tj ET
+BT /F1 8 Tf 210 340 Td ([GPO]) Tj ET
+BT /F1 8 Tf 150 320 Td ([GPO]) Tj ET
+BT /F1 8 Tf 350 510 Td ([GPO]) Tj ET
+BT /F1 8 Tf 390 480 Td ([GPO]) Tj ET
+BT /F1 8 Tf 360 490 Td ([RANGE]) Tj ET
+BT /F1 8 Tf 340 430 Td ([GPO]) Tj ET
+BT /F1 8 Tf 430 430 Td ([GPO]) Tj ET
+BT /F2 9 Tf 190 440 Td (\(L\)) Tj ET
+BT /F2 9 Tf 380 590 Td (\(L\)) Tj ET
+BT /F2 9 Tf 370 415 Td (\(L\)) Tj ET
+BT /F2 9 Tf 455 415 Td (\(L\)) Tj ET
+BT /F2 9 Tf 150 490 Td (\(L\)) Tj ET
+BT /F2 9 Tf 150 580 Td (\(L\)) Tj ET
+BT /F2 9 Tf 305 185 Td (\(L\)) Tj ET
+BT /F2 8 Tf 82 600 Td (MSB) Tj ET
+82 595 40 20 re S
+1 w 50 115 m 562 115 l S
+BT /F2 8 Tf 50 100 Td (LEGEND:) Tj ET
+BT /F1 7 Tf 50 88 Td ([GPO] = General Power Outlet \(240V 10A\)   \(L\) = Light Point   [RANGE] = Cooking Range Outlet \(240V 20A\)) Tj ET
+BT /F1 7 Tf 50 74 Td (MSB = Main Switchboard | All work to comply with AS/NZS 3000:2018 Wiring Rules) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000257 00000 n 
+0000000327 00000 n 
+0000002031 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+2106
+%%EOF

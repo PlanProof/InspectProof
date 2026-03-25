@@ -1,0 +1,72 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]
+   /Resources << /Font << /F1 4 0 R /F2 6 0 R >> >>
+   /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 1493 >>
+stream
+0 g
+BT /F2 11 Tf 185 750 Td (INSPECTPROOF - SAMPLE BUILDING PLANS) Tj ET
+BT /F1 10 Tf 220 732 Td (Site Plan - Sheet SP101) Tj ET
+BT /F1 8 Tf 50 714 Td (Project: 42 Builder Street, Sydney NSW 2000 | Date: March 2026 | Scale: 1:200) Tj ET
+1.5 w 50 710 m 562 710 l S
+0.5 G
+80 120 450 560 re S
+0 G
+140 200 320 380 re S
+1 w 80 240 m 140 240 l S
+1 w 80 200 m 140 200 l S
+0 g
+BT /F1 9 Tf 260 600 Td (-- Front Setback: 6,000 --) Tj ET
+BT /F1 8 Tf 90 380 Td (3,500) Tj ET
+BT /F1 8 Tf 490 380 Td (3,500) Tj ET
+BT /F1 9 Tf 260 155 Td (-- Rear Setback: 4,000 --) Tj ET
+BT /F2 11 Tf 240 380 Td (DWELLING) Tj ET
+BT /F1 9 Tf 240 364 Td (\(318 m2 GFA\)) Tj ET
+BT /F1 8 Tf 95 215 Td (DRIVEWAY) Tj ET
+BT /F1 8 Tf 95 330 Td (SIDE) Tj ET
+BT /F1 8 Tf 95 315 Td (SETBACK) Tj ET
+BT /F2 9 Tf 115 620 Td (FRONT BOUNDARY - BUILDER STREET) Tj ET
+BT /F1 8 Tf 140 135 Td (DRAINAGE EASEMENT \(1.5m Wide\)) Tj ET
+1 w 140 130 m 460 130 l S
+BT /F2 16 Tf 510 660 Td (N) Tj ET
+1 w 516 648 m 516 622 l S
+BT /F1 7 Tf 510 612 Td (\(TRUE\)) Tj ET
+380 600 150 60 re S
+BT /F2 8 Tf 385 645 Td (LOT 42 DP 123456) Tj ET
+BT /F1 8 Tf 385 630 Td (Area: 675 m2) Tj ET
+BT /F1 7 Tf 385 615 Td (Zoning: R2 Low Density) Tj ET
+BT /F1 7 Tf 385 602 Td (FSR: 0.5:1) Tj ET
+1 w 50 115 m 562 115 l S
+BT /F1 7 Tf 50 100 Td (All setbacks to comply with Blacktown LEP 2015. Refer to council DCP for specific requirements.) Tj ET
+BT /F1 7 Tf 50 86 Td (Site area calculations are approximate. Survey by licensed surveyor required before construction.) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000257 00000 n 
+0000000327 00000 n 
+0000001872 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1947
+%%EOF

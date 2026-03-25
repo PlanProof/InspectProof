@@ -1,0 +1,77 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]
+   /Resources << /Font << /F1 4 0 R /F2 6 0 R >> >>
+   /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 1519 >>
+stream
+0.95 g
+50 100 512 640 re S
+0 g
+50 100 512 640 re S
+BT /F2 11 Tf 180 750 Td (INSPECTPROOF - SAMPLE BUILDING PLANS) Tj ET
+BT /F1 10 Tf 210 732 Td (Ground Floor Plan - Sheet A101) Tj ET
+BT /F1 8 Tf 50 714 Td (Project: Sample Residential Development | Scale: 1:100 | Date: March 2026) Tj ET
+1.5 w 50 710 m 562 710 l S
+0.7 G
+1 w 80 150 m 80 650 l S
+1 w 80 650 m 530 650 l S
+1 w 530 650 m 530 150 l S
+1 w 80 150 m 530 150 l S
+1 w 280 150 m 280 450 l S
+1 w 80 450 m 530 450 l S
+1 w 280 550 m 530 550 l S
+1 w 400 450 m 400 650 l S
+0 g
+BT /F2 10 Tf 140 290 Td (LIVING / DINING) Tj ET
+BT /F1 9 Tf 165 274 Td (36.5 m2) Tj ET
+BT /F2 10 Tf 350 540 Td (KITCHEN) Tj ET
+BT /F1 9 Tf 360 524 Td (14.2 m2) Tj ET
+BT /F2 10 Tf 320 390 Td (BEDROOM 1) Tj ET
+BT /F1 9 Tf 335 374 Td (16.8 m2) Tj ET
+BT /F2 9 Tf 130 540 Td (BATHROOM) Tj ET
+BT /F1 9 Tf 138 524 Td (6.4 m2) Tj ET
+BT /F2 9 Tf 130 390 Td (LAUNDRY) Tj ET
+BT /F1 9 Tf 138 374 Td (4.2 m2) Tj ET
+BT /F2 10 Tf 415 390 Td (BEDROOM 2) Tj ET
+BT /F1 9 Tf 430 374 Td (14.6 m2) Tj ET
+BT /F2 9 Tf 290 180 Td (ENTRY) Tj ET
+1 w 80 130 m 530 130 l S
+BT /F1 8 Tf 265 118 Td (14,500) Tj ET
+1 w 60 150 m 60 650 l S
+BT /F1 8 Tf 20 390 Td (16,200) Tj ET
+BT /F2 14 Tf 490 670 Td (N) Tj ET
+1 w 500 658 m 500 638 l S
+1 w 50 115 m 562 115 l S
+BT /F1 7 Tf 50 95 Td (LEGEND: All dimensions in millimetres unless noted. Refer to structural drawings for beam and footing sizes.) Tj ET
+BT /F1 7 Tf 50 80 Td (DO NOT SCALE - Use figured dimensions only. Check all dimensions on site before commencing work.) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000257 00000 n 
+0000000327 00000 n 
+0000001898 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1973
+%%EOF
