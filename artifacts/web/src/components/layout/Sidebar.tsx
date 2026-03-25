@@ -33,7 +33,7 @@ export function Sidebar() {
         <div className="flex items-center justify-center w-8 h-8 rounded-md bg-brand-pear shrink-0">
           <span className="text-sidebar font-black text-sm leading-none">IP</span>
         </div>
-        <span className="text-white font-bold text-base tracking-tight leading-none">InspectProof</span>
+        <span className="text-white font-semibold text-base tracking-tight leading-none" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>InspectProof</span>
       </div>
 
       <div className="flex flex-1 flex-col overflow-y-auto pt-6 px-4 pb-4">
