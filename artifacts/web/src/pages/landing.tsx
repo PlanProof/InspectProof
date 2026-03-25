@@ -103,15 +103,6 @@ function Header() {
 function Hero() {
   return (
     <section className="relative overflow-hidden bg-[#0B1933] pt-32 pb-24">
-      {/* Background grid */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-20"
-        style={{
-          backgroundImage:
-            "linear-gradient(#466DB5 1px, transparent 1px), linear-gradient(90deg, #466DB5 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-        }}
-      />
       {/* Radial glow */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         <div className="h-[600px] w-[600px] rounded-full bg-[#466DB5]/10 blur-3xl" />
