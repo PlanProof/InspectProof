@@ -105,7 +105,9 @@ export default function InspectionDetailScreen() {
           <Badge label={inspection.status.replace("_", " ")} variant="status" value={inspection.status} />
         </View>
         <Text style={styles.projectName}>{inspection.projectName}</Text>
-        <Text style={styles.projectAddress}>{inspection.projectAddress}</Text>
+        {inspection.projectAddress ? (
+          <Text style={styles.projectAddress}>{inspection.projectAddress}</Text>
+        ) : null}
 
         <View style={styles.metaGrid}>
           <View style={styles.metaItem}>
@@ -219,7 +221,20 @@ export default function InspectionDetailScreen() {
       )}
 
       {/* Inspection Notes */}
-      {inspection.notes && (
+      {Array.isArray(inspection.notes) && inspection.notes.length > 0 && (
+        <View style={styles.notesCard}>
+          <Text style={styles.cardTitle}>Inspection Notes</Text>
+          {inspection.notes.map((note: any) => (
+            <View key={note.id} style={styles.noteItem}>
+              <Text style={styles.notesText}>{note.content}</Text>
+              {note.authorName && (
+                <Text style={styles.noteAuthor}>— {note.authorName}</Text>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+      {typeof inspection.notes === "string" && inspection.notes.length > 0 && (
         <View style={styles.notesCard}>
           <Text style={styles.cardTitle}>Inspection Notes</Text>
           <Text style={styles.notesText}>{inspection.notes}</Text>
@@ -237,12 +252,12 @@ export default function InspectionDetailScreen() {
                 <View key={item.id} style={[styles.checklistItem, { borderLeftColor: item.result === "pass" ? Colors.success : item.result === "fail" ? Colors.danger : Colors.border }]}>
                   <View style={styles.checklistIcon}>{resultIcon(item.result)}</View>
                   <View style={styles.checklistContent}>
-                    <Text style={styles.checklistItemText}>{item.itemText}</Text>
-                    {item.nccReference && (
-                      <Text style={styles.nccRef}>{item.nccReference}</Text>
+                    <Text style={styles.checklistItemText}>{item.description}</Text>
+                    {item.codeReference && (
+                      <Text style={styles.nccRef}>{item.codeReference}</Text>
                     )}
-                    {item.comments && (
-                      <Text style={styles.checklistComment}>{item.comments}</Text>
+                    {item.notes && (
+                      <Text style={styles.checklistComment}>"{item.notes}"</Text>
                     )}
                   </View>
                 </View>
@@ -384,6 +399,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   notesText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, lineHeight: 20 },
+  noteItem: { gap: 2, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  noteAuthor: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, fontStyle: "italic" },
   section: { marginHorizontal: 16, gap: 10 },
   checklistGroup: { gap: 8 },
   categoryLabel: {
