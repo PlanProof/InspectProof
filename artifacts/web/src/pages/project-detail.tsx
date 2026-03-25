@@ -10,9 +10,10 @@ import {
   FolderPlus, Pencil, Trash2, Eye, EyeOff, File, Folder, FolderOpen,
   ChevronRight, Calendar, Clock, CheckCircle, AlertCircle, XCircle, MoreHorizontal,
   Download, Mail, Loader2, Link2, Unlink, Award, Send, BarChart2,
-  Smartphone, X, Info, ZoomIn
+  Smartphone, X, Info, ZoomIn, User
 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
+import { useListUsers, useCreateInspection } from "@workspace/api-client-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -206,7 +207,7 @@ export default function ProjectDetail() {
       {/* Tab Content */}
       {tab === "Overview" && <OverviewTab project={project} onRefresh={loadProject} />}
       {tab === "Documents" && <DocumentsTab projectId={projectId} />}
-      {tab === "Inspections" && <InspectionsTab project={project} />}
+      {tab === "Inspections" && <InspectionsTab project={project} onRefresh={loadProject} />}
       {tab === "Inspection Types" && <InspectionTypesTab projectId={projectId} />}
       {tab === "Reports" && <ReportsTab projectId={projectId} />}
     </AppLayout>
@@ -235,6 +236,7 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [, navigate] = useLocation();
+  const [bookOpen, setBookOpen] = useState(false);
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -354,9 +356,25 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
         </div>
 
         <div className="bg-card border border-border rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-sidebar mb-3">Recent Inspections</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-sidebar">Recent Inspections</h3>
+            <button
+              onClick={() => setBookOpen(true)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-secondary hover:text-secondary/80 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" /> Book
+            </button>
+          </div>
           {project.inspections.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No inspections yet</p>
+            <div className="text-center py-4">
+              <p className="text-sm text-muted-foreground mb-3">No inspections yet</p>
+              <button
+                onClick={() => setBookOpen(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-sidebar text-white hover:bg-sidebar/90 transition-colors"
+              >
+                <Calendar className="h-3.5 w-3.5" /> Book First Inspection
+              </button>
+            </div>
           ) : (
             <div className="space-y-2">
               {project.inspections.slice(0, 4).map(i => (
@@ -377,6 +395,14 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
           )}
         </div>
       </div>
+
+      <BookInspectionDialog
+        open={bookOpen}
+        onClose={() => setBookOpen(false)}
+        projectId={project.id}
+        projectName={project.name}
+        onCreated={onRefresh}
+      />
     </div>
   );
 }
@@ -1048,22 +1074,222 @@ function FileTypeIcon({ mimeType }: { mimeType?: string }) {
   return <File className={cls} />;
 }
 
+// ── Inspection Types + Book Dialog ───────────────────────────────────────────
+
+const INSPECTION_TYPES = [
+  { value: "footings",      label: "Footings" },
+  { value: "slab",          label: "Slab" },
+  { value: "frame",         label: "Frame" },
+  { value: "pre_plaster",   label: "Pre-Plaster" },
+  { value: "waterproofing", label: "Waterproofing" },
+  { value: "final",         label: "Final" },
+  { value: "pool_barrier",  label: "Pool Barrier" },
+  { value: "special",       label: "Special / Other" },
+];
+
+// ── Book Inspection Dialog ────────────────────────────────────────────────────
+
+function BookInspectionDialog({
+  open,
+  onClose,
+  projectId,
+  projectName,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  projectId: number;
+  projectName: string;
+  onCreated: () => void;
+}) {
+  const { data: users } = useListUsers({});
+  const createInspection = useCreateInspection();
+
+  const today = new Date().toISOString().split("T")[0];
+  const [form, setForm] = useState({
+    inspectionType: "",
+    scheduledDate: today,
+    scheduledTime: "",
+    inspectorId: "",
+    notes: "",
+  });
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  function set(key: string, val: string) {
+    setForm(f => ({ ...f, [key]: val }));
+    setError("");
+  }
+
+  function handleClose() {
+    setForm({ inspectionType: "", scheduledDate: today, scheduledTime: "", inspectorId: "", notes: "" });
+    setError("");
+    onClose();
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.inspectionType) { setError("Please select an inspection type."); return; }
+    if (!form.scheduledDate) { setError("Please set a scheduled date."); return; }
+    setSubmitting(true);
+    try {
+      await createInspection.mutateAsync({
+        data: {
+          projectId,
+          inspectionType: form.inspectionType,
+          scheduledDate: form.scheduledDate,
+          scheduledTime: form.scheduledTime || undefined,
+          inspectorId: form.inspectorId ? Number(form.inspectorId) : undefined,
+          notes: form.notes || undefined,
+        } as any,
+      });
+      onCreated();
+      handleClose();
+    } catch {
+      setError("Failed to book inspection. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const fieldClass = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-secondary" />
+            Book Inspection
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Project context banner */}
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/10 border border-secondary/20 text-sm text-secondary font-medium">
+          <Building className="h-3.5 w-3.5 shrink-0" />
+          {projectName}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 mt-1">
+          {/* Inspection Type */}
+          <div className="space-y-1.5">
+            <Label>Inspection Type <span className="text-red-500">*</span></Label>
+            <select
+              value={form.inspectionType}
+              onChange={e => set("inspectionType", e.target.value)}
+              className={fieldClass}
+              required
+            >
+              <option value="">— Select type —</option>
+              {INSPECTION_TYPES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date + Time */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Scheduled Date <span className="text-red-500">*</span></Label>
+              <Input
+                type="date"
+                value={form.scheduledDate}
+                onChange={e => set("scheduledDate", e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>
+                Time
+                <span className="ml-1 text-xs font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                type="time"
+                value={form.scheduledTime}
+                onChange={e => set("scheduledTime", e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Inspector */}
+          <div className="space-y-1.5">
+            <Label>
+              Assign Inspector
+              <span className="ml-1 text-xs font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <select
+              value={form.inspectorId}
+              onChange={e => set("inspectorId", e.target.value)}
+              className={fieldClass}
+            >
+              <option value="">— Unassigned —</option>
+              {(users ?? []).map((u: any) => (
+                <option key={u.id} value={String(u.id)}>
+                  {u.firstName} {u.lastName}
+                  {u.role ? ` (${u.role.replace(/_/g, " ")})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1.5">
+            <Label>
+              Notes
+              <span className="ml-1 text-xs font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <textarea
+              value={form.notes}
+              onChange={e => set("notes", e.target.value)}
+              placeholder="Any special instructions or context…"
+              rows={3}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+            />
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-500 flex items-center gap-1.5">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={handleClose} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Booking…</> : <><Calendar className="h-3.5 w-3.5 mr-1.5" /> Book Inspection</>}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Inspections Tab ───────────────────────────────────────────────────────────
 
-function InspectionsTab({ project }: { project: Project }) {
+function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: () => void }) {
   const inspections = project.inspections || [];
   const [, navigate] = useLocation();
+  const [bookOpen, setBookOpen] = useState(false);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-sidebar">{inspections.length} Inspection{inspections.length !== 1 ? "s" : ""}</h2>
-        <Link href="/inspections">
-          <Button size="sm">
-            <Plus className="h-3.5 w-3.5 mr-1.5" /> Book Inspection
-          </Button>
-        </Link>
+        <Button size="sm" onClick={() => setBookOpen(true)}>
+          <Plus className="h-3.5 w-3.5 mr-1.5" /> Book Inspection
+        </Button>
       </div>
+
+      <BookInspectionDialog
+        open={bookOpen}
+        onClose={() => setBookOpen(false)}
+        projectId={project.id}
+        projectName={project.name}
+        onCreated={onRefresh}
+      />
 
       {inspections.length === 0 ? (
         <div className="bg-card border border-border rounded-xl p-12 flex flex-col items-center gap-4 text-muted-foreground">
@@ -1072,9 +1298,9 @@ function InspectionsTab({ project }: { project: Project }) {
             <p className="font-medium text-sidebar">No inspections yet</p>
             <p className="text-sm mt-1">Book the first inspection for this project</p>
           </div>
-          <Link href="/inspections">
-            <Button size="sm">Book Inspection</Button>
-          </Link>
+          <Button size="sm" onClick={() => setBookOpen(true)}>
+            <Calendar className="h-3.5 w-3.5 mr-1.5" /> Book Inspection
+          </Button>
         </div>
       ) : (
         <div className="bg-card border border-border rounded-xl overflow-hidden">
