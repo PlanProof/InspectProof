@@ -1,6 +1,6 @@
 import { db } from "../index";
 import { checklistTemplatesTable, checklistItemsTable } from "../schema/checklists";
-import { eq, inArray, not } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 
 type ItemDef = {
   category: string;
@@ -22,12 +22,6 @@ const NON_BS_DISCIPLINES = [
   "Fire Safety Engineer",
 ];
 
-const CLASS_1_TO_9_FOLDERS = [
-  "Class 1a","Class 1b","Class 2","Class 3","Class 4",
-  "Class 5","Class 6","Class 7a","Class 7b","Class 8",
-  "Class 9a","Class 9b","Class 9c",
-];
-
 async function seedTemplate(
   name: string,
   discipline: string,
@@ -37,14 +31,6 @@ async function seedTemplate(
   sortOrder: number,
   items: ItemDef[],
 ) {
-  const existing = await db.select().from(checklistTemplatesTable)
-    .where(eq(checklistTemplatesTable.name, name));
-  for (const t of existing) {
-    if (t.discipline === discipline && t.folder === folder) {
-      await db.delete(checklistItemsTable).where(eq(checklistItemsTable.templateId, t.id));
-      await db.delete(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, t.id));
-    }
-  }
   const [tmpl] = await db.insert(checklistTemplatesTable)
     .values({ name, discipline, inspectionType, folder, description, sortOrder })
     .returning();
@@ -69,1024 +55,644 @@ async function seedTemplate(
 }
 
 export async function seedDisciplineChecklists() {
-  console.log("\n=== Cleaning existing Class 1–9 templates for non-BS disciplines ===");
+  console.log("\n=== Removing ALL non-Building Surveyor templates ===");
 
-  const toDelete = await db.select({ id: checklistTemplatesTable.id })
+  const allNonBS = await db
+    .select({ id: checklistTemplatesTable.id })
     .from(checklistTemplatesTable)
-    .where(
-      inArray(checklistTemplatesTable.discipline, NON_BS_DISCIPLINES)
-    );
-
-  const toDeleteClass19 = toDelete.filter((_, i) => true);
-  const allNonBS = await db.select().from(checklistTemplatesTable)
     .where(inArray(checklistTemplatesTable.discipline, NON_BS_DISCIPLINES));
 
-  const class19Templates = allNonBS.filter(t => CLASS_1_TO_9_FOLDERS.includes(t.folder));
-  const ids = class19Templates.map(t => t.id);
-
-  if (ids.length > 0) {
+  if (allNonBS.length > 0) {
+    const ids = allNonBS.map(t => t.id);
     await db.delete(checklistItemsTable).where(inArray(checklistItemsTable.templateId, ids));
     await db.delete(checklistTemplatesTable).where(inArray(checklistTemplatesTable.id, ids));
-    console.log(`  Deleted ${ids.length} existing Class 1–9 templates for non-BS disciplines.`);
+    console.log(`  Deleted ${allNonBS.length} non-BS templates.\n`);
   } else {
-    console.log("  No existing Class 1–9 templates to delete.");
+    console.log("  Nothing to delete.\n");
   }
 
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
   // STRUCTURAL ENGINEER
-  // ══════════════════════════════════════════════════════════════════════════════
-  console.log("\n--- Structural Engineer ---");
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log("--- Structural Engineer ---");
 
-  const seFooting = (folder: string, sort: number, extra?: ItemDef[]) =>
-    seedTemplate("Footing Inspection", "Structural Engineer", "se_footing", folder,
-      "Structural engineer review of footing system prior to concrete pour.",
-      sort, [
-        { category: "Site Conditions", description: "Bearing surface free from loose material, water and contamination", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2870", recommendedAction: "Remove and re-inspect bearing surface" },
-        { category: "Site Conditions", description: "Excavation dimensions consistent with geotechnical and engineering drawings", riskLevel: "high", defectTrigger: true },
-        { category: "Reinforcement", description: "Reinforcing steel size, spacing and cover comply with structural drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 3600" },
-        { category: "Reinforcement", description: "Bar laps and hooks installed to specification", riskLevel: "high", defectTrigger: true },
-        { category: "Reinforcement", description: "Cover chairs/supports in place to maintain correct concrete cover", riskLevel: "medium", defectTrigger: true },
-        { category: "Setout", description: "Footing setout consistent with approved structural drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Setout", description: "Setbacks from site boundaries verified", riskLevel: "medium", defectTrigger: true },
-        { category: "Services / Penetrations", description: "All penetrations and sleeves identified and formed in reinforcement", riskLevel: "medium", defectTrigger: true },
-        ...(extra ?? []),
-      ]);
+  await seedTemplate(
+    "Footing Inspection", "Structural Engineer", "structural_footing", "Footing Inspection",
+    "Review of excavated footing trenches and pad footings prior to concrete pour.",
+    10,
+    [
+      { category: "Dimensions", description: "Footing dimensions match engineer drawings (depth, width, step-downs)", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2870" },
+      { category: "Bearing", description: "Founding material confirmed as per geotechnical report — no fill, soft or unstable soil", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 2870-2011 Cl 4.4" },
+      { category: "Clearances", description: "Minimum 300mm clearance from any drainage pipes or services", riskLevel: "medium", defectTrigger: true, requirePhoto: false, codeReference: "AS 2870" },
+      { category: "Reinforcement", description: "Rebar size, spacing, and cover conform to structural drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 3600" },
+      { category: "Reinforcement", description: "Ligatures, chairs and spacers installed correctly to maintain cover", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Site Conditions", description: "No water pooling in excavation — dewatering carried out if required", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Hold Points", description: "Footing hold-point sign-off obtained from structural engineer before pour", riskLevel: "critical", requirePhoto: false, codeReference: "Engineer's ITP" },
+      { category: "Documentation", description: "Footing inspection certificate or engineer's letter to be issued", riskLevel: "medium" },
+    ],
+  );
 
-  const seSlab = (folder: string, sort: number, extra?: ItemDef[]) =>
-    seedTemplate("Slab Inspection", "Structural Engineer", "se_slab", folder,
-      "Structural engineer review of ground-bearing or suspended slab prior to concrete pour.",
-      sort, [
-        { category: "Substrate", description: "Compacted fill or ground surface prepared to specification", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2870" },
-        { category: "Vapour / Membrane", description: "Vapour barrier installed, lapped, taped and free from tears", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Reinforcement", description: "Top and bottom reinforcement mesh/bar to drawing specification", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 3600" },
-        { category: "Reinforcement", description: "Edge thickening reinforcement and beams formed correctly", riskLevel: "high", defectTrigger: true },
-        { category: "Reinforcement", description: "Concrete cover maintained throughout via bar chairs", riskLevel: "medium", defectTrigger: true },
-        { category: "Services", description: "All conduits, pipes and penetrations installed prior to pour", riskLevel: "medium", defectTrigger: true },
-        { category: "Termite Protection", description: "Termite management system components in place (if applicable)", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Dimensions", description: "Slab thickness and dimensions verified against structural drawings", riskLevel: "high", defectTrigger: true },
-        ...(extra ?? []),
-      ]);
+  await seedTemplate(
+    "Slab Inspection", "Structural Engineer", "structural_slab", "Slab Inspection",
+    "Review of ground floor or elevated concrete slab prior to pour.",
+    20,
+    [
+      { category: "Subgrade", description: "Fill material compacted to specified density — compaction test report available", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2870" },
+      { category: "Membrane", description: "Vapour barrier / termite membrane installed, lapped and sealed correctly", riskLevel: "medium", defectTrigger: true, requirePhoto: true, codeReference: "AS 3660.1" },
+      { category: "Formwork", description: "Edge formwork correctly set to required slab thickness and fall", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Reinforcement", description: "Mesh / rebar size, spacing, laps and cover chairs per drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 3600" },
+      { category: "Reinforcement", description: "Top steel installed over supports and at slab edges as required", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS 3600" },
+      { category: "Services", description: "Conduits, pipes and penetrations located and fixed before pour — not stacked", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Concrete", description: "Concrete mix design approved and test cylinders arranged for pour day", riskLevel: "medium", codeReference: "AS 1379" },
+      { category: "Hold Points", description: "Engineer hold-point inspection completed and sign-off obtained", riskLevel: "critical", requirePhoto: false },
+    ],
+  );
 
-  const seFrame = (folder: string, sort: number, label = "Frame Structural Review") =>
-    seedTemplate(label, "Structural Engineer", "se_frame", folder,
-      "Structural engineer review of structural frame at frame/structure stage.",
-      sort, [
-        { category: "Wall Frames", description: "Stud size, spacing and species comply with engineering drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 1684" },
-        { category: "Wall Frames", description: "Bracing type, quantity and location comply with bracing schedule", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Install missing bracing before proceeding" },
-        { category: "Connections", description: "Tie-downs and hold-downs installed to engineer specification at all required locations", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Connections", description: "Joist hangers, straps and connectors correctly installed", riskLevel: "high", defectTrigger: true },
-        { category: "Lintels & Beams", description: "Lintels and beams of correct size installed over all openings", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 1684" },
-        { category: "Lintels & Beams", description: "Beam bearing lengths and bearing surfaces adequate", riskLevel: "high", defectTrigger: true },
-        { category: "Roof Structure", description: "Trusses and rafters installed to design — size, spacing, bearing", riskLevel: "high", defectTrigger: true },
-        { category: "Roof Structure", description: "Truss tie-downs and bracing installed per engineering", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "General", description: "No notching, drilling or alteration to structural members without engineering approval", riskLevel: "high", defectTrigger: true, recommendedAction: "Obtain engineering approval or remediate" },
-      ]);
+  await seedTemplate(
+    "Frame Inspection", "Structural Engineer", "structural_frame", "Frame Inspection",
+    "Structural review of timber or light-gauge steel framing prior to lining.",
+    30,
+    [
+      { category: "Members", description: "Stud spacing, size and grade match structural drawings throughout", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 1684 / AS 4600" },
+      { category: "Members", description: "All lintels, beams and posts are correct size, species and grade", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 1684" },
+      { category: "Connections", description: "Tie-downs, hold-downs and brackets installed per engineer's connection schedule", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1684.2" },
+      { category: "Connections", description: "Fastener type, size and quantity match specification — no substitutions", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Bracing", description: "Diagonal bracing or structural sheathing installed and fixed per drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 1684 Cl 8" },
+      { category: "Floor System", description: "Floor joists, bearers, and blocking installed correctly — no notches outside permitted zones", riskLevel: "medium", defectTrigger: false, requirePhoto: false, codeReference: "AS 1684" },
+      { category: "Roof Structure", description: "Roof trusses or rafters bear correctly on wall plates and are braced per drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Documentation", description: "Frame inspection certificate issued after satisfactory inspection", riskLevel: "medium" },
+    ],
+  );
 
-  const seSteelFrame = (folder: string, sort: number) =>
-    seedTemplate("Steel Frame Inspection", "Structural Engineer", "se_steel_frame", folder,
-      "Structural engineer review of steel portal frame or structural steel system.",
-      sort, [
-        { category: "Column Bases", description: "Column base plates installed level, plumb and to anchor bolt pattern", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 4100" },
-        { category: "Column Bases", description: "Anchor bolts of correct size, grade and projection", riskLevel: "high", defectTrigger: true },
-        { category: "Column Bases", description: "Base plate grouting completed (if applicable)", riskLevel: "medium", defectTrigger: true },
-        { category: "Frame Members", description: "Steel sections of correct grade, size and orientation to drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Frame Members", description: "Frame plumb and square — no visible out-of-tolerance deflection", riskLevel: "high", defectTrigger: true },
-        { category: "Connections", description: "Bolted connections complete — all bolts in place to correct grade", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 4100" },
-        { category: "Connections", description: "Welded connections inspected — full penetration welds as specified", riskLevel: "high", defectTrigger: true, recommendedAction: "Obtain NDT weld inspection report" },
-        { category: "Bracing & Purlins", description: "Knee bracing, fly bracing and portal bracing installed to drawings", riskLevel: "high", defectTrigger: true },
-        { category: "Bracing & Purlins", description: "Purlins, girts and bridging installed to specification", riskLevel: "medium", defectTrigger: true },
-        { category: "Protective Coating", description: "Steel protection system (paint/zinc) applied to specification", riskLevel: "medium", defectTrigger: true },
-      ]);
+  await seedTemplate(
+    "Steel Frame Inspection", "Structural Engineer", "structural_steel_frame", "Steel Frame Inspection",
+    "Inspection of structural steel framing, connections and welds for commercial and industrial buildings.",
+    40,
+    [
+      { category: "Fabrication", description: "Steel members match approved drawings — sections, lengths and grades verified", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 4100" },
+      { category: "Connections", description: "Bolted connections use correct bolt grade, size and quantity — no missing bolts", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 4100 Cl 9" },
+      { category: "Welds", description: "Welds inspected for size, length and quality — no visible cracks or undercut", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS/NZS 1554" },
+      { category: "Erection", description: "Columns plumb and beams level within permitted tolerances", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS 4100 Cl 15" },
+      { category: "Base Plates", description: "Column base plates anchored with correct holding-down bolt pattern and size", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Bracing", description: "All bracing members, gussets and turnbuckles installed per drawings", riskLevel: "high", defectTrigger: false, requirePhoto: false },
+      { category: "Surface Treatment", description: "Protective coating or paint system applied to specified DFT", riskLevel: "low", defectTrigger: false, requirePhoto: false, codeReference: "AS/NZS 2312" },
+      { category: "Documentation", description: "NATA-certified inspection report for welds and connections provided", riskLevel: "high", requirePhoto: false },
+    ],
+  );
 
-  // Class 1a
-  await seFooting("Class 1a", 1);
-  await seSlab("Class 1a", 2);
-  await seFrame("Class 1a", 3);
+  await seedTemplate(
+    "Retaining Wall Inspection", "Structural Engineer", "structural_retaining_wall", "Retaining Wall Inspection",
+    "Structural review of retaining walls and drainage prior to backfilling.",
+    50,
+    [
+      { category: "Foundation", description: "Footing depth and bearing consistent with engineer design", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 4678" },
+      { category: "Reinforcement", description: "Wall reinforcement (vertical bars, horizontal ties) match drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 3600" },
+      { category: "Drainage", description: "Agricultural drain installed at base of wall with correct fall and outlet", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Drainage", description: "Drainage aggregate placed between wall and cut face", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Waterproofing", description: "Waterproofing membrane applied to soil-face of wall where required", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Surcharge", description: "No surcharges within 1.5× wall height during construction", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "Documentation", description: "Engineer's certificate of retaining wall compliance issued", riskLevel: "medium" },
+    ],
+  );
 
-  // Class 1b
-  await seFooting("Class 1b", 1);
-  await seSlab("Class 1b", 2);
-  await seFrame("Class 1b", 3);
+  await seedTemplate(
+    "Structural Final Inspection", "Structural Engineer", "structural_final", "Structural Final Inspection",
+    "Overall structural sign-off at completion of construction.",
+    60,
+    [
+      { category: "Foundations", description: "No cracking, subsidence or differential settlement visible at footings or slab", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Frame", description: "No visible structural defects — no missing connections, split members or excessive deflection", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Roof", description: "Roof structure appears structurally sound — no sagging, spreading or missing bracing", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Connections", description: "All hold-downs, tie-downs and brackets remain in place and undamaged", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Modifications", description: "Any structural modifications approved by engineer and documented", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "Documentation", description: "Structural engineer's certificate of compliance issued for the works", riskLevel: "high" },
+    ],
+  );
 
-  // Class 2
-  await seFooting("Class 2", 1, [
-    { category: "Piled Foundations", description: "Pile locations and depths comply with geotechnical and structural drawings (if applicable)", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2159" },
-  ]);
-  await seSlab("Class 2", 2, [
-    { category: "Post-Tensioning", description: "PT cables, anchors and dead-ends installed to PT engineer drawings (if applicable)", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    { category: "Post-Tensioning", description: "Sheathing intact and ducts free from obstruction", riskLevel: "high", defectTrigger: true },
-  ]);
-  await seFrame("Class 2", 3, "Frame / Structure Inspection");
-
-  // Class 3
-  await seFooting("Class 3", 1);
-  await seSlab("Class 3", 2);
-  await seFrame("Class 3", 3);
-
-  // Class 4
-  await seedTemplate("Structural Compliance Review", "Structural Engineer", "se_structural_review", "Class 4",
-    "Structural engineer review of dwelling within a non-residential building — structural compliance assessment.",
-    1, [
-      { category: "Foundation", description: "Foundation system appropriate for combined loading (residential over/within commercial)", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Floor / Slab", description: "Floor slab/structure designed for residential live loads as well as commercial below", riskLevel: "high", defectTrigger: true },
-      { category: "Wall Structure", description: "Structural walls and columns verified to structural drawings", riskLevel: "high", defectTrigger: true },
-      { category: "Connections", description: "Interface connections between commercial and residential structure reviewed", riskLevel: "high", defectTrigger: true },
-      { category: "Fire Separation", description: "Fire-rated structural elements in place at class boundary", riskLevel: "high", defectTrigger: true, codeReference: "NCC 2022 C2" },
-      { category: "Serviceability", description: "No evidence of excessive deflection or cracking to structural elements", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    ]);
-
-  // Class 5
-  await seFooting("Class 5", 1);
-  await seSteelFrame("Class 5", 2);
-
-  // Class 6
-  await seFooting("Class 6", 1);
-  await seSteelFrame("Class 6", 2);
-
-  // Class 7a
-  await seFooting("Class 7a", 1);
-  await seedTemplate("Slab & Deck Inspection", "Structural Engineer", "se_slab_deck", "Class 7a",
-    "Structural engineer review of carpark slab/deck — reinforcement, PT and waterproofing substrate.",
-    2, [
-      { category: "Slab Geometry", description: "Slab thickness, falls and dimensions to structural drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 3600" },
-      { category: "Reinforcement", description: "Top and bottom reinforcement compliant with structural drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Post-Tensioning", description: "PT cables, stressing anchors and pocket formers installed correctly (if applicable)", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Post-Tensioning", description: "Stressing records reviewed and compliant with engineer specification", riskLevel: "high", defectTrigger: true },
-      { category: "Waterproofing Substrate", description: "Concrete surface prepared for waterproofing membrane — no contamination", riskLevel: "high", defectTrigger: true },
-      { category: "Expansion Joints", description: "Expansion and contraction joints formed at required locations", riskLevel: "medium", defectTrigger: true },
-      { category: "Edge Treatment", description: "Edge beams, upstands and kerb elements to drawings", riskLevel: "medium", defectTrigger: true },
-      { category: "Drainage", description: "Drainage falls adequate — no ponding areas visible in formwork layout", riskLevel: "high", defectTrigger: true },
-    ]);
-
-  // Class 7b
-  await seFooting("Class 7b", 1);
-  await seSteelFrame("Class 7b", 2);
-
-  // Class 8
-  await seFooting("Class 8", 1);
-  await seSteelFrame("Class 8", 2);
-
-  // Class 9a
-  await seFooting("Class 9a", 1);
-  await seSlab("Class 9a", 2);
-  await seSteelFrame("Class 9a", 3);
-
-  // Class 9b
-  await seFooting("Class 9b", 1);
-  await seSlab("Class 9b", 2);
-  await seFrame("Class 9b", 3, "Frame & Structure Inspection");
-
-  // Class 9c
-  await seFooting("Class 9c", 1);
-  await seSlab("Class 9c", 2);
-  await seFrame("Class 9c", 3);
-
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
   // PLUMBING OFFICER
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
   console.log("\n--- Plumbing Officer ---");
 
-  const poRoughIn = (folder: string, sort: number) =>
-    seedTemplate("Rough-In Inspection", "Plumbing Officer", "po_rough_in", folder,
-      "Inspection of rough-in plumbing before walls are enclosed.",
-      sort, [
-        { category: "Sanitary Pipework", description: "Sanitary pipework installed to correct falls — min 1:60 horizontal drains", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS/NZS 3500.2" },
-        { category: "Sanitary Pipework", description: "Trap arms, gully outlets and inspection points correctly positioned", riskLevel: "high", defectTrigger: true },
-        { category: "Sanitary Pipework", description: "Stack vents and ventilation pipework installed correctly", riskLevel: "high", defectTrigger: true },
-        { category: "Water Supply", description: "Hot and cold water supply lines of correct size and material", riskLevel: "high", defectTrigger: true, codeReference: "AS/NZS 3500.1" },
-        { category: "Water Supply", description: "Isolation valves installed at all fixtures and branches", riskLevel: "medium", defectTrigger: true },
-        { category: "Water Supply", description: "Pressure tested — system holds pressure per AS/NZS 3500 requirements", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Pipework Support", description: "All pipework adequately clipped, supported and protected from damage", riskLevel: "medium", defectTrigger: true },
-        { category: "Wet Area Setout", description: "Wastes and floor drains positioned to correct location per plan", riskLevel: "high", defectTrigger: true },
-      ]);
+  await seedTemplate(
+    "Rough-In Inspection", "Plumbing Officer", "plumbing_rough_in", "Rough-In Inspection",
+    "Inspection of concealed plumbing rough-in before wall and floor coverings are applied.",
+    10,
+    [
+      { category: "Layout", description: "All waste and supply pipe routes follow approved plans and are accessible for maintenance", riskLevel: "medium", defectTrigger: false, requirePhoto: true },
+      { category: "Pipe Material", description: "Correct pipe material, class and jointing method used for each application (uPVC, copper, PEX)", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3500.1" },
+      { category: "Falls", description: "Waste lines fall minimum 1:40 (2.5%) for horizontal pipes", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3500.2 Cl 8.2" },
+      { category: "Venting", description: "Vent pipes installed to correct height and diameter — not blocked by insulation or sheeting", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3500.2" },
+      { category: "Penetrations", description: "All floor and wall penetrations sealed against vermin and fire-rated where required", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Pressure Test", description: "Air or water pressure test conducted on concealed supply lines — no pressure drop", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS/NZS 3500.1 Cl 10" },
+      { category: "Isolation Valves", description: "Isolation valves installed at each fixture and at water meter", riskLevel: "medium", defectTrigger: false, requirePhoto: false, codeReference: "AS/NZS 3500.1" },
+      { category: "Documentation", description: "Rough-in inspection certificate completed and signed", riskLevel: "medium" },
+    ],
+  );
 
-  const poSanitary = (folder: string, sort: number) =>
-    seedTemplate("Sanitary Drainage Inspection", "Plumbing Officer", "po_sanitary", folder,
-      "Inspection of sanitary drainage system — underground and internal.",
-      sort, [
-        { category: "Underground Drain", description: "Underground sanitary drain installed at correct depth and falls", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS/NZS 3500.2" },
-        { category: "Underground Drain", description: "Pipe material, class and jointing compliant with specification", riskLevel: "high", defectTrigger: true },
-        { category: "Underground Drain", description: "All junctions, bends and inspection openings correctly installed", riskLevel: "medium", defectTrigger: true },
-        { category: "Underground Drain", description: "Drain tested — no visible leaks or pressure loss during test", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Connection", description: "Connection to sewer or on-site treatment system approved and correct", riskLevel: "high", defectTrigger: true },
-        { category: "Inspection Points", description: "Inspection openings accessible at required intervals and locations", riskLevel: "medium", defectTrigger: true },
-        { category: "Grease & Solids", description: "Grease arrestors installed where required (commercial kitchens)", riskLevel: "high", defectTrigger: true },
-      ]);
+  await seedTemplate(
+    "Sanitary Drainage Inspection", "Plumbing Officer", "plumbing_sanitary_drainage", "Sanitary Drainage Inspection",
+    "Inspection of sanitary drainage including underground and above-ground waste lines.",
+    20,
+    [
+      { category: "Pipe Grade", description: "Underground drain falls minimum 1:60 throughout — checked with level", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3500.2 Cl 8.2" },
+      { category: "Pipe Bedding", description: "Pipes bedded and surrounded in clean granular material to correct depth", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Junctions", description: "All junctions are 45° or 90° swept fittings — no sharp-angle connections", riskLevel: "medium", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3500.2" },
+      { category: "Inspection Openings", description: "IOs installed at every change of direction and maximum 45m spacing", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS/NZS 3500.2 Cl 9" },
+      { category: "Boundary Trap", description: "Boundary trap (BT) installed in correct location and accessible", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS/NZS 3500.2" },
+      { category: "Pressure Test", description: "Drain tested by hydraulic pressure or water-filled test — zero leakage", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS/NZS 3500.2 Cl 13" },
+      { category: "Documentation", description: "Drainage inspection certificate completed and forwarded to authority", riskLevel: "medium" },
+    ],
+  );
 
-  const poHotCold = (folder: string, sort: number) =>
-    seedTemplate("Hot & Cold Water Systems", "Plumbing Officer", "po_hot_cold", folder,
-      "Inspection of hot and cold water supply systems including tempering valves and storage.",
-      sort, [
-        { category: "Cold Water Supply", description: "Mains water connection complies with approved design", riskLevel: "high", defectTrigger: true, codeReference: "AS/NZS 3500.1" },
-        { category: "Cold Water Supply", description: "Backflow prevention device installed at point of supply", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Hot Water System", description: "Hot water unit installed — type, capacity and location per approved drawings", riskLevel: "high", defectTrigger: true },
-        { category: "Hot Water System", description: "Tempering valve installed and set to 50°C max at all sanitary outlets", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS/NZS 3500.4", recommendedAction: "Adjust tempering valve and re-test" },
-        { category: "Hot Water System", description: "Pressure relief valve and expansion control valve fitted and piped to drain", riskLevel: "high", defectTrigger: true },
-        { category: "Pipework", description: "Hot water pipe insulated to minimum specification to reduce heat loss", riskLevel: "medium", defectTrigger: true },
-        { category: "Pipework", description: "No cross-connections between hot and cold systems", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Testing", description: "System pressure tested — no leaks at joints, valves or fittings", riskLevel: "high", defectTrigger: true },
-      ]);
+  await seedTemplate(
+    "Hot & Cold Water Systems", "Plumbing Officer", "plumbing_hot_cold_water", "Hot & Cold Water Systems",
+    "Inspection of domestic hot and cold water supply including HWS and fixtures.",
+    30,
+    [
+      { category: "Water Meter", description: "Water meter located, accessible, and connects to licensed water authority service", riskLevel: "medium", defectTrigger: false, requirePhoto: false, codeReference: "AS/NZS 3500.1" },
+      { category: "Backflow", description: "Backflow prevention device installed at meter and where required by risk assessment", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3500.1 Cl 4.6" },
+      { category: "HWS", description: "Hot water system installed correctly — correct TPR valve, expansion control and pressure relief valve", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS/NZS 3500.4" },
+      { category: "HWS Temperature", description: "HWS temperature set to minimum 60°C storage / 50°C delivery", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3500.4 Cl 4.3" },
+      { category: "Pressure", description: "Water pressure at fixtures within 200–500 kPa (or as per authority requirements)", riskLevel: "medium", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3500.1" },
+      { category: "Fixtures", description: "All fixtures properly connected, sealed and free of leaks on initial fill", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Lagging", description: "Hot water pipes lagged where exposed in unheated spaces or roof void", riskLevel: "low", defectTrigger: false, requirePhoto: false },
+      { category: "Documentation", description: "Certificate of compliance for HWS and water supply works issued", riskLevel: "medium" },
+    ],
+  );
 
-  const poStormwater = (folder: string, sort: number) =>
-    seedTemplate("Stormwater Drainage Inspection", "Plumbing Officer", "po_stormwater", folder,
-      "Inspection of stormwater drainage system from roof, paved areas and site.",
-      sort, [
-        { category: "Roof Drainage", description: "Gutters and downpipes of correct size to AS 3500.3 calculation", riskLevel: "high", defectTrigger: true, codeReference: "AS/NZS 3500.3" },
-        { category: "Roof Drainage", description: "Downpipes connected to approved stormwater system", riskLevel: "high", defectTrigger: true },
-        { category: "Underground Stormwater", description: "Underground stormwater drain at correct falls and depth", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Underground Stormwater", description: "Stormwater connection to kerb/channel, soakage or detention approved", riskLevel: "high", defectTrigger: true },
-        { category: "On-site Detention", description: "OSD tank, pit or soakage system installed per hydraulic design (if applicable)", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Surface Drainage", description: "Site drainage falls away from building — no ponding adjacent to structure", riskLevel: "medium", defectTrigger: true },
-        { category: "Testing", description: "Stormwater system tested — no leaks or blockages", riskLevel: "medium", defectTrigger: true },
-      ]);
+  await seedTemplate(
+    "Gas Installation Inspection", "Plumbing Officer", "plumbing_gas", "Gas Installation Inspection",
+    "Inspection of natural gas or LPG installation including meters, pipework and appliances.",
+    40,
+    [
+      { category: "Pipe Material", description: "Gas pipework is correct material (copper or approved polymer) and appropriately clipped and supported", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 5601.1" },
+      { category: "Pressure Test", description: "Pressure test to 7 kPa (NG) or 14 kPa (LPG) held for minimum 5 minutes — zero drop", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS/NZS 5601.1 Cl 5" },
+      { category: "Meter", description: "Gas meter in accessible location with correct clearances from ignition sources and openings", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 5601.1" },
+      { category: "Appliances", description: "All gas appliances connected and commissioned by licensed gasfitter — no leaks detected", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 5601.1" },
+      { category: "Ventilation", description: "Appliance ventilation and flue system installed to manufacturer's spec and AS 5601", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 5601.1" },
+      { category: "Isolation", description: "Isolation valve accessible adjacent to each appliance", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Documentation", description: "Gas compliance certificate (Form 4 or state equivalent) completed and forwarded", riskLevel: "critical" },
+    ],
+  );
 
-  const poFireServices = (folder: string, sort: number) =>
-    seedTemplate("Fire Services Plumbing Inspection", "Plumbing Officer", "po_fire_services", folder,
-      "Inspection of fire hydrant, hose reel and sprinkler plumbing systems.",
-      sort, [
-        { category: "Water Supply", description: "Dedicated fire water supply connection size and backflow prevention compliant", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2419" },
-        { category: "Hydrant System", description: "Fire hydrant boosters, pillar hydrants and landing valves installed to AS 2419", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Hose Reel", description: "Hose reel systems installed at required spacing and height", riskLevel: "high", defectTrigger: true, codeReference: "AS 2441" },
-        { category: "Hose Reel", description: "Hose reel pressure test completed — min 400 kPa static at outlet", riskLevel: "high", defectTrigger: true },
-        { category: "Sprinkler System", description: "Sprinkler heads installed at correct spacing, orientation and concealment (if applicable)", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2118" },
-        { category: "Sprinkler System", description: "Main stop valve and flow/pressure test connection installed and labelled", riskLevel: "high", defectTrigger: true },
-        { category: "Commissioning", description: "Flow and pressure tests recorded and compliant with design", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      ]);
+  await seedTemplate(
+    "Stormwater Drainage Inspection", "Plumbing Officer", "plumbing_stormwater", "Stormwater Drainage Inspection",
+    "Inspection of roof drainage, surface drainage and stormwater discharge systems.",
+    50,
+    [
+      { category: "Gutters & Downpipes", description: "Gutters fall minimum 1:500 toward downpipes — no ponding sections", riskLevel: "medium", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3500.3" },
+      { category: "Downpipes", description: "Downpipes sized to match roof catchment area per AS/NZS 3500.3 calculations", riskLevel: "medium", defectTrigger: false, requirePhoto: false, codeReference: "AS/NZS 3500.3" },
+      { category: "Discharge", description: "Stormwater discharges to approved point — kerb/channel, soakage pit or council drain", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Pits & Sumps", description: "Grated drainage pits installed at correct locations with correct falls leading in", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Silt Traps", description: "Silt/sediment traps installed where required by local council or environmental plan", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Pressure Test", description: "Stormwater lines pressure or water tested — zero leakage confirmed", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3500.3" },
+    ],
+  );
 
-  // Class 1a
-  await poRoughIn("Class 1a", 1);
-  await poSanitary("Class 1a", 2);
-  await poHotCold("Class 1a", 3);
-  await poStormwater("Class 1a", 4);
-  await seedTemplate("Gas Installation Inspection", "Plumbing Officer", "po_gas", "Class 1a",
-    "Inspection of natural gas or LPG installation prior to connection and commissioning.",
-    5, [
-      { category: "Pipework", description: "Gas pipework material, size and jointing compliant with AS 5601", riskLevel: "high", defectTrigger: true, codeReference: "AS 5601" },
-      { category: "Pipework", description: "No gas pipe buried under slab without approved sleeve or protection", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Appliance Connections", description: "All appliance connections include approved flexible connectors and isolation valves", riskLevel: "high", defectTrigger: true },
-      { category: "Testing", description: "Gas system pressure tested — no pressure drop over 1 hour hold", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Locate and rectify leak before connection to supply" },
-      { category: "Ventilation", description: "Appliance flues and draught diverters correctly installed and terminated", riskLevel: "high", defectTrigger: true, codeReference: "AS 5601" },
-      { category: "Meter / Regulator", description: "Gas meter position compliant — clearance from ignition sources observed", riskLevel: "high", defectTrigger: true },
-      { category: "Commissioning", description: "All appliances tested for gas-tight connection and correct operation", riskLevel: "high", defectTrigger: true },
-    ]);
+  await seedTemplate(
+    "Fire Services Plumbing", "Plumbing Officer", "plumbing_fire_services", "Fire Services Plumbing",
+    "Inspection of fire hydrant and sprinkler supply plumbing for Class 2+ buildings.",
+    60,
+    [
+      { category: "Supply Pipe", description: "Fire services supply main is correct diameter per hydraulic design — no reduction in bore", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "AS 2118.1" },
+      { category: "Isolation Valves", description: "Isolation valves for fire services are OS&Y or butterfly type — locked open", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1851" },
+      { category: "Hydrant Booster", description: "Fire brigade boosting inlet on building façade — accessible, capped and labelled", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2419.1" },
+      { category: "Pressure & Flow", description: "Flow test and pressure test conducted by licensed fire protection plumber — results recorded", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "AS 1851" },
+      { category: "Backflow", description: "Testable backflow prevention device installed on fire services connection where required", riskLevel: "high", defectTrigger: false, requirePhoto: false, codeReference: "AS/NZS 3500.1" },
+      { category: "Documentation", description: "Commissioning test report and plumber's compliance certificate provided", riskLevel: "critical" },
+    ],
+  );
 
-  // Class 1b
-  await poRoughIn("Class 1b", 1);
-  await poSanitary("Class 1b", 2);
-  await poHotCold("Class 1b", 3);
-  await poStormwater("Class 1b", 4);
+  await seedTemplate(
+    "Plumbing Completion Inspection", "Plumbing Officer", "plumbing_completion", "Completion Inspection",
+    "Final plumbing sign-off confirming all systems are complete and compliant.",
+    70,
+    [
+      { category: "Fixtures", description: "All fixtures (basins, baths, showers, toilets, sinks) installed, operational and free of leaks", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Hot Water", description: "HWS operating correctly — hot water reaches all fixtures within reasonable time", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Drainage", description: "All fixtures drain freely — no gurgling, slow drainage or cross-venting issues", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Gas", description: "Gas appliances all operational and gas compliance certificate on hand", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "Water Efficiency", description: "All fixtures are WELS rated and labelled as required by WaterMark", riskLevel: "low", defectTrigger: false, requirePhoto: false, codeReference: "WaterMark Scheme" },
+      { category: "Backflow Devices", description: "All testable backflow prevention devices commissioned and logged", riskLevel: "high", defectTrigger: false, requirePhoto: false },
+      { category: "Documentation", description: "Final Certificate of Compliance (Form 1 or state equivalent) issued", riskLevel: "critical" },
+    ],
+  );
 
-  // Class 2
-  await poRoughIn("Class 2", 1);
-  await poSanitary("Class 2", 2);
-  await poHotCold("Class 2", 3);
-  await poStormwater("Class 2", 4);
-  await poFireServices("Class 2", 5);
-
-  // Class 3
-  await poSanitary("Class 3", 1);
-  await poHotCold("Class 3", 2);
-  await poFireServices("Class 3", 3);
-
-  // Class 4
-  await poRoughIn("Class 4", 1);
-  await poSanitary("Class 4", 2);
-  await poHotCold("Class 4", 3);
-
-  // Class 5
-  await poSanitary("Class 5", 1);
-  await poHotCold("Class 5", 2);
-  await poFireServices("Class 5", 3);
-
-  // Class 6
-  await poSanitary("Class 6", 1);
-  await poHotCold("Class 6", 2);
-  await seedTemplate("Grease Trap Inspection", "Plumbing Officer", "po_grease_trap", "Class 6",
-    "Inspection of commercial grease trap or grease arrestor installation.",
-    3, [
-      { category: "Unit Installation", description: "Grease arrestor size calculated to AS 1546.1 for peak flow rate", riskLevel: "high", defectTrigger: true, codeReference: "AS 1546.1" },
-      { category: "Unit Installation", description: "Grease arrestor located to permit service access and maintenance", riskLevel: "medium", defectTrigger: true },
-      { category: "Pipework", description: "All kitchen drainage connected to grease arrestor inlet", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Connect all kitchen wastes before commissioning" },
-      { category: "Pipework", description: "Outlet pipework connected to sanitary drain downstream of arrestor", riskLevel: "high", defectTrigger: true },
-      { category: "Inspection Points", description: "Inspection openings accessible and watertight", riskLevel: "medium", defectTrigger: true },
-      { category: "Testing", description: "Unit water tested prior to commissioning — no leaks", riskLevel: "high", defectTrigger: true },
-    ]);
-
-  // Class 7a
-  await poSanitary("Class 7a", 1);
-  await poStormwater("Class 7a", 2);
-
-  // Class 7b
-  await poSanitary("Class 7b", 1);
-  await poStormwater("Class 7b", 2);
-
-  // Class 8
-  await poSanitary("Class 8", 1);
-  await poStormwater("Class 8", 2);
-  await seedTemplate("Trade Waste Inspection", "Plumbing Officer", "po_trade_waste", "Class 8",
-    "Inspection of trade waste pre-treatment system prior to connection to sewer.",
-    3, [
-      { category: "Pre-Treatment System", description: "Trade waste pre-treatment system type and capacity approved by water authority", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Pre-Treatment System", description: "Oil/water separator, settling tank or other treatment device installed correctly", riskLevel: "high", defectTrigger: true },
-      { category: "Pipework", description: "All trade waste process drainage connected to pre-treatment system", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Connect all trade waste streams before commissioning" },
-      { category: "Pipework", description: "Overflow protection device installed to prevent bypass of treatment", riskLevel: "high", defectTrigger: true },
-      { category: "Connection to Sewer", description: "Treated effluent connection to sewer at approved point", riskLevel: "high", defectTrigger: true },
-      { category: "Sampling Point", description: "Sampling point installed at required location for authority monitoring", riskLevel: "medium", defectTrigger: true },
-    ]);
-
-  // Class 9a
-  await poSanitary("Class 9a", 1);
-  await poHotCold("Class 9a", 2);
-  await poFireServices("Class 9a", 3);
-
-  // Class 9b
-  await poSanitary("Class 9b", 1);
-  await poHotCold("Class 9b", 2);
-  await poFireServices("Class 9b", 3);
-
-  // Class 9c
-  await poSanitary("Class 9c", 1);
-  await poHotCold("Class 9c", 2);
-  await poFireServices("Class 9c", 3);
-
-  // ══════════════════════════════════════════════════════════════════════════════
-  // BUILDER / QC — class-specific
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
+  // BUILDER / QC
+  // ─────────────────────────────────────────────────────────────────────────
   console.log("\n--- Builder / QC ---");
 
-  const bqcCertReadiness = (folder: string, sort: number, extra?: ItemDef[]) =>
-    seedTemplate("Certifier Readiness Inspection", "Builder / QC", "qc_cert_readiness", folder,
-      "Builder QC check confirming the work is ready for building certifier stage inspection.",
-      sort, [
-        { category: "Readiness", description: "Site safe and accessible for certifier inspection", riskLevel: "medium", defectTrigger: true },
-        { category: "Readiness", description: "All required work for this stage is complete", riskLevel: "high", defectTrigger: true },
-        { category: "Documentation", description: "Approved plans and relevant engineering documents on site", riskLevel: "medium", defectTrigger: true },
-        { category: "Setout / Dimensions", description: "Dimensions and setouts verified against approved plans", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Structural Elements", description: "Structural elements installed per engineering drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Connections", description: "All required connections, fixings and fasteners in place", riskLevel: "high", defectTrigger: true },
-        { category: "Services", description: "Rough-in services and penetrations in place prior to enclosure", riskLevel: "high", defectTrigger: true },
-        ...(extra ?? []),
-      ]);
+  await seedTemplate(
+    "Pre-Slab Inspection", "Builder / QC", "builder_pre_slab", "Pre-Slab Inspection",
+    "Quality check immediately before concrete is poured for the ground floor slab.",
+    10,
+    [
+      { category: "Subgrade", description: "Subgrade compacted and approved — no disturbance since engineer's inspection", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Membrane", description: "Vapour / termite barrier laid, lapped min 200mm and taped — no tears or punctures", riskLevel: "medium", defectTrigger: true, requirePhoto: true, codeReference: "AS 3660.1" },
+      { category: "Reinforcement", description: "Steel mesh/rebar correctly positioned and supported on chairs — cover adequate", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 3600" },
+      { category: "Edge Forms", description: "Edge formwork straight, level and set to correct slab depth", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Services", description: "Conduit, PVC sleeves and in-slab pipes fixed in position — not floating", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Concrete Order", description: "Concrete mix design, quantity and slump confirmed with batch plant", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Sign-Off", description: "Plumber and structural engineer hold-point sign-offs completed before pour commences", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+    ],
+  );
 
-  const bqcDefect = (folder: string, sort: number, extra?: ItemDef[]) =>
-    seedTemplate("Defect & Quality Inspection", "Builder / QC", "qc_defect", folder,
-      "Quality control inspection identifying defects, incomplete works and non-conformances.",
-      sort, [
-        { category: "External", description: "External fabric and cladding complete and free from damage", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
-        { category: "External", description: "Roof, gutters and flashings complete and watertight", riskLevel: "high", defectTrigger: true },
-        { category: "External", description: "Windows and external doors installed, sealed and operational", riskLevel: "medium", defectTrigger: true },
-        { category: "Internal Finishes", description: "Wall and ceiling linings complete, undamaged and painted", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
-        { category: "Internal Finishes", description: "Floor finishes complete, undamaged and clean", riskLevel: "medium", defectTrigger: true },
-        { category: "Wet Areas", description: "Waterproofing and tiling complete — no cracked or hollow tiles", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Fixtures", description: "All fixtures, fittings and joinery complete and operational", riskLevel: "medium", defectTrigger: true },
-        { category: "Services", description: "Plumbing, electrical and mechanical services complete and operational", riskLevel: "high", defectTrigger: true },
-        { category: "Safety", description: "Balustrades, handrails and safety glazing compliant and undamaged", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 D3" },
-        ...(extra ?? []),
-      ]);
+  await seedTemplate(
+    "Frame Stage Inspection", "Builder / QC", "builder_frame_stage", "Frame Stage Inspection",
+    "Quality review of framing prior to lock-up — before insulation and lining.",
+    20,
+    [
+      { category: "Walls", description: "Wall frames plumb, straight and correctly spaced — no bowing or racking", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Walls", description: "All noggings, blocking and backing strips in place for fixtures and cabinetry", riskLevel: "low", defectTrigger: false, requirePhoto: false },
+      { category: "Roof", description: "Roof trusses or rafters correctly seated, plumb and braced per drawing", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 1684" },
+      { category: "Connections", description: "All structural tie-downs, straps and hold-down bolts installed", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 1684" },
+      { category: "Openings", description: "Door and window openings correctly sized, square and within tolerance ±3mm", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Services Rough-In", description: "Electrical, plumbing, and data rough-ins completed before insulation", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Termite", description: "Physical termite protection installed correctly at all penetrations", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 3660.1" },
+    ],
+  );
 
-  // Class 1a
-  await bqcCertReadiness("Class 1a", 1);
-  await bqcDefect("Class 1a", 2, [
-    { category: "Safety", description: "Smoke alarms installed in all required locations and operational", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 E2" },
-  ]);
+  await seedTemplate(
+    "Lock-Up Stage Inspection", "Builder / QC", "builder_lock_up", "Lock-Up Stage Inspection",
+    "QC inspection at lock-up — roof, external walls and openings weathertight.",
+    30,
+    [
+      { category: "Roof", description: "Roofing material fully fixed — all ridge capping, flashings, valleys and penetrations sealed", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "External Walls", description: "External cladding or brickwork complete and weathertight", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Windows & Doors", description: "All windows and external doors installed, operational and flashed correctly", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Drainage", description: "Roof drainage (gutters, downpipes) connected and discharging correctly", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Damp Course", description: "Damp-proof course / flashing visible below lowest external cladding", riskLevel: "medium", defectTrigger: true, requirePhoto: true, codeReference: "NCC Vol 2" },
+      { category: "Security", description: "Building secure — all openings lockable before trade subcontractors work inside", riskLevel: "low", defectTrigger: false, requirePhoto: false },
+    ],
+  );
 
-  // Class 1b
-  await bqcCertReadiness("Class 1b", 1);
-  await bqcDefect("Class 1b", 2);
+  await seedTemplate(
+    "Defect Inspection", "Builder / QC", "builder_defect", "Defect Inspection",
+    "Systematic inspection to identify, record and categorise defects prior to client handover.",
+    40,
+    [
+      { category: "Internal Finishes", description: "Walls — painting complete, no drips, runs, missed patches or substrate visible", riskLevel: "low", defectTrigger: true, requirePhoto: true },
+      { category: "Internal Finishes", description: "Ceilings — no cracking, staining, cornice gaps or paint defects", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Internal Finishes", description: "Skirting boards, architraves and trims — correctly fixed, gaps filled and painted", riskLevel: "low", defectTrigger: true, requirePhoto: false },
+      { category: "Joinery", description: "All doors operate freely, latch correctly and are hung square without binding", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Joinery", description: "Kitchen and laundry cabinetry level, secure, soft-close hinges operational", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Floor Coverings", description: "Tiles — grout lines consistent, no hollow-sounding tiles, no cracking or lippage", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Floor Coverings", description: "Timber / laminate / carpet — correctly laid, no bubbles, joins or fraying", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Wet Areas", description: "Waterproofing visible below tiles in shower recess — no silicone gaps or movement", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 3740" },
+      { category: "External", description: "External paint / render — no cracking, peeling, missed areas or colour variation", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Services", description: "All power points, switches and light fittings installed, operational and correctly positioned", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+    ],
+  );
 
-  // Class 2
-  await bqcCertReadiness("Class 2", 1, [
-    { category: "Fire", description: "Fire separation walls and floors constructed per fire engineered drawings", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 C" },
-  ]);
-  await bqcDefect("Class 2", 2, [
-    { category: "Fire Safety", description: "Fire doors and smoke seals installed and operational in common areas", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    { category: "Accessibility", description: "Accessible paths, lift access and common areas complete to DDA requirements", riskLevel: "high", defectTrigger: true, codeReference: "NCC 2022 D4" },
-  ]);
+  await seedTemplate(
+    "Practical Completion Inspection", "Builder / QC", "builder_practical_completion", "Practical Completion Inspection",
+    "Formal inspection confirming the building is ready for occupation and client handover.",
+    50,
+    [
+      { category: "Structural", description: "No structural defects or movement visible — doors and windows operate normally", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Services", description: "All mechanical services (HVAC, exhaust fans) operational", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Electrical", description: "Electrical installation complete — switchboard labelled, GPOs and lights tested", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Plumbing", description: "All plumbing fixtures operational and compliance certificate on hand", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Site", description: "Site cleaned — all waste, formwork, timber off-cuts and rubble removed", riskLevel: "low", defectTrigger: false, requirePhoto: false },
+      { category: "Site", description: "Driveway, paths and landscaping in agreed final condition", riskLevel: "low", defectTrigger: false, requirePhoto: false },
+      { category: "Defects List", description: "Outstanding defect list prepared — all items agreed with client and scheduled for rectification", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Certificates", description: "Occupation Certificate (or equivalent) obtained from certifier", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+    ],
+  );
 
-  // Class 3
-  await bqcCertReadiness("Class 3", 1);
-  await bqcDefect("Class 3", 2, [
-    { category: "Fire Safety", description: "Fire compartmentation, doors and suppression systems complete", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
+  await seedTemplate(
+    "Handover Inspection", "Builder / QC", "builder_handover", "Handover Inspection",
+    "Client walkthrough and formal handover — keys, manuals and warranties handed to owner.",
+    60,
+    [
+      { category: "Defect Rectification", description: "All agreed defects from PC inspection have been rectified to client's satisfaction", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Documentation", description: "All certificates, warranties and instruction manuals handed to client (appliances, garage door, HWS)", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Keys & Access", description: "All door keys, garage remotes and security codes provided to client", riskLevel: "low", defectTrigger: false, requirePhoto: false },
+      { category: "Meters", description: "Gas, electricity and water meter readings recorded at handover date", riskLevel: "low", defectTrigger: false, requirePhoto: true },
+      { category: "Smoke Alarms", description: "Smoke alarms tested in client's presence — batteries and operation confirmed", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "NCC Cl E2.2a" },
+      { category: "Client Sign-Off", description: "Client signs handover certificate acknowledging receipt of keys and documentation", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+    ],
+  );
 
-  // Class 4
-  await bqcCertReadiness("Class 4", 1);
-  await bqcDefect("Class 4", 2);
+  await seedTemplate(
+    "Concrete Pour Inspection", "Builder / QC", "builder_concrete_pour", "Concrete Pour Inspection",
+    "On-site quality control during concrete pours — mix, placement and finishing.",
+    70,
+    [
+      { category: "Delivery", description: "Concrete batch delivery docket matches specified mix design — no unauthorised water addition", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1379" },
+      { category: "Slump", description: "Slump tested on site — within specified range (typically 80–120mm)", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS 1012.3" },
+      { category: "Test Cylinders", description: "Minimum 3 test cylinders taken per 50m³ or per pour — clearly labelled and cured correctly", riskLevel: "high", defectTrigger: false, requirePhoto: true, codeReference: "AS 1012.9" },
+      { category: "Placement", description: "Concrete placed and compacted with vibrator — no segregation visible", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Finishing", description: "Surface finished to specified level, falls and texture", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Curing", description: "Curing compound applied or wet hessian placed immediately after finishing", riskLevel: "medium", defectTrigger: false, requirePhoto: false, codeReference: "AS 3600" },
+    ],
+  );
 
-  // Class 5
-  await seedTemplate("Fit-Out Quality Inspection", "Builder / QC", "qc_fitout", "Class 5",
-    "Builder QC inspection of commercial office fit-out quality and completeness.",
-    1, [
-      { category: "Structure", description: "Structural elements and penetrations complete and fire-stopped", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Partitions", description: "Internal partitions straight, plumb, complete and fully lined", riskLevel: "medium", defectTrigger: true },
-      { category: "Ceilings", description: "Suspended ceiling grid level and complete — tiles fitted and undamaged", riskLevel: "medium", defectTrigger: true },
-      { category: "Flooring", description: "Floor finishes complete and undamaged throughout", riskLevel: "medium", defectTrigger: true },
-      { category: "Services", description: "Lighting, power, data and HVAC services operational", riskLevel: "high", defectTrigger: true },
-      { category: "Amenities", description: "Amenities (toilets, kitchenette) complete and operational", riskLevel: "medium", defectTrigger: true },
-      { category: "Fire Safety", description: "Exit signs, emergency lighting and fire doors operational", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 E" },
-      { category: "Accessibility", description: "Accessible paths, amenities and signage complete", riskLevel: "high", defectTrigger: true, codeReference: "NCC 2022 D4" },
-    ]);
-  await bqcCertReadiness("Class 5", 2);
-
-  // Class 6
-  await seedTemplate("Fit-Out Quality Inspection", "Builder / QC", "qc_fitout", "Class 6",
-    "Builder QC inspection of retail shop fit-out quality and completeness.",
-    1, [
-      { category: "Shopfront", description: "Shopfront glazing, signage and entry installed and undamaged", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
-      { category: "Internal Finishes", description: "Walls, floors and ceilings complete and free from defects", riskLevel: "medium", defectTrigger: true },
-      { category: "Amenities", description: "Staff amenities and customer facilities complete", riskLevel: "medium", defectTrigger: true },
-      { category: "Services", description: "Lighting, power, HVAC and security services operational", riskLevel: "high", defectTrigger: true },
-      { category: "Kitchen / Food Service", description: "Commercial kitchen fit-out complete and cleanable (if applicable)", riskLevel: "high", defectTrigger: true },
-      { category: "Fire Safety", description: "Exit signs, emergency lighting and fire safety systems complete", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 E" },
-      { category: "Accessibility", description: "Accessible entry, circulation and amenities per DDA", riskLevel: "high", defectTrigger: true, codeReference: "NCC 2022 D4" },
-    ]);
-  await bqcCertReadiness("Class 6", 2);
-
-  // Class 7a
-  await seedTemplate("Structural & Slab Quality Review", "Builder / QC", "qc_structure", "Class 7a",
-    "Builder QC review of carpark structure and slab quality prior to certifier inspection.",
-    1, [
-      { category: "Concrete Quality", description: "Concrete surface finish acceptable — no honeycombing, cracking or cold joints", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Drainage", description: "Drainage falls adequate — no ponding evident", riskLevel: "high", defectTrigger: true },
-      { category: "Line Marking", description: "Car park line marking, signage and wheel stops complete", riskLevel: "low", defectTrigger: true },
-      { category: "Safety Features", description: "Wheel guards, safety kerbs and pedestrian barriers installed", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Waterproofing", description: "Waterproofing membrane applied to exposed slab — no blistering or damage", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Services", description: "Lighting, ventilation and fire services complete", riskLevel: "high", defectTrigger: true },
-    ]);
-  await bqcCertReadiness("Class 7a", 2);
-
-  // Class 7b
-  await seedTemplate("Structure & Cladding Quality Review", "Builder / QC", "qc_structure", "Class 7b",
-    "Builder QC inspection of warehouse structure and external cladding.",
-    1, [
-      { category: "Structure", description: "Steel portal frame plumb, square and complete", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Cladding", description: "Wall and roof cladding complete — no gaps, loose sheets or damage", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Cladding", description: "Flashings, ridgecaps and gutters installed and watertight", riskLevel: "high", defectTrigger: true },
-      { category: "Doors & Access", description: "Roller doors, personnel access doors and windows installed and operational", riskLevel: "medium", defectTrigger: true },
-      { category: "Floor Slab", description: "Concrete floor slab complete — no cracking or surface defects", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
-      { category: "Services", description: "Electrical, lighting and fire services complete", riskLevel: "high", defectTrigger: true },
-    ]);
-  await bqcCertReadiness("Class 7b", 2);
-
-  // Class 8
-  await seedTemplate("Structure & Services Quality Review", "Builder / QC", "qc_structure", "Class 8",
-    "Builder QC inspection of industrial building structure, services and safety features.",
-    1, [
-      { category: "Structure", description: "Structural frame complete and free from visible defects", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Cladding & Roof", description: "Roof and wall cladding complete, sealed and watertight", riskLevel: "high", defectTrigger: true },
-      { category: "Floor", description: "Industrial floor slab complete — finish, falls and joint sealing to specification", riskLevel: "medium", defectTrigger: true },
-      { category: "Services", description: "Electrical, compressed air, gas and mechanical services complete", riskLevel: "high", defectTrigger: true },
-      { category: "Safety", description: "Safety handrails, mezzanine barriers and loading dock safety complete", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "WHS Regulations 2017" },
-      { category: "Fire Safety", description: "Fire suppression, detection and exit systems complete", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 E" },
-    ]);
-  await bqcCertReadiness("Class 8", 2);
-
-  // Class 9a
-  await bqcCertReadiness("Class 9a", 1, [
-    { category: "Infection Control", description: "Infection control zones and finishes complete per health facility guidelines", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
-  await bqcDefect("Class 9a", 2, [
-    { category: "Medical Services", description: "Medical gas, nurse call and specialist services tested and operational", riskLevel: "high", defectTrigger: true },
-  ]);
-
-  // Class 9b
-  await bqcCertReadiness("Class 9b", 1);
-  await bqcDefect("Class 9b", 2, [
-    { category: "Evacuation", description: "Evacuation routes, exit doors and signage complete and compliant", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 E" },
-  ]);
-
-  // Class 9c
-  await bqcCertReadiness("Class 9c", 1);
-  await bqcDefect("Class 9c", 2, [
-    { category: "Accessibility", description: "Aged care accessibility features complete — grab rails, ramps, accessible bathrooms", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 D4" },
-  ]);
-
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
   // SITE SUPERVISOR
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
   console.log("\n--- Site Supervisor ---");
 
-  const ssProgress = (folder: string, sort: number, label = "Stage Progress Inspection", extraItems?: ItemDef[]) =>
-    seedTemplate(label, "Site Supervisor", "ss_progress", folder,
-      "Site supervisor stage inspection confirming progress, quality and readiness to proceed.",
-      sort, [
-        { category: "Safety", description: "Site is safe — fencing, signage, PPE and access in order", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "WHS Regulations 2017" },
-        { category: "Works Completed", description: "Works for this stage are complete per construction programme", riskLevel: "high", defectTrigger: true },
-        { category: "Quality", description: "Quality of workmanship acceptable — no visible defects to completed work", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
-        { category: "Plans on Site", description: "Current approved plans and documentation on site", riskLevel: "medium", defectTrigger: true },
-        { category: "Subcontractors", description: "Subcontractor work reviewed against scope and specification", riskLevel: "medium", defectTrigger: true },
-        { category: "Programme", description: "Works on track with construction programme — delays noted and managed", riskLevel: "low" },
-        { category: "Materials", description: "Materials on site are as specified — no substitutions without approval", riskLevel: "medium", defectTrigger: true },
-        ...(extraItems ?? []),
-      ]);
+  await seedTemplate(
+    "Daily Site Inspection", "Site Supervisor", "site_daily", "Daily Site Inspection",
+    "Daily safety, housekeeping and progress check across the construction site.",
+    10,
+    [
+      { category: "Site Access", description: "Site entry is controlled — hoarding, gates and signage in place and undamaged", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Housekeeping", description: "Site free of unnecessary trip hazards — walkways clear, materials stored safely", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "PPE", description: "All workers on site wearing required PPE (hard hats, high-vis, safety boots)", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "WHS Reg 2017" },
+      { category: "Edge Protection", description: "All open edges, excavations and floor voids are barricaded or covered", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "WHS Reg s225" },
+      { category: "Plant & Equipment", description: "Mobile plant operating safely — spotters used where pedestrian/plant interaction exists", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Weather", description: "Site conditions assessed for high wind, lightning or extreme heat risk", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Progress", description: "Work progressing in line with programme — delays or issues noted", riskLevel: "low", defectTrigger: false, requirePhoto: false },
+    ],
+  );
 
-  const ssHandover = (folder: string, sort: number) =>
-    seedTemplate("Pre-Handover Site Review", "Site Supervisor", "ss_handover", folder,
-      "Site supervisor pre-handover review confirming the site is clean, complete and ready for occupancy.",
-      sort, [
-        { category: "Cleanliness", description: "All construction waste, rubbish and temporary works removed from site", riskLevel: "medium", defectTrigger: true },
-        { category: "Cleanliness", description: "Building interior cleaned and presented to handover standard", riskLevel: "medium", defectTrigger: true },
-        { category: "External Works", description: "External works complete — paths, driveways, landscaping", riskLevel: "low", defectTrigger: true },
-        { category: "Outstanding Items", description: "All outstanding items from defect lists rectified", riskLevel: "high", defectTrigger: true },
-        { category: "Services", description: "All services operational and tested — power, water, gas", riskLevel: "high", defectTrigger: true },
-        { category: "Safety", description: "Safety items complete — balustrades, smoke alarms, pool fencing (if applicable)", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Handover Pack", description: "Manuals, warranties and keys assembled for client handover", riskLevel: "medium", defectTrigger: true },
-      ]);
+  await seedTemplate(
+    "Subcontractor Pre-Start", "Site Supervisor", "site_subcontractor_prestart", "Subcontractor Pre-Start",
+    "Pre-start briefing and sign-on check for each new trade or subcontractor arriving on site.",
+    20,
+    [
+      { category: "Induction", description: "Subcontractor workers have completed site induction — forms signed and filed", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Licences", description: "All required trade licences and insurances checked and on file (Public Liability, WorkCover)", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "SWMS", description: "Safe Work Method Statement submitted, reviewed and accepted before commencing high-risk work", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "WHS Reg s299" },
+      { category: "Scope of Work", description: "Scope of works, drawings and specifications briefed to subcontractor foreman", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Programme", description: "Subcontractor's work sequence confirmed against master programme — no conflicts", riskLevel: "low", defectTrigger: false, requirePhoto: false },
+      { category: "Coordination", description: "Interface with other trades identified — coordination meeting held if required", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+    ],
+  );
 
-  // Class 1a
-  await ssProgress("Class 1a", 1, "Stage Progress Inspection", [
-    { category: "Footing / Slab", description: "Footing and slab stage complete and inspected by certifier", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    { category: "Frame", description: "Frame stage complete, bracing and tie-downs in place", riskLevel: "high", defectTrigger: true },
-    { category: "Lock-Up", description: "Lock-up stage achieved — roof, windows and external doors in", riskLevel: "medium", defectTrigger: true },
-  ]);
-  await ssHandover("Class 1a", 2);
+  await seedTemplate(
+    "Concrete Pour Sign-Off", "Site Supervisor", "site_concrete_pour", "Concrete Pour Sign-Off",
+    "Site supervisor's hold-point confirmation before and during each concrete pour.",
+    30,
+    [
+      { category: "Engineer Sign-Off", description: "Structural engineer's hold-point inspection completed and written approval received", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "Plumber Sign-Off", description: "Plumber has signed off all in-slab services — no further changes to be made", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Electrician Sign-Off", description: "Electrician has confirmed all conduit positions and sleeves are correct", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Crew & Resources", description: "Concrete crew, vibrators, screed rails and curing materials confirmed on site", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Weather", description: "Weather forecast reviewed — no rain expected during pour and initial cure period", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Test Cylinders", description: "Concrete testing technician confirmed on site for cylinder collection and slump testing", riskLevel: "high", defectTrigger: false, requirePhoto: false },
+    ],
+  );
 
-  // Class 1b
-  await ssProgress("Class 1b", 1);
-  await ssHandover("Class 1b", 2);
+  await seedTemplate(
+    "Defect Walkthrough", "Site Supervisor", "site_defect_walkthrough", "Defect Walkthrough",
+    "Systematic room-by-room walkthrough to log defects prior to client inspection.",
+    40,
+    [
+      { category: "Walls", description: "All internal walls — free of holes, patching marks, scuffs and paint defects", riskLevel: "low", defectTrigger: true, requirePhoto: true },
+      { category: "Ceilings", description: "Ceilings — no cracking, staining, cornice gaps or uneven plasterboard joins", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Doors", description: "All doors open, close and latch correctly — hardware complete and operational", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Windows", description: "All windows open, lock and seal correctly — no broken glass or damaged frames", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Kitchen", description: "Kitchen cabinetry — no gaps, damage, misaligned doors or non-operational soft-close", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Bathrooms", description: "Tiles, grout and silicone in wet areas — no cracks, voids or hollow-sounding tiles", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Flooring", description: "All floor coverings — no joins lifting, staining, bubbles or transitional strip issues", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "External", description: "External — render, cladding, decking and paths all defect free and clean", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+    ],
+  );
 
-  // Class 2
-  await ssProgress("Class 2", 1, "Stage Progress Inspection", [
-    { category: "Common Areas", description: "Common area works progressing — stairwells, lifts, lobbies", riskLevel: "medium", defectTrigger: true },
-    { category: "Fire Separation", description: "Fire-rated construction progress checked at each stage", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
-  await ssHandover("Class 2", 2);
+  await seedTemplate(
+    "Pre-Handover Walk", "Site Supervisor", "site_pre_handover_walk", "Pre-Handover Walk",
+    "Final walk confirming defects rectified and site ready before client handover.",
+    50,
+    [
+      { category: "Defect Closure", description: "All items on defect list from previous inspection have been signed off as rectified", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Cleanliness", description: "Building professionally cleaned — no construction dust, labels or protective film remaining", riskLevel: "low", defectTrigger: true, requirePhoto: false },
+      { category: "Appliances", description: "All appliances installed, functional and protective wrapping removed", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Site", description: "Site cleaned — no rubbish, unused materials or plant remaining on site", riskLevel: "low", defectTrigger: false, requirePhoto: false },
+      { category: "Signage & Hoarding", description: "Temporary hoarding and signage removed from public areas", riskLevel: "low", defectTrigger: false, requirePhoto: false },
+      { category: "Occupation Certificate", description: "Occupation Certificate confirmed issued and on file before handover proceeds", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+    ],
+  );
 
-  // Class 3
-  await ssProgress("Class 3", 1, "Stage Progress Inspection", [
-    { category: "Fire Safety", description: "Fire safety construction elements progressing as per drawings", riskLevel: "high", defectTrigger: true },
-  ]);
-  await ssHandover("Class 3", 2);
-
-  // Class 4
-  await ssProgress("Class 4", 1);
-  await ssHandover("Class 4", 2);
-
-  // Class 5
-  await ssProgress("Class 5", 1, "Stage Progress Inspection", [
-    { category: "Base Building", description: "Base building structure and services complete before fit-out commences", riskLevel: "high", defectTrigger: true },
-    { category: "Fit-Out", description: "Fit-out works progressing per tenant brief and construction drawings", riskLevel: "medium", defectTrigger: true },
-  ]);
-  await ssHandover("Class 5", 2);
-
-  // Class 6
-  await ssProgress("Class 6", 1, "Stage Progress Inspection", [
-    { category: "Shopfront", description: "Shopfront and tenancy fit-out progressing to approved plans", riskLevel: "medium", defectTrigger: true },
-  ]);
-  await ssHandover("Class 6", 2);
-
-  // Class 7a
-  await ssProgress("Class 7a", 1, "Structural Stage Inspection", [
-    { category: "Slab", description: "Carpark slab quality — finish, falls and no visible defects", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    { category: "Safety", description: "Temporary safety barriers in place on all open edges", riskLevel: "high", defectTrigger: true, codeReference: "WHS Regulations 2017" },
-  ]);
-  await ssHandover("Class 7a", 2);
-
-  // Class 7b
-  await ssProgress("Class 7b", 1, "Structural Stage Inspection", [
-    { category: "Structure", description: "Steel frame complete and sign-off from structural engineer obtained", riskLevel: "high", defectTrigger: true },
-    { category: "Cladding", description: "Wall and roof cladding progressing — weather-tight at each section", riskLevel: "high", defectTrigger: true },
-  ]);
-  await ssHandover("Class 7b", 2);
-
-  // Class 8
-  await ssProgress("Class 8", 1, "Structural Stage Inspection", [
-    { category: "Structure & Slab", description: "Industrial structure and slab complete to specification", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    { category: "Process Services", description: "Process services (gas, compressed air, trade waste) roughed-in correctly", riskLevel: "high", defectTrigger: true },
-  ]);
-  await ssHandover("Class 8", 2);
-
-  // Class 9a
-  await ssProgress("Class 9a", 1, "Stage Progress Inspection", [
-    { category: "Infection Control", description: "Infection control construction methodology followed during works", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    { category: "Specialist Services", description: "Medical gases, nurse call and specialist services roughed-in", riskLevel: "high", defectTrigger: true },
-  ]);
-  await ssHandover("Class 9a", 2);
-
-  // Class 9b
-  await ssProgress("Class 9b", 1, "Stage Progress Inspection", [
-    { category: "Seating / Assembly", description: "Assembly area structure, seating and sightlines progressing to plans", riskLevel: "medium", defectTrigger: true },
-    { category: "Acoustics", description: "Acoustic walls, ceilings and insulation installed per acoustic spec", riskLevel: "medium", defectTrigger: true },
-  ]);
-  await ssHandover("Class 9b", 2);
-
-  // Class 9c
-  await ssProgress("Class 9c", 1, "Stage Progress Inspection", [
-    { category: "Accessibility", description: "Aged care accessibility features — corridors, grab rails, bathroom layouts", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    { category: "Resident Safety", description: "Resident safety features in place — wander management, call systems", riskLevel: "high", defectTrigger: true },
-  ]);
-  await ssHandover("Class 9c", 2);
-
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
   // WHS OFFICER
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
   console.log("\n--- WHS Officer ---");
 
-  const whsSite = (folder: string, sort: number, extra?: ItemDef[]) =>
-    seedTemplate("Site Safety Inspection", "WHS Officer", "whs_site_safety", folder,
-      "Work health and safety inspection of the construction site.",
-      sort, [
-        { category: "Site Perimeter", description: "Site fencing or hoarding complete, secure and in good condition", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "WHS Regulations 2017 r.305" },
-        { category: "Site Perimeter", description: "Public protection measures in place — overhead protection, barriers", riskLevel: "high", defectTrigger: true },
-        { category: "PPE", description: "All workers wearing appropriate PPE — helmets, HiVis, boots, eye/ear protection", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "WHS Regulations 2017 r.44" },
-        { category: "Housekeeping", description: "Site kept in an orderly condition — no trip hazards or waste build-up", riskLevel: "medium", defectTrigger: true },
-        { category: "Access / Egress", description: "Safe access and egress to all work areas — no improvised access", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "First Aid", description: "First aid kit accessible and fully stocked", riskLevel: "medium", defectTrigger: true },
-        { category: "Emergency", description: "Emergency assembly point and emergency contacts displayed on site", riskLevel: "medium", defectTrigger: true },
-        { category: "Induction", description: "All workers have completed site induction and hold SWMS for their tasks", riskLevel: "high", defectTrigger: true, codeReference: "WHS Act 2011 s.47" },
-        ...(extra ?? []),
-      ]);
+  await seedTemplate(
+    "Site Safety Audit", "WHS Officer", "whs_site_safety_audit", "Site Safety Audit",
+    "Comprehensive safety audit of the construction site against WHS legislation and site rules.",
+    10,
+    [
+      { category: "Management", description: "WHS Management Plan current, signed by PCBU and accessible on site", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "WHS Reg s293" },
+      { category: "Management", description: "Emergency response plan posted prominently — assembly point clearly marked", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "WHS Act s19" },
+      { category: "Site Conditions", description: "Site perimeter securely fenced — no unauthorised access possible", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "First Aid", description: "Adequate first aid kit available and restocked — first aid officer identified", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "WHS Reg s42" },
+      { category: "Fall Prevention", description: "Edge protection, scaffolding or personal fall arrest in use at all work at heights >2m", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "WHS Reg s225" },
+      { category: "Fall Prevention", description: "Scaffolding erected by competent person — tag current", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "WHS Reg s228" },
+      { category: "Excavations", description: "All excavations >1.5m shored, battered or benched — no unprotected workers below", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "WHS Reg s308" },
+      { category: "Electrical", description: "Temporary electrical supply has RCDs — all extension leads tagged and tested", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3012" },
+      { category: "SWMS", description: "SWMS in place for all high-risk construction work — reviewed and signed by workers", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "WHS Reg s299" },
+      { category: "Welfare", description: "Amenities (toilets, drinking water, shelter) adequate for workforce size", riskLevel: "medium", defectTrigger: false, requirePhoto: false, codeReference: "WHS Reg s223" },
+    ],
+  );
 
-  const whsScaffold = (folder: string, sort: number) =>
-    seedTemplate("Scaffold & Elevated Work Platform Inspection", "WHS Officer", "whs_scaffold", folder,
-      "WHS inspection of scaffolding, EWPs and fall prevention systems on site.",
-      sort, [
-        { category: "Scaffold", description: "Scaffold erected by a competent person — tag current and valid", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS/NZS 4576, WHS Reg r.225" },
-        { category: "Scaffold", description: "Scaffold fully planked, with guardrails, mid-rails and toe boards", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Stop work on scaffold until compliant" },
-        { category: "Scaffold", description: "Scaffold tied to building per design — no excess lean or displacement", riskLevel: "high", defectTrigger: true },
-        { category: "Scaffold", description: "Safe access to scaffold platform provided — ladder or stair tower", riskLevel: "high", defectTrigger: true },
-        { category: "EWP / MEWP", description: "EWP pre-start check completed — current log book sighted", riskLevel: "high", defectTrigger: true, codeReference: "AS 2550.10" },
-        { category: "EWP / MEWP", description: "EWP operator holds current licence for the equipment class", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Fall Prevention", description: "Edge protection installed at all open edges — no unprotected leading edges", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "WHS Regulations 2017 r.224" },
-        { category: "Fall Prevention", description: "Safety nets or catch platforms in place where required", riskLevel: "high", defectTrigger: true },
-      ]);
+  await seedTemplate(
+    "Plant & Equipment Inspection", "WHS Officer", "whs_plant_equipment", "Plant & Equipment Inspection",
+    "Pre-use and periodic inspection of construction plant, mobile equipment and lifting gear.",
+    20,
+    [
+      { category: "Registration", description: "Plant registration current (cranes, EWPs, forklifts) — records on site", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "WHS Reg s233" },
+      { category: "Operator Licences", description: "All plant operators hold current high-risk work licence for the specific plant", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "WHS Reg s60" },
+      { category: "Pre-Start Checks", description: "Daily pre-start inspection completed by operator and logged — defects reported", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Condition", description: "No fluid leaks, damaged hoses, missing guards or loose components observed", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Lifting Gear", description: "Slings, chains and shackles inspected — within SWL rating, no kinks or deformation", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "AS 3776" },
+      { category: "Exclusion Zones", description: "Exclusion zones established around operating plant — barriers or spotter in place", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "Maintenance", description: "Plant maintenance logbook up to date — next service due date not exceeded", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+    ],
+  );
 
-  const whsHazmat = (folder: string, sort: number) =>
-    seedTemplate("Hazardous Materials & Asbestos Inspection", "WHS Officer", "whs_hazmat", folder,
-      "WHS inspection of hazardous materials management on the construction site.",
-      sort, [
-        { category: "Asbestos", description: "Asbestos register and management plan available on site (existing buildings)", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "WHS Regulations 2017 r.425" },
-        { category: "Asbestos", description: "Asbestos removal licensed — Class A or B licence sighted as required", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Cease all asbestos work until licenced contractor on site" },
-        { category: "Asbestos", description: "Asbestos waste labelled, contained and disposed of to licensed facility", riskLevel: "high", defectTrigger: true },
-        { category: "Chemicals", description: "Safety Data Sheets (SDS) available for all hazardous chemicals on site", riskLevel: "high", defectTrigger: true, codeReference: "WHS Regulations 2017 r.341" },
-        { category: "Chemicals", description: "Chemical storage in approved flammable cabinets or bunded areas", riskLevel: "high", defectTrigger: true },
-        { category: "Silica Dust", description: "Silica dust controls in place — wet cutting, vacuum extraction or RPE", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "WHS Regulations 2017 r.50" },
-        { category: "Lead", description: "Lead paint identified and managed — lead safety practices followed", riskLevel: "medium", defectTrigger: true },
-      ]);
+  await seedTemplate(
+    "Hazardous Materials Inspection", "WHS Officer", "whs_hazmat", "Hazardous Materials Inspection",
+    "Inspection of hazardous chemical storage, handling and SDS compliance on site.",
+    30,
+    [
+      { category: "Register", description: "Hazardous chemicals register current and accessible — all chemicals on site listed", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "WHS Reg s346" },
+      { category: "SDS", description: "Safety Data Sheets available for every hazardous chemical — less than 5 years old", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "WHS Reg s344" },
+      { category: "Storage", description: "Flammable liquids stored in approved flammable goods cabinet — away from ignition sources", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1940" },
+      { category: "Labelling", description: "All chemical containers correctly labelled — no decanting into unlabelled containers", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Asbestos", description: "Asbestos register checked — no ACM disturbed without licensed removalist", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "WHS Reg s419" },
+      { category: "Spill Kit", description: "Spill containment kit available and stocked — workers trained in spill procedure", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+    ],
+  );
 
-  // Class 1a
-  await whsSite("Class 1a", 1);
-  await whsScaffold("Class 1a", 2);
+  await seedTemplate(
+    "Incident Investigation", "WHS Officer", "whs_incident_investigation", "Incident Investigation",
+    "Structured investigation following a workplace incident, near miss or dangerous event.",
+    40,
+    [
+      { category: "Scene", description: "Scene secured and preserved — no disturbance until investigation complete (unless ongoing hazard)", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Notification", description: "Regulator notified within required timeframe for serious incident", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "WHS Act s38" },
+      { category: "Evidence", description: "Photographs, measurements and witness statements collected promptly", riskLevel: "high", defectTrigger: false, requirePhoto: true },
+      { category: "Root Cause", description: "Root cause analysis completed — contributing factors identified", riskLevel: "high", defectTrigger: false, requirePhoto: false },
+      { category: "Corrective Actions", description: "Corrective actions documented with owner and due date — entered in register", riskLevel: "high", defectTrigger: false, requirePhoto: false },
+      { category: "Worker Welfare", description: "Injured worker's welfare checked — EAP and return-to-work plan initiated if required", riskLevel: "high", defectTrigger: false, requirePhoto: false },
+      { category: "Report", description: "Incident report completed and distributed to management and workers", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+    ],
+  );
 
-  // Class 1b
-  await whsSite("Class 1b", 1);
-  await whsScaffold("Class 1b", 2);
+  await seedTemplate(
+    "Emergency Procedures Review", "WHS Officer", "whs_emergency_procedures", "Emergency Procedures Review",
+    "Periodic review and drill of site emergency response arrangements.",
+    50,
+    [
+      { category: "Plan", description: "Emergency response plan is current — reviewed within last 12 months", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "WHS Act s19" },
+      { category: "Assembly Point", description: "Assembly point sign posted and unobstructed — all workers know the location", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "First Aid", description: "First aid officer present on site — contact details posted at entry", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Drill", description: "Emergency drill conducted and documented — participation rate and timing recorded", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Communications", description: "Communication system functional — emergency services numbers posted", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Evacuation", description: "Evacuation routes clear and unobstructed — all workers briefed on routes", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+    ],
+  );
 
-  // Class 2
-  await whsSite("Class 2", 1, [
-    { category: "Working at Heights", description: "Fall prevention in place on all open floor slabs and stairwells", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "WHS Regulations 2017 r.224" },
-  ]);
-  await whsScaffold("Class 2", 2);
-  await whsHazmat("Class 2", 3);
-
-  // Class 3
-  await whsSite("Class 3", 1, [
-    { category: "Public Interface", description: "Public safety maintained — pedestrian separation from construction activity", riskLevel: "high", defectTrigger: true },
-  ]);
-  await whsScaffold("Class 3", 2);
-  await whsHazmat("Class 3", 3);
-
-  // Class 4
-  await whsSite("Class 4", 1);
-  await whsScaffold("Class 4", 2);
-
-  // Class 5
-  await whsSite("Class 5", 1, [
-    { category: "Existing Occupants", description: "Separation between occupied areas and construction maintained — no cross-contamination", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
-  await whsScaffold("Class 5", 2);
-  await whsHazmat("Class 5", 3);
-
-  // Class 6
-  await whsSite("Class 6", 1, [
-    { category: "Retail Environment", description: "Shop/retail area protected from construction dust and activity during trading", riskLevel: "high", defectTrigger: true },
-  ]);
-  await whsScaffold("Class 6", 2);
-  await whsHazmat("Class 6", 3);
-
-  // Class 7a
-  await whsSite("Class 7a", 1, [
-    { category: "Traffic Management", description: "Traffic management plan in place — pedestrian and vehicle separation maintained", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    { category: "Open Edges", description: "Open slab edges protected — no unguarded drop to lower levels", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Install edge protection immediately" },
-  ]);
-  await seedTemplate("Plant & Equipment Safety Inspection", "WHS Officer", "whs_plant", "Class 7a",
-    "WHS inspection of plant and equipment on carpark construction site.",
-    2, [
-      { category: "Plant Registration", description: "Registered plant has current registration certificate on site", riskLevel: "high", defectTrigger: true, codeReference: "WHS Regulations 2017 r.229" },
-      { category: "Operators", description: "Plant operators hold required High Risk Work Licence", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Pre-Start Check", description: "Pre-start inspection records maintained for all plant", riskLevel: "medium", defectTrigger: true },
-      { category: "Exclusion Zones", description: "Exclusion zones maintained around operating plant", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Traffic Control", description: "Spotters/traffic controllers in place when plant operates near workers or public", riskLevel: "high", defectTrigger: true },
-      { category: "Overhead Hazards", description: "Overhead power lines and services identified — safe working distances maintained", riskLevel: "high", defectTrigger: true, codeReference: "WHS Regulations 2017 r.163" },
-    ]);
-
-  // Class 7b
-  await whsSite("Class 7b", 1, [
-    { category: "Craning", description: "Crane lift plans and exclusion zones in place for structural steel erection", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
-  await seedTemplate("Plant & Equipment Safety Inspection", "WHS Officer", "whs_plant", "Class 7b",
-    "WHS inspection of plant, equipment and steel erection safety on warehouse site.",
-    2, [
-      { category: "Plant Registration", description: "Registered plant has current registration certificate on site", riskLevel: "high", defectTrigger: true, codeReference: "WHS Regulations 2017 r.229" },
-      { category: "Operators", description: "Plant operators hold required High Risk Work Licence", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Steel Erection", description: "Steel erection SWMS in place — structural engineer sign-off on frame stability", riskLevel: "high", defectTrigger: true },
-      { category: "Exclusion Zones", description: "Exclusion zones maintained during crane and rigging activities", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Overhead Hazards", description: "Overhead power lines identified — safe working distances maintained", riskLevel: "high", defectTrigger: true, codeReference: "WHS Regulations 2017 r.163" },
-    ]);
-
-  // Class 8
-  await whsSite("Class 8", 1, [
-    { category: "Hazardous Processes", description: "Hazardous work SWMS in place for industrial processes — welding, confined spaces", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
-  await seedTemplate("Plant & Equipment Safety Inspection", "WHS Officer", "whs_plant", "Class 8",
-    "WHS inspection of industrial plant, equipment and confined space safety.",
-    2, [
-      { category: "Plant Registration", description: "All registered plant has current registration and pre-start logs", riskLevel: "high", defectTrigger: true, codeReference: "WHS Regulations 2017 r.229" },
-      { category: "Confined Spaces", description: "Confined space entry permits and atmospheric testing in place", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "WHS Regulations 2017 r.66" },
-      { category: "Hot Work", description: "Hot work permit in place — fire watch and extinguisher on hand", riskLevel: "high", defectTrigger: true },
-      { category: "Hazardous Substances", description: "Chemical manifest, SDS and spill containment in place for hazardous substances", riskLevel: "high", defectTrigger: true },
-      { category: "Electrical", description: "Electrical installations tested and tagged — no exposed or damaged leads", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "WHS Regulations 2017 r.150" },
-    ]);
-  await whsHazmat("Class 8", 3);
-
-  // Class 9a
-  await whsSite("Class 9a", 1, [
-    { category: "Infection Control", description: "Construction infection control risk assessment (ICRA) in place and followed", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    { category: "Dust Control", description: "Negative pressure dust containment maintained in adjacent occupied clinical areas", riskLevel: "high", defectTrigger: true },
-  ]);
-  await whsHazmat("Class 9a", 2);
-
-  // Class 9b
-  await whsSite("Class 9b", 1, [
-    { category: "Public Safety", description: "Public access to facility separated from construction — safe pedestrian paths", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    { category: "Crowd Management", description: "Construction schedule coordinated with facility events to minimise risk", riskLevel: "medium" },
-  ]);
-  await whsScaffold("Class 9b", 2);
-
-  // Class 9c
-  await whsSite("Class 9c", 1, [
-    { category: "Vulnerable Persons", description: "Residents protected from construction noise, dust and access — separation maintained", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    { category: "Noise & Vibration", description: "Construction noise and vibration within approved limits during resident care hours", riskLevel: "medium", defectTrigger: true },
-  ]);
-  await whsHazmat("Class 9c", 2);
-
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
   // PRE-PURCHASE INSPECTOR
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
   console.log("\n--- Pre-Purchase Inspector ---");
 
-  const ppResidential = (folder: string, sort: number, label = "Pre-Purchase Building Inspection", extra?: ItemDef[]) =>
-    seedTemplate(label, "Pre-Purchase Inspector", "pp_residential", folder,
-      "Standard pre-purchase building inspection assessing overall condition of the property.",
-      sort, [
-        { category: "Roof & Gutters", description: "Roof covering condition — visible damage, deterioration or displacement", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Obtain roofer's report and repair quote" },
-        { category: "Roof & Gutters", description: "Gutters and downpipes condition — rust, blockage, improper fall", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
-        { category: "External", description: "External walls — cracking, movement, damp or surface deterioration", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "External", description: "Windows and external doors — condition, sealing and operation", riskLevel: "medium", defectTrigger: true },
-        { category: "Internal", description: "Internal walls and ceilings — cracking, moisture staining or damage", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Internal", description: "Floor structure and coverings — bounce, damage, dampness", riskLevel: "medium", defectTrigger: true },
-        { category: "Wet Areas", description: "Bathroom, ensuite and laundry — waterproofing concerns, silicone, mould", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Structure", description: "Subfloor/foundation — condition of stumps, bearers, joists where accessible", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Services", description: "Plumbing, electrical and gas services — visible concerns or obvious deficiencies noted", riskLevel: "high", defectTrigger: true },
-        ...(extra ?? []),
-      ]);
+  await seedTemplate(
+    "Pre-Purchase Building Inspection", "Pre-Purchase Inspector", "prepurchase_building", "Pre-Purchase Building Inspection",
+    "Comprehensive condition assessment of a property for a prospective purchaser per AS 4349.1.",
+    10,
+    [
+      { category: "Roof Exterior", description: "Roof covering — tiles, metal or membrane in good condition; no slipped, cracked or missing materials", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 4349.1" },
+      { category: "Roof Exterior", description: "Gutters, flashings, valleys and downpipes — no rust, blockages or pulling away from fascia", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Roof Space", description: "Roof space inspected — no active leaks, pest damage, missing insulation or structural concerns", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "External Walls", description: "External walls — no significant cracking, moisture penetration, spalling or damage", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Site Drainage", description: "Site drainage falls away from building — no evidence of ponding or rising damp", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Internal", description: "Internal walls and ceilings — no significant cracking, damp staining or structural movement", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Sub-Floor", description: "Sub-floor inspected (if applicable) — no moisture, pest damage, or failing stumps/bearer", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Wet Areas", description: "Bathrooms and laundry — no evidence of leaks, water damage or failed waterproofing", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Services", description: "Electrical, plumbing and gas — visible condition noted; specialist inspection recommended where concerns identified", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Conclusion", description: "Overall condition assessment and major defects summary completed per AS 4349.1", riskLevel: "high", requirePhoto: false, codeReference: "AS 4349.1" },
+    ],
+  );
 
-  const ppPest = (folder: string, sort: number) =>
-    seedTemplate("Pest & Termite Inspection", "Pre-Purchase Inspector", "pp_pest", folder,
-      "Visual inspection for evidence of timber pest activity including termites.",
-      sort, [
-        { category: "Timber Pests", description: "Evidence of termite activity — mud leads, damage to timber, workings", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Engage licensed pest controller immediately" },
-        { category: "Timber Pests", description: "Termite management system in place and in date — chemical, physical or bait", riskLevel: "high", defectTrigger: true },
-        { category: "Timber Damage", description: "Structural timber showing damage from wood borers or decay fungi", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Conducive Conditions", description: "Conducive conditions identified — excessive moisture, timber-to-soil contact", riskLevel: "medium", defectTrigger: true },
-        { category: "Subfloor", description: "Subfloor accessible and inspected — no evidence of moisture or pest harbourage", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Roof Space", description: "Roof space inspected for pest activity and moisture-damaged timbers", riskLevel: "high", defectTrigger: true },
-      ]);
+  await seedTemplate(
+    "Pest & Termite Inspection", "Pre-Purchase Inspector", "prepurchase_pest", "Pest & Termite Inspection",
+    "Visual inspection for timber pests including termites, borers and wood decay fungi.",
+    20,
+    [
+      { category: "Exterior", description: "Perimeter of building inspected — no termite leads, mud tubes or evidence of active activity", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 3660.2" },
+      { category: "Sub-Floor", description: "Sub-floor accessible areas inspected — no termite workings, moisture or decayed timber", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 4349.3" },
+      { category: "Roof Space", description: "Roof space inspected for termite and borer activity in roof timbers and battens", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Internal", description: "Internal rooms — probing and inspection of skirtings, architraves, floors and wall frames", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Garden & Trees", description: "Trees, stumps and garden beds within 3m of building checked for termite nests", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Moisture", description: "Moisture levels in timber checked with moisture meter — readings above 20% flagged", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Report", description: "Pest inspection report issued in accordance with AS 4349.3 — defects clearly noted", riskLevel: "high", requirePhoto: false, codeReference: "AS 4349.3" },
+    ],
+  );
 
-  const ppCommercial = (folder: string, sort: number, label = "Commercial Property Condition Inspection") =>
-    seedTemplate(label, "Pre-Purchase Inspector", "pp_commercial", folder,
-      "Pre-purchase condition inspection of commercial or industrial property.",
-      sort, [
-        { category: "Structure", description: "Structural elements — visible cracking, movement, corrosion or deterioration", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Engage structural engineer for assessment" },
-        { category: "Roof & Envelope", description: "Roof cladding and external fabric — condition, leaks, penetrations", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Internal", description: "Internal finishes — walls, ceilings, floors condition and suitability for use", riskLevel: "medium", defectTrigger: true },
-        { category: "Services", description: "Electrical, plumbing and HVAC services — obvious condition concerns noted", riskLevel: "high", defectTrigger: true },
-        { category: "Hazardous Materials", description: "Evidence of asbestos, lead paint or hazardous materials — record location", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Obtain hazardous materials survey before purchase" },
-        { category: "Site", description: "Site access, drainage, parking and external hardstand — condition", riskLevel: "medium", defectTrigger: true },
-        { category: "Compliance", description: "Visible building works — evidence of unauthorised alterations or additions", riskLevel: "high", defectTrigger: true, recommendedAction: "Request building consent records from council" },
-      ]);
+  await seedTemplate(
+    "Strata / Unit Inspection", "Pre-Purchase Inspector", "prepurchase_strata", "Strata / Unit Inspection",
+    "Condition inspection of a strata title unit and its lot entitlements within a strata scheme.",
+    30,
+    [
+      { category: "Unit Interior", description: "Walls, ceilings, floors and wet areas within the lot — no defects or water damage", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 4349.1" },
+      { category: "Balcony", description: "Balcony structure, balustrade height and condition assessed — no corrosion or movement", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Common Property", description: "Visible common property areas noted — car park, lobby, lifts, pool and gardens", riskLevel: "medium", defectTrigger: false, requirePhoto: true },
+      { category: "Services", description: "Metering, hot water system, air conditioning and exhaust fans operational", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Strata Records", description: "Strata report recommended — 10-year capital works fund, levies and known disputes noted", riskLevel: "high", defectTrigger: false, requirePhoto: false },
+    ],
+  );
 
-  // Class 1a
-  await ppResidential("Class 1a", 1);
-  await ppPest("Class 1a", 2);
+  await seedTemplate(
+    "Commercial Property Condition Report", "Pre-Purchase Inspector", "prepurchase_commercial", "Commercial Property Condition Report",
+    "Condition assessment of a commercial, retail or industrial property prior to purchase or lease.",
+    40,
+    [
+      { category: "Structure", description: "External and internal structural elements — no significant cracking, movement or deterioration", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 4349.1" },
+      { category: "Roof", description: "Roof covering, drainage and penetrations — no leaks, membrane failures or damaged flashings", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Façade", description: "External façade — cladding, glazing, sealants and weatherproofing in acceptable condition", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Services", description: "Electrical switchboard, HVAC, hydraulics and fire services — visible condition assessed", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Accessibility", description: "Accessible path of travel and DDA-compliant facilities — any non-compliance noted", riskLevel: "medium", defectTrigger: true, requirePhoto: false, codeReference: "NCC Cl D3" },
+      { category: "Asbestos", description: "Signs of ACM noted for further assessment — asbestos register requested from vendor", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "WHS Reg s419" },
+      { category: "Conclusion", description: "Condition rating and major capital expenditure items summarised in report", riskLevel: "high", requirePhoto: false },
+    ],
+  );
 
-  // Class 1b
-  await ppResidential("Class 1b", 1, "Pre-Purchase Building Inspection", [
-    { category: "Fire Safety", description: "Smoke alarms installed in required locations", riskLevel: "high", defectTrigger: true },
-  ]);
-  await ppPest("Class 1b", 2);
-
-  // Class 2
-  await seedTemplate("Strata Unit Pre-Purchase Inspection", "Pre-Purchase Inspector", "pp_strata", "Class 2",
-    "Pre-purchase inspection of apartment/strata unit including lot and common area observations.",
-    1, [
-      { category: "Lot — Condition", description: "Internal walls, ceilings and floors — cracks, moisture or damage", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Lot — Wet Areas", description: "Bathroom and laundry wet areas — waterproofing concerns, mould, silicone failure", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Lot — Services", description: "Plumbing and electrical within lot — visible issues", riskLevel: "medium", defectTrigger: true },
-      { category: "Lot — Windows & Doors", description: "Windows, balcony doors and entry door operation and sealing", riskLevel: "medium", defectTrigger: true },
-      { category: "Common Areas", description: "Lift, stairwells, carpark and common area condition noted", riskLevel: "medium", defectTrigger: true },
-      { category: "Common Areas", description: "External cladding and facade condition observed from visible areas", riskLevel: "high", defectTrigger: true, requirePhoto: true, recommendedAction: "Review strata records for outstanding defects and maintenance" },
-      { category: "Building Fabric", description: "Evidence of water ingress or fire separation deficiencies in common areas", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Records", description: "Strata levy arrears, special levies and major works planned reviewed (if available)", riskLevel: "medium" },
-    ]);
-  await ppPest("Class 2", 2);
-
-  // Class 3
-  await ppResidential("Class 3", 1, "Building Condition Inspection");
-
-  // Class 4
-  await ppResidential("Class 4", 1, "Building Condition Inspection");
-
-  // Class 5
-  await ppCommercial("Class 5", 1, "Commercial Office Condition Inspection");
-
-  // Class 6
-  await ppCommercial("Class 6", 1, "Retail Property Condition Inspection");
-
-  // Class 7a
-  await ppCommercial("Class 7a", 1, "Carpark Property Condition Inspection");
-
-  // Class 7b
-  await ppCommercial("Class 7b", 1, "Warehouse Property Condition Inspection");
-
-  // Class 8
-  await ppCommercial("Class 8", 1, "Industrial Property Condition Inspection");
-
-  // Class 9a
-  await ppCommercial("Class 9a", 1, "Health Facility Condition Inspection");
-
-  // Class 9b
-  await ppCommercial("Class 9b", 1, "Assembly Building Condition Inspection");
-
-  // Class 9c
-  await ppCommercial("Class 9c", 1, "Aged Care Facility Condition Inspection");
-
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
   // FIRE SAFETY ENGINEER
-  // ══════════════════════════════════════════════════════════════════════════════
+  // ─────────────────────────────────────────────────────────────────────────
   console.log("\n--- Fire Safety Engineer ---");
 
-  const fseSystems = (folder: string, sort: number, extra?: ItemDef[]) =>
-    seedTemplate("Fire Safety Systems Inspection", "Fire Safety Engineer", "fse_systems", folder,
-      "Fire safety engineer inspection of active and passive fire safety systems.",
-      sort, [
-        { category: "Passive Fire", description: "Fire-rated walls and floors complete — penetration seals in place", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 C3, AS 4072" },
-        { category: "Passive Fire", description: "Fire and smoke doors installed — rating, seals and hardware correct", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 1905" },
-        { category: "Passive Fire", description: "Fire dampers installed in HVAC penetrations through fire-rated construction", riskLevel: "high", defectTrigger: true },
-        { category: "Detection", description: "Smoke detection system installed — detector type and placement per engineered design", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 1670" },
-        { category: "Detection", description: "Fire indicator panel (FIP) installed, commissioned and tested", riskLevel: "high", defectTrigger: true },
-        { category: "Suppression", description: "Sprinkler system hydraulically tested and commissioned per AS 2118", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2118" },
-        { category: "Exit Systems", description: "Exit signs and emergency lighting installed and functioning", riskLevel: "high", defectTrigger: true, codeReference: "AS 2293" },
-        { category: "Exit Systems", description: "Exits clear, unobstructed and exit doors operable without key from inside", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 D2" },
-        ...(extra ?? []),
-      ]);
+  await seedTemplate(
+    "Fire Safety Systems Inspection", "Fire Safety Engineer", "fire_safety_systems", "Fire Safety Systems Inspection",
+    "Inspection and commissioning verification of active fire safety systems in a building.",
+    10,
+    [
+      { category: "Detection", description: "Smoke detection system covers all required areas — no zone gaps", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "NCC Spec E2.2b / AS 1670.1" },
+      { category: "Detection", description: "Fire alarm panel operational — no faults, monitored by approved monitoring company", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1670.1" },
+      { category: "Sprinklers", description: "Sprinkler system covers all required areas — correct sprinkler type and spacing per design", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 2118.1" },
+      { category: "Sprinklers", description: "Sprinkler control valve open and tagged — flow test confirms adequate pressure and flow", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 2118.1" },
+      { category: "Special Suppression", description: "Special suppression systems commissioned and tested per manufacturer requirements", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Dampers", description: "Fire and smoke dampers in HVAC inspected and actuated correctly in test mode", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS 1682.2" },
+      { category: "Compartmentation", description: "Fire-rated walls, doors and penetration seals intact — no holes or gaps in rated construction", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "NCC Spec C3.4" },
+      { category: "Documentation", description: "Fire systems commissioning report and Essential Safety Measures schedule prepared", riskLevel: "high", requirePhoto: false },
+    ],
+  );
 
-  const fseEmergency = (folder: string, sort: number) =>
-    seedTemplate("Emergency Lighting & Exit Inspection", "Fire Safety Engineer", "fse_emergency", folder,
-      "Inspection of emergency lighting, exit signage and evacuation systems.",
-      sort, [
-        { category: "Exit Signs", description: "Exit signs installed at all required locations — illuminated and visible", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2293, NCC 2022 E4" },
-        { category: "Exit Signs", description: "Exit signs tested — battery backup operates for 90 minute duration", riskLevel: "high", defectTrigger: true },
-        { category: "Emergency Lighting", description: "Emergency luminaires installed at required locations per AS 2293", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Emergency Lighting", description: "Emergency lighting functional test completed — duration and lux level adequate", riskLevel: "high", defectTrigger: true, codeReference: "AS 2293.2" },
-        { category: "Evacuation", description: "Evacuation diagrams installed at required locations and current", riskLevel: "medium", defectTrigger: true, codeReference: "AS 3745" },
-        { category: "Exit Doors", description: "Exit door hardware allows free exit — no key or code required from inside", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 D2" },
-        { category: "Paths of Travel", description: "Paths of travel to exits clear and unobstructed — min 1m clear width", riskLevel: "high", defectTrigger: true },
-      ]);
+  await seedTemplate(
+    "Emergency Lighting & Exit Inspection", "Fire Safety Engineer", "fire_emergency_lighting", "Emergency Lighting & Exit Inspection",
+    "Inspection and testing of emergency lighting and exit signage throughout the building.",
+    20,
+    [
+      { category: "Exit Signs", description: "Exit signs installed above all exit doors and along exit paths — illuminated and unobstructed", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 2293.1" },
+      { category: "Exit Signs", description: "Exit signs have directional arrows where path of travel is not obvious", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS 2293.1" },
+      { category: "Emergency Lights", description: "Emergency luminaires installed at required spacing along evacuation routes", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 2293.1" },
+      { category: "Battery Test", description: "90-minute discharge test conducted — all units maintain minimum illumination throughout", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "AS 2293.2" },
+      { category: "Luminance", description: "Emergency lighting illuminance levels measured and recorded — not less than 0.2 lux at floor", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS 2293.1 Cl 3.3" },
+      { category: "Exits", description: "All exit doors swing in the direction of travel and open without a key or special knowledge", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "NCC D2.21" },
+      { category: "Maintenance Tag", description: "Emergency lighting maintenance tag current — next service within required interval", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+    ],
+  );
 
-  const fseHydrant = (folder: string, sort: number) =>
-    seedTemplate("Fire Hydrant & Hose Reel Inspection", "Fire Safety Engineer", "fse_hydrant", folder,
-      "Fire safety engineer inspection of fire hydrant and hose reel system.",
-      sort, [
-        { category: "Hydrant System", description: "Fire hydrant system installed per approved hydraulic design", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2419" },
-        { category: "Hydrant System", description: "Booster assembly installed, labelled and accessible at street level", riskLevel: "high", defectTrigger: true },
-        { category: "Hydrant System", description: "Hydrant flow and pressure test results compliant with AS 2419", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-        { category: "Hose Reels", description: "Hose reels installed at required locations — within 36m travel of any point", riskLevel: "high", defectTrigger: true, codeReference: "AS 2441" },
-        { category: "Hose Reels", description: "Hose reel pressure test completed — min 400 kPa at outlet", riskLevel: "high", defectTrigger: true },
-        { category: "Isolating Valves", description: "Isolation valves and test points labelled and accessible", riskLevel: "medium", defectTrigger: true },
-        { category: "Signage", description: "Hydrant signage and location indicators installed to standard", riskLevel: "medium", defectTrigger: true },
-      ]);
+  await seedTemplate(
+    "Fire Hydrant & Hose Reel Inspection", "Fire Safety Engineer", "fire_hydrant_hose_reel", "Fire Hydrant & Hose Reel Inspection",
+    "Inspection and flow testing of fire hydrant and hose reel systems.",
+    30,
+    [
+      { category: "Hydrants", description: "All fire hydrants accessible, labelled and unobstructed — no parking over hydrant pits", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 2419.1" },
+      { category: "Hydrants", description: "Hydrant outlet valve, cap and thread in good condition — pressure test within required interval", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS 1851" },
+      { category: "Booster Inlet", description: "Fire brigade booster inlet accessible at building front — signage correct, capped and undamaged", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 2419.1" },
+      { category: "Hose Reels", description: "Hose reels in accessible cabinets — hose undamaged, nozzle present and reel unobstructed", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2441" },
+      { category: "Flow Test", description: "Flow test conducted at furthest hydrant — minimum residual pressure and flow rate achieved", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "AS 2419.1" },
+      { category: "Annual Service", description: "Annual inspection and service completed by fire protection contractor — report on file", riskLevel: "high", requirePhoto: false, codeReference: "AS 1851" },
+    ],
+  );
 
-  // Class 1a
-  await seedTemplate("Smoke Alarm Compliance Inspection", "Fire Safety Engineer", "fse_smoke_alarm", "Class 1a",
-    "Fire safety inspection of smoke alarm installation in Class 1a dwellings.",
-    1, [
-      { category: "Location", description: "Smoke alarms installed in all bedrooms, living areas and hallways per NCC", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 E2.2a" },
-      { category: "Type", description: "Smoke alarm type correct — photoelectric type required for NCC 2022", riskLevel: "high", defectTrigger: true, codeReference: "NCC 2022 E2.2a, AS 3786" },
-      { category: "Interconnection", description: "Smoke alarms interconnected — when one activates all sound", riskLevel: "high", defectTrigger: true, codeReference: "NCC 2022 E2.2a" },
-      { category: "Power Supply", description: "Smoke alarms hard-wired with battery backup where required", riskLevel: "high", defectTrigger: true },
-      { category: "Function Test", description: "All alarms function tested on site — audible alarm confirmed", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Compliant Product", description: "Alarms are listed in the Register of Fire Protection Products (or equivalent)", riskLevel: "medium", defectTrigger: true },
-    ]);
+  await seedTemplate(
+    "Smoke Alarm Compliance Inspection", "Fire Safety Engineer", "fire_smoke_alarms", "Smoke Alarm Compliance Inspection",
+    "Inspection of smoke alarm installation and compliance for residential buildings.",
+    40,
+    [
+      { category: "Locations", description: "Smoke alarms installed in every bedroom, hallway and on each storey as required by legislation", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "NCC E2.2a / State legislation" },
+      { category: "Type", description: "Alarm type appropriate for location — interconnected alarms where required", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS 3786" },
+      { category: "Hardwired", description: "Alarms hardwired to mains power with battery backup where required by state legislation", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Test", description: "All alarms tested by activating test button — all units sound within 30 seconds of activation", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "AS 3786" },
+      { category: "Interconnection", description: "Interconnected alarms tested — activation of one alarm triggers all other alarms in the dwelling", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Age", description: "Alarms not older than 10 years from manufacture date — manufacture date visible on unit", riskLevel: "medium", defectTrigger: true, requirePhoto: true, codeReference: "AS 3786" },
+    ],
+  );
 
-  // Class 1b
-  await seedTemplate("Smoke Alarm & Fire Safety Compliance", "Fire Safety Engineer", "fse_smoke_alarm", "Class 1b",
-    "Fire safety inspection of smoke alarms, emergency lighting and basic fire safety in Class 1b buildings.",
-    1, [
-      { category: "Smoke Alarms", description: "Smoke alarms installed in all bedrooms and corridors per NCC 2022", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 E2" },
-      { category: "Smoke Alarms", description: "Smoke alarms interconnected and hard-wired with battery backup", riskLevel: "high", defectTrigger: true },
-      { category: "Emergency Lighting", description: "Emergency lighting installed in corridors, stairwells and exits (if required)", riskLevel: "high", defectTrigger: true, codeReference: "NCC 2022 E4, AS 2293" },
-      { category: "Exits", description: "Exit paths clear and exit doors operable without key", riskLevel: "high", defectTrigger: true },
-      { category: "Fire Extinguisher", description: "Portable fire extinguisher installed in accessible location", riskLevel: "medium", defectTrigger: true, codeReference: "AS 2444" },
-      { category: "Function Test", description: "All smoke alarms function tested on site", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-    ]);
-
-  // Class 2
-  await fseSystems("Class 2", 1, [
-    { category: "Common Areas", description: "Fire safety systems complete in common areas — lobby, carpark, plant rooms", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
-  await fseEmergency("Class 2", 2);
-  await fseHydrant("Class 2", 3);
-
-  // Class 3
-  await fseSystems("Class 3", 1, [
-    { category: "Guest Rooms", description: "Smoke detection in all guest rooms — addressable system commissioned", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
-  await fseEmergency("Class 3", 2);
-  await fseHydrant("Class 3", 3);
-
-  // Class 4
-  await seedTemplate("Smoke Alarm & Fire Safety Compliance", "Fire Safety Engineer", "fse_smoke_alarm", "Class 4",
-    "Fire safety inspection for Class 4 dwelling within a non-residential building.",
-    1, [
-      { category: "Dwelling Smoke Alarms", description: "Smoke alarms in dwelling portion per Class 1a requirements", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 E2" },
-      { category: "Interface", description: "Fire separation between Class 4 dwelling and host building maintained", riskLevel: "high", defectTrigger: true, codeReference: "NCC 2022 C2" },
-      { category: "Egress", description: "Separate egress from dwelling to outside provided", riskLevel: "high", defectTrigger: true },
-      { category: "Host Building", description: "Host building fire safety systems operational in common areas", riskLevel: "high", defectTrigger: true },
-    ]);
-
-  // Class 5
-  await fseSystems("Class 5", 1);
-  await fseEmergency("Class 5", 2);
-  await fseHydrant("Class 5", 3);
-
-  // Class 6
-  await fseSystems("Class 6", 1, [
-    { category: "Sprinklers", description: "Sprinkler system installed throughout tenancy per AS 2118", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 2118" },
-  ]);
-  await fseEmergency("Class 6", 2);
-  await fseHydrant("Class 6", 3);
-
-  // Class 7a
-  await fseEmergency("Class 7a", 1);
-  await fseHydrant("Class 7a", 2);
-
-  // Class 7b
-  await fseSystems("Class 7b", 1, [
-    { category: "Suppression", description: "Fire suppression system type appropriate for occupancy — sprinkler or gaseous", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
-  await fseEmergency("Class 7b", 2);
-  await fseHydrant("Class 7b", 3);
-
-  // Class 8
-  await fseSystems("Class 8", 1, [
-    { category: "Hazardous Areas", description: "Special suppression or hazardous area protection installed per hazmat fire safety report", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
-  await fseEmergency("Class 8", 2);
-  await seedTemplate("Hazardous Materials Fire Safety Inspection", "Fire Safety Engineer", "fse_hazmat", "Class 8",
-    "Fire safety inspection of hazardous materials storage areas and industrial fire suppression.",
-    3, [
-      { category: "Storage Areas", description: "Flammable and combustible liquid storage in approved fire-rated cabinets/rooms", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "AS 1940" },
-      { category: "Suppression", description: "Automatic suppression system type and coverage appropriate for hazard", riskLevel: "high", defectTrigger: true },
-      { category: "Ventilation", description: "Explosion-proof ventilation and extraction installed in hazardous areas", riskLevel: "high", defectTrigger: true },
-      { category: "Containment", description: "Spill containment bunding installed — capacity adequate", riskLevel: "high", defectTrigger: true },
-      { category: "Detection", description: "Gas or vapour detection installed in hazardous atmospheres", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-      { category: "Extinguishers", description: "Appropriate portable extinguisher types provided for the hazard class", riskLevel: "medium", defectTrigger: true, codeReference: "AS 2444" },
-    ]);
-
-  // Class 9a
-  await fseSystems("Class 9a", 1, [
-    { category: "Compartmentation", description: "Fire compartmentation between wards, theatres and plant rooms complete", riskLevel: "high", defectTrigger: true, requirePhoto: true, codeReference: "NCC 2022 C" },
-    { category: "Healthcare Specific", description: "Medical gas shutoffs and fire control panels installed in required locations", riskLevel: "high", defectTrigger: true },
-  ]);
-  await fseEmergency("Class 9a", 2);
-  await fseHydrant("Class 9a", 3);
-
-  // Class 9b
-  await fseSystems("Class 9b", 1, [
-    { category: "Assembly", description: "Fire safety systems capable of protecting peak occupancy load for assembly area", riskLevel: "high", defectTrigger: true },
-    { category: "Stage / Production", description: "Fire curtain, drencher or separation system installed at stage (if applicable)", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
-  await fseEmergency("Class 9b", 2);
-  await fseHydrant("Class 9b", 3);
-
-  // Class 9c
-  await fseSystems("Class 9c", 1, [
-    { category: "Resident Egress", description: "Fire safety systems account for residents' limited mobility — extended evacuation time", riskLevel: "high", defectTrigger: true, codeReference: "NCC 2022 C, E" },
-    { category: "Refuge Areas", description: "Fire refuge areas installed per fire engineering report", riskLevel: "high", defectTrigger: true, requirePhoto: true },
-  ]);
-  await fseEmergency("Class 9c", 2);
-  await fseHydrant("Class 9c", 3);
+  await seedTemplate(
+    "Annual Fire Safety Statement", "Fire Safety Engineer", "fire_afss", "Annual Fire Safety Statement",
+    "Annual Essential Safety Measures inspection to support the Annual Fire Safety Statement.",
+    50,
+    [
+      { category: "Essential Safety Measures", description: "All ESMs listed on the ESM schedule are inspected this cycle — none overlooked", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "Fire Compartmentation", description: "Fire doors, smoke doors and seals operational — no wedged-open doors or damaged seals", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1905.1" },
+      { category: "Sprinklers", description: "Sprinkler system annual service completed by licensed fire protection contractor", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "AS 1851" },
+      { category: "Detection & Alarm", description: "Fire detection and alarm system annual service completed — no outstanding faults", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "AS 1851" },
+      { category: "Emergency Lighting", description: "Emergency lighting annual service completed — all units operational and battery test passed", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS 2293.2" },
+      { category: "Hydrants & Hose Reels", description: "Hydrant and hose reel annual service completed — flow test on record", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS 1851" },
+      { category: "Statement", description: "Annual Fire Safety Statement signed by competent fire safety practitioner and lodged with council", riskLevel: "critical", defectTrigger: false, requirePhoto: false },
+    ],
+  );
 
   console.log("\n=== All discipline checklists seeded successfully ===");
 }
