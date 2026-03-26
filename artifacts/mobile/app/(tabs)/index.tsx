@@ -235,26 +235,49 @@ function MapPinButton({ address, suburb }: { address: string; suburb: string | n
 interface DraggableCardProps {
   insp: any;
   isLast: boolean;
-  shiftMode: boolean;
   onTimeChange: (id: number, newTime: string) => void;
 }
 
-function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardProps) {
+function DraggableCard({ insp, onTimeChange }: DraggableCardProps) {
   const translateY = useRef(new Animated.Value(0)).current;
   const [dragging, setDragging] = useState(false);
   const [previewTime, setPreviewTime] = useState<string | null>(null);
-  const shiftModeRef = useRef(shiftMode);
   const baseMinutesRef = useRef(timeToMinutes(insp.displayTime));
 
-  useEffect(() => { shiftModeRef.current = shiftMode; }, [shiftMode]);
+  // Time editor state
+  const [timeEditOpen, setTimeEditOpen] = useState(false);
+  const [editHour, setEditHour] = useState("9");
+  const [editMinute, setEditMinute] = useState("00");
+  const [editAmPm, setEditAmPm] = useState<"AM" | "PM">("AM");
+
   useEffect(() => {
     baseMinutesRef.current = timeToMinutes(insp.displayTime);
   }, [insp.displayTime]);
 
+  const openTimeEdit = () => {
+    const [h, m] = insp.displayTime.split(":").map(Number);
+    const isPM = h >= 12;
+    const hour12 = h % 12 || 12;
+    setEditHour(String(hour12));
+    setEditMinute(String(m).padStart(2, "0"));
+    setEditAmPm(isPM ? "PM" : "AM");
+    setTimeEditOpen(true);
+  };
+
+  const confirmTimeEdit = () => {
+    const h = Math.max(1, Math.min(12, parseInt(editHour) || 12));
+    const m = Math.max(0, Math.min(59, parseInt(editMinute) || 0));
+    let h24 = h % 12;
+    if (editAmPm === "PM") h24 += 12;
+    const newTime = `${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    onTimeChange(insp.id, newTime);
+    setTimeEditOpen(false);
+  };
+
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => shiftModeRef.current,
-      onMoveShouldSetPanResponder: (_, gs) => shiftModeRef.current && Math.abs(gs.dy) > 4,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 6,
       onPanResponderGrant: () => {
         setDragging(true);
         translateY.setOffset((translateY as any).__getValue?.() ?? 0);
@@ -297,32 +320,25 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
         tlStyles.item,
         { transform: [{ translateY }], zIndex: dragging ? 100 : 1 },
       ]}
-      {...(shiftMode ? panResponder.panHandlers : {})}
+      {...panResponder.panHandlers}
     >
       {/* Card */}
       <View style={[
         tlStyles.card,
         insp.status === "completed" && tlStyles.cardCompleted,
-        shiftMode && tlStyles.cardShift,
         dragging && tlStyles.cardDragging,
       ]}>
-        {/* Drag handle */}
-        {shiftMode && (
-          <View style={tlStyles.dragHandle}>
-            <Feather name="menu" size={16} color={Colors.secondary + "80"} />
-          </View>
-        )}
-
         <View style={tlStyles.cardInner}>
           <View style={tlStyles.cardTop}>
             <View style={[tlStyles.typePill, { backgroundColor: Colors.infoLight }]}>
               <Feather name="clipboard" size={11} color={Colors.secondary} />
               <Text style={tlStyles.typeText}>{typeLabel}</Text>
             </View>
-            <View style={tlStyles.timePill}>
-              <Feather name="clock" size={11} color={Colors.textTertiary} />
-              <Text style={[tlStyles.timeInCard, previewTime && tlStyles.timePreview]}>{displayedTime}</Text>
-            </View>
+            <Pressable onPress={openTimeEdit} style={({ pressed }) => [tlStyles.timePill, pressed && { opacity: 0.6 }]}>
+              <Feather name="clock" size={11} color={Colors.secondary} />
+              <Text style={[tlStyles.timeInCard, { color: Colors.secondary }, previewTime && tlStyles.timePreview]}>{displayedTime}</Text>
+              <Feather name="edit-2" size={9} color={Colors.secondary + "99"} />
+            </Pressable>
             <View style={[tlStyles.statusPill, { backgroundColor: cfg.bg, flexDirection: "row", alignItems: "center", gap: 3 }]}>
               {insp.status === "completed" && <Feather name="check-circle" size={10} color={cfg.color} />}
               <Text style={[tlStyles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
@@ -338,7 +354,7 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
             <View style={tlStyles.addressRow}>
               <Feather name="map-pin" size={11} color={Colors.textTertiary} />
               <Text style={tlStyles.addressText} numberOfLines={1}>{addressLine}</Text>
-              {!shiftMode && <MapPinButton address={insp.projectAddress} suburb={insp.projectSuburb} />}
+              <MapPinButton address={insp.projectAddress} suburb={insp.projectSuburb} />
             </View>
           )}
 
@@ -349,7 +365,7 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
             </View>
           )}
 
-          {!shiftMode && insp.status === "completed" && (
+          {insp.status === "completed" && (
             <View style={tlStyles.completedActions}>
               <Pressable
                 onPress={() => router.push({
@@ -373,7 +389,7 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
             </View>
           )}
 
-          {!shiftMode && insp.status !== "completed" && insp.status !== "cancelled" && (
+          {insp.status !== "completed" && insp.status !== "cancelled" && (
             <Pressable
               onPress={() => router.push(`/inspection/conduct/${insp.id}` as any)}
               style={({ pressed }) => [tlStyles.actionBtn, pressed && { opacity: 0.8 }]}
@@ -385,14 +401,65 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
             </Pressable>
           )}
 
-          {shiftMode && (
-            <View style={tlStyles.shiftHint}>
-              <Feather name="move" size={11} color={Colors.secondary + "99"} />
-              <Text style={tlStyles.shiftHintText}>Drag to reschedule · 15 min intervals</Text>
-            </View>
-          )}
+          {/* Drag handle hint */}
+          <View style={tlStyles.dragHint}>
+            <Feather name="more-horizontal" size={14} color={Colors.borderLight} />
+          </View>
         </View>
       </View>
+
+      {/* Time edit sheet */}
+      <Modal visible={timeEditOpen} transparent animationType="slide" onRequestClose={() => setTimeEditOpen(false)}>
+        <Pressable style={tlStyles.timeEditOverlay} onPress={() => setTimeEditOpen(false)} />
+        <View style={tlStyles.timeEditSheet}>
+          <View style={tlStyles.timeEditHandle} />
+          <Text style={tlStyles.timeEditTitle}>Change Time</Text>
+          <View style={tlStyles.timeEditRow}>
+            <View style={tlStyles.timeEditField}>
+              <Text style={tlStyles.timeEditLabel}>Hour</Text>
+              <TextInput
+                style={tlStyles.timeEditInput}
+                value={editHour}
+                onChangeText={setEditHour}
+                keyboardType="number-pad"
+                maxLength={2}
+                selectTextOnFocus
+              />
+            </View>
+            <Text style={tlStyles.timeEditColon}>:</Text>
+            <View style={tlStyles.timeEditField}>
+              <Text style={tlStyles.timeEditLabel}>Min</Text>
+              <TextInput
+                style={tlStyles.timeEditInput}
+                value={editMinute}
+                onChangeText={setEditMinute}
+                keyboardType="number-pad"
+                maxLength={2}
+                selectTextOnFocus
+              />
+            </View>
+            <View style={tlStyles.amPmToggle}>
+              {(["AM", "PM"] as const).map(v => (
+                <Pressable
+                  key={v}
+                  onPress={() => setEditAmPm(v)}
+                  style={[tlStyles.amPmBtn, editAmPm === v && tlStyles.amPmBtnActive]}
+                >
+                  <Text style={[tlStyles.amPmText, editAmPm === v && tlStyles.amPmTextActive]}>{v}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          <View style={tlStyles.timeEditActions}>
+            <Pressable onPress={() => setTimeEditOpen(false)} style={({ pressed }) => [tlStyles.timeEditCancel, pressed && { opacity: 0.7 }]}>
+              <Text style={tlStyles.timeEditCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable onPress={confirmTimeEdit} style={({ pressed }) => [tlStyles.timeEditConfirm, pressed && { opacity: 0.8 }]}>
+              <Text style={tlStyles.timeEditConfirmText}>Confirm</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </Animated.View>
   );
 }
@@ -400,14 +467,10 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
 function ScheduleTimeline({
   inspections,
   selectedDate,
-  shiftMode,
-  onToggleShift,
   onTimeChange,
 }: {
   inspections: any[];
   selectedDate: string;
-  shiftMode: boolean;
-  onToggleShift: () => void;
   onTimeChange: (id: number, newTime: string) => void;
 }) {
   const today = toLocalDateStr(new Date());
@@ -459,29 +522,7 @@ function ScheduleTimeline({
           <Text style={tlStyles.dateLabel}>{dateLabel}</Text>
           <Text style={tlStyles.countLabel}>{active.length} inspection{active.length !== 1 ? "s" : ""}</Text>
         </View>
-        <Pressable
-          onPress={onToggleShift}
-          style={({ pressed }) => [
-            tlStyles.shiftToggle,
-            shiftMode && tlStyles.shiftToggleActive,
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <Feather name="sliders" size={13} color={shiftMode ? Colors.primary : Colors.textSecondary} />
-          <Text style={[tlStyles.shiftToggleText, shiftMode && tlStyles.shiftToggleTextActive]}>
-            {shiftMode ? "Done" : "Shift"}
-          </Text>
-        </Pressable>
       </View>
-
-      {shiftMode && (
-        <View style={tlStyles.shiftBanner}>
-          <Feather name="info" size={13} color={Colors.secondary} />
-          <Text style={tlStyles.shiftBannerText}>
-            Drag any inspection card up or down to reschedule it. Snaps to 15-minute intervals.
-          </Text>
-        </View>
-      )}
 
       {/* Active inspections */}
       {active.length > 0 && (
@@ -491,14 +532,13 @@ function ScheduleTimeline({
               key={insp.id}
               insp={insp}
               isLast={idx === active.length - 1}
-              shiftMode={shiftMode}
               onTimeChange={onTimeChange}
             />
           ))}
         </View>
       )}
 
-      {active.length === 0 && !shiftMode && (
+      {active.length === 0 && (
         <View style={tlStyles.allDoneBox}>
           <Feather name="check-circle" size={15} color={Colors.success} />
           <Text style={tlStyles.allDoneText}>All done for {dateLabel.toLowerCase()}!</Text>
@@ -519,7 +559,6 @@ function ScheduleTimeline({
                 key={insp.id}
                 insp={insp}
                 isLast={idx === completed.length - 1}
-                shiftMode={shiftMode}
                 onTimeChange={onTimeChange}
               />
             ))}
@@ -535,27 +574,6 @@ const tlStyles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dateLabel: { fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, letterSpacing: -0.3 },
   countLabel: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
-  shiftToggle: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
-    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
-  },
-  shiftToggleActive: {
-    backgroundColor: Colors.accent, borderColor: Colors.accent,
-  },
-  shiftToggleText: {
-    fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary,
-  },
-  shiftToggleTextActive: { color: Colors.primary },
-  shiftBanner: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    backgroundColor: Colors.infoLight, borderRadius: 10, padding: 11,
-    borderWidth: 1, borderColor: Colors.secondary + "30",
-  },
-  shiftBannerText: {
-    flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.secondary, lineHeight: 17,
-  },
   list: { gap: 0 },
   item: { marginBottom: 10 },
   timePill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, backgroundColor: Colors.background },
@@ -573,10 +591,6 @@ const tlStyles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
-  cardShift: {
-    borderColor: Colors.secondary + "40",
-    borderStyle: "dashed",
-  },
   cardDragging: {
     borderColor: Colors.secondary,
     borderStyle: "solid",
@@ -590,13 +604,7 @@ const tlStyles = StyleSheet.create({
     borderColor: "#D8DADD",
     shadowOpacity: 0.02,
   },
-  dragHandle: {
-    alignItems: "center",
-    paddingVertical: 6,
-    backgroundColor: Colors.infoLight,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
+  dragHint: { alignItems: "center", paddingTop: 4 },
   cardInner: { padding: 13, gap: 6 },
   cardTop: { flexDirection: "row", gap: 6, alignItems: "center" },
   typePill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
@@ -637,8 +645,41 @@ const tlStyles = StyleSheet.create({
     paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7,
   },
   viewBtnText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
-  shiftHint: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
-  shiftHintText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary + "99" },
+  timeEditOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
+  timeEditSheet: {
+    backgroundColor: Colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 20, paddingBottom: 36, gap: 20,
+  },
+  timeEditHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.borderLight, alignSelf: "center" },
+  timeEditTitle: { fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, textAlign: "center" },
+  timeEditRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  timeEditField: { alignItems: "center", gap: 4 },
+  timeEditLabel: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  timeEditInput: {
+    width: 64, height: 56, borderRadius: 12, borderWidth: 1.5, borderColor: Colors.border,
+    backgroundColor: Colors.background, textAlign: "center",
+    fontSize: 26, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text,
+  },
+  timeEditColon: { fontSize: 26, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, marginBottom: 4 },
+  amPmToggle: { flexDirection: "column", gap: 4, marginLeft: 4 },
+  amPmBtn: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background,
+  },
+  amPmBtnActive: { backgroundColor: Colors.secondary, borderColor: Colors.secondary },
+  amPmText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  amPmTextActive: { color: "#fff" },
+  timeEditActions: { flexDirection: "row", gap: 10 },
+  timeEditCancel: {
+    flex: 1, paddingVertical: 14, borderRadius: 12,
+    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, alignItems: "center",
+  },
+  timeEditCancelText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  timeEditConfirm: {
+    flex: 2, paddingVertical: 14, borderRadius: 12,
+    backgroundColor: Colors.secondary, alignItems: "center",
+  },
+  timeEditConfirmText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
   emptyWrap: { alignItems: "center", paddingVertical: 32, gap: 8 },
   emptyIcon: { width: 52, height: 52, borderRadius: 16, backgroundColor: Colors.borderLight, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   emptyTitle: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
@@ -668,7 +709,6 @@ export default function HomeScreen() {
   const { user, token } = useAuth();
   const { scheduleInspectionReminders, prefs } = useNotifications();
   const [selectedDate, setSelectedDate] = useState(toLocalDateStr(new Date()));
-  const [shiftMode, setShiftMode] = useState(false);
   const [localTimes, setLocalTimes] = useState<Record<number, string>>({});
 
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
@@ -733,7 +773,7 @@ export default function HomeScreen() {
       ]}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
       showsVerticalScrollIndicator={false}
-      scrollEnabled={!shiftMode}
+      scrollEnabled
     >
       {/* Header */}
       <View style={styles.header}>
@@ -784,8 +824,6 @@ export default function HomeScreen() {
       <ScheduleTimeline
         inspections={inspectionsForDay}
         selectedDate={selectedDate}
-        shiftMode={shiftMode}
-        onToggleShift={() => setShiftMode((v) => !v)}
         onTimeChange={handleTimeChange}
       />
 
