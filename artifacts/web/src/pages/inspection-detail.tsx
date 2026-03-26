@@ -10,7 +10,7 @@ import {
   Award, BarChart2, Send, Download, Zap, X,
   UserCheck, ChevronDown, FolderOpen, Upload, File,
   FileImage, FileSpreadsheet, CheckSquare, PencilLine,
-  RefreshCw, Eye, ShieldCheck, Flame, Home, ClipboardCheck,
+  RefreshCw, Eye, ShieldCheck, Flame, Home, ClipboardCheck, Trash2,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -615,6 +615,12 @@ export default function InspectionDetail() {
               await refreshReports();
             } catch {}
           }}
+          onDelete={async (report) => {
+            try {
+              await apiFetch(`/api/reports/${report.id}`, { method: "DELETE" });
+              await refreshReports();
+            } catch {}
+          }}
         />
       )}
 
@@ -809,6 +815,7 @@ function ReportsTab({
   onDownload,
   onView,
   onSendReport,
+  onDelete,
 }: {
   reports: any[];
   inspection: any;
@@ -816,7 +823,10 @@ function ReportsTab({
   onDownload: (r: any) => void;
   onView: (r: any) => void;
   onSendReport: (r: any) => void;
+  onDelete: (r: any) => Promise<void>;
 }) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const canGenerate = inspection.status === "completed" || inspection.status === "follow_up_required";
 
   return (
@@ -906,35 +916,71 @@ function ReportsTab({
               </div>
               {/* Actions */}
               <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onView(report)}
-                  className="gap-1.5 text-xs h-8"
-                >
-                  <Eye className="h-3.5 w-3.5" /> View
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onDownload(report)}
-                  className="gap-1.5 text-xs h-8"
-                >
-                  <Download className="h-3.5 w-3.5" /> PDF
-                </Button>
-                {report.status === "approved" && (
-                  <Button
-                    size="sm"
-                    onClick={() => onSendReport(report)}
-                    className="gap-1.5 text-xs h-8 bg-secondary hover:bg-secondary/90 text-white"
-                  >
-                    <Send className="h-3.5 w-3.5" /> Send
-                  </Button>
-                )}
-                {report.status === "sent" && (
-                  <span className="flex items-center gap-1 text-xs text-purple-600 font-medium">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Sent
-                  </span>
+                {confirmDeleteId === report.id ? (
+                  /* Inline delete confirmation */
+                  <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                    <span className="text-xs text-red-700 font-medium">Delete this report?</span>
+                    <button
+                      onClick={async () => {
+                        setDeleting(true);
+                        await onDelete(report);
+                        setDeleting(false);
+                        setConfirmDeleteId(null);
+                      }}
+                      disabled={deleting}
+                      className="text-xs font-semibold text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors"
+                    >
+                      {deleting ? "Deleting…" : "Yes, delete"}
+                    </button>
+                    <span className="text-red-300">|</span>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      disabled={deleting}
+                      className="text-xs text-muted-foreground hover:text-sidebar transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onView(report)}
+                      className="gap-1.5 text-xs h-8"
+                    >
+                      <Eye className="h-3.5 w-3.5" /> View
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onDownload(report)}
+                      className="gap-1.5 text-xs h-8"
+                    >
+                      <Download className="h-3.5 w-3.5" /> PDF
+                    </Button>
+                    {report.status === "approved" && (
+                      <Button
+                        size="sm"
+                        onClick={() => onSendReport(report)}
+                        className="gap-1.5 text-xs h-8 bg-secondary hover:bg-secondary/90 text-white"
+                      >
+                        <Send className="h-3.5 w-3.5" /> Send
+                      </Button>
+                    )}
+                    {report.status === "sent" && (
+                      <span className="flex items-center gap-1 text-xs text-purple-600 font-medium">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Sent
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setConfirmDeleteId(report.id)}
+                      title="Delete report"
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </>
                 )}
               </div>
             </div>

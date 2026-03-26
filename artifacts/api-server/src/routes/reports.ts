@@ -949,4 +949,23 @@ router.get("/:id/pdf", async (req, res) => {
   }
 });
 
+// ── Delete report ──────────────────────────────────────────────────────────────
+router.delete("/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+
+    const [deleted] = await db.delete(reportsTable)
+      .where(eq(reportsTable.id, id))
+      .returning();
+
+    if (!deleted) { res.status(404).json({ error: "not_found" }); return; }
+
+    res.json({ success: true, id });
+  } catch (err) {
+    req.log.error({ err }, "Delete report error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 export default router;
