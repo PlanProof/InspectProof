@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Linking,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -39,6 +40,7 @@ export default function ProjectDetailScreen() {
   const [bookTime, setBookTime] = useState("");
   const [bookSubmitting, setBookSubmitting] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [quotaError, setQuotaError] = useState<string | null>(null);
 
   const fetchWithAuth = async (url: string) => {
     const res = await fetch(`${baseUrl}${url}`, {
@@ -103,6 +105,15 @@ export default function ProjectDetailScreen() {
           scheduledTime: bookTime.trim() || undefined,
         }),
       });
+      if (res.status === 403) {
+        const body = await res.json().catch(() => ({}));
+        const isQuota = body.error === "inspection_limit_reached" || body.error === "project_limit_reached";
+        if (isQuota) {
+          setBookOpen(false);
+          setQuotaError(body.message ?? "You've reached your plan limit.");
+          return;
+        }
+      }
       if (!res.ok) throw new Error("Failed");
       setBookOpen(false);
       setSelectedTemplate(null);
@@ -342,6 +353,34 @@ export default function ProjectDetailScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+    </Modal>
+
+    {/* Quota / Plan limit upgrade modal */}
+    <Modal visible={!!quotaError} transparent animationType="fade" onRequestClose={() => setQuotaError(null)}>
+      <View style={styles.quotaOverlay}>
+        <View style={styles.quotaCard}>
+          <View style={styles.quotaIconWrap}>
+            <Feather name="zap" size={28} color={Colors.secondary} />
+          </View>
+          <Text style={styles.quotaTitle}>Plan limit reached</Text>
+          <Text style={styles.quotaMessage}>{quotaError}</Text>
+          <TouchableOpacity
+            style={styles.quotaBtn}
+            onPress={() => {
+              setQuotaError(null);
+              const domain = process.env.EXPO_PUBLIC_DOMAIN ?? "";
+              const url = domain ? `https://${domain}/billing` : "https://inspectproof.com.au/billing";
+              Linking.openURL(url).catch(() => {});
+            }}
+          >
+            <Feather name="arrow-up-right" size={16} color="#fff" />
+            <Text style={styles.quotaBtnText}>View upgrade options</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quotaDismiss} onPress={() => setQuotaError(null)}>
+            <Text style={styles.quotaDismissText}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </Modal>
     </View>
   );
@@ -615,5 +654,68 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: "#fff",
+  },
+  quotaOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  quotaCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    padding: 28,
+    width: "100%",
+    maxWidth: 360,
+    alignItems: "center",
+    gap: 12,
+  },
+  quotaIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: Colors.secondary + "20",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  quotaTitle: {
+    fontSize: 18,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+    textAlign: "center",
+  },
+  quotaMessage: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 19,
+  },
+  quotaBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+    borderRadius: 12,
+    marginTop: 8,
+    width: "100%",
+    justifyContent: "center",
+  },
+  quotaBtnText: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#fff",
+  },
+  quotaDismiss: {
+    paddingVertical: 8,
+  },
+  quotaDismissText: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
   },
 });

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useGetDashboardAnalytics } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
   FolderOpen, CheckSquare, AlertTriangle, FileText, ArrowRight,
   ChevronLeft, ChevronRight, Calendar, Clock, MapPin, User, CalendarDays,
-  Send, CheckCircle2, Users,
+  Send, CheckCircle2, Users, Zap,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -553,6 +554,66 @@ function CalendarWidget({
   );
 }
 
+// ── Upgrade Banner ────────────────────────────────────────────────────────────
+function UpgradeBanner() {
+  const [, setLocation] = useLocation();
+  const { data: sub } = useQuery({
+    queryKey: ["billing-subscription-banner"],
+    queryFn: async () => {
+      const token = localStorage.getItem("inspectproof_token") ?? "";
+      const r = await fetch("/api/billing/subscription", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) return null;
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
+
+  if (!sub || sub.plan !== "free_trial") return null;
+
+  const projectPct = sub.limits.maxProjects
+    ? Math.round((sub.usage.projects / sub.limits.maxProjects) * 100)
+    : 0;
+  const inspPct = sub.limits.maxInspectionsTotal
+    ? Math.round((sub.usage.inspections / sub.limits.maxInspectionsTotal) * 100)
+    : 0;
+  const isNearLimit = projectPct >= 70 || inspPct >= 70;
+
+  return (
+    <div className={`rounded-2xl border px-5 py-4 mb-7 flex items-center gap-5 flex-wrap ${
+      isNearLimit
+        ? "bg-amber-50 border-amber-200"
+        : "bg-[#0B1933]/5 border-[#0B1933]/10"
+    }`}>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+        isNearLimit ? "bg-amber-100 text-amber-600" : "bg-[#C5D92D]/30 text-[#5a6600]"
+      }`}>
+        <Zap className="w-4 h-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-[#0B1933] text-sm">
+          {isNearLimit ? "You're approaching your plan limits" : "You're on the Free Trial"}
+        </p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          {sub.usage.projects} of {sub.limits.maxProjects} projects &nbsp;·&nbsp;
+          {sub.usage.inspections} of {sub.limits.maxInspectionsTotal} total inspections used
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          className="bg-[#0B1933] hover:bg-[#0B1933]/90 text-white text-xs h-8"
+          onClick={() => setLocation("/billing")}
+        >
+          <Zap className="w-3.5 h-3.5 mr-1.5" />
+          Upgrade plan
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { data, isLoading } = useGetDashboardAnalytics();
@@ -574,6 +635,8 @@ export default function Dashboard() {
           <Link href="/inspections">Schedule Inspection</Link>
         </Button>
       </div>
+
+      <UpgradeBanner />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">

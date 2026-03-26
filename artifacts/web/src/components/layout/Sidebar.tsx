@@ -11,6 +11,7 @@ import {
   LogOut,
   FileText,
   ShieldCheck,
+  Zap,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -72,6 +73,20 @@ export function Sidebar() {
       </div>
 
       <div className="border-t border-white/10 p-4 space-y-1">
+        {user && user.plan === "free_trial" && (
+          <Link
+            href="/billing"
+            className={cn(
+              "group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              location === "/billing"
+                ? "bg-[#C5D92D]/20 text-[#C5D92D]"
+                : "bg-[#C5D92D]/10 text-[#C5D92D] hover:bg-[#C5D92D]/20"
+            )}
+          >
+            <Zap className="mr-3 h-5 w-5 flex-shrink-0" />
+            Upgrade plan
+          </Link>
+        )}
         {user?.isAdmin && (
           <Link
             href="/admin"

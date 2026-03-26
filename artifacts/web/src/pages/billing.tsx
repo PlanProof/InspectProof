@@ -104,10 +104,15 @@ export default function Billing() {
     if (cancelled) toast({ title: "Checkout cancelled", description: "No charges were made.", variant: "destructive" });
   }, []);
 
+  const authHeader = () => ({
+    Authorization: `Bearer ${localStorage.getItem("inspectproof_token") ?? ""}`,
+    "Content-Type": "application/json",
+  });
+
   const { data: subData } = useQuery({
     queryKey: ["billing-subscription"],
     queryFn: async () => {
-      const r = await fetch(API("/billing/subscription"));
+      const r = await fetch(API("/billing/subscription"), { headers: authHeader() });
       return r.json();
     },
   });
@@ -115,7 +120,7 @@ export default function Billing() {
   const { data: plansData } = useQuery({
     queryKey: ["billing-plans"],
     queryFn: async () => {
-      const r = await fetch(API("/billing/plans"));
+      const r = await fetch(API("/billing/plans"), { headers: authHeader() });
       return r.json();
     },
   });
@@ -124,7 +129,7 @@ export default function Billing() {
     mutationFn: async (priceId: string) => {
       const r = await fetch(API("/billing/checkout"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeader(),
         body: JSON.stringify({ priceId }),
       });
       return r.json();
@@ -137,7 +142,7 @@ export default function Billing() {
 
   const portalMutation = useMutation({
     mutationFn: async () => {
-      const r = await fetch(API("/billing/portal"), { method: "POST" });
+      const r = await fetch(API("/billing/portal"), { method: "POST", headers: authHeader() });
       return r.json();
     },
     onSuccess: (data) => {
