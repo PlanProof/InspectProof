@@ -600,12 +600,18 @@ export default function ConductInspectionScreen() {
             <View style={[styles.generateBar, { paddingBottom: insets.bottom + 12 }]}>
               {/* Row 1: Mark Complete toggle */}
               <Pressable
-                style={({ pressed }) => [styles.markCompleteRow, pressed && { opacity: 0.75 }]}
+                style={({ pressed }) => [
+                  styles.markCompleteRow,
+                  isCompleted && styles.markCompleteRowActive,
+                  pressed && { opacity: 0.75 },
+                ]}
                 onPress={toggleMarkComplete}
               >
-                <View style={[styles.markCompleteCheck, isCompleted && styles.markCompleteCheckActive]}>
-                  {isCompleted && <Feather name="check" size={14} color="#fff" />}
-                </View>
+                <Feather
+                  name={isCompleted ? "check-circle" : "circle"}
+                  size={17}
+                  color={isCompleted ? "#fff" : Colors.textSecondary}
+                />
                 <Text style={[styles.markCompleteLabel, isCompleted && styles.markCompleteLabelActive]}>
                   {isCompleted ? "Inspection Marked Complete" : "Mark Complete"}
                 </Text>
@@ -1515,22 +1521,16 @@ const styles = StyleSheet.create({
   markCompleteRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    marginBottom: 8,
-  },
-  markCompleteCheck: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-    alignItems: "center",
     justifyContent: "center",
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 16,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.background,
   },
-  markCompleteCheckActive: {
+  markCompleteRowActive: {
     backgroundColor: "#22c55e",
     borderColor: "#22c55e",
   },
@@ -1540,7 +1540,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   markCompleteLabelActive: {
-    color: "#16a34a",
+    color: "#fff",
     fontFamily: "PlusJakartaSans_700Bold",
   },
   generateBtn: {
