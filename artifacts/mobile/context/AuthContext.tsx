@@ -24,9 +24,30 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+function getBaseUrl() {
+  return process.env.EXPO_PUBLIC_DOMAIN
+    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+    : "";
+}
+
+async function fetchCurrentUser(token: string): Promise<User | null> {
+  try {
+    const res = await fetch(`${getBaseUrl()}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    // /api/auth/me returns the user object directly (not wrapped)
+    return data.id ? (data as User) : (data.user ?? null);
+  } catch {
+    return null;
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -38,13 +59,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const storedToken = await AsyncStorage.getItem("auth_token");
         const storedUser = await AsyncStorage.getItem("auth_user");
-        if (storedToken && storedUser) {
+
+        if (storedToken) {
           setToken(storedToken);
-          setUser(JSON.parse(storedUser));
           setAuthTokenGetter(() => storedToken);
+
+          if (storedUser) {
+            setUser(JSON.parse(storedUser));
+          }
+
+          const freshUser = await fetchCurrentUser(storedToken);
+          if (freshUser) {
+            setUser(freshUser);
+            await AsyncStorage.setItem("auth_user", JSON.stringify(freshUser));
+          } else if (!storedUser) {
+            await AsyncStorage.removeItem("auth_token");
+            setToken(null);
+          }
         }
-      } catch (e) {
-        // ignore
+      } catch {
+        // ignore storage errors
       } finally {
         setIsLoading(false);
       }
@@ -53,11 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const baseUrl = process.env.EXPO_PUBLIC_DOMAIN
-      ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-      : "";
-
-    const response = await fetch(`${baseUrl}/api/auth/login`, {
+    const response = await fetch(`${getBaseUrl()}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -84,8 +114,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    if (!token) return;
+    const freshUser = await fetchCurrentUser(token);
+    if (freshUser) {
+      setUser(freshUser);
+      await AsyncStorage.setItem("auth_user", JSON.stringify(freshUser));
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

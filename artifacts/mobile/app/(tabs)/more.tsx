@@ -80,18 +80,36 @@ export default function MoreScreen() {
       {/* Profile Card */}
       <View style={styles.profileCard}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {user?.firstName?.[0]}{user?.lastName?.[0]}
-          </Text>
+          {user?.firstName || user?.lastName ? (
+            <Text style={styles.avatarText}>
+              {(user?.firstName?.[0] ?? "").toUpperCase()}{(user?.lastName?.[0] ?? "").toUpperCase()}
+            </Text>
+          ) : (
+            <Feather name="user" size={22} color={Colors.accent} />
+          )}
         </View>
         <View style={styles.profileInfo}>
-          <Text style={styles.profileName}>{user?.firstName} {user?.lastName}</Text>
-          <Text style={styles.profileRole}>{roleLabel[user?.role || ""] || user?.role}</Text>
-          <Text style={styles.profileEmail}>{user?.email}</Text>
+          {(user?.firstName || user?.lastName) ? (
+            <Text style={styles.profileName} numberOfLines={1}>
+              {[user?.firstName, user?.lastName].filter(Boolean).join(" ")}
+            </Text>
+          ) : (
+            <Text style={styles.profileName} numberOfLines={1}>{user?.email ?? "Your Account"}</Text>
+          )}
+          {(user?.role) ? (
+            <Text style={styles.profileRole} numberOfLines={1}>
+              {roleLabel[user.role] || user.role}
+            </Text>
+          ) : null}
+          {(user?.email && (user?.firstName || user?.lastName)) ? (
+            <Text style={styles.profileEmail} numberOfLines={1}>{user.email}</Text>
+          ) : null}
         </View>
-        <View style={styles.profileBadge}>
-          <Text style={styles.profileBadgeText}>{user?.role?.toUpperCase()}</Text>
-        </View>
+        {user?.role ? (
+          <View style={styles.profileBadge}>
+            <Text style={styles.profileBadgeText}>{user.role.toUpperCase()}</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Quick Access */}
