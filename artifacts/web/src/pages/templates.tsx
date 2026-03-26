@@ -3,6 +3,7 @@ import { useListChecklistTemplates, useGetChecklistTemplate } from "@workspace/a
 import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, Button } from "@/components/ui";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   FolderOpen, Folder, FileText, ChevronRight, ChevronDown,
   ClipboardList, CheckSquare, Plus, Search, X,
@@ -792,6 +793,15 @@ export default function Templates() {
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<string | null>(null);
   const [deletingFolder, setDeletingFolder] = useState(false);
 
+  // New Checklist modal state
+  const [newOpen, setNewOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState("final");
+  const [newFolderMode, setNewFolderMode] = useState<"existing" | "new">("existing");
+  const [newFolder, setNewFolder] = useState("");
+  const [newFolderText, setNewFolderText] = useState("");
+  const [newSaving, setNewSaving] = useState(false);
+
   const { data: allTemplates, isLoading, refetch } = useListChecklistTemplates(
     { discipline },
     { query: { queryKey: ["templates", discipline] } }
@@ -905,6 +915,46 @@ export default function Templates() {
     } catch {}
   };
 
+  const openNewChecklist = () => {
+    setNewName("");
+    setNewType("final");
+    setNewFolderMode("existing");
+    setNewFolder(folderKeys[0] ?? "");
+    setNewFolderText("");
+    setNewOpen(true);
+  };
+
+  const createChecklist = async () => {
+    const chosenFolder = newFolderMode === "new" ? newFolderText.trim() : newFolder;
+    if (!newName.trim() || !chosenFolder) return;
+    setNewSaving(true);
+    try {
+      const created = await apiFetch("/api/checklist-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newName.trim(),
+          inspectionType: newType,
+          folder: chosenFolder,
+          discipline,
+        }),
+      });
+      setNewOpen(false);
+      // If a brand-new folder was created, add it to folderOrder
+      if (newFolderMode === "new" && !folderOrder.includes(chosenFolder)) {
+        const next = [...folderOrder, chosenFolder];
+        setFolderOrder(next);
+        localStorage.setItem(`folderOrder_${discipline}`, JSON.stringify(next));
+      }
+      refetch();
+      setSelectedId(created.id);
+      setOpenFolders(prev => new Set([...prev, chosenFolder]));
+    } catch {
+      alert("Failed to create checklist. Please try again.");
+    }
+    setNewSaving(false);
+  };
+
   const deleteFolder = async (folder: string) => {
     setDeletingFolder(true);
     try {
@@ -930,7 +980,7 @@ export default function Templates() {
           <h1 className="text-3xl font-bold text-sidebar tracking-tight">Checklists</h1>
           <p className="text-muted-foreground mt-1">Manage inspection checklists organised by NCC building classification.</p>
         </div>
-        <Button className="shadow-lg shadow-primary/20 gap-2">
+        <Button className="shadow-lg shadow-primary/20 gap-2" onClick={openNewChecklist}>
           <Plus className="h-4 w-4" /> New Checklist
         </Button>
       </div>
@@ -1180,6 +1230,111 @@ export default function Templates() {
           </div>
         </div>
       </Card>
+
+      {/* ── New Checklist Dialog ── */}
+      <Dialog open={newOpen} onOpenChange={setNewOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>New Checklist</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Name */}
+            <div>
+              <label className="text-sm font-medium text-sidebar mb-1.5 block">Checklist Name <span className="text-red-500">*</span></label>
+              <input
+                autoFocus
+                type="text"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && createChecklist()}
+                placeholder="e.g. Frame Stage Inspection"
+                className="w-full px-3 py-2 text-sm border border-muted/60 rounded-lg bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+
+            {/* Inspection Type */}
+            <div>
+              <label className="text-sm font-medium text-sidebar mb-1.5 block">Inspection Type</label>
+              <select
+                value={newType}
+                onChange={e => setNewType(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-muted/60 rounded-lg bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                {Object.entries(TYPE_META).map(([key, meta]) => (
+                  <option key={key} value={key}>{meta.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Folder assignment */}
+            <div>
+              <label className="text-sm font-medium text-sidebar mb-2 block">Assign to Folder <span className="text-red-500">*</span></label>
+              <div className="flex gap-3 mb-2.5">
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="radio"
+                    checked={newFolderMode === "existing"}
+                    onChange={() => setNewFolderMode("existing")}
+                    className="accent-primary"
+                  />
+                  Existing folder
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="radio"
+                    checked={newFolderMode === "new"}
+                    onChange={() => setNewFolderMode("new")}
+                    className="accent-primary"
+                  />
+                  Create new folder
+                </label>
+              </div>
+
+              {newFolderMode === "existing" ? (
+                folderKeys.length > 0 ? (
+                  <select
+                    value={newFolder}
+                    onChange={e => setNewFolder(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-muted/60 rounded-lg bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    {folderKeys.map(f => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">No folders yet — create a new one.</p>
+                )
+              ) : (
+                <input
+                  type="text"
+                  value={newFolderText}
+                  onChange={e => setNewFolderText(e.target.value)}
+                  placeholder="e.g. Swimming Pool Inspections"
+                  className="w-full px-3 py-2 text-sm border border-muted/60 rounded-lg bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <button
+              onClick={() => setNewOpen(false)}
+              className="px-4 py-2 text-sm rounded-lg border border-muted/60 text-muted-foreground hover:bg-muted/40 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={createChecklist}
+              disabled={newSaving || !newName.trim() || (newFolderMode === "existing" ? !newFolder : !newFolderText.trim())}
+              className="px-4 py-2 text-sm rounded-lg bg-primary text-white font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {newSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {newSaving ? "Creating…" : "Create Checklist"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
