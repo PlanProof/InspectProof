@@ -201,6 +201,177 @@ router.post('/admin/users/:id/sync-plan', requireAdmin, async (req, res) => {
   return res.json({ user: updated });
 });
 
+// ── Revenue / Financial Stats ──────────────────────────────────────────────────
+
+router.get('/admin/revenue', requireAdmin, async (req, res) => {
+  try {
+    const stripe = await getUncachableStripeClient();
+
+    // ── Subscriptions ──────────────────────────────────────────────────────────
+    const [activeSubs, cancelledSubs, trialSubs] = await Promise.all([
+      stripe.subscriptions.list({ status: 'active', limit: 100, expand: ['data.items.data.price'] }),
+      stripe.subscriptions.list({ status: 'canceled', limit: 100, created: { gte: Math.floor(Date.now() / 1000) - 90 * 24 * 3600 } }),
+      stripe.subscriptions.list({ status: 'trialing', limit: 100 }),
+    ]);
+
+    // ── MRR calculation from active subscriptions ──────────────────────────────
+    let mrrCents = 0;
+    const revenueByPlan: Record<string, number> = {};
+    const priceToProductId: Record<string, string> = {};
+
+    for (const sub of activeSubs.data) {
+      for (const item of sub.items.data) {
+        const price = item.price;
+        const amount = price.unit_amount ?? 0;
+        const interval = price.recurring?.interval;
+        const monthlyAmount = interval === 'year' ? Math.round(amount / 12) : amount;
+        mrrCents += monthlyAmount;
+
+        // Map price → product for later lookup
+        const productId = typeof price.product === 'string' ? price.product : (price.product as any)?.id;
+        if (productId) priceToProductId[price.id] = productId;
+
+        // Temporarily key by price nickname or product ID until we fetch products
+        const tempKey = price.nickname ?? productId ?? price.id ?? 'unknown';
+        revenueByPlan[tempKey] = (revenueByPlan[tempKey] ?? 0) + monthlyAmount;
+      }
+    }
+
+    // Fetch unique products to resolve plan keys
+    const uniqueProductIds = [...new Set(Object.values(priceToProductId))];
+    const productPlanMap: Record<string, string> = {};
+    if (uniqueProductIds.length > 0) {
+      await Promise.all(uniqueProductIds.map(async (pid) => {
+        try {
+          const product = await stripe.products.retrieve(pid);
+          productPlanMap[pid] = (product as any).metadata?.inspectproof_plan ?? product.name ?? pid;
+        } catch {}
+      }));
+    }
+
+    // Re-key revenueByPlan using proper plan labels
+    const resolvedRevenueByPlan: Record<string, number> = {};
+    for (const sub of activeSubs.data) {
+      for (const item of sub.items.data) {
+        const price = item.price;
+        const amount = price.unit_amount ?? 0;
+        const interval = price.recurring?.interval;
+        const monthlyAmount = interval === 'year' ? Math.round(amount / 12) : amount;
+        const productId = priceToProductId[price.id];
+        const planKey = productId ? (productPlanMap[productId] ?? productId) : (price.nickname ?? 'unknown');
+        resolvedRevenueByPlan[planKey] = (resolvedRevenueByPlan[planKey] ?? 0) + monthlyAmount;
+      }
+    }
+
+    // ── Revenue from invoices (last 12 months) ─────────────────────────────────
+    const twelveMonthsAgo = Math.floor(Date.now() / 1000) - 365 * 24 * 3600;
+    const invoices = await stripe.invoices.list({
+      status: 'paid',
+      limit: 100,
+      created: { gte: twelveMonthsAgo },
+    });
+
+    let totalRevenueCents = 0;
+    const monthlyRevenue: Record<string, number> = {};
+    for (const inv of invoices.data) {
+      totalRevenueCents += inv.amount_paid;
+      const d = new Date(inv.created * 1000);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthlyRevenue[key] = (monthlyRevenue[key] ?? 0) + inv.amount_paid;
+    }
+
+    // ── Current month revenue ──────────────────────────────────────────────────
+    const now = new Date();
+    const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const currentMonthRevenue = monthlyRevenue[thisMonthKey] ?? 0;
+
+    // Fill missing months in the last 12 months
+    const months: { month: string; revenue: number }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('en-AU', { month: 'short', year: '2-digit' });
+      months.push({ month: label, revenue: (monthlyRevenue[key] ?? 0) / 100 });
+    }
+
+    // ── Failed / Past Due payments ─────────────────────────────────────────────
+    const [pastDueInvoices, failedPayments] = await Promise.all([
+      stripe.invoices.list({ status: 'open', limit: 20, due_date: { lte: Math.floor(Date.now() / 1000) } }),
+      stripe.paymentIntents.list({ limit: 20 }),
+    ]);
+    const failedPaymentIntents = failedPayments.data.filter(pi => pi.status === 'requires_payment_method' || pi.status === 'canceled');
+
+    // ── Recent paid invoices ───────────────────────────────────────────────────
+    const recentInvoices = await stripe.invoices.list({ status: 'paid', limit: 10 });
+    const recentPayments = await Promise.all(
+      recentInvoices.data.map(async inv => {
+        let customerEmail: string | null = null;
+        let customerName: string | null = null;
+        if (inv.customer) {
+          try {
+            const customer = await stripe.customers.retrieve(inv.customer as string);
+            if (!('deleted' in customer)) {
+              customerEmail = customer.email;
+              customerName = customer.name;
+            }
+          } catch {}
+        }
+        return {
+          id: inv.id,
+          amount: inv.amount_paid / 100,
+          currency: inv.currency.toUpperCase(),
+          date: new Date(inv.created * 1000).toISOString(),
+          customerEmail,
+          customerName,
+          description: inv.lines.data[0]?.description ?? inv.description ?? '—',
+          hostedUrl: inv.hosted_invoice_url,
+        };
+      })
+    );
+
+    // ── Churn & conversion from DB ─────────────────────────────────────────────
+    const [{ paidCount }] = await db
+      .select({ paidCount: count() })
+      .from(usersTable)
+      .where(sql`plan NOT IN ('free_trial', 'enterprise') AND stripe_subscription_id IS NOT NULL`);
+
+    const [{ trialCount }] = await db
+      .select({ trialCount: count() })
+      .from(usersTable)
+      .where(eq(usersTable.plan, 'free_trial'));
+
+    const totalUsersResult = await db.select({ cnt: count() }).from(usersTable);
+    const totalUsers = Number(totalUsersResult[0].cnt);
+
+    // ── Lifetime value estimate ────────────────────────────────────────────────
+    const avgRevenuePerUser = Number(paidCount) > 0 ? mrrCents / Number(paidCount) : 0;
+
+    res.json({
+      mrr: mrrCents / 100,
+      arr: (mrrCents * 12) / 100,
+      totalRevenue12m: totalRevenueCents / 100,
+      currentMonthRevenue: currentMonthRevenue / 100,
+      activeSubscriptions: activeSubs.data.length,
+      trialSubscriptions: trialSubs.data.length + Number(trialCount),
+      cancelledLast90Days: cancelledSubs.data.length,
+      pastDueCount: pastDueInvoices.data.length,
+      failedPaymentCount: failedPaymentIntents.length,
+      paidUsers: Number(paidCount),
+      freeTrialUsers: Number(trialCount),
+      totalUsers,
+      avgRevenuePerUser: avgRevenuePerUser / 100,
+      revenueByPlan: Object.entries(resolvedRevenueByPlan).map(([plan, cents]) => ({
+        plan, mrr: cents / 100,
+      })),
+      monthlyRevenue: months,
+      recentPayments,
+    });
+  } catch (err: any) {
+    req.log.error({ err }, 'Revenue stats error');
+    res.status(500).json({ error: 'Failed to load revenue stats', message: err.message });
+  }
+});
+
 // ── Plan Configs ───────────────────────────────────────────────────────────────
 
 router.get('/admin/plans', requireAdmin, async (_req, res) => {

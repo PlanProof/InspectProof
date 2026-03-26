@@ -5,6 +5,8 @@ import {
   Users, BarChart3, Shield, AlertCircle, CheckCircle2,
   ChevronDown, ChevronUp, Edit2, Search, Trash2, UserPlus,
   Package, X, Plus, GripVertical, Save,
+  DollarSign, TrendingUp, TrendingDown, CreditCard,
+  Calendar, ExternalLink, AlertOctagon, Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -506,7 +508,7 @@ export default function Admin() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"users" | "plans" | "stats">("users");
+  const [tab, setTab] = useState<"users" | "plans" | "stats" | "revenue">("users");
 
   const [userModal, setUserModal] = useState<{ open: boolean; user: AdminUser | null }>({ open: false, user: null });
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
@@ -526,6 +528,17 @@ export default function Admin() {
       const r = await fetch(API("/admin/stats"), { headers: authHeaders() });
       return r.json();
     },
+  });
+
+  const { data: revenueData, isLoading: revenueLoading } = useQuery({
+    queryKey: ["admin-revenue"],
+    queryFn: async () => {
+      const r = await fetch(API("/admin/revenue"), { headers: authHeaders() });
+      if (!r.ok) throw new Error("Failed to load revenue data");
+      return r.json();
+    },
+    staleTime: 60_000,
+    enabled: tab === "revenue",
   });
 
   const { data: plansData, refetch: refetchPlans } = useQuery({
@@ -650,7 +663,7 @@ export default function Admin() {
             </span>
           </div>
           <div className="flex gap-1">
-            {(["users", "plans", "stats"] as const).map(t => (
+            {(["users", "plans", "revenue", "stats"] as const).map(t => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -658,7 +671,7 @@ export default function Admin() {
                   tab === t ? "bg-white/15 text-white" : "text-gray-300 hover:text-white"
                 }`}
               >
-                {t === "users" ? "Users" : t === "plans" ? "Plans" : "Stats"}
+                {t === "users" ? "Users" : t === "plans" ? "Plans" : t === "revenue" ? "Revenue" : "Stats"}
               </button>
             ))}
           </div>
@@ -817,6 +830,316 @@ export default function Admin() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Revenue Tab ── */}
+        {tab === "revenue" && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-[#0B1933]">Revenue & Billing</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Live financial data pulled from Stripe · AUD</p>
+              </div>
+              <button
+                onClick={() => qc.invalidateQueries({ queryKey: ["admin-revenue"] })}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+              >
+                <Activity className="w-3.5 h-3.5" />
+                Refresh
+              </button>
+            </div>
+
+            {revenueLoading ? (
+              <div className="text-center py-24 text-gray-400 text-sm">Loading Stripe data…</div>
+            ) : revenueData?.error ? (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+                <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+                <p className="text-sm text-red-600 font-medium">Failed to load revenue data</p>
+                <p className="text-xs text-red-400 mt-1">{revenueData.message}</p>
+              </div>
+            ) : revenueData && (
+              <div className="space-y-6">
+
+                {/* ── Alerts ── */}
+                {(revenueData.pastDueCount > 0 || revenueData.failedPaymentCount > 0) && (
+                  <div className="flex gap-3 flex-wrap">
+                    {revenueData.pastDueCount > 0 && (
+                      <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
+                        <AlertOctagon className="w-4 h-4 text-amber-500" />
+                        <span className="text-sm font-medium text-amber-700">
+                          {revenueData.pastDueCount} past-due invoice{revenueData.pastDueCount !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    )}
+                    {revenueData.failedPaymentCount > 0 && (
+                      <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5">
+                        <TrendingDown className="w-4 h-4 text-red-500" />
+                        <span className="text-sm font-medium text-red-700">
+                          {revenueData.failedPaymentCount} failed payment{revenueData.failedPaymentCount !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── KPI Cards ── */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    {
+                      label: "Monthly Recurring Revenue",
+                      sublabel: "MRR",
+                      value: `$${revenueData.mrr?.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                      icon: DollarSign,
+                      color: "bg-green-50 text-green-600",
+                      badge: revenueData.mrr > 0 ? "Live" : null,
+                    },
+                    {
+                      label: "Annual Recurring Revenue",
+                      sublabel: "ARR (MRR × 12)",
+                      value: `$${revenueData.arr?.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                      icon: TrendingUp,
+                      color: "bg-[#466DB5]/10 text-[#466DB5]",
+                      badge: null,
+                    },
+                    {
+                      label: "Revenue this month",
+                      sublabel: new Date().toLocaleDateString("en-AU", { month: "long", year: "numeric" }),
+                      value: `$${revenueData.currentMonthRevenue?.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                      icon: Calendar,
+                      color: "bg-[#C5D92D]/20 text-[#6b7a00]",
+                      badge: null,
+                    },
+                    {
+                      label: "Revenue last 12 months",
+                      sublabel: "Paid invoices only",
+                      value: `$${revenueData.totalRevenue12m?.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                      icon: CreditCard,
+                      color: "bg-purple-50 text-purple-600",
+                      badge: null,
+                    },
+                  ].map(card => (
+                    <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-5">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className={`w-9 h-9 rounded-lg ${card.color} flex items-center justify-center`}>
+                          <card.icon className="w-4 h-4" />
+                        </div>
+                        {card.badge && (
+                          <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{card.badge}</span>
+                        )}
+                      </div>
+                      <p className="text-2xl font-bold text-[#0B1933]">{card.value}</p>
+                      <p className="text-xs font-semibold text-gray-500 mt-0.5">{card.sublabel}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{card.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Secondary KPIs ── */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    {
+                      label: "Active subscriptions",
+                      value: revenueData.activeSubscriptions,
+                      icon: CheckCircle2,
+                      color: "text-green-600",
+                    },
+                    {
+                      label: "Avg revenue / paid user",
+                      value: revenueData.avgRevenuePerUser > 0
+                        ? `$${revenueData.avgRevenuePerUser.toFixed(2)}/mo`
+                        : "—",
+                      icon: Users,
+                      color: "text-[#466DB5]",
+                    },
+                    {
+                      label: "Cancelled (last 90 days)",
+                      value: revenueData.cancelledLast90Days,
+                      icon: TrendingDown,
+                      color: "text-red-500",
+                    },
+                    {
+                      label: "Trial conversion rate",
+                      value: revenueData.totalUsers > 0
+                        ? `${Math.round((revenueData.paidUsers / Math.max(revenueData.totalUsers, 1)) * 100)}%`
+                        : "—",
+                      icon: Activity,
+                      color: "text-purple-600",
+                    },
+                  ].map(card => (
+                    <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <card.icon className={`w-4 h-4 ${card.color}`} />
+                        <span className="text-xs text-gray-500 font-medium">{card.label}</span>
+                      </div>
+                      <p className="text-xl font-bold text-[#0B1933]">{card.value ?? "—"}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Revenue Chart (12 months) ── */}
+                {revenueData.monthlyRevenue?.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-200 p-6">
+                    <h3 className="font-bold text-[#0B1933] mb-1">Monthly Revenue — Last 12 Months</h3>
+                    <p className="text-xs text-gray-400 mb-5">Paid invoices in AUD</p>
+                    {(() => {
+                      const months = revenueData.monthlyRevenue as { month: string; revenue: number }[];
+                      const maxVal = Math.max(...months.map(m => m.revenue), 1);
+                      const total = months.reduce((a, m) => a + m.revenue, 0);
+                      return (
+                        <div>
+                          <div className="flex items-end gap-1 h-40 mb-2">
+                            {months.map((m, i) => {
+                              const pct = (m.revenue / maxVal) * 100;
+                              const isThisMonth = i === months.length - 1;
+                              return (
+                                <div key={m.month} className="flex-1 flex flex-col items-center gap-1 group">
+                                  <div className="relative w-full flex items-end justify-center h-36">
+                                    {m.revenue > 0 && (
+                                      <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 transition bg-[#0B1933] text-white text-xs rounded px-1.5 py-0.5 whitespace-nowrap pointer-events-none z-10">
+                                        ${m.revenue.toFixed(2)}
+                                      </div>
+                                    )}
+                                    <div
+                                      className={`w-full rounded-t-sm transition-all ${isThisMonth ? "bg-[#C5D92D]" : "bg-[#466DB5]/70 group-hover:bg-[#466DB5]"}`}
+                                      style={{ height: `${Math.max(pct, m.revenue > 0 ? 2 : 0)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[9px] text-gray-400 truncate w-full text-center">{m.month}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex justify-between items-center border-t border-gray-100 pt-3 mt-1">
+                            <div className="flex items-center gap-4 text-xs text-gray-500">
+                              <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-[#466DB5]/70 inline-block"></span> Past months</span>
+                              <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-[#C5D92D] inline-block"></span> This month</span>
+                            </div>
+                            <span className="text-xs text-gray-400">Total: <strong className="text-[#0B1933]">${total.toFixed(2)}</strong></span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* ── Revenue by Plan ── */}
+                {revenueData.revenueByPlan?.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-gray-200 p-6">
+                    <h3 className="font-bold text-[#0B1933] mb-4">MRR by Plan</h3>
+                    <div className="space-y-3">
+                      {revenueData.revenueByPlan.map((p: any) => {
+                        const pct = revenueData.mrr > 0 ? Math.min(100, (p.mrr / revenueData.mrr) * 100) : 0;
+                        return (
+                          <div key={p.plan} className="flex items-center gap-3">
+                            <span className="text-sm text-gray-500 w-28 shrink-0 capitalize">{PLAN_LABELS[p.plan] ?? p.plan}</span>
+                            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-[#466DB5] rounded-full" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-sm font-semibold text-[#0B1933] w-24 text-right">
+                              ${p.mrr.toFixed(2)}/mo
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── User Funnel ── */}
+                <div className="bg-white rounded-2xl border border-gray-200 p-6">
+                  <h3 className="font-bold text-[#0B1933] mb-4">Subscription Funnel</h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    {[
+                      { label: "Free Trial", value: revenueData.freeTrialUsers, color: "bg-gray-100 text-gray-600", icon: Users },
+                      { label: "Paying", value: revenueData.paidUsers, color: "bg-green-100 text-green-700", icon: CheckCircle2 },
+                      { label: "Cancelled (90d)", value: revenueData.cancelledLast90Days, color: "bg-red-50 text-red-600", icon: TrendingDown },
+                    ].map(f => (
+                      <div key={f.label} className={`rounded-xl p-4 ${f.color.split(" ")[0]}`}>
+                        <f.icon className={`w-4 h-4 mb-2 ${f.color.split(" ")[1]}`} />
+                        <p className={`text-2xl font-bold ${f.color.split(" ")[1]}`}>{f.value ?? 0}</p>
+                        <p className={`text-xs font-medium ${f.color.split(" ")[1]} opacity-80`}>{f.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {revenueData.totalUsers > 0 && (
+                    <div className="mt-4">
+                      <div className="flex justify-between text-xs text-gray-500 mb-1">
+                        <span>Free → Paid conversion</span>
+                        <span className="font-semibold text-[#0B1933]">
+                          {Math.round((revenueData.paidUsers / revenueData.totalUsers) * 100)}%
+                        </span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#C5D92D] rounded-full"
+                          style={{ width: `${Math.round((revenueData.paidUsers / revenueData.totalUsers) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Recent Payments ── */}
+                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="font-bold text-[#0B1933]">Recent Payments</h3>
+                    <span className="text-xs text-gray-400">Last 10 successful invoices</span>
+                  </div>
+                  {revenueData.recentPayments?.length > 0 ? (
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50">
+                          <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</th>
+                          <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Description</th>
+                          <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Amount</th>
+                          <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
+                          <th className="px-4 py-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {revenueData.recentPayments.map((payment: any) => (
+                          <tr key={payment.id} className="border-b border-gray-50 hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <p className="text-sm font-medium text-[#0B1933]">{payment.customerName ?? "—"}</p>
+                              <p className="text-xs text-gray-400">{payment.customerEmail ?? "—"}</p>
+                            </td>
+                            <td className="px-4 py-3 text-xs text-gray-500 max-w-48 truncate">{payment.description}</td>
+                            <td className="px-4 py-3">
+                              <span className="text-sm font-bold text-green-600">
+                                ${payment.amount.toFixed(2)} {payment.currency}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-xs text-gray-400">
+                              {new Date(payment.date).toLocaleDateString("en-AU")}
+                            </td>
+                            <td className="px-4 py-3">
+                              {payment.hostedUrl && (
+                                <a
+                                  href={payment.hostedUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-gray-400 hover:text-[#466DB5] transition"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="px-6 py-10 text-center">
+                      <CreditCard className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                      <p className="text-sm text-gray-400">No payments yet</p>
+                      <p className="text-xs text-gray-300 mt-1">Successful invoices from Stripe will appear here</p>
+                    </div>
+                  )}
+                </div>
+
               </div>
             )}
           </div>
