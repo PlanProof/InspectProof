@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ const FEATURES = [
   {
     icon: "clipboard" as const,
     title: "Digital Inspection Forms",
-    desc: "NCC 2022 & BCA-compliant checklists for every building class, stage, and trade.",
+    desc: "Purpose-built checklists for every discipline, inspection stage and trade type — aligned to Australian standards.",
   },
   {
     icon: "camera" as const,
@@ -30,21 +30,105 @@ const FEATURES = [
   },
   {
     icon: "file-text" as const,
-    title: "One-Tap Certificates",
-    desc: "Generate Inspection Certificates, Defect Notices, and Compliance Reports instantly.",
+    title: "One-Tap Reports",
+    desc: "Generate inspection certificates, compliance reports, defect notices and more — instantly from field data.",
   },
   {
     icon: "shield" as const,
-    title: "Issue Tracking",
-    desc: "Log defects, assign responsibility, and track resolution through to sign-off.",
+    title: "Audit-Ready Records",
+    desc: "Every inspection is timestamped, geotagged and securely stored — defensible records at every stage.",
   },
 ];
 
-const WHO_FOR = [
-  { icon: "briefcase" as const, label: "Building Certifiers" },
-  { icon: "tool" as const, label: "Site Inspectors" },
-  { icon: "bar-chart-2" as const, label: "Project Managers" },
-  { icon: "droplet" as const, label: "Plumbing Inspectors" },
+const PROFESSIONALS = [
+  {
+    icon: "shield" as const,
+    label: "Building Surveyors",
+    description:
+      "Manage the full statutory inspection lifecycle from a single platform — from hold points to compliance certificates.",
+    bullets: [
+      "Statutory hold point and mandatory inspection management",
+      "Occupation and compliance certificate documentation",
+      "Client-facing PDF report and certificate delivery",
+    ],
+  },
+  {
+    icon: "trending-up" as const,
+    label: "Structural Engineers",
+    description:
+      "Document structural inspections at every stage with timestamped evidence that stands up to scrutiny.",
+    bullets: [
+      "Stage-by-stage structural inspection records",
+      "Photo evidence attached to each inspection item",
+      "Engineer certification report export",
+    ],
+  },
+  {
+    icon: "droplet" as const,
+    label: "Plumbing Inspectors",
+    description:
+      "Carry out plumbing inspections with purpose-built checklists. Issue compliance certificates from the field.",
+    bullets: [
+      "Plumbing compliance certificate templates",
+      "Pressure test and fixture inspection records",
+      "Geocoded inspection reports for regulatory lodgement",
+    ],
+  },
+  {
+    icon: "tool" as const,
+    label: "Builders",
+    description:
+      "Record quality checks at every stage, flag non-conformances and maintain a full audit trail before handover.",
+    bullets: [
+      "Stage-based quality control checklists",
+      "Non-conformance flagging and resolution tracking",
+      "Pre-handover inspection records for clients",
+    ],
+  },
+  {
+    icon: "clipboard" as const,
+    label: "Site Supervisors",
+    description:
+      "Schedule inspections, log daily observations and ensure nothing slips through the cracks during construction.",
+    bullets: [
+      "Daily run sheet scheduling and management",
+      "Hold point and inspection gate management",
+      "Daily site diary and observation logging",
+    ],
+  },
+  {
+    icon: "alert-triangle" as const,
+    label: "WHS Officers",
+    description:
+      "Document safety inspections and hazard assessments in the field. Raise issues instantly and track corrective actions.",
+    bullets: [
+      "Safety inspection checklists aligned to WHS Act",
+      "Hazard and incident reporting with photo evidence",
+      "Audit-ready safety records and reports",
+    ],
+  },
+  {
+    icon: "home" as const,
+    label: "Pre-Purchase Inspectors",
+    description:
+      "Deliver professional building inspection reports faster than ever — generated before you leave the property.",
+    bullets: [
+      "Residential and commercial inspection templates",
+      "Branded PDF report generation from the field",
+      "Client delivery direct from the app",
+    ],
+  },
+  {
+    icon: "zap" as const,
+    label: "Fire Safety Engineers",
+    description:
+      "Conduct fire safety inspections, document system compliance and issue fire safety certificates from the field.",
+    bullets: [
+      "Fire safety system inspection checklists",
+      "Passive and active fire protection verification",
+      "Annual fire safety statement support",
+    ],
+  },
 ];
 
 export default function WelcomeScreen() {
@@ -52,6 +136,7 @@ export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
+  const [activeProf, setActiveProf] = useState(0);
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -74,6 +159,8 @@ export default function WelcomeScreen() {
 
   if (user) return null;
 
+  const prof = PROFESSIONALS[activeProf];
+
   return (
     <ScrollView
       style={styles.container}
@@ -87,16 +174,16 @@ export default function WelcomeScreen() {
 
         {/* Hero */}
         <View style={styles.hero}>
-          {/* Logo badge */}
           <View style={styles.logoBadge}>
             <Feather name="clipboard" size={28} color={Colors.primary} />
           </View>
           <Text style={styles.brandName}>InspectProof</Text>
           <Text style={styles.tagline}>
-            Australia's building certification{"\n"}and inspection platform
+            Inspection records that{"\n"}
+            <Text style={styles.taglineAccent}>prove compliance.</Text>
           </Text>
           <Text style={styles.subTagline}>
-            Built for certifiers, surveyors and engineers who demand accuracy on site and speed in the office.
+            The field inspection platform for every professional working within Australia's built environment.
           </Text>
         </View>
 
@@ -121,7 +208,7 @@ export default function WelcomeScreen() {
         <View style={styles.statsStrip}>
           {[
             { n: "10+", label: "Inspection\nTypes" },
-            { n: "NCC\n2022", label: "Compliant" },
+            { n: "8", label: "Professional\nDisciplines" },
             { n: "AU", label: "Built for\nAustralia" },
           ].map((s) => (
             <View key={s.label} style={styles.statItem}>
@@ -151,14 +238,62 @@ export default function WelcomeScreen() {
 
         {/* Who It's For */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Built for professionals</Text>
-          <View style={styles.whoGrid}>
-            {WHO_FOR.map((w) => (
-              <View key={w.label} style={styles.whoChip}>
-                <Feather name={w.icon} size={15} color={Colors.accent} />
-                <Text style={styles.whoLabel}>{w.label}</Text>
-              </View>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionBadge}>
+              <Text style={styles.sectionBadgeText}>WHO IT'S FOR</Text>
+            </View>
+            <Text style={styles.sectionTitle}>Built for every professional</Text>
+            <Text style={styles.sectionSubtitle}>
+              From building surveyors to fire safety engineers — InspectProof covers every discipline in Australia's built environment.
+            </Text>
+          </View>
+
+          {/* Professional chip scroll */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipScroll}
+            contentContainerStyle={styles.chipScrollContent}
+          >
+            {PROFESSIONALS.map((p, i) => (
+              <Pressable
+                key={p.label}
+                onPress={() => setActiveProf(i)}
+                style={({ pressed }) => [
+                  styles.chip,
+                  activeProf === i && styles.chipActive,
+                  pressed && { opacity: 0.75 },
+                ]}
+              >
+                <Feather
+                  name={p.icon}
+                  size={13}
+                  color={activeProf === i ? Colors.primary : "rgba(255,255,255,0.6)"}
+                />
+                <Text style={[styles.chipLabel, activeProf === i && styles.chipLabelActive]}>
+                  {p.label}
+                </Text>
+              </Pressable>
             ))}
+          </ScrollView>
+
+          {/* Active professional detail card */}
+          <View style={styles.profCard}>
+            <View style={styles.profCardHeader}>
+              <View style={styles.profIconWrap}>
+                <Feather name={prof.icon} size={20} color={Colors.accent} />
+              </View>
+              <Text style={styles.profCardTitle}>{prof.label}</Text>
+            </View>
+            <Text style={styles.profCardDesc}>{prof.description}</Text>
+            <View style={styles.profBullets}>
+              {prof.bullets.map((b) => (
+                <View key={b} style={styles.bulletRow}>
+                  <Feather name="check-circle" size={14} color={Colors.accent} />
+                  <Text style={styles.bulletText}>{b}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         </View>
 
@@ -176,13 +311,16 @@ export default function WelcomeScreen() {
             <Feather name="arrow-right" size={16} color={Colors.primary} />
           </Pressable>
           <Pressable onPress={() => router.push("/login" as any)}>
-            <Text style={styles.alreadyHave}>Already have an account? <Text style={styles.signInLink}>Sign In</Text></Text>
+            <Text style={styles.alreadyHave}>
+              Already have an account?{" "}
+              <Text style={styles.signInLink}>Sign In</Text>
+            </Text>
           </Pressable>
         </View>
 
         {/* Footer */}
         <Text style={styles.footerText}>InspectProof · contact@inspectproof.com.au</Text>
-        <Text style={styles.footerSub}>NCC 2022 · BCA · AS Standards Compatible</Text>
+        <Text style={styles.footerSub}>Standards-aligned for Australia's built environment</Text>
       </Animated.View>
     </ScrollView>
   );
@@ -208,11 +346,14 @@ const styles = StyleSheet.create({
     fontFamily: "PlusJakartaSans_600SemiBold",
   },
   tagline: {
-    fontSize: 17,
-    color: "rgba(255,255,255,0.85)",
+    fontSize: 22,
+    color: "rgba(255,255,255,0.9)",
     fontFamily: "PlusJakartaSans_600SemiBold",
     textAlign: "center",
-    lineHeight: 24,
+    lineHeight: 30,
+  },
+  taglineAccent: {
+    color: Colors.accent,
   },
   subTagline: {
     fontSize: 13,
@@ -220,7 +361,7 @@ const styles = StyleSheet.create({
     fontFamily: "PlusJakartaSans_600SemiBold",
     textAlign: "center",
     lineHeight: 19,
-    maxWidth: 300,
+    maxWidth: 310,
   },
 
   ctaRow: { gap: 10 },
@@ -247,8 +388,23 @@ const styles = StyleSheet.create({
   statN: { fontSize: 18, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.accent, lineHeight: 22, textAlign: "center" },
   statLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.45)", textAlign: "center", lineHeight: 13 },
 
-  section: { gap: 14 },
+  section: { gap: 16 },
+  sectionHeader: { gap: 8 },
+  sectionBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(197,217,45,0.12)",
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+    borderWidth: 1, borderColor: "rgba(197,217,45,0.25)",
+  },
+  sectionBadgeText: {
+    fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.accent, letterSpacing: 1,
+  },
   sectionTitle: { fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: "#FFFFFF" },
+  sectionSubtitle: {
+    fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "rgba(255,255,255,0.45)", lineHeight: 17,
+  },
   featureList: { gap: 10 },
   featureCard: {
     flexDirection: "row", gap: 14, alignItems: "flex-start",
@@ -265,14 +421,39 @@ const styles = StyleSheet.create({
   featureTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: "#FFFFFF" },
   featureDesc: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.5)", lineHeight: 17 },
 
-  whoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  whoChip: {
-    flexDirection: "row", alignItems: "center", gap: 7,
-    backgroundColor: "rgba(255,255,255,0.07)",
-    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
+  chipScroll: { marginHorizontal: -24 },
+  chipScrollContent: { paddingHorizontal: 24, gap: 8 },
+  chip: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    borderRadius: 20, paddingHorizontal: 13, paddingVertical: 8,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
-  whoLabel: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.8)" },
+  chipActive: {
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
+  },
+  chipLabel: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.7)" },
+  chipLabelActive: { color: Colors.primary },
+
+  profCard: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 16, padding: 18,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
+    gap: 12,
+  },
+  profCardHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  profIconWrap: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: "rgba(197,217,45,0.15)",
+    borderWidth: 1, borderColor: "rgba(197,217,45,0.25)",
+    alignItems: "center", justifyContent: "center",
+  },
+  profCardTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: "#FFFFFF", flex: 1 },
+  profCardDesc: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.55)", lineHeight: 19 },
+  profBullets: { gap: 10 },
+  bulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  bulletText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.7)", lineHeight: 17 },
 
   divider: { height: 1, backgroundColor: "rgba(255,255,255,0.08)" },
 
