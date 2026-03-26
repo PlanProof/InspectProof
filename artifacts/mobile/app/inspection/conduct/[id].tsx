@@ -261,6 +261,26 @@ export default function ConductInspectionScreen() {
     }
   };
 
+  const isCompleted = inspection?.status === "completed" || inspection?.status === "follow_up_required";
+
+  const toggleMarkComplete = async () => {
+    const newStatus = isCompleted ? "in_progress" : (failCount > 0 || monitorCount > 0 ? "follow_up_required" : "completed");
+    try {
+      await fetchWithAuth(`/api/inspections/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: newStatus,
+          ...(newStatus === "in_progress" ? {} : { completedDate: new Date().toISOString().split("T")[0] }),
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["inspections"] });
+      queryClient.invalidateQueries({ queryKey: ["inspection", id] });
+    } catch {
+      Alert.alert("Error", "Could not update status. Try again.");
+    }
+  };
+
   const openAddItemModal = (category: string) => {
     setAddItemDesc("");
     setAddItemModal({ visible: true, category });
@@ -517,7 +537,7 @@ export default function ConductInspectionScreen() {
           {/* Checklist items */}
           <ScrollView
             style={styles.scroll}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + (progress === 1 ? 130 : 80) }]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + (progress === 1 ? 160 : 80) }]}
             showsVerticalScrollIndicator={false}
             nestedScrollEnabled
           >
@@ -571,25 +591,31 @@ export default function ConductInspectionScreen() {
           {/* Bottom action bar — shown when 100% complete */}
           {progress === 1 && total > 0 && (
             <View style={[styles.generateBar, { paddingBottom: insets.bottom + 12 }]}>
-              <View style={styles.generateRow}>
-                <Pressable
-                  style={({ pressed }) => [styles.completeOnlyBtn, pressed && { opacity: 0.8 }]}
-                  onPress={() => router.back()}
-                >
-                  <Feather name="check" size={16} color={Colors.primary} />
-                  <Text style={styles.completeOnlyText}>Mark Complete</Text>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.generateBtn, pressed && { opacity: 0.85 }]}
-                  onPress={() => {
-                    const autoType = failCount > 0 ? "defect_notice" : "inspection_certificate";
-                    router.push(`/inspection/generate-report?id=${id}&autoType=${autoType}` as any);
-                  }}
-                >
-                  <Feather name="file-text" size={17} color={Colors.primary} />
-                  <Text style={styles.generateBtnText}>Generate Report</Text>
-                </Pressable>
-              </View>
+              {/* Row 1: Mark Complete toggle */}
+              <Pressable
+                style={({ pressed }) => [styles.markCompleteRow, pressed && { opacity: 0.75 }]}
+                onPress={toggleMarkComplete}
+              >
+                <View style={[styles.markCompleteCheck, isCompleted && styles.markCompleteCheckActive]}>
+                  {isCompleted && <Feather name="check" size={14} color="#fff" />}
+                </View>
+                <Text style={[styles.markCompleteLabel, isCompleted && styles.markCompleteLabelActive]}>
+                  {isCompleted ? "Inspection Marked Complete" : "Mark Complete"}
+                </Text>
+              </Pressable>
+
+              {/* Row 2: Generate Report */}
+              <Pressable
+                style={({ pressed }) => [styles.generateBtn, pressed && { opacity: 0.85 }]}
+                onPress={async () => {
+                  if (!isCompleted) await toggleMarkComplete();
+                  const autoType = failCount > 0 ? "defect_notice" : "inspection_certificate";
+                  router.push(`/inspection/generate-report?id=${id}&autoType=${autoType}` as any);
+                }}
+              >
+                <Feather name="file-text" size={17} color={Colors.primary} />
+                <Text style={styles.generateBtnText}>Generate Report</Text>
+              </Pressable>
             </View>
           )}
         </View>
@@ -1477,27 +1503,38 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
-  generateRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  completeOnlyBtn: {
-    flex: 1,
+  markCompleteRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    paddingVertical: 16,
-    borderRadius: 14,
-    backgroundColor: Colors.accent,
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    marginBottom: 8,
   },
-  completeOnlyText: {
+  markCompleteCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  markCompleteCheckActive: {
+    backgroundColor: "#22c55e",
+    borderColor: "#22c55e",
+  },
+  markCompleteLabel: {
     fontSize: 15,
     fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.primary,
+    color: Colors.textSecondary,
+  },
+  markCompleteLabelActive: {
+    color: "#16a34a",
+    fontFamily: "PlusJakartaSans_700Bold",
   },
   generateBtn: {
-    flex: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

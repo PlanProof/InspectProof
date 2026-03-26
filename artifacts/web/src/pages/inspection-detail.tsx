@@ -10,7 +10,7 @@ import {
   Award, BarChart2, Send, Download, Zap, X,
   UserCheck, ChevronDown, FolderOpen, Upload, File,
   FileImage, FileSpreadsheet, CheckSquare, PencilLine,
-  RefreshCw, Eye, ShieldCheck, Flame, Home, ClipboardCheck, Trash2,
+  RefreshCw, Eye, ShieldCheck, Flame, Home, ClipboardCheck, Trash2, Camera,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -587,7 +587,7 @@ export default function InspectionDetail() {
           onReload={load}
         />
       )}
-      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} />}
+      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} inspection={inspection} />}
       {tab === "Issues" && <IssuesTab issues={inspection.issues} />}
       {tab === "Documents" && (
         <DocumentsTab
@@ -1708,16 +1708,113 @@ function ChecklistTab({
   docsByItem,
   inspectionId,
   onReload,
+  inspection,
 }: {
   results: ChecklistResult[];
   docsByItem: Record<number, { id: number; name: string; mimeType?: string }[]>;
   inspectionId: number;
   onReload: () => void;
+  inspection: Inspection;
 }) {
   const [localResults, setLocalResults] = useState<ChecklistResult[]>(initialResults);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<number, ItemDraft>>({});
   const [saving, setSaving] = useState<number | null>(null);
+
+  const generatePhotoSheet = () => {
+    const allPhotos: { url: string; itemDesc: string; result: string | null; category: string }[] = [];
+    for (const r of localResults) {
+      const docs = docsByItem[r.id] ?? [];
+      for (const doc of docs) {
+        if (doc.mimeType?.startsWith("image/")) {
+          const baseUrl = window.location.origin;
+          allPhotos.push({
+            url: `${baseUrl}/api/inspections/${inspectionId}/documents/${doc.id}`,
+            itemDesc: r.description,
+            result: r.result ?? null,
+            category: r.category,
+          });
+        }
+      }
+    }
+
+    const resultBadge = (res: string | null) => {
+      const map: Record<string, [string, string]> = {
+        pass:    ["#16a34a", "Pass"],
+        fail:    ["#dc2626", "Fail"],
+        monitor: ["#d97706", "Monitor"],
+        na:      ["#6b7280", "N/A"],
+      };
+      if (!res) return "";
+      const [color, label] = map[res] ?? ["#6b7280", res];
+      return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${color};color:#fff;font-size:11px;font-weight:600;">${label}</span>`;
+    };
+
+    const photoGrid = allPhotos.length > 0
+      ? `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-bottom:32px;">${allPhotos.map(p =>
+          `<div style="break-inside:avoid;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+            <img src="${p.url}" style="width:100%;height:220px;object-fit:cover;" crossorigin="use-credentials" />
+            <div style="padding:10px 12px;">
+              <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">${p.category}</div>
+              <div style="font-size:13px;color:#111827;margin:3px 0;">${p.itemDesc}</div>
+              ${resultBadge(p.result)}
+            </div>
+          </div>`
+        ).join("")}</div>`
+      : `<p style="color:#6b7280;font-style:italic;">No photos attached to any checklist items.</p>`;
+
+    const checklistRows = Array.from(new Set(localResults.map(r => r.category))).map(cat => {
+      const items = localResults.filter(r => r.category === cat);
+      return `
+        <h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;margin:20px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px;">${cat}</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;">
+          ${items.map((item, i) => `
+            <tr style="border-bottom:1px solid #f3f4f6;">
+              <td style="padding:6px 8px;color:#9ca3af;width:28px;font-weight:600;">${i + 1}</td>
+              <td style="padding:6px 8px;color:#111827;">${item.description}</td>
+              <td style="padding:6px 8px;text-align:right;">${resultBadge(item.result ?? null)}</td>
+              ${item.notes ? `<td style="padding:6px 8px;color:#6b7280;font-style:italic;width:200px;font-size:12px;">${item.notes}</td>` : "<td></td>"}
+            </tr>
+          `).join("")}
+        </table>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Photo Sheet – ${inspection.projectName}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 32px; color: #111827; }
+  @media print { body { padding: 16px; } }
+</style>
+</head>
+<body>
+<div style="border-bottom:3px solid #0B1933;padding-bottom:16px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:flex-end;">
+  <div>
+    <div style="font-size:22px;font-weight:700;color:#0B1933;">${inspection.projectName}</div>
+    <div style="font-size:14px;color:#6b7280;margin-top:4px;">${inspection.inspectionType} — Photo &amp; Checklist Sheet</div>
+  </div>
+  <div style="text-align:right;font-size:13px;color:#6b7280;">
+    ${inspection.scheduledDate ? `<div>Date: ${inspection.scheduledDate}</div>` : ""}
+    ${inspection.inspectorName ? `<div>Inspector: ${inspection.inspectorName}</div>` : ""}
+    ${inspection.checklistTemplateName ? `<div>Template: ${inspection.checklistTemplateName}</div>` : ""}
+  </div>
+</div>
+<h2 style="font-size:16px;font-weight:700;color:#0B1933;margin:0 0 16px;">Photos</h2>
+${photoGrid}
+<h2 style="font-size:16px;font-weight:700;color:#0B1933;margin:32px 0 8px;border-top:2px solid #0B1933;padding-top:16px;">Checklist</h2>
+${checklistRows}
+<script>window.print();</script>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    }
+  };
 
   const RESULT_OPTS: { key: ResultKey; label: string; icon: React.ReactNode; activeClass: string; pendingClass: string }[] = [
     { key: "pass",    label: "Pass",    icon: <CheckCircle2 className="h-4 w-4" />, activeClass: "bg-green-50 border-green-400 text-green-700",  pendingClass: "hover:bg-green-50/50" },
@@ -1803,6 +1900,17 @@ function ChecklistTab({
 
   return (
     <div className="space-y-6">
+      {/* Photo Sheet button */}
+      <div className="flex justify-end">
+        <button
+          onClick={generatePhotoSheet}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-muted bg-card text-sm font-medium text-sidebar hover:bg-muted/40 transition-colors"
+        >
+          <Camera className="h-4 w-4" />
+          Photo Sheet
+        </button>
+      </div>
+
       {categories.map(cat => (
         <div key={cat}>
           <div className="flex items-center gap-2 mb-3">
