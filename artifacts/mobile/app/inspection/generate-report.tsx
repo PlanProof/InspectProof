@@ -17,7 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
-const REPORT_TYPES = [
+const ALL_REPORT_TYPES = [
   {
     key: "inspection_certificate",
     label: "Inspection Certificate",
@@ -54,9 +54,109 @@ const REPORT_TYPES = [
     bg: "#fef2f2",
     border: "#fca5a5",
   },
+  {
+    key: "summary",
+    label: "Inspection Summary",
+    desc: "Brief narrative summary of overall inspection outcomes",
+    icon: "file-text",
+    color: "#475569",
+    bg: "#f8fafc",
+    border: "#cbd5e1",
+  },
+  {
+    key: "quality_control_report",
+    label: "Quality Control Report",
+    desc: "QC results against approved plans and project specifications",
+    icon: "check-square",
+    color: "#0891b2",
+    bg: "#ecfeff",
+    border: "#67e8f9",
+  },
+  {
+    key: "non_conformance_report",
+    label: "Non-Conformance Report",
+    desc: "Formal record of non-conformances against design standards",
+    icon: "alert-triangle",
+    color: "#c026d3",
+    bg: "#fdf4ff",
+    border: "#e879f9",
+  },
+  {
+    key: "safety_inspection_report",
+    label: "Safety Inspection Report",
+    desc: "WHS site inspection findings and safety compliance status",
+    icon: "shield",
+    color: "#059669",
+    bg: "#ecfdf5",
+    border: "#6ee7b7",
+  },
+  {
+    key: "hazard_assessment_report",
+    label: "Hazard Assessment Report",
+    desc: "Site hazard identification and risk control requirements",
+    icon: "alert-octagon",
+    color: "#ea580c",
+    bg: "#fff7ed",
+    border: "#fdba74",
+  },
+  {
+    key: "corrective_action_report",
+    label: "Corrective Action Report",
+    desc: "Status of open corrective actions from prior inspections",
+    icon: "refresh-cw",
+    color: "#7c3aed",
+    bg: "#f5f3ff",
+    border: "#c4b5fd",
+  },
+  {
+    key: "pre_purchase_report",
+    label: "Pre-Purchase Building Report",
+    desc: "Property condition assessment for prospective buyers (AS 4349.1)",
+    icon: "home",
+    color: "#0369a1",
+    bg: "#f0f9ff",
+    border: "#7dd3fc",
+  },
+  {
+    key: "annual_fire_safety",
+    label: "Annual Fire Safety Statement",
+    desc: "Annual certification of essential fire safety measures",
+    icon: "activity",
+    color: "#b91c1c",
+    bg: "#fff1f2",
+    border: "#fda4af",
+  },
+  {
+    key: "fire_inspection_report",
+    label: "Fire Safety Inspection Report",
+    desc: "Fire safety compliance inspection findings and required actions",
+    icon: "zap",
+    color: "#b45309",
+    bg: "#fefce8",
+    border: "#fde68a",
+  },
 ] as const;
 
-type ReportTypeKey = typeof REPORT_TYPES[number]["key"];
+const DISCIPLINE_REPORT_TYPES: Record<string, string[]> = {
+  "Building Surveyor":      ["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice", "summary"],
+  "Structural Engineer":    ["compliance_report", "non_conformance_report", "defect_notice", "summary"],
+  "Plumbing Officer":       ["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice"],
+  "Builder / QC":           ["quality_control_report", "defect_notice", "non_conformance_report", "corrective_action_report", "summary"],
+  "WHS Officer":            ["safety_inspection_report", "hazard_assessment_report", "corrective_action_report", "non_compliance_notice"],
+  "Pre-Purchase Inspector": ["pre_purchase_report", "defect_notice", "summary", "compliance_report"],
+  "Fire Safety Engineer":   ["annual_fire_safety", "fire_inspection_report", "compliance_report", "defect_notice"],
+};
+
+const DEFAULT_TYPES = ["inspection_certificate", "compliance_report", "defect_notice", "summary"];
+
+function getReportTypesForDiscipline(discipline?: string | null) {
+  const allowed = discipline && DISCIPLINE_REPORT_TYPES[discipline]
+    ? DISCIPLINE_REPORT_TYPES[discipline]
+    : DEFAULT_TYPES;
+  return ALL_REPORT_TYPES.filter(t => allowed.includes(t.key));
+}
+
+type ReportTypeKey = typeof ALL_REPORT_TYPES[number]["key"];
 
 export default function GenerateReportScreen() {
   const { id, autoType } = useLocalSearchParams<{ id: string; autoType?: string }>();
@@ -65,9 +165,8 @@ export default function GenerateReportScreen() {
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   const [step, setStep] = useState<"select" | "preview" | "action">("select");
-  // Pre-select the suggested type if passed via navigation params
-  const [selectedType, setSelectedType] = useState<ReportTypeKey | null>(
-    (autoType && REPORT_TYPES.some(t => t.key === autoType) ? autoType as ReportTypeKey : null)
+  const [selectedType, setSelectedType] = useState<string | null>(
+    autoType || null
   );
   const [generating, setGenerating] = useState(false);
   const [report, setReport] = useState<any>(null);
@@ -167,7 +266,8 @@ export default function GenerateReportScreen() {
     }
   };
 
-  const selectedTypeObj = REPORT_TYPES.find(t => t.key === selectedType);
+  const REPORT_TYPES = getReportTypesForDiscipline(inspection?.checklistTemplateDiscipline);
+  const selectedTypeObj = ALL_REPORT_TYPES.find(t => t.key === selectedType);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -217,6 +317,14 @@ export default function GenerateReportScreen() {
           <Text style={styles.sectionSub}>
             The report will be auto-filled with inspection results, project details, and checklist items.
           </Text>
+          {inspection?.checklistTemplateDiscipline && (
+            <View style={styles.disciplineBanner}>
+              <Feather name="briefcase" size={13} color={Colors.secondary} />
+              <Text style={styles.disciplineBannerText}>
+                Showing report types for <Text style={{ fontWeight: "700" }}>{inspection.checklistTemplateDiscipline}</Text>
+              </Text>
+            </View>
+          )}
           {autoType && (
             <View style={styles.recommendedBanner}>
               <Feather name="zap" size={13} color="#C5D92D" />
@@ -425,6 +533,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: "#C5D92D",
+    lineHeight: 17,
+  },
+  disciplineBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.borderLight,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 4,
+  },
+  disciplineBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textSecondary,
     lineHeight: 17,
   },
   recommendedBadge: {

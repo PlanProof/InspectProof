@@ -109,6 +109,64 @@ Weather Conditions:   ${inspection?.weatherConditions || "Not recorded"}
 Duration:             ${inspection?.duration ? `${inspection.duration} minutes` : "Not recorded"}
 `;
 
+  const monitorItems = checklistResults.filter(i => i.result === "monitor");
+
+  // ── Helper: grouped checklist block ────────────────────────────────────────
+  const groupedChecklistBlock = (items: any[], heading = "DETAILED CHECKLIST RESULTS") => {
+    if (items.length === 0) return "";
+    const grouped: Record<string, any[]> = {};
+    items.forEach(item => {
+      const cat = item.category || "General";
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(item);
+    });
+    let block = `\n────────────────────────────────────────────────────────\n${heading}\n────────────────────────────────────────────────────────\n`;
+    Object.entries(grouped).forEach(([cat, its]) => {
+      block += `\n${cat.toUpperCase()}\n${"-".repeat(cat.length)}\n`;
+      its.forEach((item, idx) => {
+        const icon = item.result === "pass" ? "✓ PASS" : item.result === "fail" ? "✗ FAIL" : item.result === "monitor" ? "◎ MONITOR" : "— N/A";
+        block += `${idx + 1}. [${icon}] ${item.description}\n`;
+        if (item.codeReference) block += `   Code Ref: ${item.codeReference}\n`;
+        if (item.severity)      block += `   Severity: ${item.severity.toUpperCase()}\n`;
+        if (item.location)      block += `   Location: ${item.location}\n`;
+        if (item.tradeAllocated) block += `   Trade: ${item.tradeAllocated}\n`;
+        if (item.recommendedAction) block += `   Recommended Action: ${item.recommendedAction}\n`;
+        if (item.notes)         block += `   Notes: ${item.notes}\n`;
+      });
+    });
+    return block;
+  };
+
+  // ── Helper: defects / non-conformance block ─────────────────────────────────
+  const defectsBlock = (heading: string, actionLabel: string) => {
+    const relevantIssues = issues.filter(i => i.status !== "resolved");
+    if (failItems.length === 0 && monitorItems.length === 0 && relevantIssues.length === 0) return "";
+    let block = `\n────────────────────────────────────────────────────────\n${heading}\n────────────────────────────────────────────────────────\n`;
+    [...failItems, ...monitorItems].forEach((item, idx) => {
+      block += `\nItem ${idx + 1}: ${item.description}\n`;
+      if (item.severity)          block += `  Severity: ${item.severity.toUpperCase()}\n`;
+      if (item.location)          block += `  Location: ${item.location}\n`;
+      if (item.tradeAllocated)    block += `  Trade Allocated: ${item.tradeAllocated}\n`;
+      if (item.codeReference)     block += `  Code Reference: ${item.codeReference}\n`;
+      if (item.recommendedAction) block += `  Recommended Action: ${item.recommendedAction}\n`;
+      if (item.notes)             block += `  Inspector Notes: ${item.notes}\n`;
+      block += `  ${actionLabel}\n`;
+    });
+    if (relevantIssues.length > 0) {
+      block += `\nOUTSTANDING ISSUES (${relevantIssues.length})\n`;
+      relevantIssues.forEach((issue, idx) => {
+        block += `\n${idx + 1}. ${issue.title} [${(issue.severity || "medium").toUpperCase()}]\n`;
+        if (issue.description)     block += `   ${issue.description}\n`;
+        if (issue.location)        block += `   Location: ${issue.location}\n`;
+        if (issue.codeReference)   block += `   Code Ref: ${issue.codeReference}\n`;
+        if (issue.responsibleParty) block += `   Responsible: ${issue.responsibleParty}\n`;
+      });
+    }
+    return block;
+  };
+
+  // ── Content sections per report type ───────────────────────────────────────
+
   if (reportType === "inspection_certificate" || reportType === "compliance_report" || reportType === "summary") {
     content += `
 ────────────────────────────────────────────────────────
@@ -116,61 +174,181 @@ CHECKLIST RESULTS SUMMARY
 ────────────────────────────────────────────────────────
 Total Items Assessed: ${total}
 Pass:                 ${passItems.length}
+Monitor:              ${monitorItems.length}
 Fail:                 ${failItems.length}
 Not Applicable:       ${naItems.length}
 Pass Rate:            ${passRate !== null ? `${passRate}%` : "—"}
 Overall Result:       ${overallResult}
 `;
+    content += groupedChecklistBlock(checklistResults.filter(i => i.result !== "na"));
+  }
 
-    const reportableItems = checklistResults.filter(i => i.result !== "na");
-    if (reportableItems.length > 0) {
-      const grouped: Record<string, any[]> = {};
-      reportableItems.forEach(item => {
-        const cat = item.category || "General";
-        if (!grouped[cat]) grouped[cat] = [];
-        grouped[cat].push(item);
-      });
+  if (reportType === "defect_notice" || reportType === "non_compliance_notice") {
+    const heading = reportType === "non_compliance_notice" ? "NON-COMPLIANCE ITEMS" : "DEFECTS & NON-COMPLIANT ITEMS";
+    const action  = reportType === "non_compliance_notice"
+      ? "Action Required: Rectification required within 14 days; notify certifier upon completion."
+      : "Action Required: Rectification required prior to re-inspection.";
+    content += defectsBlock(heading, action);
+  } else if (failItems.length > 0) {
+    content += defectsBlock("DEFECTS IDENTIFIED", "Action Required: Rectification required prior to re-inspection.");
+  }
 
-      content += `\n────────────────────────────────────────────────────────\nDETAILED CHECKLIST RESULTS\n────────────────────────────────────────────────────────\n`;
-      Object.entries(grouped).forEach(([cat, items]) => {
-        content += `\n${cat.toUpperCase()}\n${"-".repeat(cat.length)}\n`;
-        items.forEach((item, idx) => {
-          const resultIcon = item.result === "pass" ? "✓ PASS" : item.result === "fail" ? "✗ FAIL" : "— N/A";
-          content += `${idx + 1}. [${resultIcon}] ${item.description}\n`;
-          if (item.codeReference) content += `   Code Ref: ${item.codeReference}\n`;
-          if (item.notes) content += `   Notes: ${item.notes}\n`;
-        });
-      });
+  if (reportType === "quality_control_report") {
+    content += `
+────────────────────────────────────────────────────────
+QUALITY CONTROL RESULTS SUMMARY
+────────────────────────────────────────────────────────
+Total QC Items:       ${total}
+Conforming:           ${passItems.length}
+Non-Conforming:       ${failItems.length}
+Under Observation:    ${monitorItems.length}
+Not Applicable:       ${naItems.length}
+Conformance Rate:     ${passRate !== null ? `${passRate}%` : "—"}
+QC Outcome:           ${failItems.length === 0 ? "CONFORMING" : "NON-CONFORMING — Action Required"}
+`;
+    content += groupedChecklistBlock(checklistResults.filter(i => i.result !== "na"), "QC ITEM DETAIL");
+    if (failItems.length > 0 || monitorItems.length > 0) {
+      content += defectsBlock("NON-CONFORMING ITEMS", "Action Required: Corrective work required before sign-off.");
     }
   }
 
-  if (reportType === "defect_notice" || reportType === "non_compliance_notice" || failItems.length > 0) {
-    const relevantIssues = issues.filter(i => i.status !== "resolved");
+  if (reportType === "non_conformance_report") {
+    content += `
+────────────────────────────────────────────────────────
+NON-CONFORMANCE SUMMARY
+────────────────────────────────────────────────────────
+Total Items Assessed: ${total}
+Conforming:           ${passItems.length}
+Non-Conforming:       ${failItems.length}
+Under Observation:    ${monitorItems.length}
+Pass Rate:            ${passRate !== null ? `${passRate}%` : "—"}
+`;
+    content += defectsBlock("NON-CONFORMANCES IDENTIFIED", "Required Action: Corrective measure to be implemented per project specification and relevant standard.");
+    content += groupedChecklistBlock(passItems, "CONFORMING ITEMS");
+  }
 
-    if (failItems.length > 0 || relevantIssues.length > 0) {
-      content += `\n────────────────────────────────────────────────────────\n`;
-      content += reportType === "non_compliance_notice"
-        ? "NON-COMPLIANCE ITEMS\n"
-        : "DEFECTS & NON-COMPLIANT ITEMS\n";
-      content += `────────────────────────────────────────────────────────\n`;
+  if (reportType === "safety_inspection_report") {
+    content += `
+────────────────────────────────────────────────────────
+WHS INSPECTION SUMMARY
+────────────────────────────────────────────────────────
+Total Safety Items:   ${total}
+Compliant:            ${passItems.length}
+Non-Compliant:        ${failItems.length}
+Monitor / Caution:    ${monitorItems.length}
+Not Applicable:       ${naItems.length}
+Compliance Rate:      ${passRate !== null ? `${passRate}%` : "—"}
+Safety Outcome:       ${failItems.length === 0 ? "COMPLIANT" : "NON-COMPLIANT — Immediate Action Required"}
+`;
+    content += groupedChecklistBlock(checklistResults.filter(i => i.result !== "na"), "WHS INSPECTION FINDINGS");
+    if (failItems.length > 0 || monitorItems.length > 0) {
+      content += defectsBlock("WHS BREACHES & CAUTIONS", "Required Action: Immediate rectification required under WHS Act 2011.");
+    }
+  }
 
-      failItems.forEach((item, idx) => {
-        content += `\nItem ${idx + 1}: ${item.description}\n`;
-        if (item.codeReference) content += `  NCC Reference: ${item.codeReference}\n`;
-        if (item.notes) content += `  Inspector Notes: ${item.notes}\n`;
-        content += `  Action Required: Rectification required prior to re-inspection\n`;
-      });
+  if (reportType === "hazard_assessment_report") {
+    content += `
+────────────────────────────────────────────────────────
+HAZARD ASSESSMENT SUMMARY
+────────────────────────────────────────────────────────
+Total Hazard Items:   ${total}
+Acceptable:           ${passItems.length}
+Hazards Identified:   ${failItems.length}
+Monitor:              ${monitorItems.length}
+Not Applicable:       ${naItems.length}
+Risk Outcome:         ${failItems.length === 0 ? "ACCEPTABLE RISK" : "UNACCEPTABLE RISK — Action Required"}
+`;
+    content += groupedChecklistBlock(checklistResults.filter(i => i.result !== "na"), "HAZARD ASSESSMENT FINDINGS");
+    if (failItems.length > 0 || monitorItems.length > 0) {
+      content += defectsBlock("IDENTIFIED HAZARDS REQUIRING CONTROL", "Required Control Measure: Implement risk control(s) per hierarchy of controls before works resume.");
+    }
+  }
 
-      if (relevantIssues.length > 0) {
-        content += `\nOUTSTANDING ISSUES (${relevantIssues.length})\n`;
-        relevantIssues.forEach((issue, idx) => {
-          content += `\n${idx + 1}. ${issue.title} [${(issue.severity || "medium").toUpperCase()}]\n`;
-          if (issue.description) content += `   ${issue.description}\n`;
-          if (issue.location) content += `   Location: ${issue.location}\n`;
-          if (issue.codeReference) content += `   Code Ref: ${issue.codeReference}\n`;
-          if (issue.responsibleParty) content += `   Responsible: ${issue.responsibleParty}\n`;
-        });
-      }
+  if (reportType === "corrective_action_report") {
+    content += `
+────────────────────────────────────────────────────────
+CORRECTIVE ACTION SUMMARY
+────────────────────────────────────────────────────────
+Total Items Reviewed: ${total}
+Closed Out:           ${passItems.length}
+Open / Pending:       ${failItems.length}
+Under Monitoring:     ${monitorItems.length}
+`;
+    content += defectsBlock("OPEN CORRECTIVE ACTIONS", "Status: Open — Corrective action required. Notify site supervisor upon completion.");
+    content += groupedChecklistBlock(passItems, "CLOSED / COMPLETED ACTIONS");
+  }
+
+  if (reportType === "pre_purchase_report") {
+    const critical = failItems.filter(i => i.severity === "critical");
+    const major    = failItems.filter(i => i.severity === "major" || (!i.severity && i.result === "fail"));
+    const minor    = failItems.filter(i => i.severity === "minor" || i.severity === "cosmetic");
+    const conditionRating = failItems.length === 0 ? "GOOD" : critical.length > 0 ? "POOR — Immediate attention required" : major.length > 2 ? "FAIR — Significant defects present" : "FAIR — Minor defects present";
+
+    content += `
+────────────────────────────────────────────────────────
+PRE-PURCHASE INSPECTION SUMMARY
+────────────────────────────────────────────────────────
+Total Items Inspected: ${total}
+Satisfactory:          ${passItems.length}
+Requires Attention:    ${monitorItems.length}
+Defects Found:         ${failItems.length}
+  — Critical:          ${critical.length}
+  — Major:             ${major.length}
+  — Minor/Cosmetic:    ${minor.length}
+Not Applicable:        ${naItems.length}
+Overall Condition:     ${conditionRating}
+
+IMPORTANT NOTICE: This report represents the condition of the property
+as observed at the time of inspection. Concealed defects not observable
+without destructive investigation are excluded. This report is prepared
+for the exclusive use of the client named above.
+`;
+    content += groupedChecklistBlock(checklistResults.filter(i => i.result !== "na"), "PROPERTY CONDITION FINDINGS");
+    if (failItems.length > 0 || monitorItems.length > 0) {
+      content += defectsBlock("DEFECTS & ITEMS REQUIRING ATTENTION", "Recommended Action: Obtain specialist quotation before settlement.");
+    }
+  }
+
+  if (reportType === "annual_fire_safety") {
+    content += `
+────────────────────────────────────────────────────────
+ANNUAL FIRE SAFETY STATEMENT
+────────────────────────────────────────────────────────
+Statement Reference:   ${project.certificationNumber || "—"}
+Building Address:      ${project.siteAddress}, ${project.suburb} ${project.state} ${project.postcode}
+Building Class:        ${project.buildingClassification}
+
+ESSENTIAL FIRE SAFETY MEASURES ASSESSMENT
+────────────────────────────────────────────────────────
+Total Measures Assessed: ${total}
+Compliant:               ${passItems.length}
+Non-Compliant:           ${failItems.length}
+Under Observation:       ${monitorItems.length}
+Not Applicable:          ${naItems.length}
+Overall Compliance:      ${failItems.length === 0 ? "COMPLIANT" : "NON-COMPLIANT"}
+`;
+    content += groupedChecklistBlock(checklistResults.filter(i => i.result !== "na"), "ESSENTIAL FIRE SAFETY MEASURES");
+    if (failItems.length > 0) {
+      content += defectsBlock("NON-COMPLIANT FIRE SAFETY MEASURES", "Action Required: Rectification required within 14 days. Council must be notified of non-compliance.");
+    }
+  }
+
+  if (reportType === "fire_inspection_report") {
+    content += `
+────────────────────────────────────────────────────────
+FIRE SAFETY INSPECTION FINDINGS
+────────────────────────────────────────────────────────
+Total Items Inspected: ${total}
+Compliant:             ${passItems.length}
+Non-Compliant:         ${failItems.length}
+Monitor:               ${monitorItems.length}
+Not Applicable:        ${naItems.length}
+Compliance Rate:       ${passRate !== null ? `${passRate}%` : "—"}
+Inspection Outcome:    ${failItems.length === 0 ? "COMPLIANT" : "NON-COMPLIANT — Action Required"}
+`;
+    content += groupedChecklistBlock(checklistResults.filter(i => i.result !== "na"), "FIRE SAFETY INSPECTION ITEMS");
+    if (failItems.length > 0 || monitorItems.length > 0) {
+      content += defectsBlock("NON-COMPLIANT FIRE SAFETY ITEMS", "Required Action: Rectification required prior to re-inspection. Do not occupy if fire egress is compromised.");
     }
   }
 
@@ -192,6 +370,22 @@ CERTIFICATION
     content += `This Non-Compliance Notice is issued pursuant to the Environmental Planning and Assessment Act 1979 / Building Act. The responsible party is required to rectify all identified non-compliances within the specified timeframe and notify the certifier upon completion.`;
   } else if (reportType === "defect_notice") {
     content += `This Defect Notice is issued to advise that defects have been identified during the above inspection. All defects must be rectified and a re-inspection arranged prior to proceeding to the next stage of construction.`;
+  } else if (reportType === "quality_control_report") {
+    content += `I confirm that the above Quality Control inspection was carried out in accordance with the approved Quality Management Plan. All non-conformances must be closed out before the next stage of works commences.`;
+  } else if (reportType === "non_conformance_report") {
+    content += `This Non-Conformance Report has been prepared in accordance with the Project Quality Plan. All identified non-conformances must be reviewed and corrective actions implemented within the timeframe agreed with the project team.`;
+  } else if (reportType === "safety_inspection_report") {
+    content += `This WHS Inspection has been conducted in accordance with the Work Health and Safety Act 2011 and the applicable Safe Work Method Statements. All identified non-compliances must be rectified immediately.`;
+  } else if (reportType === "hazard_assessment_report") {
+    content += `This Hazard Assessment was conducted in accordance with the WHS Act 2011 and AS/NZS ISO 31000. All identified hazards must have appropriate controls implemented prior to the commencement or continuation of works.`;
+  } else if (reportType === "corrective_action_report") {
+    content += `This Corrective Action Report documents the status of all identified corrective actions. Open items must be closed by the responsible party within the agreed timeframe.`;
+  } else if (reportType === "pre_purchase_report") {
+    content += `This Pre-Purchase Building Inspection Report has been prepared in accordance with AS 4349.1-2007 Inspection of Buildings. The report is intended solely for the use of the commissioning client. This report does not represent an approval of the property for purchase.`;
+  } else if (reportType === "annual_fire_safety") {
+    content += `I, the undersigned accredited fire safety practitioner, certify that each essential fire safety measure installed in the above building has been assessed by a suitably qualified person and found to be capable of performing to the standard required by the current fire safety schedule.`;
+  } else if (reportType === "fire_inspection_report") {
+    content += `This Fire Safety Inspection Report has been prepared in accordance with the Environmental Planning and Assessment (Development Certification and Fire Safety) Regulation 2021. All identified non-compliances must be rectified within 14 days.`;
   } else {
     content += `This report has been prepared based on a site inspection conducted on the date noted above. All findings are based on conditions observed at the time of inspection.`;
   }

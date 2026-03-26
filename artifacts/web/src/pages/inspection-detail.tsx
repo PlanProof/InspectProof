@@ -9,7 +9,7 @@ import {
   Award, BarChart2, Send, Download, Zap, X,
   UserCheck, ChevronDown, FolderOpen, Upload, File,
   FileImage, FileSpreadsheet, CheckSquare, PencilLine,
-  RefreshCw, Eye,
+  RefreshCw, Eye, ShieldCheck, Flame, Home, ClipboardCheck,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -105,6 +105,7 @@ interface Inspection {
   weatherConditions?: string;
   checklistTemplateId?: number;
   checklistTemplateName?: string;
+  checklistTemplateDiscipline?: string | null;
   passCount: number;
   failCount: number;
   monitorCount: number;
@@ -167,16 +168,60 @@ function severityColors(sev: string) {
 const TABS = ["Overview", "Checklist", "Issues", "Documents"] as const;
 type Tab = typeof TABS[number];
 
-// ── Report type suggestion ────────────────────────────────────────────────────
+// ── Report type catalogue ─────────────────────────────────────────────────────
 
-const REPORT_TYPE_LABELS_MAP: Record<string, string> = {
-  inspection_certificate: "Inspection Certificate",
-  compliance_report: "Compliance Report",
-  defect_notice: "Defect Notice",
-  non_compliance_notice: "Non-Compliance Notice",
+const ALL_REPORT_TYPE_LABELS: Record<string, string> = {
+  inspection_certificate:   "Inspection Certificate",
+  compliance_report:        "Compliance Report",
+  defect_notice:            "Defect Notice",
+  non_compliance_notice:    "Non-Compliance Notice",
+  summary:                  "Inspection Summary",
+  quality_control_report:   "Quality Control Report",
+  non_conformance_report:   "Non-Conformance Report",
+  safety_inspection_report: "Safety Inspection Report",
+  hazard_assessment_report: "Hazard Assessment Report",
+  corrective_action_report: "Corrective Action Report",
+  pre_purchase_report:      "Pre-Purchase Building Report",
+  annual_fire_safety:       "Annual Fire Safety Statement",
+  fire_inspection_report:   "Fire Safety Inspection Report",
 };
 
+const ALL_REPORT_TYPES_META: Array<{ key: string; label: string; icon: React.ElementType; desc: string }> = [
+  { key: "inspection_certificate",   label: "Inspection Certificate",        icon: Award,          desc: "Formal certificate confirming compliance with NCC requirements" },
+  { key: "compliance_report",        label: "Compliance Report",             icon: BarChart2,      desc: "Detailed checklist results and overall compliance status" },
+  { key: "defect_notice",            label: "Defect Notice",                 icon: AlertTriangle,  desc: "Notice of defects requiring rectification before the next stage" },
+  { key: "non_compliance_notice",    label: "Non-Compliance Notice",         icon: XCircle,        desc: "Formal notice of non-compliant work under the Building Act" },
+  { key: "summary",                  label: "Inspection Summary",            icon: FileText,       desc: "Brief narrative summary of overall inspection outcomes" },
+  { key: "quality_control_report",   label: "Quality Control Report",        icon: ClipboardCheck, desc: "QC results against approved plans and project specifications" },
+  { key: "non_conformance_report",   label: "Non-Conformance Report",        icon: AlertTriangle,  desc: "Formal record of non-conformances against design standards" },
+  { key: "safety_inspection_report", label: "Safety Inspection Report",      icon: ShieldCheck,    desc: "WHS site inspection findings and safety compliance status" },
+  { key: "hazard_assessment_report", label: "Hazard Assessment Report",      icon: ShieldCheck,    desc: "Site hazard identification and risk control requirements" },
+  { key: "corrective_action_report", label: "Corrective Action Report",      icon: RefreshCw,      desc: "Status of open corrective actions from prior inspections" },
+  { key: "pre_purchase_report",      label: "Pre-Purchase Building Report",  icon: Home,           desc: "Property condition assessment for prospective buyers (AS 4349.1)" },
+  { key: "annual_fire_safety",       label: "Annual Fire Safety Statement",  icon: Flame,          desc: "Annual certification of essential fire safety measures" },
+  { key: "fire_inspection_report",   label: "Fire Safety Inspection Report", icon: Flame,          desc: "Fire safety compliance inspection findings and actions" },
+];
+
+const DISCIPLINE_REPORT_TYPES: Record<string, string[]> = {
+  "Building Surveyor":      ["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice", "summary"],
+  "Structural Engineer":    ["compliance_report", "non_conformance_report", "defect_notice", "summary"],
+  "Plumbing Officer":       ["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice"],
+  "Builder / QC":           ["quality_control_report", "defect_notice", "non_conformance_report", "corrective_action_report", "summary"],
+  "WHS Officer":            ["safety_inspection_report", "hazard_assessment_report", "corrective_action_report", "non_compliance_notice"],
+  "Pre-Purchase Inspector": ["pre_purchase_report", "defect_notice", "summary", "compliance_report"],
+  "Fire Safety Engineer":   ["annual_fire_safety", "fire_inspection_report", "compliance_report", "defect_notice"],
+};
+
+const DEFAULT_DISCIPLINE_TYPES = ["inspection_certificate", "compliance_report", "defect_notice", "summary"];
+
+function getAllowedReportTypes(discipline?: string | null): string[] {
+  if (discipline && DISCIPLINE_REPORT_TYPES[discipline]) return DISCIPLINE_REPORT_TYPES[discipline];
+  return DEFAULT_DISCIPLINE_TYPES;
+}
+
 function getSuggestedReportType(inspection: Inspection): string {
+  const allowed = getAllowedReportTypes(inspection.checklistTemplateDiscipline);
+
   // 1. Check doc templates linked to this inspection's checklist template
   try {
     const raw = localStorage.getItem("inspectproof_doc_templates");
@@ -185,14 +230,18 @@ function getSuggestedReportType(inspection: Inspection): string {
       const linked = docTemplates.find(
         dt => dt.defaultReportType && dt.linkedChecklistIds.includes(inspection.checklistTemplateId as number)
       );
-      if (linked?.defaultReportType) return linked.defaultReportType;
+      if (linked?.defaultReportType && allowed.includes(linked.defaultReportType)) return linked.defaultReportType;
     }
   } catch {}
 
-  // 2. Heuristic fallback based on results
-  if (inspection.failCount > 0) return "defect_notice";
-  if (inspection.passCount > 0) return "inspection_certificate";
-  return "compliance_report";
+  // 2. Heuristic: prefer a defect-type report when failures exist
+  if (inspection.failCount > 0) {
+    const defectType = allowed.find(k => ["defect_notice", "non_conformance_report", "safety_inspection_report", "hazard_assessment_report", "pre_purchase_report"].includes(k));
+    if (defectType) return defectType;
+  }
+
+  // 3. First allowed type as default
+  return allowed[0] || "compliance_report";
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -262,12 +311,10 @@ export default function InspectionDetail() {
 
   useState(() => { load(); });
 
-  const REPORT_TYPES_DESKTOP = [
-    { key: "inspection_certificate", label: "Inspection Certificate", icon: Award },
-    { key: "compliance_report", label: "Compliance Report", icon: BarChart2 },
-    { key: "defect_notice", label: "Defect Notice", icon: AlertTriangle },
-    { key: "non_compliance_notice", label: "Non-Compliance Notice", icon: XCircle },
-  ] as const;
+  const disciplineReportTypes = inspection
+    ? getAllowedReportTypes(inspection.checklistTemplateDiscipline)
+    : DEFAULT_DISCIPLINE_TYPES;
+  const REPORT_TYPES_DESKTOP = ALL_REPORT_TYPES_META.filter(rt => disciplineReportTypes.includes(rt.key));
 
   const generateReport = async () => {
     setGeneratingReport(true);
@@ -535,16 +582,25 @@ export default function InspectionDetail() {
               <div className="overflow-auto space-y-4">
                 {inspection && (() => {
                   const suggested = getSuggestedReportType(inspection);
+                  const discipline = inspection.checklistTemplateDiscipline;
                   return (
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-sidebar text-white text-xs">
-                      <Zap className="h-3.5 w-3.5 text-brand-pear shrink-0" />
-                      <span>
-                        <span className="font-semibold text-brand-pear">{REPORT_TYPE_LABELS_MAP[suggested]}</span>
-                        {" "}has been pre-selected based on your results
-                        {inspection.checklistTemplateId ? " and linked template settings" : ""}.
-                        You can change it below.
-                      </span>
-                    </div>
+                    <>
+                      {discipline && (
+                        <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground">
+                          <Building className="h-3.5 w-3.5 shrink-0" />
+                          <span>Showing report types for <span className="font-semibold text-foreground">{discipline}</span></span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 p-3 rounded-lg bg-sidebar text-white text-xs">
+                        <Zap className="h-3.5 w-3.5 text-brand-pear shrink-0" />
+                        <span>
+                          <span className="font-semibold text-brand-pear">{ALL_REPORT_TYPE_LABELS[suggested]}</span>
+                          {" "}has been pre-selected based on your results
+                          {inspection.checklistTemplateId ? " and linked template settings" : ""}.
+                          You can change it below.
+                        </span>
+                      </div>
+                    </>
                   );
                 })()}
                 <div className="space-y-2">
@@ -555,7 +611,7 @@ export default function InspectionDetail() {
                       <label
                         key={rt.key}
                         className={cn(
-                          "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                          "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
                           selectedReportType === rt.key
                             ? "border-sidebar bg-sidebar/5"
                             : "border-border hover:border-sidebar/30"
@@ -569,11 +625,14 @@ export default function InspectionDetail() {
                           onChange={() => setSelectedReportType(rt.key)}
                           className="sr-only"
                         />
-                        <Icon className={cn("h-4 w-4 shrink-0", selectedReportType === rt.key ? "text-sidebar" : "text-muted-foreground")} />
-                        <span className={cn("text-sm font-medium", selectedReportType === rt.key ? "text-sidebar" : "text-muted-foreground")}>
-                          {rt.label}
-                        </span>
-                        <div className="ml-auto flex items-center gap-2">
+                        <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", selectedReportType === rt.key ? "text-sidebar" : "text-muted-foreground")} />
+                        <div className="flex-1 min-w-0">
+                          <span className={cn("text-sm font-medium block", selectedReportType === rt.key ? "text-sidebar" : "text-foreground")}>
+                            {rt.label}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground leading-snug">{rt.desc}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 mt-0.5">
                           {isRecommended && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-pear text-sidebar">Recommended</span>
                           )}

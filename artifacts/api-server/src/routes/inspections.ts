@@ -29,9 +29,11 @@ async function formatInspection(i: any) {
   const counts = await getInspectionCounts(i.id);
 
   let checklistTemplateName: string | null = null;
+  let checklistTemplateDiscipline: string | null = null;
   if (i.checklistTemplateId) {
     const tmpl = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, i.checklistTemplateId));
     checklistTemplateName = tmpl[0]?.name || null;
+    checklistTemplateDiscipline = tmpl[0]?.discipline || null;
   }
 
   return {
@@ -52,6 +54,7 @@ async function formatInspection(i: any) {
     weatherConditions: i.weatherConditions,
     checklistTemplateId: i.checklistTemplateId,
     checklistTemplateName,
+    checklistTemplateDiscipline,
     ...counts,
     createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : i.createdAt,
   };
@@ -202,11 +205,13 @@ router.get("/:id", async (req, res) => {
       if (inspUsers[0]) inspectorNameResolved = `${inspUsers[0].firstName} ${inspUsers[0].lastName}`;
     }
 
-    // Resolve checklist template name
+    // Resolve checklist template name + discipline
     let checklistTemplateName: string | null = null;
+    let checklistTemplateDiscipline: string | null = null;
     if (inspection.checklistTemplateId) {
       const tmpl = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, inspection.checklistTemplateId));
       checklistTemplateName = tmpl[0]?.name ?? null;
+      checklistTemplateDiscipline = tmpl[0]?.discipline ?? null;
     }
 
     res.json({
@@ -224,6 +229,7 @@ router.get("/:id", async (req, res) => {
       weatherConditions: inspection.weatherConditions,
       checklistTemplateId: inspection.checklistTemplateId,
       checklistTemplateName,
+      checklistTemplateDiscipline,
       ...counts,
       createdAt: inspection.createdAt instanceof Date ? inspection.createdAt.toISOString() : inspection.createdAt,
       checklistResults: formattedResults,
