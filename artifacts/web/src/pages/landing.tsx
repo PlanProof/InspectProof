@@ -260,6 +260,18 @@ function Features() {
 
 const PROFESSIONALS = [
   {
+    icon: ShieldCheck,
+    role: "Building Surveyors",
+    description:
+      "Manage the full statutory inspection lifecycle from a single platform. InspectProof gives building surveyors a professional system for issuing compliant inspection certificates, managing hold points and delivering client-ready reports — from minor works to complex Class 2–9 developments.",
+    bullets: [
+      "NCC 2022 and BCA-aligned inspection checklists",
+      "Statutory hold point and mandatory inspection management",
+      "Occupation and compliance certificate documentation",
+      "Client-facing PDF report and certificate delivery",
+    ],
+  },
+  {
     icon: Building2,
     role: "Structural Engineers",
     description:
@@ -281,18 +293,6 @@ const PROFESSIONALS = [
       "AS/NZS and state regulation aligned checklists",
       "Pressure test and fixture inspection records",
       "Geocoded inspection reports for regulatory lodgement",
-    ],
-  },
-  {
-    icon: Wrench,
-    role: "Private Certifiers & Surveyors",
-    description:
-      "Handle the full volume of a private practice. InspectProof scales with your workload, giving you a professional system for every job — from minor works to complex developments.",
-    bullets: [
-      "Unlimited projects and inspection records",
-      "Multi-inspector team with role-based access",
-      "Daily run sheet scheduling and dispatch",
-      "Client-facing PDF report delivery",
     ],
   },
   {
