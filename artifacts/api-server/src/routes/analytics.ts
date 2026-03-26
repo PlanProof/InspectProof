@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { sql, ne, eq } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { db, projectsTable, inspectionsTable, issuesTable, reportsTable, activityLogsTable, checklistResultsTable, checklistItemsTable, usersTable } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -55,7 +55,7 @@ router.get("/dashboard", async (req, res) => {
       createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : i.createdAt,
     }));
 
-    // Upcoming (scheduled, future) for legacy compat
+    // Upcoming (scheduled, future)
     const todayStr2 = now.toISOString().split("T")[0];
     const formattedUpcoming = allInspections.filter(
       i => i.status === "scheduled" && i.scheduledDate >= todayStr2
@@ -86,6 +86,15 @@ router.get("/dashboard", async (req, res) => {
       scheduled: sql<number>`count(*) filter (where "inspections"."status" = 'scheduled')::int`,
     }).from(inspectionsTable).groupBy(inspectionsTable.inspectionType);
 
+    // Overall compliance rate for KPI display
+    const [totalResultsRow] = await db.select({ count: sql<number>`count(*)::int` }).from(checklistResultsTable)
+      .where(sql`${checklistResultsTable.result} != 'pending'`);
+    const [passResultsRow] = await db.select({ count: sql<number>`count(*)::int` }).from(checklistResultsTable)
+      .where(sql`${checklistResultsTable.result} = 'pass'`);
+    const complianceRate = totalResultsRow.count > 0
+      ? Math.round((passResultsRow.count / totalResultsRow.count) * 100)
+      : null;
+
     res.json({
       totalProjects: totalProjectsRow.count,
       activeProjects: activeProjectsRow.count,
@@ -110,6 +119,7 @@ router.get("/dashboard", async (req, res) => {
       projectsByStage,
       issuesBySeverity,
       inspectionsByType,
+      complianceRate,
     });
   } catch (err) {
     req.log.error({ err }, "Dashboard analytics error");
@@ -119,14 +129,68 @@ router.get("/dashboard", async (req, res) => {
 
 router.get("/trends", async (req, res) => {
   try {
-    // Inspections by month (last 6 months)
+    // Inspections by month (last 12 months)
     const inspectionsByMonth = await db.select({
-      month: sql<string>`to_char(${inspectionsTable.scheduledDate}::date, 'Mon YYYY')`,
-      count: sql<number>`count(*)::int`,
+      month: sql<string>`to_char(date_trunc('month', ${inspectionsTable.scheduledDate}::date), 'Mon')`,
+      total: sql<number>`count(*)::int`,
     }).from(inspectionsTable)
-      .where(sql`${inspectionsTable.scheduledDate}::date >= now() - interval '6 months'`)
-      .groupBy(sql`to_char(${inspectionsTable.scheduledDate}::date, 'Mon YYYY'), date_trunc('month', ${inspectionsTable.scheduledDate}::date)`)
+      .where(sql`${inspectionsTable.scheduledDate}::date >= now() - interval '12 months'`)
+      .groupBy(sql`date_trunc('month', ${inspectionsTable.scheduledDate}::date)`)
       .orderBy(sql`date_trunc('month', ${inspectionsTable.scheduledDate}::date)`);
+
+    // Pass / Fail / N/A breakdown from checklist results
+    const passFailRaw = await db.select({
+      result: checklistResultsTable.result,
+      count: sql<number>`count(*)::int`,
+    }).from(checklistResultsTable)
+      .where(sql`${checklistResultsTable.result} != 'pending'`)
+      .groupBy(checklistResultsTable.result);
+
+    const resultLabelMap: Record<string, string> = {
+      pass: "Pass",
+      fail: "Fail",
+      na: "N/A",
+      monitor: "Monitor",
+    };
+    // Merge by label so duplicates combine correctly
+    const passFailMap: Record<string, number> = {};
+    for (const r of passFailRaw) {
+      const label = resultLabelMap[r.result] ?? r.result;
+      passFailMap[label] = (passFailMap[label] ?? 0) + r.count;
+    }
+    const passFailBreakdown = Object.entries(passFailMap).map(([name, value]) => ({ name, value }));
+
+    // Compliance rate trend — monthly for last 12 months
+    const complianceTrendRaw = await db.execute(sql`
+      SELECT
+        to_char(date_trunc('month', created_at::date), 'Mon') AS month,
+        date_trunc('month', created_at::date) AS month_date,
+        ROUND(
+          100.0 * COUNT(*) FILTER (WHERE result = 'pass') /
+          NULLIF(COUNT(*) FILTER (WHERE result != 'pending'), 0)
+        )::int AS rate
+      FROM checklist_results
+      WHERE created_at::date >= now() - interval '12 months'
+        AND result != 'pending'
+      GROUP BY date_trunc('month', created_at::date)
+      ORDER BY date_trunc('month', created_at::date)
+    `);
+    const trendRows: any[] = Array.isArray(complianceTrendRaw)
+      ? complianceTrendRaw
+      : (complianceTrendRaw as any).rows ?? [];
+    const complianceTrend = trendRows.map((r: any) => ({
+      month: r.month as string,
+      rate: Number(r.rate ?? 0),
+    }));
+
+    // Issues by severity (active only)
+    const issuesBySeverity = await db.select({
+      name: issuesTable.severity,
+      count: sql<number>`count(*)::int`,
+    }).from(issuesTable)
+      .where(sql`${issuesTable.status} NOT IN ('closed', 'resolved')`)
+      .groupBy(issuesTable.severity)
+      .orderBy(sql`count(*) DESC`);
 
     // Common failures from checklist
     const commonFailures = await db.select({
@@ -138,13 +202,6 @@ router.get("/trends", async (req, res) => {
       .groupBy(checklistItemsTable.description)
       .orderBy(sql`count(*) DESC`)
       .limit(10);
-
-    // Defects by severity as categories
-    const defectsByType = await db.select({
-      category: issuesTable.severity,
-      count: sql<number>`count(*)::int`,
-    }).from(issuesTable)
-      .groupBy(issuesTable.severity);
 
     // Average resolution days
     const resolvedIssues = await db.select().from(issuesTable)
@@ -162,19 +219,20 @@ router.get("/trends", async (req, res) => {
       avgResolutionDays = totalDays / resolvedIssues.length;
     }
 
-    // Compliance rate
+    // Overall compliance rate
     const [totalResults] = await db.select({ count: sql<number>`count(*)::int` }).from(checklistResultsTable)
       .where(sql`${checklistResultsTable.result} != 'pending'`);
     const [passResults] = await db.select({ count: sql<number>`count(*)::int` }).from(checklistResultsTable)
       .where(sql`${checklistResultsTable.result} = 'pass'`);
-
     const complianceRate = totalResults.count > 0
       ? Math.round((passResults.count / totalResults.count) * 100)
-      : 0;
+      : null;
 
     res.json({
       inspectionsByMonth,
-      defectsByType,
+      passFailBreakdown,
+      complianceTrend,
+      issuesBySeverity,
       commonFailures,
       avgResolutionDays: Math.round(avgResolutionDays * 10) / 10,
       complianceRate,

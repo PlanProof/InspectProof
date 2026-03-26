@@ -683,14 +683,18 @@ export interface DashboardAnalytics {
   overdueIssues: number;
   reportsPending: number;
   upcomingInspections: Inspection[];
+  allInspections?: Inspection[];
   recentActivity: ActivityLog[];
   projectsByStage: DashboardAnalyticsProjectsByStageItem[];
   issuesBySeverity: DashboardAnalyticsIssuesBySeverityItem[];
+  complianceRate?: number | null;
+  inspectionsByType?: { type: string; total: number; completed: number; scheduled: number }[];
 }
 
 export type AnalyticsTrendsInspectionsByMonthItem = {
   month: string;
-  count: number;
+  total?: number;
+  count?: number;
 };
 
 export type AnalyticsTrendsDefectsByTypeItem = {
@@ -703,12 +707,30 @@ export type AnalyticsTrendsCommonFailuresItem = {
   count: number;
 };
 
+export type AnalyticsTrendsPassFailItem = {
+  name: string;
+  value: number;
+};
+
+export type AnalyticsTrendsComplianceTrendItem = {
+  month: string;
+  rate: number;
+};
+
+export type AnalyticsTrendsIssuesBySeverityItem = {
+  name: string;
+  count: number;
+};
+
 export interface AnalyticsTrends {
   inspectionsByMonth: AnalyticsTrendsInspectionsByMonthItem[];
   defectsByType: AnalyticsTrendsDefectsByTypeItem[];
   commonFailures: AnalyticsTrendsCommonFailuresItem[];
+  passFailBreakdown?: AnalyticsTrendsPassFailItem[];
+  complianceTrend?: AnalyticsTrendsComplianceTrendItem[];
+  issuesBySeverity?: AnalyticsTrendsIssuesBySeverityItem[];
   avgResolutionDays: number;
-  complianceRate: number;
+  complianceRate: number | null;
 }
 
 export type NotificationType =

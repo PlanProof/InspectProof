@@ -72,23 +72,14 @@ const INSPECTION_REPORT_TYPE: Record<string, string> = {
   pressure_test: "compliance_report", electrical: "compliance_report",
 };
 
-const MOCK_TIMES = [
-  "07:30", "08:00", "08:30", "09:00", "09:30", "10:00",
-  "10:30", "11:00", "13:00", "13:30", "14:00", "14:30",
-  "15:00", "15:30", "16:00", "16:30",
-];
-
-function getMockTime(id: number): string {
-  return MOCK_TIMES[id % MOCK_TIMES.length];
-}
-
 function getDisplayTime(insp: any): string {
-  return insp.scheduledTime || getMockTime(insp.id);
+  return insp.scheduledTime || "TBD";
 }
 
 function timeToMinutes(time: string): number {
+  if (!time || !time.includes(":")) return 9 * 60; // default 9:00 AM
   const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
+  return (h || 9) * 60 + (m || 0);
 }
 
 function minutesToTime(minutes: number): string {
