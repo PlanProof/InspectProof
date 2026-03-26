@@ -317,14 +317,28 @@ export default function GenerateReportScreen() {
           <Text style={styles.sectionSub}>
             The report will be auto-filled with inspection results, project details, and checklist items.
           </Text>
-          {inspection?.checklistTemplateDiscipline && (
-            <View style={styles.disciplineBanner}>
-              <Feather name="briefcase" size={13} color={Colors.secondary} />
-              <Text style={styles.disciplineBannerText}>
-                Showing report types for <Text style={{ fontWeight: "700" }}>{inspection.checklistTemplateDiscipline}</Text>
-              </Text>
+
+          {/* Choose Template row */}
+          <Pressable
+            style={({ pressed }) => [styles.templateRow, pressed && { opacity: 0.75 }]}
+            onPress={() => router.push("/templates" as any)}
+          >
+            <View style={styles.templateIconWrap}>
+              <Feather name="book" size={18} color={Colors.secondary} />
             </View>
-          )}
+            <View style={styles.templateTextWrap}>
+              <Text style={styles.templateRowLabel}>Choose Template</Text>
+              {inspection?.checklistTemplateName ? (
+                <Text style={styles.templateRowSub} numberOfLines={1}>{inspection.checklistTemplateName}</Text>
+              ) : inspection?.checklistTemplateDiscipline ? (
+                <Text style={styles.templateRowSub} numberOfLines={1}>{inspection.checklistTemplateDiscipline}</Text>
+              ) : (
+                <Text style={styles.templateRowSubEmpty}>No template selected — tap to browse</Text>
+              )}
+            </View>
+            <Feather name="chevron-right" size={16} color={Colors.textTertiary} />
+          </Pressable>
+
           {autoType && (
             <View style={styles.recommendedBanner}>
               <Feather name="zap" size={13} color="#C5D92D" />
@@ -563,6 +577,42 @@ const styles = StyleSheet.create({
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: "#0B1933",
     letterSpacing: 0.3,
+  },
+  templateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+  },
+  templateIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 9,
+    backgroundColor: Colors.infoLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  templateTextWrap: { flex: 1 },
+  templateRowLabel: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+  },
+  templateRowSub: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.secondary,
+    marginTop: 1,
+  },
+  templateRowSubEmpty: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    marginTop: 1,
   },
   typeList: { gap: 12 },
   typeCard: {
