@@ -299,14 +299,6 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
       ]}
       {...(shiftMode ? panResponder.panHandlers : {})}
     >
-      {/* Time column */}
-      <View style={tlStyles.timeCol}>
-        <Text style={[tlStyles.time, previewTime && tlStyles.timePreview]}>
-          {displayedTime}
-        </Text>
-        {!isLast && !dragging && <View style={tlStyles.connector} />}
-      </View>
-
       {/* Card */}
       <View style={[
         tlStyles.card,
@@ -326,6 +318,10 @@ function DraggableCard({ insp, isLast, shiftMode, onTimeChange }: DraggableCardP
             <View style={[tlStyles.typePill, { backgroundColor: Colors.infoLight }]}>
               <Feather name="clipboard" size={11} color={Colors.secondary} />
               <Text style={tlStyles.typeText}>{typeLabel}</Text>
+            </View>
+            <View style={tlStyles.timePill}>
+              <Feather name="clock" size={11} color={Colors.textTertiary} />
+              <Text style={[tlStyles.timeInCard, previewTime && tlStyles.timePreview]}>{displayedTime}</Text>
             </View>
             <View style={[tlStyles.statusPill, { backgroundColor: cfg.bg, flexDirection: "row", alignItems: "center", gap: 3 }]}>
               {insp.status === "completed" && <Feather name="check-circle" size={10} color={cfg.color} />}
@@ -561,18 +557,15 @@ const tlStyles = StyleSheet.create({
     color: Colors.secondary, lineHeight: 17,
   },
   list: { gap: 0 },
-  item: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 2 },
-  timeCol: { width: 46, alignItems: "flex-end", paddingTop: 14 },
-  time: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
-  timePreview: { color: Colors.secondary, fontSize: 13 },
-  connector: { width: 1.5, flex: 1, backgroundColor: Colors.borderLight, marginTop: 6, marginBottom: -4, alignSelf: "center" },
+  item: { marginBottom: 10 },
+  timePill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, backgroundColor: Colors.background },
+  timeInCard: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  timePreview: { color: Colors.secondary },
   card: {
-    flex: 1,
     backgroundColor: Colors.surface,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 10,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
