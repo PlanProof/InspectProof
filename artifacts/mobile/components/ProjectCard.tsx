@@ -4,7 +4,7 @@ import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Colors } from "@/constants/colors";
 import { Badge } from "@/components/ui/Badge";
-import { PROJECT_STAGES, PROJECT_TYPES } from "@/constants/api";
+import { PROJECT_STAGES } from "@/constants/api";
 
 interface ProjectCardProps {
   project: {
@@ -40,16 +40,6 @@ export function ProjectCard({ project, compact = false }: ProjectCardProps) {
       style={({ pressed }) => [styles.card, pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] }]}
     >
       <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <View style={styles.typeIcon}>
-            <Feather
-              name={project.projectType === "residential" ? "home" : project.projectType === "commercial" ? "briefcase" : project.projectType === "industrial" ? "tool" : "layers"}
-              size={14}
-              color={Colors.secondary}
-            />
-          </View>
-          <Text style={styles.projectType}>{PROJECT_TYPES[project.projectType] || project.projectType}</Text>
-        </View>
         <Badge label={statusLabels[project.status] || project.status} variant="status" value={project.status} size="sm" />
       </View>
 
@@ -105,24 +95,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 2,
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  typeIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: Colors.infoLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  projectType: {
-    fontSize: 12,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textSecondary,
   },
   name: {
     fontSize: 15,

@@ -23,10 +23,6 @@ function NativeTabLayout() {
         <Icon sf={{ default: "checkmark.circle", selected: "checkmark.circle.fill" }} />
         <Label>Inspections</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="issues">
-        <Icon sf={{ default: "exclamationmark.triangle", selected: "exclamationmark.triangle.fill" }} />
-        <Label>Issues</Label>
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="more">
         <Icon sf={{ default: "ellipsis.circle", selected: "ellipsis.circle.fill" }} />
         <Label>More</Label>
@@ -106,15 +102,7 @@ function ClassicTabLayout() {
       />
       <Tabs.Screen
         name="issues"
-        options={{
-          title: "Issues",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="exclamationmark.triangle" tintColor={color} size={22} />
-            ) : (
-              <Feather name="alert-triangle" size={20} color={color} />
-            ),
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="more"
