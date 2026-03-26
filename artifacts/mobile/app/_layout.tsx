@@ -96,6 +96,14 @@ function RootLayoutNav() {
         name="notifications"
         options={{ headerShown: false }}
       />
+      <Stack.Screen name="templates/index" options={{ headerShown: false }} />
+      <Stack.Screen name="templates/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="settings" options={{ headerShown: false }} />
+      <Stack.Screen name="documents" options={{ headerShown: false }} />
+      <Stack.Screen name="reports" options={{ headerShown: false }} />
+      <Stack.Screen name="team" options={{ headerShown: false }} />
+      <Stack.Screen name="help" options={{ headerShown: false }} />
+      <Stack.Screen name="inspection/document-viewer" options={{ headerShown: false }} />
     </Stack>
   );
 }
