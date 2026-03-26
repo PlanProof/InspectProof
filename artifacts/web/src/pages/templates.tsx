@@ -787,6 +787,8 @@ export default function Templates() {
   const [search, setSearch] = useState("");
   const [reordering, setReordering] = useState(false);
   const [folderOrder, setFolderOrder] = useState<string[]>([]);
+  const [dragFolderIdx, setDragFolderIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<string | null>(null);
   const [deletingFolder, setDeletingFolder] = useState(false);
 
@@ -887,6 +889,22 @@ export default function Templates() {
     } catch {}
   };
 
+  const dropFolder = async (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx) return;
+    const next = [...folderOrder];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setFolderOrder(next);
+    localStorage.setItem(`folderOrder_${discipline}`, JSON.stringify(next));
+    try {
+      await apiFetch("/api/checklist-templates/folder-reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discipline, folders: next }),
+      });
+    } catch {}
+  };
+
   const deleteFolder = async (folder: string) => {
     setDeletingFolder(true);
     try {
@@ -972,12 +990,56 @@ export default function Templates() {
                 const canReorder = discipline !== "Building Surveyor" && !search;
                 const isConfirmingDelete = confirmDeleteFolder === folder;
 
+                const isDragging = dragFolderIdx === fi;
+                const isDragOver = dragOverIdx === fi && dragFolderIdx !== null && dragFolderIdx !== fi;
+
                 return (
-                  <div key={folder} className="group/folder">
+                  <div
+                    key={folder}
+                    className={cn("group/folder transition-all", isDragging && "opacity-40")}
+                    draggable={canReorder}
+                    onDragStart={canReorder ? e => {
+                      setDragFolderIdx(fi);
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", String(fi));
+                    } : undefined}
+                    onDragOver={canReorder ? e => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      setDragOverIdx(fi);
+                    } : undefined}
+                    onDragLeave={canReorder ? () => setDragOverIdx(null) : undefined}
+                    onDrop={canReorder ? e => {
+                      e.preventDefault();
+                      if (dragFolderIdx !== null) dropFolder(dragFolderIdx, fi);
+                      setDragFolderIdx(null);
+                      setDragOverIdx(null);
+                    } : undefined}
+                    onDragEnd={canReorder ? () => {
+                      setDragFolderIdx(null);
+                      setDragOverIdx(null);
+                    } : undefined}
+                  >
+                    {/* Drop indicator line */}
+                    {isDragOver && (
+                      <div className="h-0.5 mx-3 bg-secondary rounded-full mb-0.5" />
+                    )}
                     <div className="flex items-center">
+                      {/* Drag handle — visible on hover for non-BS disciplines */}
+                      {canReorder && (
+                        <div
+                          className="pl-2 opacity-0 group-hover/folder:opacity-100 transition-opacity cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground shrink-0"
+                          title="Drag to reorder"
+                        >
+                          <GripVertical className="h-4 w-4" />
+                        </div>
+                      )}
                       <button
                         onClick={() => toggleFolder(folder)}
-                        className="flex-1 flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-sidebar hover:bg-muted/40 transition-colors min-w-0"
+                        className={cn(
+                          "flex-1 flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-sidebar hover:bg-muted/40 transition-colors min-w-0",
+                          canReorder && "pl-1.5",
+                        )}
                       >
                         {isOpen
                           ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -990,27 +1052,9 @@ export default function Templates() {
                         </span>
                       </button>
 
-                      {/* Folder controls — reorder + delete (non-BS only) */}
+                      {/* Folder controls — delete only (non-BS; reorder is now drag-and-drop) */}
                       {canReorder && (
                         <div className="flex items-center gap-0.5 pr-2 opacity-0 group-hover/folder:opacity-100 transition-opacity">
-                          <div className="flex flex-col">
-                            <button
-                              disabled={fi === 0}
-                              onClick={() => moveFolder(fi, -1)}
-                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar disabled:opacity-20"
-                              title="Move folder up"
-                            >
-                              <ChevronUp className="h-3 w-3" />
-                            </button>
-                            <button
-                              disabled={fi === folderKeys.length - 1}
-                              onClick={() => moveFolder(fi, 1)}
-                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar disabled:opacity-20"
-                              title="Move folder down"
-                            >
-                              <ChevronRight className="h-3 w-3 rotate-90" />
-                            </button>
-                          </div>
                           {isConfirmingDelete ? (
                             <div className="flex items-center gap-1 ml-1">
                               <button
