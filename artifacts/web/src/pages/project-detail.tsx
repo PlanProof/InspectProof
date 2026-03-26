@@ -39,6 +39,8 @@ interface InspectionRecord {
   completedDate?: string;
   notes?: string;
   createdAt: string;
+  checklistTemplateId?: number;
+  checklistTemplateName?: string;
 }
 
 interface InspectionTypeRow {
@@ -1299,19 +1301,25 @@ function BookInspectionDialog({
   projectId,
   projectName,
   onCreated,
+  defaultTemplateId,
+  defaultTemplateName,
+  defaultInspectionType,
 }: {
   open: boolean;
   onClose: () => void;
   projectId: number;
   projectName: string;
   onCreated: () => void;
+  defaultTemplateId?: number;
+  defaultTemplateName?: string;
+  defaultInspectionType?: string;
 }) {
   const { data: users } = useListUsers({});
   const createInspection = useCreateInspection();
 
   const today = new Date().toISOString().split("T")[0];
   const [form, setForm] = useState({
-    inspectionType: "",
+    inspectionType: defaultInspectionType ?? "",
     scheduledDate: today,
     scheduledTime: "",
     inspectorId: "",
@@ -1320,13 +1328,20 @@ function BookInspectionDialog({
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (open) {
+      setForm({ inspectionType: defaultInspectionType ?? "", scheduledDate: today, scheduledTime: "", inspectorId: "", notes: "" });
+      setError("");
+    }
+  }, [open, defaultInspectionType]);
+
   function set(key: string, val: string) {
     setForm(f => ({ ...f, [key]: val }));
     setError("");
   }
 
   function handleClose() {
-    setForm({ inspectionType: "", scheduledDate: today, scheduledTime: "", inspectorId: "", notes: "" });
+    setForm({ inspectionType: defaultInspectionType ?? "", scheduledDate: today, scheduledTime: "", inspectorId: "", notes: "" });
     setError("");
     onClose();
   }
@@ -1345,6 +1360,7 @@ function BookInspectionDialog({
           scheduledTime: form.scheduledTime || undefined,
           inspectorId: form.inspectorId ? Number(form.inspectorId) : undefined,
           notes: form.notes || undefined,
+          ...(defaultTemplateId ? { checklistTemplateId: defaultTemplateId } : {}),
         } as any,
       });
       onCreated();
@@ -1375,7 +1391,16 @@ function BookInspectionDialog({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-1">
-          {/* Inspection Type */}
+          {/* Inspection Type — locked when coming from a template */}
+          {defaultTemplateName ? (
+            <div className="space-y-1.5">
+              <Label>Inspection Type</Label>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-muted/40 text-sm font-medium text-sidebar">
+                <ClipboardList className="h-3.5 w-3.5 text-secondary shrink-0" />
+                {defaultTemplateName}
+              </div>
+            </div>
+          ) : (
           <div className="space-y-1.5">
             <Label>Inspection Type <span className="text-red-500">*</span></Label>
             <select
@@ -1390,6 +1415,7 @@ function BookInspectionDialog({
               ))}
             </select>
           </div>
+          )}
 
           {/* Date + Time */}
           <div className="grid grid-cols-2 gap-3">
@@ -1477,8 +1503,26 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
   const inspections = project.inspections || [];
   const [, navigate] = useLocation();
   const [bookOpen, setBookOpen] = useState(false);
+  const [bookTemplate, setBookTemplate] = useState<InspectionTypeRow | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Selected inspection types from Inspection Types tab
+  const [selectedTypes, setSelectedTypes] = useState<InspectionTypeRow[]>([]);
+  const [loadingTypes, setLoadingTypes] = useState(true);
+
+  useEffect(() => {
+    apiFetch(`/api/projects/${project.id}/inspection-types`)
+      .then((data: InspectionTypeRow[]) => setSelectedTypes(data.filter(t => t.isSelected)))
+      .catch(() => {})
+      .finally(() => setLoadingTypes(false));
+  }, [project.id]);
+
+  // Build a Set of templateIds that already have an inspection booked
+  const bookedTemplateIds = new Set(inspections.map(i => i.checklistTemplateId).filter(Boolean));
+
+  // Inspections not linked to any selected template (ad-hoc)
+  const adHocInspections = inspections.filter(i => !i.checklistTemplateId || !selectedTypes.find(t => t.templateId === i.checklistTemplateId));
 
   const handleDelete = async () => {
     if (!confirmDeleteId) return;
@@ -1496,21 +1540,43 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
 
   const inspectionToDelete = inspections.find(i => i.id === confirmDeleteId);
 
+  const openBookForTemplate = (t: InspectionTypeRow) => {
+    setBookTemplate(t);
+    setBookOpen(true);
+  };
+  const closeBook = () => {
+    setBookOpen(false);
+    setBookTemplate(null);
+  };
+  const handleCreated = () => {
+    onRefresh();
+    // Refresh selected types to pick up new checklistTemplateId mapping
+    apiFetch(`/api/projects/${project.id}/inspection-types`)
+      .then((data: InspectionTypeRow[]) => setSelectedTypes(data.filter(t => t.isSelected)))
+      .catch(() => {});
+  };
+
+  // Group selected types by folder
+  const folders = Array.from(new Set(selectedTypes.map(t => t.folder))).sort();
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-sidebar">{inspections.length} Inspection{inspections.length !== 1 ? "s" : ""}</h2>
-        <Button size="sm" onClick={() => setBookOpen(true)}>
+        <Button size="sm" onClick={() => { setBookTemplate(null); setBookOpen(true); }}>
           <Plus className="h-3.5 w-3.5 mr-1.5" /> Book Inspection
         </Button>
       </div>
 
       <BookInspectionDialog
         open={bookOpen}
-        onClose={() => setBookOpen(false)}
+        onClose={closeBook}
         projectId={project.id}
         projectName={project.name}
-        onCreated={onRefresh}
+        onCreated={handleCreated}
+        defaultTemplateId={bookTemplate?.templateId}
+        defaultTemplateName={bookTemplate?.name}
+        defaultInspectionType={bookTemplate?.inspectionType}
       />
 
       {/* Delete confirmation dialog */}
@@ -1540,80 +1606,144 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
         </DialogContent>
       </Dialog>
 
-      {inspections.length === 0 ? (
+      {/* ── Selected Inspection Types ── */}
+      {!loadingTypes && selectedTypes.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Required Inspections</h3>
+          {folders.map(folder => {
+            const folderTypes = selectedTypes.filter(t => t.folder === folder);
+            return (
+              <div key={folder} className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="px-5 py-2.5 border-b bg-muted/20 flex items-center gap-2">
+                  <FolderOpen className="h-4 w-4 text-amber-500" />
+                  <span className="font-semibold text-sm text-sidebar">{folder}</span>
+                </div>
+                <div className="divide-y divide-border">
+                  {folderTypes.map(t => {
+                    const booked = bookedTemplateIds.has(t.templateId);
+                    const linkedInspection = booked
+                      ? inspections.find(i => i.checklistTemplateId === t.templateId)
+                      : null;
+                    return (
+                      <div key={t.templateId} className="px-5 py-3 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {booked
+                            ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                            : <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 shrink-0" />
+                          }
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm text-sidebar truncate">{t.name}</div>
+                            <div className="text-xs text-muted-foreground capitalize">{t.inspectionType.replace(/_/g, " ")} · {t.itemCount} checklist item{t.itemCount !== 1 ? "s" : ""}</div>
+                          </div>
+                        </div>
+                        <div className="shrink-0">
+                          {booked && linkedInspection ? (
+                            <button
+                              onClick={() => navigate(`/inspections/${linkedInspection.id}`)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-muted hover:bg-muted/80 transition-colors text-sidebar"
+                            >
+                              {inspectionStatusBadge(linkedInspection.status)}
+                              <span className="ml-1">{formatDate(linkedInspection.scheduledDate)}</span>
+                            </button>
+                          ) : (
+                            <Button size="sm" variant="outline" className="h-7 text-xs px-3" onClick={() => openBookForTemplate(t)}>
+                              <Calendar className="h-3 w-3 mr-1" /> Book
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Ad-hoc / unlinked booked inspections ── */}
+      {adHocInspections.length > 0 && (
+        <div className="space-y-3">
+          {selectedTypes.length > 0 && (
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Other Inspections</h3>
+          )}
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Scheduled Date</TableHead>
+                  <TableHead>Completed</TableHead>
+                  <TableHead>Notes</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {adHocInspections.map((insp, idx) => (
+                  <TableRow
+                    key={insp.id}
+                    className="group cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate(`/inspections/${insp.id}`)}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {inspectionStatusIcon(insp.status)}
+                        <div>
+                          <div className="font-medium text-sm text-sidebar capitalize group-hover:text-secondary transition-colors">
+                            {insp.inspectionType.replace(/_/g, " ")}
+                          </div>
+                          <div className="text-xs text-muted-foreground">#{idx + 1}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{inspectionStatusBadge(insp.status)}</TableCell>
+                    <TableCell className="text-sm">{formatDate(insp.scheduledDate)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {insp.completedDate ? formatDate(insp.completedDate) : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
+                      {insp.notes || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {(insp.status === "completed" || insp.status === "passed") && (
+                          <button
+                            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors"
+                            title="Send report"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <Mail className="h-3 w-3" /> Send Report
+                          </button>
+                        )}
+                        <button
+                          className="p-1.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                          title="Delete inspection"
+                          onClick={e => { e.stopPropagation(); setConfirmDeleteId(insp.id); }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Empty state ── */}
+      {!loadingTypes && selectedTypes.length === 0 && inspections.length === 0 && (
         <div className="bg-card border border-border rounded-xl p-12 flex flex-col items-center gap-4 text-muted-foreground">
           <ClipboardList className="h-10 w-10 text-muted-foreground/30" />
           <div className="text-center">
             <p className="font-medium text-sidebar">No inspections yet</p>
-            <p className="text-sm mt-1">Book the first inspection for this project</p>
+            <p className="text-sm mt-1">Select inspection types in the "Inspection Types" tab, or book an ad-hoc inspection</p>
           </div>
-          <Button size="sm" onClick={() => setBookOpen(true)}>
+          <Button size="sm" onClick={() => { setBookTemplate(null); setBookOpen(true); }}>
             <Calendar className="h-3.5 w-3.5 mr-1.5" /> Book Inspection
           </Button>
-        </div>
-      ) : (
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Scheduled Date</TableHead>
-                <TableHead>Completed</TableHead>
-                <TableHead>Notes</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {inspections.map((insp, idx) => (
-                <TableRow
-                  key={insp.id}
-                  className="group cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/inspections/${insp.id}`)}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {inspectionStatusIcon(insp.status)}
-                      <div>
-                        <div className="font-medium text-sm text-sidebar capitalize group-hover:text-secondary transition-colors">
-                          {insp.inspectionType.replace(/_/g, " ")}
-                        </div>
-                        <div className="text-xs text-muted-foreground">#{idx + 1}</div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{inspectionStatusBadge(insp.status)}</TableCell>
-                  <TableCell className="text-sm">{formatDate(insp.scheduledDate)}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {insp.completedDate ? formatDate(insp.completedDate) : "—"}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
-                    {insp.notes || "—"}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {(insp.status === "completed" || insp.status === "passed") && (
-                        <button
-                          className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors"
-                          title="Send report"
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <Mail className="h-3 w-3" /> Send Report
-                        </button>
-                      )}
-                      <button
-                        className="p-1.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
-                        title="Delete inspection"
-                        onClick={e => { e.stopPropagation(); setConfirmDeleteId(insp.id); }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
         </div>
       )}
     </div>
