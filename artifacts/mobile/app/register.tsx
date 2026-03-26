@@ -395,7 +395,7 @@ export default function RegisterScreen() {
               ) : (
                 <>
                   <Text style={styles.actionBtnText}>
-                    {selectedPlan === "starter" ? "Create Free Account" : `Start ${PLANS.find(p => p.key === selectedPlan)?.name} Plan`}
+                    {selectedPlan === "free_trial" ? "Create Free Account" : `Start ${plans.find(p => p.key === selectedPlan)?.name ?? selectedPlan} Plan`}
                   </Text>
                   <Feather name="arrow-right" size={16} color={Colors.primary} />
                 </>

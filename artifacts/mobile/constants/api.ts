@@ -5,6 +5,13 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
   setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
 }
 
+export function getApiUrl(path: string): string {
+  const base = process.env.EXPO_PUBLIC_DOMAIN
+    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+    : "";
+  return `${base}/api${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 export const DEMO_EMAIL = "admin@inspectproof.com.au";
 export const DEMO_PASSWORD = "password123";
 
