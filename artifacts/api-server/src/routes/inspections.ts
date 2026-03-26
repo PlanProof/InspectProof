@@ -552,6 +552,73 @@ router.patch("/:id/checklist/:resultId", async (req, res) => {
   }
 });
 
+router.post("/:id/manual-item", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { description, category } = req.body;
+
+    if (!description?.trim() || !category?.trim()) {
+      res.status(400).json({ error: "description and category are required" });
+      return;
+    }
+
+    // Find the max orderIndex already on this inspection so we append at end
+    const existing = await db.select({ oi: checklistItemsTable.orderIndex })
+      .from(checklistResultsTable)
+      .innerJoin(checklistItemsTable, eq(checklistResultsTable.checklistItemId, checklistItemsTable.id))
+      .where(eq(checklistResultsTable.inspectionId, id));
+
+    const maxOrder = existing.length > 0 ? Math.max(...existing.map(e => e.oi)) : 0;
+
+    const [newItem] = await db.insert(checklistItemsTable).values({
+      templateId: null,
+      orderIndex: maxOrder + 1,
+      category: category.trim(),
+      description: description.trim(),
+      riskLevel: "medium",
+      isRequired: false,
+      requirePhoto: false,
+      defectTrigger: false,
+      includeInReport: true,
+    }).returning();
+
+    const [newResult] = await db.insert(checklistResultsTable).values({
+      inspectionId: id,
+      checklistItemId: newItem.id,
+      result: "pending",
+      notes: null,
+    }).returning();
+
+    res.json({
+      id: newResult.id,
+      inspectionId: newResult.inspectionId,
+      checklistItemId: newResult.checklistItemId,
+      category: newItem.category,
+      description: newItem.description,
+      codeReference: null,
+      riskLevel: newItem.riskLevel,
+      requirePhoto: false,
+      defectTrigger: false,
+      recommendedActionDefault: null,
+      result: newResult.result,
+      notes: null,
+      photoUrls: [],
+      photoMarkups: {},
+      severity: null,
+      location: null,
+      tradeAllocated: null,
+      defectStatus: "open",
+      clientVisible: true,
+      recommendedAction: null,
+      orderIndex: newItem.orderIndex,
+      isManual: true,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Add manual checklist item error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 router.delete("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);

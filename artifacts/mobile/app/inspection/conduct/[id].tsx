@@ -103,6 +103,9 @@ export default function ConductInspectionScreen() {
   const [savingItem, setSavingItem] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [activePage, setActivePage] = useState(0);
+  const [addItemModal, setAddItemModal] = useState<{ visible: boolean; category: string }>({ visible: false, category: "" });
+  const [addItemDesc, setAddItemDesc] = useState("");
+  const [addingItem, setAddingItem] = useState(false);
   const pageScrollRef = useRef<ScrollView>(null);
   const autoCompletedRef = useRef(false);
 
@@ -255,6 +258,30 @@ export default function ConductInspectionScreen() {
       await refetchChecklist();
     } catch {
       Alert.alert("Error", "Failed to update. Please try again.");
+    }
+  };
+
+  const openAddItemModal = (category: string) => {
+    setAddItemDesc("");
+    setAddItemModal({ visible: true, category });
+  };
+
+  const submitManualItem = async () => {
+    if (!addItemDesc.trim()) return;
+    setAddingItem(true);
+    try {
+      await fetchWithAuth(`/api/inspections/${id}/manual-item`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: addItemModal.category, description: addItemDesc.trim() }),
+      });
+      await refetchChecklist();
+      setAddItemModal({ visible: false, category: "" });
+      setAddItemDesc("");
+    } catch {
+      Alert.alert("Error", "Failed to add item. Please try again.");
+    } finally {
+      setAddingItem(false);
     }
   };
 
@@ -529,6 +556,13 @@ export default function ConductInspectionScreen() {
                   {items.map(item => (
                     <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} onQuickNA={() => quickNA(item)} />
                   ))}
+                  <Pressable
+                    onPress={() => openAddItemModal(category)}
+                    style={({ pressed }) => [styles.addItemBtn, pressed && { opacity: 0.6 }]}
+                  >
+                    <Feather name="plus" size={14} color={Colors.secondary} />
+                    <Text style={styles.addItemBtnText}>Add item</Text>
+                  </Pressable>
                 </View>
               ))
             )}
@@ -616,6 +650,49 @@ export default function ConductInspectionScreen() {
             inspectionId={id}
           />
         )}
+      </Modal>
+
+      {/* Add Manual Item Modal */}
+      <Modal
+        visible={addItemModal.visible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setAddItemModal({ visible: false, category: "" })}
+      >
+        <Pressable
+          style={styles.addItemOverlay}
+          onPress={() => setAddItemModal({ visible: false, category: "" })}
+        />
+        <View style={[styles.addItemSheet, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.addItemSheetHandle} />
+          <Text style={styles.addItemSheetTitle}>Add Inspection Item</Text>
+          <Text style={styles.addItemSheetCategory}>{addItemModal.category}</Text>
+          <TextInput
+            style={styles.addItemInput}
+            placeholder="Describe what needs to be inspected…"
+            placeholderTextColor={Colors.textTertiary}
+            value={addItemDesc}
+            onChangeText={setAddItemDesc}
+            multiline
+            autoFocus
+            returnKeyType="done"
+            blurOnSubmit
+          />
+          <Pressable
+            style={({ pressed }) => [
+              styles.addItemSubmit,
+              !addItemDesc.trim() && styles.addItemSubmitDisabled,
+              pressed && { opacity: 0.8 },
+            ]}
+            onPress={submitManualItem}
+            disabled={!addItemDesc.trim() || addingItem}
+          >
+            {addingItem
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={styles.addItemSubmitText}>Add Item</Text>
+            }
+          </Pressable>
+        </View>
       </Modal>
 
     </View>
@@ -1456,6 +1533,91 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   cameraBadgeText: { fontSize: 9, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+
+  addItemBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    marginTop: 2,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: Colors.secondary,
+    backgroundColor: "#EEF3FB",
+  },
+  addItemBtnText: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.secondary,
+  },
+  addItemOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  addItemSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 12,
+  },
+  addItemSheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  addItemSheetTitle: {
+    fontSize: 18,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: Colors.primary,
+    marginBottom: 4,
+  },
+  addItemSheetCategory: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_500Medium",
+    color: Colors.secondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 16,
+  },
+  addItemInput: {
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.text,
+    minHeight: 90,
+    textAlignVertical: "top",
+    backgroundColor: Colors.surface,
+    marginBottom: 16,
+  },
+  addItemSubmit: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  addItemSubmitDisabled: {
+    opacity: 0.4,
+  },
+  addItemSubmitText: {
+    fontSize: 15,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: "#fff",
+  },
 });
 
 const modalStyles = StyleSheet.create({
@@ -1761,5 +1923,4 @@ const panelStyles = StyleSheet.create({
   markupBtnText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   previewContainer: { flex: 1, backgroundColor: "#000" },
   previewImage: { flex: 1, width: "100%" },
-
 });

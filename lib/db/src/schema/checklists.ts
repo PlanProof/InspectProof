@@ -15,7 +15,7 @@ export const checklistTemplatesTable = pgTable("checklist_templates", {
 
 export const checklistItemsTable = pgTable("checklist_items", {
   id: serial("id").primaryKey(),
-  templateId: integer("template_id").notNull(),
+  templateId: integer("template_id"),
   orderIndex: integer("order_index").notNull(),
   category: text("category").notNull(),
   description: text("description").notNull(),
