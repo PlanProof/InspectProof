@@ -13,6 +13,12 @@ export const usersTable = pgTable("users", {
   avatar: text("avatar"),
   signatureUrl: text("signature_url"),
   isActive: boolean("is_active").notNull().default(true),
+  isAdmin: boolean("is_admin").notNull().default(false),
+  plan: text("plan").notNull().default("free_trial"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  planOverrideProjects: text("plan_override_projects"),
+  planOverrideInspections: text("plan_override_inspections"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

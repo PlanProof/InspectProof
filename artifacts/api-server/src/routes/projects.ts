@@ -1,8 +1,19 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
 import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable } from "@workspace/db";
+import { checkProjectQuota } from "../lib/quota";
 
 const router: IRouter = Router();
+
+function getUserIdFromRequest(req: any): number | null {
+  const auth = req.headers?.authorization;
+  if (!auth?.startsWith('Bearer ')) return null;
+  try {
+    const decoded = Buffer.from(auth.slice(7), 'base64').toString();
+    const [userId] = decoded.split(':');
+    return Number(userId) || null;
+  } catch { return null; }
+}
 
 function formatProject(p: any, totalInspections = 0, openIssues = 0) {
   return {
@@ -86,9 +97,10 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", checkProjectQuota, async (req, res) => {
   try {
     const data = req.body;
+    const createdById = getUserIdFromRequest(req);
     const [project] = await db.insert(projectsTable).values({
       name: data.name,
       siteAddress: data.siteAddress,
@@ -106,6 +118,7 @@ router.post("/", async (req, res) => {
       stage: "pre_construction",
       assignedCertifierId: data.assignedCertifierId,
       assignedInspectorId: data.assignedInspectorId,
+      createdById: createdById ?? undefined,
       startDate: data.startDate,
       expectedCompletionDate: data.expectedCompletionDate,
     }).returning();

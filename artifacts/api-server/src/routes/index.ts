@@ -12,6 +12,8 @@ import analyticsRouter from "./analytics";
 import notificationsRouter from "./notifications";
 import usersRouter from "./users";
 import storageRouter from "./storage";
+import billingRouter from "./billing";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -28,5 +30,7 @@ router.use("/analytics", analyticsRouter);
 router.use("/notifications", notificationsRouter);
 router.use("/users", usersRouter);
 router.use(storageRouter);
+router.use(billingRouter);
+router.use(adminRouter);
 
 export default router;

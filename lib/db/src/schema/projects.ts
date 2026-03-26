@@ -20,6 +20,7 @@ export const projectsTable = pgTable("projects", {
   stage: text("stage").notNull().default("pre_construction"),
   assignedCertifierId: integer("assigned_certifier_id"),
   assignedInspectorId: integer("assigned_inspector_id"),
+  createdById: integer("created_by_id"),
   startDate: date("start_date"),
   expectedCompletionDate: date("expected_completion_date"),
   completedDate: date("completed_date"),

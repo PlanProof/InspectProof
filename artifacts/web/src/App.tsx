@@ -16,6 +16,8 @@ import Templates from "@/pages/templates";
 import DocTemplates from "@/pages/doc-templates";
 import Inspectors from "@/pages/inspectors";
 import Settings from "@/pages/settings";
+import Billing from "@/pages/billing";
+import Admin from "@/pages/admin";
 import NotFound from "@/pages/not-found";
 
 // Global fetch interceptor for auth
@@ -66,6 +68,8 @@ function Router() {
       <Route path="/doc-templates" component={DocTemplates} />
       <Route path="/inspectors" component={Inspectors} />
       <Route path="/settings" component={Settings} />
+      <Route path="/billing" component={Billing} />
+      <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );

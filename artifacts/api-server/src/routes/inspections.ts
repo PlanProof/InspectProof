@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable, reportsTable } from "@workspace/db";
+import { checkInspectionQuota } from "../lib/quota";
 
 const router: IRouter = Router();
 
@@ -78,7 +79,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", checkInspectionQuota, async (req, res) => {
   try {
     const data = req.body;
     const [inspection] = await db.insert(inspectionsTable).values({
