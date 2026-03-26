@@ -346,7 +346,7 @@ function GenerateReportDialog({ template, onClose }: { template: DocTemplate; on
                 style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a" }}
               >
                 {template.backgroundImage && (
-                  <img src={template.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ opacity: 0.15 }} />
+                  <img src={template.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ opacity: 1 }} />
                 )}
                 <div
                   ref={printRef}
@@ -622,7 +622,7 @@ export default function DocTemplates() {
                   style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a" }}
                 >
                   {selected.backgroundImage && (
-                    <img src={selected.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ opacity: 0.15 }} />
+                    <img src={selected.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ opacity: 1 }} />
                   )}
                   <div
                     ref={editorRef}
