@@ -438,13 +438,13 @@ function HowItWorks() {
       number: "01",
       title: "Set up your project",
       description:
-        "Create a project for each development. Add the address, NCC building class, and assign your inspection team. All sites are stored and searchable.",
+        "Create a project for each site or engagement. Add the address, project type, and assign your inspection team. All sites are organised and searchable.",
     },
     {
       number: "02",
       title: "Conduct the inspection",
       description:
-        "On site, open the NCC-aligned checklist on your phone or tablet. Mark items pass, fail or N/A. Add photos, notes and defect details in seconds.",
+        "On site, open the relevant checklist on your phone or tablet. Mark items pass, fail or N/A. Add photos, notes and defect details in seconds.",
     },
     {
       number: "03",
