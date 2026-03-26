@@ -17,7 +17,7 @@ import {
 import Swipeable from "react-native-gesture-handler/Swipeable";
 import Svg, { Path } from "react-native-svg";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
@@ -700,13 +700,13 @@ export default function ConductInspectionScreen() {
           if (inspection?.weatherConditions) setShowPreInspection(false);
         }}
       >
-        <View style={styles.briefingModal}>
+        <SafeAreaView style={styles.briefingModal} edges={["bottom"]}>
           {/* Handle bar */}
           <View style={styles.briefingHandle} />
 
           {/* Header */}
           <View style={styles.briefingHeader}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.briefingTitle}>Site Briefing</Text>
               <Text style={styles.briefingSubtitle}>Complete before commencing inspection</Text>
             </View>
@@ -717,7 +717,13 @@ export default function ConductInspectionScreen() {
             )}
           </View>
 
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.briefingContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={styles.briefingScroll}
+            contentContainerStyle={styles.briefingContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            bounces={true}
+          >
 
             {/* Weather section */}
             <Text style={styles.briefingLabel}>Current Weather Conditions <Text style={{ color: "#ef4444" }}>*</Text></Text>
@@ -728,6 +734,7 @@ export default function ConductInspectionScreen() {
                   onPress={() => setPreWeather(w.key)}
                   style={[
                     styles.weatherChip,
+                    { width: Math.floor((screenW - 48 - 20) / 3) },
                     preWeather === w.key && styles.weatherChipSelected,
                   ]}
                 >
@@ -777,7 +784,7 @@ export default function ConductInspectionScreen() {
             </Pressable>
 
           </ScrollView>
-        </View>
+        </SafeAreaView>
       </Modal>
     </View>
   );
@@ -1945,7 +1952,9 @@ const panelStyles = StyleSheet.create({
   briefingModal: {
     flex: 1,
     backgroundColor: "#fff",
-    paddingTop: 8,
+  },
+  briefingScroll: {
+    flex: 1,
   },
   briefingHandle: {
     width: 40,
@@ -1953,6 +1962,7 @@ const panelStyles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: Colors.border,
     alignSelf: "center",
+    marginTop: 12,
     marginBottom: 8,
   },
   briefingHeader: {
@@ -2001,7 +2011,6 @@ const panelStyles = StyleSheet.create({
     gap: 10,
   },
   weatherChip: {
-    width: "30%",
     alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: 8,
