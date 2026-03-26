@@ -108,13 +108,13 @@ export default function MoreScreen() {
             icon="file-text"
             label="Reports"
             sublabel="Generate and manage inspection reports"
-            onPress={() => {}}
+            onPress={() => router.push("/reports" as any)}
           />
           <MenuItem
             icon="book"
             label="Documents"
             sublabel="Project documents and certificates"
-            onPress={() => {}}
+            onPress={() => router.push("/documents" as any)}
           />
         </View>
       </View>
@@ -126,8 +126,8 @@ export default function MoreScreen() {
           <MenuItem
             icon="clipboard"
             label="Checklist Templates"
-            sublabel="Manage inspection checklists"
-            onPress={() => {}}
+            sublabel="Browse, create and manage inspection checklists"
+            onPress={() => router.push("/templates" as any)}
           />
           <MenuItem
             icon="bell"
@@ -138,8 +138,8 @@ export default function MoreScreen() {
           <MenuItem
             icon="users"
             label="Team Members"
-            sublabel="Manage inspectors and staff"
-            onPress={() => {}}
+            sublabel="View inspectors and staff"
+            onPress={() => router.push("/team" as any)}
           />
         </View>
       </View>
@@ -172,13 +172,13 @@ export default function MoreScreen() {
             icon="settings"
             label="Settings"
             sublabel="App preferences and configuration"
-            onPress={() => {}}
+            onPress={() => router.push("/settings" as any)}
           />
           <MenuItem
             icon="help-circle"
             label="Help & Support"
             sublabel="Documentation and contact"
-            onPress={() => {}}
+            onPress={() => router.push("/help" as any)}
           />
           <MenuItem
             icon="log-out"
