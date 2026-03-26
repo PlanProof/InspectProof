@@ -1,4 +1,4 @@
-CREATE TABLE "users" (
+CREATE TABLE IF NOT EXISTS "users" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"email" text NOT NULL,
 	"password_hash" text NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
-CREATE TABLE "projects" (
+CREATE TABLE IF NOT EXISTS "projects" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"site_address" text NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE "projects" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "inspections" (
+CREATE TABLE IF NOT EXISTS "inspections" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"project_id" integer NOT NULL,
 	"inspection_type" text NOT NULL,
@@ -63,7 +63,7 @@ CREATE TABLE "inspections" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "checklist_items" (
+CREATE TABLE IF NOT EXISTS "checklist_items" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"template_id" integer,
 	"order_index" integer NOT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE "checklist_items" (
 	"include_in_report" boolean DEFAULT true NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "checklist_results" (
+CREATE TABLE IF NOT EXISTS "checklist_results" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"inspection_id" integer NOT NULL,
 	"checklist_item_id" integer NOT NULL,
@@ -97,7 +97,7 @@ CREATE TABLE "checklist_results" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "checklist_templates" (
+CREATE TABLE IF NOT EXISTS "checklist_templates" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"inspection_type" text NOT NULL,
@@ -108,7 +108,7 @@ CREATE TABLE "checklist_templates" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "issues" (
+CREATE TABLE IF NOT EXISTS "issues" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"project_id" integer NOT NULL,
 	"inspection_id" integer,
@@ -126,7 +126,7 @@ CREATE TABLE "issues" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "document_checklist_links" (
+CREATE TABLE IF NOT EXISTS "document_checklist_links" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"document_id" integer NOT NULL,
 	"checklist_item_id" integer NOT NULL,
@@ -135,7 +135,7 @@ CREATE TABLE "document_checklist_links" (
 	CONSTRAINT "doc_item_unique" UNIQUE("document_id","checklist_item_id")
 );
 --> statement-breakpoint
-CREATE TABLE "documents" (
+CREATE TABLE IF NOT EXISTS "documents" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"project_id" integer NOT NULL,
 	"name" text NOT NULL,
@@ -153,7 +153,7 @@ CREATE TABLE "documents" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "project_inspection_types" (
+CREATE TABLE IF NOT EXISTS "project_inspection_types" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"project_id" integer NOT NULL,
 	"inspection_type" text NOT NULL,
@@ -163,7 +163,7 @@ CREATE TABLE "project_inspection_types" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "notes" (
+CREATE TABLE IF NOT EXISTS "notes" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"project_id" integer NOT NULL,
 	"inspection_id" integer,
@@ -172,7 +172,7 @@ CREATE TABLE "notes" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "reports" (
+CREATE TABLE IF NOT EXISTS "reports" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"project_id" integer NOT NULL,
 	"inspection_id" integer,
@@ -187,7 +187,7 @@ CREATE TABLE "reports" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "activity_logs" (
+CREATE TABLE IF NOT EXISTS "activity_logs" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"entity_type" text NOT NULL,
 	"entity_id" integer NOT NULL,
@@ -197,7 +197,7 @@ CREATE TABLE "activity_logs" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "notifications" (
+CREATE TABLE IF NOT EXISTS "notifications" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"title" text NOT NULL,
@@ -209,7 +209,7 @@ CREATE TABLE "notifications" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "plan_configs" (
+CREATE TABLE IF NOT EXISTS "plan_configs" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"plan_key" text NOT NULL,
 	"label" text NOT NULL,
