@@ -19,20 +19,11 @@ import { useAuth } from "@/context/AuthContext";
 
 const WEB_TOP = Platform.OS === "web" ? 67 : 0;
 
-const STATUS_FILTERS = ["All", "Active", "On Hold", "Completed", "Archived"];
-const STATUS_VALUES: Record<string, string | null> = {
-  All: null,
-  Active: "active",
-  "On Hold": "on_hold",
-  Completed: "completed",
-  Archived: "archived",
-};
 
 export default function ProjectsScreen() {
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const [search, setSearch] = useState("");
-  const [activeFilter, setActiveFilter] = useState("Active");
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   const { data: projects = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
@@ -48,8 +39,7 @@ export default function ProjectsScreen() {
   });
 
   const filtered = projects.filter(p => {
-    const statusVal = STATUS_VALUES[activeFilter];
-    if (statusVal && p.status !== statusVal) return false;
+    if (p.status !== "active") return false;
     if (search.trim()) {
       const s = search.toLowerCase();
       return p.name.toLowerCase().includes(s) ||
@@ -90,18 +80,6 @@ export default function ProjectsScreen() {
           )}
         </View>
 
-        {/* Filter tabs */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-          {STATUS_FILTERS.map(f => (
-            <Pressable
-              key={f}
-              onPress={() => setActiveFilter(f)}
-              style={[styles.filterChip, activeFilter === f && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterText, activeFilter === f && styles.filterTextActive]}>{f}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
       </View>
 
       {/* List */}
@@ -125,6 +103,7 @@ export default function ProjectsScreen() {
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
@@ -174,30 +153,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
-  },
-  filters: {
-    gap: 8,
-    paddingRight: 4,
-  },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  filterChipActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  filterText: {
-    fontSize: 13,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textSecondary,
-  },
-  filterTextActive: {
-    color: Colors.accent,
   },
   list: {
     padding: 16,

@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,12 @@ import {
   Pressable,
   RefreshControl,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,16 +22,23 @@ import { Colors } from "@/constants/colors";
 import { Badge } from "@/components/ui/Badge";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { InspectionCard } from "@/components/InspectionCard";
-import { IssueCard } from "@/components/IssueCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/context/AuthContext";
-import { PROJECT_STAGES, PROJECT_TYPES } from "@/constants/api";
+import { PROJECT_STAGES } from "@/constants/api";
 
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
+
+  // Book inspection modal state
+  const [bookOpen, setBookOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [bookDate, setBookDate] = useState("");
+  const [bookTime, setBookTime] = useState("");
+  const [bookSubmitting, setBookSubmitting] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   const fetchWithAuth = async (url: string) => {
     const res = await fetch(`${baseUrl}${url}`, {
@@ -41,21 +54,68 @@ export default function ProjectDetailScreen() {
     enabled: !!token && !!id,
   });
 
-  const { data: inspections = [] } = useQuery({
+  const { data: inspections = [], refetch: refetchInspections } = useQuery({
     queryKey: ["project-inspections", id, token],
     queryFn: () => fetchWithAuth(`/api/inspections?projectId=${id}`),
     enabled: !!token && !!id,
   });
 
-  const { data: issues = [] } = useQuery({
-    queryKey: ["project-issues", id, token],
-    queryFn: () => fetchWithAuth(`/api/issues?projectId=${id}`),
-    enabled: !!token && !!id,
+  // Selected inspection types from desktop
+  const { data: inspectionTypes = [] } = useQuery({
+    queryKey: ["project-inspection-types", id, token],
+    queryFn: async () => {
+      const data = await fetchWithAuth(`/api/projects/${id}/inspection-types`);
+      return data.filter((t: any) => t.isSelected);
+    },
+    enabled: !!token && !!id && bookOpen,
   });
 
-  const openIssues = issues.filter((i: any) => !["resolved", "closed"].includes(i.status));
-  const criticalIssues = openIssues.filter((i: any) => i.severity === "critical");
   const upcomingInspections = inspections.filter((i: any) => i.status !== "completed" && i.status !== "cancelled");
+
+  const handleBookInspection = async () => {
+    if (!selectedTemplate) {
+      Alert.alert("Required", "Please select an inspection type.");
+      return;
+    }
+    if (!bookDate.trim()) {
+      Alert.alert("Required", "Please enter a date.");
+      return;
+    }
+    // Parse DD/MM/YYYY → YYYY-MM-DD
+    const parts = bookDate.trim().split("/");
+    let isoDate = bookDate.trim();
+    if (parts.length === 3) {
+      isoDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+    }
+    setBookSubmitting(true);
+    try {
+      const res = await fetch(`${baseUrl}/api/inspections`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          projectId: Number(id),
+          inspectionType: selectedTemplate.inspectionType,
+          checklistTemplateId: selectedTemplate.templateId,
+          scheduledDate: isoDate,
+          scheduledTime: bookTime.trim() || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setBookOpen(false);
+      setSelectedTemplate(null);
+      setBookDate("");
+      setBookTime("");
+      refetchInspections();
+      refetch();
+    } catch {
+      Alert.alert("Error", "Failed to book inspection. Please try again.");
+    } finally {
+      setBookSubmitting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -72,13 +132,11 @@ export default function ProjectDetailScreen() {
   }
 
   const completedInspections = inspections.filter((i: any) => i.status === "completed").length;
-  const passRate = project.totalChecklistItems > 0
-    ? Math.round((project.passedItems / project.totalChecklistItems) * 100)
-    : null;
 
   return (
+    <View style={styles.container}>
     <ScrollView
-      style={styles.container}
+      style={{ flex: 1 }}
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Colors.secondary} />}
       showsVerticalScrollIndicator={false}
@@ -86,15 +144,10 @@ export default function ProjectDetailScreen() {
       {/* Hero */}
       <View style={styles.hero}>
         <View style={styles.heroHeader}>
-          <View style={styles.typeChip}>
-            <Feather
-              name={project.projectType === "residential" ? "home" : project.projectType === "commercial" ? "briefcase" : "layers"}
-              size={13}
-              color={Colors.secondary}
-            />
-            <Text style={styles.typeText}>{PROJECT_TYPES[project.projectType] || project.projectType}</Text>
-          </View>
           <Badge label={project.status} variant="status" value={project.status} />
+          <Pressable style={styles.backBtn} onPress={() => router.back()}>
+            <Feather name="arrow-left" size={18} color={Colors.textSecondary} />
+          </Pressable>
         </View>
 
         <Text style={styles.projectName}>{project.name}</Text>
@@ -128,22 +181,16 @@ export default function ProjectDetailScreen() {
       <View style={styles.statsRow}>
         <View style={styles.statBox}>
           <Text style={styles.statValue}>{inspections.length}</Text>
-          <Text style={styles.statLabel}>Inspections</Text>
+          <Text style={styles.statLabel}>Total</Text>
         </View>
         <View style={[styles.statBox, styles.statBorder]}>
           <Text style={styles.statValue}>{completedInspections}</Text>
           <Text style={styles.statLabel}>Completed</Text>
         </View>
         <View style={[styles.statBox, styles.statBorder]}>
-          <Text style={[styles.statValue, openIssues.length > 0 && { color: Colors.danger }]}>{openIssues.length}</Text>
-          <Text style={styles.statLabel}>Open Issues</Text>
+          <Text style={styles.statValue}>{upcomingInspections.length}</Text>
+          <Text style={styles.statLabel}>Upcoming</Text>
         </View>
-        {passRate !== null && (
-          <View style={[styles.statBox, styles.statBorder]}>
-            <Text style={[styles.statValue, { color: passRate >= 80 ? Colors.success : Colors.warning }]}>{passRate}%</Text>
-            <Text style={styles.statLabel}>Pass Rate</Text>
-          </View>
-        )}
       </View>
 
       {/* Project Details */}
@@ -167,44 +214,24 @@ export default function ProjectDetailScreen() {
         ))}
       </View>
 
-      {/* Critical Issues Alert */}
-      {criticalIssues.length > 0 && (
-        <View style={styles.criticalAlert}>
-          <Feather name="alert-triangle" size={16} color={Colors.danger} />
-          <Text style={styles.criticalAlertText}>{criticalIssues.length} critical issue{criticalIssues.length > 1 ? "s" : ""} require immediate action</Text>
-        </View>
-      )}
-
       {/* Inspections */}
       <View style={styles.section}>
         <SectionHeader
           title={`Inspections (${inspections.length})`}
-          actionLabel={inspections.length > 3 ? "View All" : undefined}
-          onAction={() => router.push({ pathname: "/(tabs)/inspections" })}
+          actionLabel="Add"
+          onAction={() => setBookOpen(true)}
         />
-        {upcomingInspections.length === 0 && inspections.filter((i: any) => i.status === "completed").length === 0 ? (
-          <EmptyState icon="clipboard" title="No inspections scheduled" />
+        {inspections.length === 0 ? (
+          <EmptyState icon="clipboard" title="No inspections yet" description='Tap "Add" to book an inspection' />
         ) : (
           <>
-            {upcomingInspections.slice(0, 2).map((i: any) => (
+            {upcomingInspections.slice(0, 3).map((i: any) => (
               <InspectionCard key={i.id} inspection={i} showProject={false} />
             ))}
             {inspections.filter((i: any) => i.status === "completed").slice(0, 2).map((i: any) => (
               <InspectionCard key={i.id} inspection={i} showProject={false} />
             ))}
           </>
-        )}
-      </View>
-
-      {/* Issues */}
-      <View style={styles.section}>
-        <SectionHeader title={`Issues (${openIssues.length} open)`} />
-        {openIssues.length === 0 ? (
-          <EmptyState icon="check-circle" title="No open issues" description="All issues have been resolved" />
-        ) : (
-          openIssues.slice(0, 4).map((i: any) => (
-            <IssueCard key={i.id} issue={{ ...i, projectName: project.name }} showProject={false} />
-          ))
         )}
       </View>
 
@@ -216,6 +243,107 @@ export default function ProjectDetailScreen() {
         </View>
       )}
     </ScrollView>
+
+    {/* Book Inspection Modal */}
+    <Modal
+      visible={bookOpen}
+      animationType="slide"
+      transparent
+      onRequestClose={() => setBookOpen(false)}
+    >
+      <KeyboardAvoidingView
+        style={styles.modalOverlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setBookOpen(false)} />
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
+          {/* Header */}
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Book Inspection</Text>
+            <Pressable onPress={() => setBookOpen(false)} style={styles.modalClose}>
+              <Feather name="x" size={20} color={Colors.textSecondary} />
+            </Pressable>
+          </View>
+
+          <Text style={styles.modalProjectName}>{project.name}</Text>
+
+          {/* Template Picker */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Inspection Type *</Text>
+            <Pressable
+              style={styles.pickerBtn}
+              onPress={() => setShowTemplatePicker(!showTemplatePicker)}
+            >
+              <Text style={[styles.pickerBtnText, !selectedTemplate && styles.pickerPlaceholder]}>
+                {selectedTemplate ? selectedTemplate.name : "Select inspection type…"}
+              </Text>
+              <Feather name={showTemplatePicker ? "chevron-up" : "chevron-down"} size={16} color={Colors.textSecondary} />
+            </Pressable>
+            {showTemplatePicker && (
+              <View style={styles.pickerDropdown}>
+                {inspectionTypes.length === 0 ? (
+                  <Text style={styles.pickerEmpty}>No inspection types selected on desktop yet</Text>
+                ) : (
+                  inspectionTypes.map((t: any) => (
+                    <Pressable
+                      key={t.templateId}
+                      style={[styles.pickerOption, selectedTemplate?.templateId === t.templateId && styles.pickerOptionActive]}
+                      onPress={() => { setSelectedTemplate(t); setShowTemplatePicker(false); }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.pickerOptionText, selectedTemplate?.templateId === t.templateId && styles.pickerOptionTextActive]}>
+                          {t.name}
+                        </Text>
+                        <Text style={styles.pickerOptionSub}>{t.folder} · {t.itemCount} items</Text>
+                      </View>
+                      {selectedTemplate?.templateId === t.templateId && (
+                        <Feather name="check" size={16} color={Colors.secondary} />
+                      )}
+                    </Pressable>
+                  ))
+                )}
+              </View>
+            )}
+          </View>
+
+          {/* Date */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Date *</Text>
+            <TextInput
+              style={styles.fieldInput}
+              value={bookDate}
+              onChangeText={setBookDate}
+              placeholder="DD/MM/YYYY"
+              placeholderTextColor={Colors.textTertiary}
+              keyboardType="numeric"
+            />
+          </View>
+
+          {/* Time */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Time (optional)</Text>
+            <TextInput
+              style={styles.fieldInput}
+              value={bookTime}
+              onChangeText={setBookTime}
+              placeholder="e.g. 9:00 AM"
+              placeholderTextColor={Colors.textTertiary}
+            />
+          </View>
+
+          {/* Submit */}
+          <TouchableOpacity
+            style={[styles.bookBtn, bookSubmitting && { opacity: 0.6 }]}
+            onPress={handleBookInspection}
+            disabled={bookSubmitting}
+          >
+            <Feather name="calendar" size={16} color="#fff" />
+            <Text style={styles.bookBtnText}>{bookSubmitting ? "Booking…" : "Book Inspection"}</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+    </View>
   );
 }
 
@@ -235,19 +363,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  typeChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: Colors.infoLight,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  typeText: {
-    fontSize: 12,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.secondary,
+  backBtn: {
+    padding: 4,
   },
   projectName: {
     fontSize: 22,
@@ -348,23 +465,6 @@ const styles = StyleSheet.create({
     textAlign: "right",
     maxWidth: "60%",
   },
-  criticalAlert: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: Colors.dangerLight,
-    borderRadius: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.dangerBorder,
-    marginHorizontal: 16,
-  },
-  criticalAlertText: {
-    fontSize: 14,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.danger,
-    flex: 1,
-  },
   section: {
     marginHorizontal: 16,
     gap: 10,
@@ -383,5 +483,137 @@ const styles = StyleSheet.create({
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  modalSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    gap: 14,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+  },
+  modalClose: {
+    padding: 4,
+  },
+  modalProjectName: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.secondary,
+    backgroundColor: Colors.secondary + "15",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  fieldGroup: {
+    gap: 6,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textSecondary,
+  },
+  fieldInput: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+    backgroundColor: Colors.background,
+  },
+  pickerBtn: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.background,
+  },
+  pickerBtnText: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+    flex: 1,
+  },
+  pickerPlaceholder: {
+    color: Colors.textTertiary,
+  },
+  pickerDropdown: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    backgroundColor: Colors.background,
+    overflow: "hidden",
+    maxHeight: 220,
+  },
+  pickerOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+    gap: 10,
+  },
+  pickerOptionActive: {
+    backgroundColor: Colors.secondary + "10",
+  },
+  pickerOptionText: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+  },
+  pickerOptionTextActive: {
+    color: Colors.secondary,
+  },
+  pickerOptionSub: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  pickerEmpty: {
+    padding: 16,
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    textAlign: "center",
+  },
+  bookBtn: {
+    backgroundColor: Colors.secondary,
+    borderRadius: 12,
+    height: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  bookBtnText: {
+    fontSize: 15,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#fff",
   },
 });
