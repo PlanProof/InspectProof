@@ -8,7 +8,7 @@ import {
 import {
   ArrowLeft, Building, FileText, ClipboardList, CheckSquare, Plus, Upload,
   FolderPlus, Pencil, Trash2, Eye, EyeOff, File, Folder, FolderOpen,
-  ChevronRight, ChevronDown, Calendar, Clock, CheckCircle, AlertCircle, XCircle, MoreHorizontal,
+  ChevronRight, ChevronDown, Calendar, Clock, CheckCircle, CheckCircle2, AlertCircle, XCircle, MoreHorizontal,
   Download, Mail, Loader2, Link2, Unlink, Award, Send, BarChart2,
   Smartphone, X, Info, ZoomIn, User
 } from "lucide-react";
