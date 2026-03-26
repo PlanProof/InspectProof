@@ -81,6 +81,11 @@ interface Issue {
   codeReference?: string;
   responsibleParty?: string;
   dueDate?: string;
+  source?: "checklist" | "manual";
+  category?: string;
+  result?: string;
+  recommendedAction?: string;
+  checklistResultId?: number;
 }
 
 interface Note {
@@ -2162,43 +2167,121 @@ function IssuesTab({ issues }: { issues: Issue[] }) {
     );
   }
 
+  const checklistIssues = issues.filter(i => i.source === "checklist");
+  const manualIssues = issues.filter(i => i.source !== "checklist");
+
   return (
-    <div className="space-y-4">
-      {issues.map(issue => (
-        <div key={issue.id} className="bg-card border border-border rounded-xl p-5">
-          <div className="flex items-start justify-between gap-4 mb-3">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded border capitalize ${severityColors(issue.severity)}`}>
-                  {issue.severity}
-                </span>
-                <span className="text-xs text-muted-foreground capitalize border border-muted/50 rounded px-2 py-0.5">
-                  {issue.status.replace(/_/g, " ")}
-                </span>
-              </div>
-              <h3 className="font-semibold text-sidebar">{issue.title}</h3>
-            </div>
-            {issue.dueDate && (
-              <div className="text-right shrink-0">
-                <div className="text-xs text-muted-foreground">Due</div>
-                <div className="text-sm font-medium text-sidebar">{formatDate(issue.dueDate)}</div>
-              </div>
-            )}
+    <div className="space-y-6">
+      {/* Checklist defects */}
+      {checklistIssues.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <ClipboardList className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-sidebar">Checklist Defects</span>
+            <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{checklistIssues.length}</span>
           </div>
-          <p className="text-sm text-muted-foreground leading-relaxed">{issue.description}</p>
-          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
-            {issue.location && (
-              <span><span className="font-medium">Location:</span> {issue.location}</span>
-            )}
-            {issue.codeReference && (
-              <span><span className="font-medium">Code ref:</span> {issue.codeReference}</span>
-            )}
-            {issue.responsibleParty && (
-              <span><span className="font-medium">Responsible:</span> {issue.responsibleParty}</span>
-            )}
+          <div className="space-y-3">
+            {checklistIssues.map(issue => (
+              <div
+                key={issue.id}
+                className={cn(
+                  "bg-card border rounded-xl p-5",
+                  issue.result === "monitor"
+                    ? "border-amber-200 bg-amber-50/30"
+                    : "border-red-200 bg-red-50/20"
+                )}
+              >
+                <div className="flex items-start justify-between gap-4 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                      {issue.result === "monitor" ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200">
+                          <Eye className="h-3 w-3" /> Monitor
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border bg-red-50 text-red-700 border-red-200">
+                          <XCircle className="h-3 w-3" /> Fail
+                        </span>
+                      )}
+                      {issue.severity && (
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded border capitalize ${severityColors(issue.severity)}`}>
+                          {issue.severity}
+                        </span>
+                      )}
+                      {issue.category && (
+                        <span className="text-xs text-muted-foreground border border-muted/50 rounded px-2 py-0.5">
+                          {issue.category}
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground capitalize border border-muted/50 rounded px-2 py-0.5">
+                        {(issue.status ?? "open").replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <h3 className="font-semibold text-sidebar leading-snug">{issue.title}</h3>
+                  </div>
+                </div>
+                {issue.description && (
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-2">{issue.description}</p>
+                )}
+                {issue.recommendedAction && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-sidebar/5 border border-sidebar/10 text-xs text-sidebar">
+                    <span className="font-semibold">Recommended action:</span> {issue.recommendedAction}
+                  </div>
+                )}
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                  {issue.location && <span><span className="font-medium">Location:</span> {issue.location}</span>}
+                  {issue.codeReference && <span><span className="font-medium">Code ref:</span> {issue.codeReference}</span>}
+                  {issue.responsibleParty && <span><span className="font-medium">Trade:</span> {issue.responsibleParty}</span>}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      ))}
+      )}
+
+      {/* Manually raised issues */}
+      {manualIssues.length > 0 && (
+        <div>
+          {checklistIssues.length > 0 && (
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-sidebar">Raised Issues</span>
+              <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{manualIssues.length}</span>
+            </div>
+          )}
+          <div className="space-y-3">
+            {manualIssues.map(issue => (
+              <div key={issue.id} className="bg-card border border-border rounded-xl p-5">
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded border capitalize ${severityColors(issue.severity)}`}>
+                        {issue.severity}
+                      </span>
+                      <span className="text-xs text-muted-foreground capitalize border border-muted/50 rounded px-2 py-0.5">
+                        {issue.status.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <h3 className="font-semibold text-sidebar">{issue.title}</h3>
+                  </div>
+                  {issue.dueDate && (
+                    <div className="text-right shrink-0">
+                      <div className="text-xs text-muted-foreground">Due</div>
+                      <div className="text-sm font-medium text-sidebar">{formatDate(issue.dueDate)}</div>
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">{issue.description}</p>
+                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                  {issue.location && <span><span className="font-medium">Location:</span> {issue.location}</span>}
+                  {issue.codeReference && <span><span className="font-medium">Code ref:</span> {issue.codeReference}</span>}
+                  {issue.responsibleParty && <span><span className="font-medium">Responsible:</span> {issue.responsibleParty}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

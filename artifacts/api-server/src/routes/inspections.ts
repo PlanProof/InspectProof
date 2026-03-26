@@ -187,7 +187,7 @@ router.get("/:id", async (req, res) => {
       orderIndex: r.item.orderIndex,
     }));
 
-    const issues = await db.select().from(issuesTable)
+    const realIssues = await db.select().from(issuesTable)
       .where(eq(issuesTable.inspectionId, id));
 
     const notes = await db.select().from(notesTable)
@@ -195,6 +195,35 @@ router.get("/:id", async (req, res) => {
 
     const project = await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId));
     const pName = project[0]?.name || "Unknown";
+
+    // Synthesise issues from failed/monitor checklist results so the Issues tab
+    // always reflects what was found on the checklist, even if no manual issue
+    // record was raised.
+    const syntheticIssues = formattedResults
+      .filter(r => r.result === "fail" || r.result === "monitor")
+      .map(r => ({
+        id: -(r.id),          // negative to avoid collision with real issue IDs
+        projectId: inspection.projectId,
+        inspectionId: id,
+        title: r.description,
+        description: r.notes ?? "",
+        severity: r.severity ?? (r.riskLevel === "high" ? "high" : r.riskLevel === "critical" ? "critical" : r.riskLevel === "low" ? "low" : "medium"),
+        status: r.defectStatus ?? "open",
+        location: r.location ?? null,
+        codeReference: r.codeReference ?? null,
+        responsibleParty: r.tradeAllocated ?? null,
+        dueDate: null,
+        resolvedDate: null,
+        assignedToId: null,
+        projectName: pName,
+        source: "checklist" as const,
+        checklistResultId: r.id,
+        category: r.category ?? null,
+        result: r.result,
+        recommendedAction: r.recommendedAction ?? null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }));
 
     const counts = await getInspectionCounts(id);
 
@@ -233,15 +262,18 @@ router.get("/:id", async (req, res) => {
       ...counts,
       createdAt: inspection.createdAt instanceof Date ? inspection.createdAt.toISOString() : inspection.createdAt,
       checklistResults: formattedResults,
-      issues: issues.map(i => ({
-        id: i.id, projectId: i.projectId, inspectionId: i.inspectionId,
-        title: i.title, description: i.description, severity: i.severity,
-        status: i.status, location: i.location, codeReference: i.codeReference,
-        responsibleParty: i.responsibleParty, dueDate: i.dueDate, resolvedDate: i.resolvedDate,
-        assignedToId: i.assignedToId, projectName: pName,
-        createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : i.createdAt,
-        updatedAt: i.updatedAt instanceof Date ? i.updatedAt.toISOString() : i.updatedAt,
-      })),
+      issues: [
+        ...realIssues.map(i => ({
+          id: i.id, projectId: i.projectId, inspectionId: i.inspectionId,
+          title: i.title, description: i.description, severity: i.severity,
+          status: i.status, location: i.location, codeReference: i.codeReference,
+          responsibleParty: i.responsibleParty, dueDate: i.dueDate, resolvedDate: i.resolvedDate,
+          assignedToId: i.assignedToId, projectName: pName, source: "manual" as const,
+          createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : i.createdAt,
+          updatedAt: i.updatedAt instanceof Date ? i.updatedAt.toISOString() : i.updatedAt,
+        })),
+        ...syntheticIssues,
+      ],
       notes: notes.map(n => ({
         id: n.id, projectId: n.projectId, inspectionId: n.inspectionId,
         content: n.content, authorId: n.authorId, authorName: "Inspector",
