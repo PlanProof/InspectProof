@@ -796,22 +796,6 @@ export default function HomeScreen() {
         onTimeChange={handleTimeChange}
       />
 
-      {/* Overdue alert */}
-      {(analytics?.overdueIssues || 0) > 0 && (
-        <Pressable
-          onPress={() => router.push("/(tabs)/issues" as any)}
-          style={({ pressed }) => [styles.alertBanner, pressed && { opacity: 0.85 }]}
-        >
-          <View style={styles.alertIcon}>
-            <Feather name="alert-circle" size={16} color={Colors.danger} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.alertTitle}>{analytics.overdueIssues} Overdue Issues</Text>
-            <Text style={styles.alertSub}>Tap to review</Text>
-          </View>
-          <Feather name="chevron-right" size={16} color={Colors.danger} />
-        </Pressable>
-      )}
     </ScrollView>
   );
 }
@@ -851,15 +835,4 @@ const styles = StyleSheet.create({
   calendarTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   calendarTitle: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   viewAll: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
-  alertBanner: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    backgroundColor: Colors.dangerLight, borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: Colors.dangerBorder,
-  },
-  alertIcon: {
-    width: 34, height: 34, borderRadius: 8,
-    backgroundColor: "#FED7D7", alignItems: "center", justifyContent: "center",
-  },
-  alertTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.danger },
-  alertSub: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.danger + "99" },
 });
