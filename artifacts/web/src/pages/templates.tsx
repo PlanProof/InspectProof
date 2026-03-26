@@ -814,9 +814,8 @@ export default function Templates() {
       grouped[t.folder].push(t);
     });
 
-  const classOrder = Object.keys(NCC_CLASSES);
+  const classOrder = discipline === "Building Surveyor" ? Object.keys(NCC_CLASSES) : [];
   const folderKeys = [
-    // When not searching, always show all NCC classes (even empty); when searching, only show matching classes
     ...classOrder.filter(f => !search || grouped[f] || NCC_CLASSES[f]?.toLowerCase().includes(search.toLowerCase())),
     ...Object.keys(grouped).filter(f => !classOrder.includes(f)),
   ];
@@ -859,7 +858,7 @@ export default function Templates() {
         {DISCIPLINE_ORDER.map(d => (
           <button
             key={d}
-            onClick={() => { setDiscipline(d); setSelectedId(null); setOpenFolders(new Set(["Class 1a"])); }}
+            onClick={() => { setDiscipline(d); setSelectedId(null); setOpenFolders(new Set(d === "Building Surveyor" ? ["Class 1a"] : [])); }}
             className={cn(
               "px-4 py-2 rounded-lg text-sm font-semibold border-2 transition-all",
               discipline === d
