@@ -545,7 +545,14 @@ export default function ConductInspectionScreen() {
               <View style={styles.emptyState}>
                 <Feather name="clipboard" size={48} color={Colors.textTertiary} />
                 <Text style={styles.emptyTitle}>No checklist items</Text>
-                <Text style={styles.emptySub}>This inspection has no checklist template attached.</Text>
+                <Text style={styles.emptySub}>Add items manually to build your checklist.</Text>
+                <Pressable
+                  onPress={() => openAddItemModal("General")}
+                  style={({ pressed }) => [styles.emptyAddBtn, pressed && { opacity: 0.7 }]}
+                >
+                  <Feather name="plus" size={16} color="#fff" />
+                  <Text style={styles.emptyAddBtnText}>Add Item</Text>
+                </Pressable>
               </View>
             ) : (
               Object.entries(grouped).map(([category, items]) => (
@@ -1402,9 +1409,11 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
   scrollContent: { padding: 12, gap: 16 },
-  emptyState: { alignItems: "center", paddingTop: 60, gap: 12 },
+  emptyState: { alignItems: "center", paddingTop: 60, gap: 12, paddingHorizontal: 32 },
   emptyTitle: { fontSize: 18, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   emptySub: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, textAlign: "center" },
+  emptyAddBtn: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.secondary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, marginTop: 8 },
+  emptyAddBtnText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
   category: { gap: 6 },
   categoryHeader: {
     flexDirection: "row",
