@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import { useParams, Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Badge, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
+import { DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   Calendar, Clock, User, CloudSun, ClipboardList,
   CheckCircle2, XCircle, MinusCircle, AlertTriangle, MessageSquare,
@@ -165,7 +166,7 @@ function severityColors(sev: string) {
   return map[sev] ?? "bg-gray-50 text-gray-500 border-gray-200";
 }
 
-const TABS = ["Overview", "Checklist", "Issues", "Documents"] as const;
+const TABS = ["Overview", "Checklist", "Issues", "Documents", "Reports"] as const;
 type Tab = typeof TABS[number];
 
 // ── Report type catalogue ─────────────────────────────────────────────────────
@@ -254,8 +255,9 @@ export default function InspectionDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [docsByItem, setDocsByItem] = useState<Record<number, { id: number; name: string; mimeType?: string }[]>>({});
-  const [existingReportCount, setExistingReportCount] = useState<number | null>(null);
+  const [reports, setReports] = useState<any[]>([]);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [viewingReport, setViewingReport] = useState<any | null>(null);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState("inspection_certificate");
   const [generatingReport, setGeneratingReport] = useState(false);
@@ -298,7 +300,7 @@ export default function InspectionDetail() {
         }
       }
       setDocsByItem(byItem);
-      setExistingReportCount(reports.length);
+      setReports(reports);
       setInspectors(users);
       setTemplates(tmpls);
       setProjectDocuments(projDocs);
@@ -332,6 +334,13 @@ export default function InspectionDetail() {
     }
   };
 
+  const refreshReports = useCallback(async () => {
+    try {
+      const updated = await apiFetch(`/api/reports?inspectionId=${inspId}`).catch(() => []);
+      setReports(updated);
+    } catch {}
+  }, [inspId]);
+
   const submitReport = async () => {
     if (!generatedReport) return;
     setSubmittingReport(true);
@@ -342,10 +351,20 @@ export default function InspectionDetail() {
       });
       setReportDialogOpen(false);
       setGeneratedReport(null);
+      await refreshReports();
+      setTab("Reports");
     } catch {
     } finally {
       setSubmittingReport(false);
     }
+  };
+
+  const saveReportDraft = async () => {
+    if (!generatedReport) return;
+    setReportDialogOpen(false);
+    setGeneratedReport(null);
+    await refreshReports();
+    setTab("Reports");
   };
 
   const downloadReportPdf = async (report: any) => {
@@ -483,7 +502,7 @@ export default function InspectionDetail() {
 
       {/* ── Report creation prompt banner ── */}
       {(inspection.status === "completed" || inspection.status === "follow_up_required")
-        && existingReportCount === 0
+        && reports.length === 0
         && !bannerDismissed && (
         <div className="mb-5 rounded-xl border border-brand-pear/40 bg-sidebar text-white px-5 py-4 flex items-center gap-4 shadow-sm">
           <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-brand-pear shrink-0">
@@ -544,6 +563,11 @@ export default function InspectionDetail() {
                 {total}
               </span>
             )}
+            {t === "Reports" && reports.length > 0 && (
+              <span className="text-xs bg-sidebar text-white font-semibold rounded-full px-1.5 py-0.5 leading-none">
+                {reports.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -566,6 +590,55 @@ export default function InspectionDetail() {
           onReload={load}
         />
       )}
+
+      {tab === "Reports" && (
+        <ReportsTab
+          reports={reports}
+          inspection={inspection}
+          onGenerate={() => openReportDialog(inspection)}
+          onDownload={downloadReportPdf}
+          onView={setViewingReport}
+          onSendReport={async (report) => {
+            try {
+              await apiFetch(`/api/reports/${report.id}/send`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: inspection.clientEmail ?? "" }),
+              });
+              await refreshReports();
+            } catch {}
+          }}
+        />
+      )}
+
+      {/* ── View Report Content Modal ── */}
+      <Dialog open={!!viewingReport} onOpenChange={o => { if (!o) setViewingReport(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-4.5 w-4.5 text-secondary" />
+              {viewingReport?.title}
+            </DialogTitle>
+            <DialogDescription>
+              {ALL_REPORT_TYPE_LABELS[viewingReport?.reportType] ?? viewingReport?.reportType}
+              {viewingReport?.generatedByName ? ` · Generated by ${viewingReport.generatedByName}` : ""}
+              {viewingReport?.createdAt ? ` · ${new Date(viewingReport.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            {viewingReport?.content && renderReportContent(viewingReport.content)}
+          </div>
+          <DialogFooter className="mt-4 gap-2 flex-row justify-end">
+            <Button variant="outline" onClick={() => setViewingReport(null)}>Close</Button>
+            <Button
+              onClick={() => downloadReportPdf(viewingReport)}
+              className="gap-1.5 bg-sidebar hover:bg-sidebar/90 text-white"
+            >
+              <Download className="h-3.5 w-3.5" /> Download PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Generate Report Dialog ── */}
       <Dialog open={reportDialogOpen} onOpenChange={o => { setReportDialogOpen(o); if (!o) setGeneratedReport(null); }}>
@@ -677,14 +750,22 @@ export default function InspectionDetail() {
                     Download PDF
                   </Button>
                   <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={saveReportDraft}
+                    className="gap-1.5"
+                  >
+                    Save Draft
+                  </Button>
+                  <Button
                     size="sm"
                     onClick={submitReport}
                     disabled={submittingReport}
-                    className="gap-1.5"
+                    className="gap-1.5 bg-sidebar hover:bg-sidebar/90 text-white"
                   >
                     {submittingReport
                       ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Approving…</>
-                      : <><Send className="h-3.5 w-3.5" />Approve & Save to Project</>
+                      : <><Send className="h-3.5 w-3.5" />Approve & Save</>
                     }
                   </Button>
                 </div>
@@ -694,6 +775,175 @@ export default function InspectionDetail() {
         </DialogContent>
       </Dialog>
     </AppLayout>
+  );
+}
+
+// ── Reports Tab ───────────────────────────────────────────────────────────────
+
+function renderReportContent(content: string) {
+  return (
+    <pre className="text-xs font-mono leading-relaxed p-4 whitespace-pre-wrap text-sidebar bg-muted/30 rounded-lg border border-border">
+      {content}
+    </pre>
+  );
+}
+
+const REPORT_STATUS_STYLES: Record<string, string> = {
+  draft:     "bg-yellow-50 text-yellow-700 border-yellow-200",
+  submitted: "bg-blue-50 text-blue-700 border-blue-200",
+  approved:  "bg-green-50 text-green-700 border-green-200",
+  sent:      "bg-purple-50 text-purple-700 border-purple-200",
+};
+
+function ReportsTab({
+  reports,
+  inspection,
+  onGenerate,
+  onDownload,
+  onView,
+  onSendReport,
+}: {
+  reports: any[];
+  inspection: any;
+  onGenerate: () => void;
+  onDownload: (r: any) => void;
+  onView: (r: any) => void;
+  onSendReport: (r: any) => void;
+}) {
+  const canGenerate = inspection.status === "completed" || inspection.status === "follow_up_required";
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-sidebar">Reports</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {reports.length === 0
+              ? "No reports generated yet"
+              : `${reports.length} report${reports.length !== 1 ? "s" : ""} for this inspection`}
+          </p>
+        </div>
+        {canGenerate && (
+          <Button
+            size="sm"
+            onClick={onGenerate}
+            className="gap-1.5 bg-brand-pear hover:bg-brand-pear/90 text-sidebar font-semibold"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Generate Report
+          </Button>
+        )}
+      </div>
+
+      {/* Empty state */}
+      {reports.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-border rounded-xl">
+          <div className="w-14 h-14 rounded-2xl bg-sidebar/5 flex items-center justify-center mb-4">
+            <FileText className="h-7 w-7 text-sidebar/40" />
+          </div>
+          <p className="font-semibold text-sidebar mb-1">No reports yet</p>
+          <p className="text-sm text-muted-foreground mb-5 max-w-xs">
+            {canGenerate
+              ? "This inspection is complete. Generate your first report to document the findings."
+              : "Reports can be generated once the inspection is marked as completed."}
+          </p>
+          {canGenerate && (
+            <Button onClick={onGenerate} className="gap-1.5 bg-sidebar hover:bg-sidebar/90 text-white">
+              <FileText className="h-3.5 w-3.5" />
+              Generate First Report
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Report cards */}
+      {reports.map((report) => {
+        const statusStyle = REPORT_STATUS_STYLES[report.status] ?? "bg-gray-50 text-gray-600 border-gray-200";
+        const date = report.createdAt
+          ? new Date(report.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })
+          : null;
+        const preview = typeof report.content === "string"
+          ? report.content.slice(0, 220).replace(/\n+/g, " ").trim()
+          : null;
+
+        return (
+          <div key={report.id} className="bg-card border border-border rounded-xl overflow-hidden">
+            {/* Card header */}
+            <div className="px-5 py-4 flex items-start gap-4">
+              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-sidebar/5 border border-sidebar/10 shrink-0">
+                <FileText className="h-5 w-5 text-sidebar" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border capitalize ${statusStyle}`}>
+                    {report.status}
+                  </span>
+                  <span className="text-xs text-muted-foreground border border-muted/40 rounded-full px-2 py-0.5">
+                    {ALL_REPORT_TYPE_LABELS[report.reportType] ?? report.reportType}
+                  </span>
+                </div>
+                <h4 className="text-sm font-semibold text-sidebar leading-snug">{report.title}</h4>
+                <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                  {report.generatedByName && (
+                    <span className="flex items-center gap-1">
+                      <User className="h-3 w-3" /> {report.generatedByName}
+                    </span>
+                  )}
+                  {date && (
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" /> {date}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {/* Actions */}
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onView(report)}
+                  className="gap-1.5 text-xs h-8"
+                >
+                  <Eye className="h-3.5 w-3.5" /> View
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onDownload(report)}
+                  className="gap-1.5 text-xs h-8"
+                >
+                  <Download className="h-3.5 w-3.5" /> PDF
+                </Button>
+                {report.status === "approved" && (
+                  <Button
+                    size="sm"
+                    onClick={() => onSendReport(report)}
+                    className="gap-1.5 text-xs h-8 bg-secondary hover:bg-secondary/90 text-white"
+                  >
+                    <Send className="h-3.5 w-3.5" /> Send
+                  </Button>
+                )}
+                {report.status === "sent" && (
+                  <span className="flex items-center gap-1 text-xs text-purple-600 font-medium">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Sent
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Content preview */}
+            {preview && (
+              <div className="px-5 pb-4">
+                <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 font-mono leading-relaxed line-clamp-3">
+                  {preview}{preview.length < (report.content?.length ?? 0) ? "…" : ""}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
