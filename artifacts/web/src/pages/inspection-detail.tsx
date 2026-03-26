@@ -109,6 +109,8 @@ interface Inspection {
   duration?: number;
   notes: Note[];
   weatherConditions?: string;
+  siteNotes?: string;
+  clientEmail?: string;
   checklistTemplateId?: number;
   checklistTemplateName?: string;
   checklistTemplateDiscipline?: string | null;
@@ -974,6 +976,7 @@ function OverviewTab({
     completedDate: inspection.completedDate ?? "",
     duration: inspection.duration ? String(inspection.duration) : "",
     weatherConditions: inspection.weatherConditions ?? "",
+    siteNotes: inspection.siteNotes ?? "",
   });
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsSaved, setDetailsSaved] = useState(false);
@@ -993,6 +996,7 @@ function OverviewTab({
           completedDate: detailForm.completedDate || null,
           duration: detailForm.duration ? parseInt(detailForm.duration) : null,
           weatherConditions: detailForm.weatherConditions || null,
+          notes: detailForm.siteNotes || null,
         }),
       });
       setEditingDetails(false);
@@ -1014,6 +1018,7 @@ function OverviewTab({
       completedDate: inspection.completedDate ?? "",
       duration: inspection.duration ? String(inspection.duration) : "",
       weatherConditions: inspection.weatherConditions ?? "",
+      siteNotes: inspection.siteNotes ?? "",
     });
     setDetailsError("");
     setEditingDetails(false);
@@ -1153,22 +1158,30 @@ function OverviewTab({
 
           {/* Static read view */}
           {!editingDetails && (
-            <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-              {[
-                { label: "Project", value: inspection.projectName },
-                { label: "Type", value: inspection.inspectionType.replace(/_/g, " ") },
-                { label: "Status", value: inspection.status.replace(/_/g, " ") },
-                { label: "Scheduled Date", value: formatDate(inspection.scheduledDate) },
-                { label: "Scheduled Time", value: inspection.scheduledTime ?? "TBC" },
-                { label: "Completed Date", value: inspection.completedDate ? formatDate(inspection.completedDate) : "—" },
-                { label: "Duration", value: inspection.duration ? `${inspection.duration} min` : "—" },
-                { label: "Weather", value: inspection.weatherConditions ?? "—" },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <div className="text-xs text-muted-foreground mb-0.5">{label}</div>
-                  <div className="font-medium text-sidebar capitalize">{value}</div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                {[
+                  { label: "Project", value: inspection.projectName },
+                  { label: "Type", value: inspection.inspectionType.replace(/_/g, " ") },
+                  { label: "Status", value: inspection.status.replace(/_/g, " ") },
+                  { label: "Scheduled Date", value: formatDate(inspection.scheduledDate) },
+                  { label: "Scheduled Time", value: inspection.scheduledTime ?? "TBC" },
+                  { label: "Completed Date", value: inspection.completedDate ? formatDate(inspection.completedDate) : "—" },
+                  { label: "Duration", value: inspection.duration ? `${inspection.duration} min` : "—" },
+                  { label: "Weather", value: inspection.weatherConditions ?? "—" },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <div className="text-xs text-muted-foreground mb-0.5">{label}</div>
+                    <div className="font-medium text-sidebar capitalize">{value}</div>
+                  </div>
+                ))}
+              </div>
+              {inspection.siteNotes && (
+                <div className="text-sm border-t border-border pt-4">
+                  <div className="text-xs text-muted-foreground mb-1">Site Briefing Notes</div>
+                  <div className="font-medium text-sidebar whitespace-pre-wrap">{inspection.siteNotes}</div>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -1272,6 +1285,18 @@ function OverviewTab({
                     ))}
                   </div>
                 </div>
+              </div>
+
+              {/* Site Notes */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Site Briefing Notes</label>
+                <textarea
+                  rows={3}
+                  placeholder="Persons on site, key observations, access notes…"
+                  value={detailForm.siteNotes}
+                  onChange={e => setDetailForm(f => ({ ...f, siteNotes: e.target.value }))}
+                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
               </div>
 
               {detailsError && (

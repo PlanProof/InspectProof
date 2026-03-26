@@ -32,6 +32,15 @@ const RESULT_OPTS = [
   { key: "na", label: "N/A", icon: "minus-circle", color: "#94a3b8", bg: "#f1f5f9" },
 ];
 
+const WEATHER_OPTS = [
+  { key: "Sunny", emoji: "☀️" },
+  { key: "Partly Cloudy", emoji: "⛅" },
+  { key: "Overcast", emoji: "🌥️" },
+  { key: "Rain", emoji: "🌧️" },
+  { key: "Strong Wind", emoji: "💨" },
+  { key: "Other", emoji: "🌩️" },
+];
+
 type ResultKey = "pass" | "fail" | "monitor" | "na" | "pending";
 
 const SEVERITY_OPTS = ["critical", "major", "minor", "cosmetic"] as const;
@@ -105,6 +114,13 @@ export default function ConductInspectionScreen() {
   const [activePage, setActivePage] = useState(0);
   const pageScrollRef = useRef<ScrollView>(null);
   const autoCompletedRef = useRef(false);
+  const hasShownBriefingRef = useRef(false);
+
+  // Pre-inspection briefing state
+  const [showPreInspection, setShowPreInspection] = useState(false);
+  const [preWeather, setPreWeather] = useState("");
+  const [preSiteNotes, setPreSiteNotes] = useState("");
+  const [savingBriefing, setSavingBriefing] = useState(false);
 
   const scrollToPage = useCallback((page: number) => {
     pageScrollRef.current?.scrollTo({ x: page * screenW, animated: true });
@@ -164,6 +180,48 @@ export default function ConductInspectionScreen() {
   // Score only counts pass/fail — N/A and monitor items are excluded from pass rate
   const scored = passCount + failCount;
   const passRate = scored > 0 ? passCount / scored : null;
+
+  // Auto-show pre-inspection briefing on first load if not yet set
+  useEffect(() => {
+    if (!inspection || hasShownBriefingRef.current) return;
+    hasShownBriefingRef.current = true;
+    if (!inspection.weatherConditions) {
+      setPreWeather("");
+      setPreSiteNotes(inspection.siteNotes ?? "");
+      setShowPreInspection(true);
+    }
+  }, [inspection?.id]);
+
+  const openBriefingEdit = () => {
+    setPreWeather(inspection?.weatherConditions ?? "");
+    setPreSiteNotes(inspection?.siteNotes ?? "");
+    setShowPreInspection(true);
+  };
+
+  const savePreInspection = async () => {
+    if (!preWeather) {
+      Alert.alert("Weather Required", "Please select the current weather conditions before commencing.");
+      return;
+    }
+    setSavingBriefing(true);
+    try {
+      await fetchWithAuth(`/api/inspections/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weatherConditions: preWeather,
+          notes: preSiteNotes || null,
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["inspection", id] });
+      queryClient.invalidateQueries({ queryKey: ["inspections"] });
+      setShowPreInspection(false);
+    } catch {
+      Alert.alert("Error", "Failed to save briefing. Please try again.");
+    } finally {
+      setSavingBriefing(false);
+    }
+  };
 
   // Auto-mark as completed/follow_up_required when 100% checked off
   useEffect(() => {
@@ -425,6 +483,21 @@ export default function ConductInspectionScreen() {
         </Pressable>
       </View>
 
+      {/* Weather briefing strip */}
+      <Pressable onPress={openBriefingEdit} style={styles.weatherStrip}>
+        <Feather
+          name={inspection?.weatherConditions ? "cloud" : "alert-circle"}
+          size={13}
+          color={inspection?.weatherConditions ? Colors.secondary : "#f59e0b"}
+        />
+        <Text style={[styles.weatherStripText, !inspection?.weatherConditions && { color: "#f59e0b" }]}>
+          {inspection?.weatherConditions
+            ? `${WEATHER_OPTS.find(w => w.key === inspection.weatherConditions)?.emoji ?? "🌤️"} ${inspection.weatherConditions}`
+            : "Site briefing incomplete — tap to complete"}
+        </Text>
+        <Feather name="edit-2" size={11} color={inspection?.weatherConditions ? Colors.textTertiary : "#f59e0b"} />
+      </Pressable>
+
       {/* Tab bar */}
       <View style={styles.tabBar}>
         <Pressable style={[styles.tab, activePage === 0 && styles.tabActive]} onPress={() => scrollToPage(0)}>
@@ -616,6 +689,95 @@ export default function ConductInspectionScreen() {
             inspectionId={id}
           />
         )}
+      </Modal>
+
+      {/* Pre-Inspection Briefing Modal */}
+      <Modal
+        visible={showPreInspection}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          if (inspection?.weatherConditions) setShowPreInspection(false);
+        }}
+      >
+        <View style={styles.briefingModal}>
+          {/* Handle bar */}
+          <View style={styles.briefingHandle} />
+
+          {/* Header */}
+          <View style={styles.briefingHeader}>
+            <View>
+              <Text style={styles.briefingTitle}>Site Briefing</Text>
+              <Text style={styles.briefingSubtitle}>Complete before commencing inspection</Text>
+            </View>
+            {inspection?.weatherConditions && (
+              <Pressable onPress={() => setShowPreInspection(false)} hitSlop={12} style={styles.briefingSkip}>
+                <Feather name="x" size={20} color={Colors.textTertiary} />
+              </Pressable>
+            )}
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.briefingContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+            {/* Weather section */}
+            <Text style={styles.briefingLabel}>Current Weather Conditions <Text style={{ color: "#ef4444" }}>*</Text></Text>
+            <View style={styles.weatherChipGrid}>
+              {WEATHER_OPTS.map(w => (
+                <Pressable
+                  key={w.key}
+                  onPress={() => setPreWeather(w.key)}
+                  style={[
+                    styles.weatherChip,
+                    preWeather === w.key && styles.weatherChipSelected,
+                  ]}
+                >
+                  <Text style={styles.weatherChipEmoji}>{w.emoji}</Text>
+                  <Text style={[styles.weatherChipLabel, preWeather === w.key && styles.weatherChipLabelSelected]}>
+                    {w.key}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {!preWeather && (
+              <Text style={styles.briefingHint}>Select one to continue</Text>
+            )}
+
+            {/* Site notes */}
+            <Text style={[styles.briefingLabel, { marginTop: 24 }]}>Site Notes</Text>
+            <Text style={styles.briefingHint}>Persons on site, access details, key observations…</Text>
+            <TextInput
+              multiline
+              numberOfLines={5}
+              textAlignVertical="top"
+              placeholder="e.g. John Smith (Builder), Mary Lee (Owner) on site. Access via side gate."
+              placeholderTextColor={Colors.textTertiary}
+              value={preSiteNotes}
+              onChangeText={setPreSiteNotes}
+              style={styles.briefingTextarea}
+            />
+
+            {/* CTA */}
+            <Pressable
+              onPress={savePreInspection}
+              disabled={savingBriefing || !preWeather}
+              style={({ pressed }) => [
+                styles.briefingCTA,
+                (!preWeather || savingBriefing) && styles.briefingCTADisabled,
+                pressed && preWeather && { opacity: 0.85 },
+              ]}
+            >
+              {savingBriefing ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Feather name="clipboard" size={16} color="#fff" />
+                  <Text style={styles.briefingCTAText}>Commence Inspection</Text>
+                </>
+              )}
+            </Pressable>
+
+          </ScrollView>
+        </View>
       </Modal>
     </View>
   );
@@ -1760,4 +1922,140 @@ const panelStyles = StyleSheet.create({
   markupBtnText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   previewContainer: { flex: 1, backgroundColor: "#000" },
   previewImage: { flex: 1, width: "100%" },
+
+  // ── Weather briefing strip ──
+  weatherStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  weatherStripText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_500Medium",
+    color: Colors.textSecondary,
+  },
+
+  // ── Pre-inspection briefing modal ──
+  briefingModal: {
+    flex: 1,
+    backgroundColor: "#fff",
+    paddingTop: 8,
+  },
+  briefingHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: "center",
+    marginBottom: 8,
+  },
+  briefingHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  briefingTitle: {
+    fontSize: 20,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: Colors.primary,
+  },
+  briefingSubtitle: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  briefingSkip: {
+    padding: 4,
+  },
+  briefingContent: {
+    padding: 24,
+    paddingBottom: 48,
+  },
+  briefingLabel: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+    marginBottom: 12,
+  },
+  briefingHint: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.textTertiary,
+    marginBottom: 10,
+    marginTop: -6,
+  },
+  weatherChipGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  weatherChip: {
+    width: "30%",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    gap: 4,
+  },
+  weatherChipSelected: {
+    borderColor: Colors.secondary,
+    backgroundColor: "#EEF3FB",
+  },
+  weatherChipEmoji: {
+    fontSize: 26,
+  },
+  weatherChipLabel: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_500Medium",
+    color: Colors.textSecondary,
+    textAlign: "center",
+  },
+  weatherChipLabelSelected: {
+    color: Colors.secondary,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+  },
+  briefingTextarea: {
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.text,
+    minHeight: 110,
+    backgroundColor: Colors.surface,
+  },
+  briefingCTA: {
+    marginTop: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.primary,
+    paddingVertical: 18,
+    borderRadius: 16,
+  },
+  briefingCTADisabled: {
+    opacity: 0.45,
+  },
+  briefingCTAText: {
+    fontSize: 16,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: "#fff",
+    letterSpacing: 0.2,
+  },
 });
