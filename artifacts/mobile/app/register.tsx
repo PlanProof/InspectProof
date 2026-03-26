@@ -136,7 +136,7 @@ export default function RegisterScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoBadge}>
-            <Feather name="clipboard" size={22} color={Colors.primary} />
+            <Feather name="clipboard" size={22} color="#F2F3F4" />
           </View>
           <Text style={styles.title}>
             {step === "profile" ? "Create your account" : "Choose your plan"}
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
   header: { alignItems: "center", gap: 8 },
   logoBadge: {
     width: 48, height: 48, borderRadius: 14,
-    backgroundColor: Colors.accent, alignItems: "center", justifyContent: "center",
+    backgroundColor: Colors.secondary, alignItems: "center", justifyContent: "center",
   },
   title: { fontSize: 24, fontFamily: "PlusJakartaSans_600SemiBold", color: "#FFFFFF", letterSpacing: -0.4, textAlign: "center" },
   subtitle: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.5)", textAlign: "center", maxWidth: 280 },

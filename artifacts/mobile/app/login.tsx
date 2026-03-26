@@ -67,7 +67,7 @@ export default function LoginScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoBadge}>
-            <Feather name="clipboard" size={22} color={Colors.primary} />
+            <Feather name="clipboard" size={22} color="#F2F3F4" />
           </View>
           <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in to your InspectProof account</Text>
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   header: { alignItems: "center", gap: 10 },
   logoBadge: {
     width: 52, height: 52, borderRadius: 16,
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.secondary,
     alignItems: "center", justifyContent: "center",
   },
   title: { fontSize: 26, fontFamily: "PlusJakartaSans_600SemiBold", color: "#FFFFFF", letterSpacing: -0.5 },

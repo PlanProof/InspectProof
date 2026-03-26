@@ -175,7 +175,7 @@ export default function WelcomeScreen() {
         {/* Hero */}
         <View style={styles.hero}>
           <View style={styles.logoBadge}>
-            <Feather name="clipboard" size={28} color={Colors.primary} />
+            <Feather name="clipboard" size={28} color="#F2F3F4" />
           </View>
           <Text style={styles.brandName}>InspectProof</Text>
           <Text style={styles.tagline}>
@@ -225,7 +225,7 @@ export default function WelcomeScreen() {
             {FEATURES.map((f) => (
               <View key={f.title} style={styles.featureCard}>
                 <View style={styles.featureIcon}>
-                  <Feather name={f.icon} size={18} color={Colors.accent} />
+                  <Feather name={f.icon} size={18} color={Colors.secondary} />
                 </View>
                 <View style={styles.featureText}>
                   <Text style={styles.featureTitle}>{f.title}</Text>
@@ -281,7 +281,7 @@ export default function WelcomeScreen() {
           <View style={styles.profCard}>
             <View style={styles.profCardHeader}>
               <View style={styles.profIconWrap}>
-                <Feather name={prof.icon} size={20} color={Colors.accent} />
+                <Feather name={prof.icon} size={20} color={Colors.secondary} />
               </View>
               <Text style={styles.profCardTitle}>{prof.label}</Text>
             </View>
@@ -335,9 +335,9 @@ const styles = StyleSheet.create({
   hero: { alignItems: "center", gap: 10, paddingTop: 8 },
   logoBadge: {
     width: 68, height: 68, borderRadius: 20,
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.secondary,
     alignItems: "center", justifyContent: "center",
-    shadowColor: Colors.accent, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
+    shadowColor: Colors.secondary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 8,
   },
   brandName: {
     fontSize: 34,
@@ -374,19 +374,19 @@ const styles = StyleSheet.create({
   ctaSecondary: {
     alignItems: "center", justifyContent: "center",
     borderRadius: 14, paddingVertical: 14,
-    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)",
+    borderWidth: 1.5, borderColor: Colors.secondary,
   },
-  ctaSecondaryText: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.8)" },
+  ctaSecondaryText: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
 
   statsStrip: {
     flexDirection: "row",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(70,109,181,0.18)",
+    borderRadius: 16, borderWidth: 1, borderColor: "rgba(70,109,181,0.35)",
     paddingVertical: 16,
   },
   statItem: { flex: 1, alignItems: "center", gap: 3 },
   statN: { fontSize: 18, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.accent, lineHeight: 22, textAlign: "center" },
-  statLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.45)", textAlign: "center", lineHeight: 13 },
+  statLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.6)", textAlign: "center", lineHeight: 13 },
 
   section: { gap: 16 },
   sectionHeader: { gap: 8 },
@@ -408,18 +408,18 @@ const styles = StyleSheet.create({
   featureList: { gap: 10 },
   featureCard: {
     flexDirection: "row", gap: 14, alignItems: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#F2F3F5",
+    borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "rgba(70,109,181,0.15)",
   },
   featureIcon: {
     width: 38, height: 38, borderRadius: 10,
-    backgroundColor: "rgba(197,217,45,0.15)",
+    backgroundColor: "rgba(70,109,181,0.12)",
     alignItems: "center", justifyContent: "center",
     flexShrink: 0,
   },
   featureText: { flex: 1, gap: 3 },
-  featureTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: "#FFFFFF" },
-  featureDesc: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.5)", lineHeight: 17 },
+  featureTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: "#0B1933" },
+  featureDesc: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#566077", lineHeight: 17 },
 
   chipScroll: { marginHorizontal: -24 },
   chipScrollContent: { paddingHorizontal: 24, gap: 8 },
@@ -437,25 +437,25 @@ const styles = StyleSheet.create({
   chipLabelActive: { color: Colors.primary },
 
   profCard: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "#F2F3F5",
     borderRadius: 16, padding: 18,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.1)",
+    borderWidth: 1, borderColor: "rgba(70,109,181,0.2)",
     gap: 12,
   },
   profCardHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   profIconWrap: {
     width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "rgba(197,217,45,0.15)",
-    borderWidth: 1, borderColor: "rgba(197,217,45,0.25)",
+    backgroundColor: "rgba(70,109,181,0.12)",
+    borderWidth: 1, borderColor: "rgba(70,109,181,0.25)",
     alignItems: "center", justifyContent: "center",
   },
-  profCardTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: "#FFFFFF", flex: 1 },
-  profCardDesc: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.55)", lineHeight: 19 },
+  profCardTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: "#0B1933", flex: 1 },
+  profCardDesc: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "#566077", lineHeight: 19 },
   profBullets: { gap: 10 },
   bulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  bulletText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.7)", lineHeight: 17 },
+  bulletText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#566077", lineHeight: 17 },
 
-  divider: { height: 1, backgroundColor: "rgba(255,255,255,0.08)" },
+  divider: { height: 1, backgroundColor: "rgba(70,109,181,0.3)" },
 
   bottomCta: { alignItems: "center", gap: 12 },
   bottomCtaText: {
