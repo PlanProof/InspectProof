@@ -238,7 +238,7 @@ interface DraggableCardProps {
   insp: any;
   isLast: boolean;
   onTimeChange: (id: number, newTime: string) => void;
-  onEditTime: (inspId: number, currentTime: string) => void;
+  onEditTime: (inspId: number, currentTime: string, currentDate: string) => void;
 }
 
 function DraggableCard({ insp, onTimeChange, onEditTime }: DraggableCardProps) {
@@ -311,7 +311,7 @@ function DraggableCard({ insp, onTimeChange, onEditTime }: DraggableCardProps) {
               <Feather name="clipboard" size={11} color={Colors.secondary} />
               <Text style={tlStyles.typeText}>{typeLabel}</Text>
             </View>
-            <Pressable onPress={() => onEditTime(insp.id, insp.displayTime)} style={({ pressed }) => [tlStyles.timePill, pressed && { opacity: 0.6 }]}>
+            <Pressable onPress={() => onEditTime(insp.id, insp.displayTime, insp.scheduledDate || toLocalDateStr(new Date()))} style={({ pressed }) => [tlStyles.timePill, pressed && { opacity: 0.6 }]}>
               <Feather name="clock" size={11} color={Colors.secondary} />
               <Text style={[tlStyles.timeInCard, { color: Colors.secondary }, previewTime && tlStyles.timePreview]}>{displayedTime}</Text>
               <Feather name="edit-2" size={9} color={Colors.secondary + "99"} />
@@ -389,31 +389,60 @@ function DraggableCard({ insp, onTimeChange, onEditTime }: DraggableCardProps) {
   );
 }
 
+const SCHEDULE_DATE_RANGE = 42; // show 6 weeks
+const SCHEDULE_DATE_OFFSET = 14; // start 2 weeks before today
+
+function buildDateOptions(): { date: Date; str: string }[] {
+  const arr: { date: Date; str: string }[] = [];
+  const start = new Date();
+  start.setDate(start.getDate() - SCHEDULE_DATE_OFFSET);
+  for (let i = 0; i < SCHEDULE_DATE_RANGE; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    arr.push({ date: d, str: toLocalDateStr(d) });
+  }
+  return arr;
+}
+
+const SCHEDULE_DATES = buildDateOptions();
+const DATE_CELL_W = 48;
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 function ScheduleTimeline({
   inspections,
   selectedDate,
-  onTimeChange,
+  onScheduleChange,
 }: {
   inspections: any[];
   selectedDate: string;
-  onTimeChange: (id: number, newTime: string) => void;
+  onScheduleChange: (id: number, newTime: string, newDate: string) => void;
 }) {
   const today = toLocalDateStr(new Date());
 
-  // Time editor — single shared modal lifted out of cards
+  // Schedule editor — single shared modal lifted out of cards
   const [timeEditTarget, setTimeEditTarget] = useState<{ inspId: number } | null>(null);
   const [editHour, setEditHour] = useState("9");
   const [editMinute, setEditMinute] = useState("00");
   const [editAmPm, setEditAmPm] = useState<"AM" | "PM">("AM");
+  const [editDate, setEditDate] = useState(today);
+  const dateScrollRef = useRef<ScrollView>(null);
 
-  const handleEditTime = useCallback((inspId: number, currentTime: string) => {
+  const handleEditTime = useCallback((inspId: number, currentTime: string, currentDate: string) => {
     const [h, m] = currentTime.split(":").map(Number);
     const isPM = h >= 12;
     const hour12 = h % 12 || 12;
     setEditHour(String(hour12));
     setEditMinute(String(m).padStart(2, "0"));
     setEditAmPm(isPM ? "PM" : "AM");
+    setEditDate(currentDate);
     setTimeEditTarget({ inspId });
+    // scroll date strip so selected date is visible
+    const idx = SCHEDULE_DATES.findIndex(d => d.str === currentDate);
+    if (idx >= 0) {
+      setTimeout(() => {
+        dateScrollRef.current?.scrollTo({ x: Math.max(0, idx * DATE_CELL_W - DATE_CELL_W * 2), animated: false });
+      }, 50);
+    }
   }, []);
 
   const confirmTimeEdit = useCallback(() => {
@@ -423,9 +452,16 @@ function ScheduleTimeline({
     let h24 = h % 12;
     if (editAmPm === "PM") h24 += 12;
     const newTime = `${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-    onTimeChange(timeEditTarget.inspId, newTime);
+    onScheduleChange(timeEditTarget.inspId, newTime, editDate);
     setTimeEditTarget(null);
-  }, [timeEditTarget, editHour, editMinute, editAmPm, onTimeChange]);
+  }, [timeEditTarget, editHour, editMinute, editAmPm, editDate, onScheduleChange]);
+
+  // Drag handler — keeps existing date, changes only time
+  const handleDragTimeChange = useCallback((inspId: number, newTime: string) => {
+    const insp = inspections.find((i: any) => i.id === inspId);
+    const date = insp?.scheduledDate || toLocalDateStr(new Date());
+    onScheduleChange(inspId, newTime, date);
+  }, [inspections, onScheduleChange]);
 
   const isToday = selectedDate === today;
   const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return toLocalDateStr(d); })();
@@ -458,43 +494,85 @@ function ScheduleTimeline({
         <Pressable style={tlStyles.timeEditOverlay} onPress={() => setTimeEditTarget(null)} />
         <View style={tlStyles.timeEditSheet}>
           <View style={tlStyles.timeEditHandle} />
-          <Text style={tlStyles.timeEditTitle}>Change Time</Text>
-          <View style={tlStyles.timeEditRow}>
-            <View style={tlStyles.timeEditField}>
-              <Text style={tlStyles.timeEditLabel}>Hour</Text>
-              <TextInput
-                style={tlStyles.timeEditInput}
-                value={editHour}
-                onChangeText={setEditHour}
-                keyboardType="number-pad"
-                maxLength={2}
-                selectTextOnFocus
-              />
-            </View>
-            <Text style={tlStyles.timeEditColon}>:</Text>
-            <View style={tlStyles.timeEditField}>
-              <Text style={tlStyles.timeEditLabel}>Min</Text>
-              <TextInput
-                style={tlStyles.timeEditInput}
-                value={editMinute}
-                onChangeText={setEditMinute}
-                keyboardType="number-pad"
-                maxLength={2}
-                selectTextOnFocus
-              />
-            </View>
-            <View style={tlStyles.amPmToggle}>
-              {(["AM", "PM"] as const).map(v => (
-                <Pressable
-                  key={v}
-                  onPress={() => setEditAmPm(v)}
-                  style={[tlStyles.amPmBtn, editAmPm === v && tlStyles.amPmBtnActive]}
-                >
-                  <Text style={[tlStyles.amPmText, editAmPm === v && tlStyles.amPmTextActive]}>{v}</Text>
-                </Pressable>
-              ))}
+          <Text style={tlStyles.timeEditTitle}>Change Schedule</Text>
+
+          {/* Date picker strip */}
+          <View>
+            <Text style={tlStyles.timeEditSectionLabel}>Date</Text>
+            <ScrollView
+              ref={dateScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={tlStyles.datePicker}
+              contentContainerStyle={tlStyles.datePickerContent}
+            >
+              {SCHEDULE_DATES.map(({ date, str }) => {
+                const isSelected = str === editDate;
+                const isToday2 = str === today;
+                return (
+                  <Pressable
+                    key={str}
+                    onPress={() => setEditDate(str)}
+                    style={[tlStyles.dateCell, isSelected && tlStyles.dateCellSelected]}
+                  >
+                    <Text style={[tlStyles.dateDayName, isSelected && tlStyles.dateDayNameSelected]}>
+                      {DAY_SHORT[date.getDay()]}
+                    </Text>
+                    <View style={[tlStyles.dateDayNum, isSelected && tlStyles.dateDayNumSelected, isToday2 && !isSelected && tlStyles.dateDayNumToday]}>
+                      <Text style={[tlStyles.dateDayNumText, isSelected && tlStyles.dateDayNumTextSelected, isToday2 && !isSelected && tlStyles.dateDayNumTextToday]}>
+                        {date.getDate()}
+                      </Text>
+                    </View>
+                    <Text style={[tlStyles.dateMonthText, isSelected && tlStyles.dateMonthTextSelected]}>
+                      {date.toLocaleDateString("en-AU", { month: "short" })}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Time picker */}
+          <View>
+            <Text style={tlStyles.timeEditSectionLabel}>Time</Text>
+            <View style={tlStyles.timeEditRow}>
+              <View style={tlStyles.timeEditField}>
+                <Text style={tlStyles.timeEditLabel}>Hour</Text>
+                <TextInput
+                  style={tlStyles.timeEditInput}
+                  value={editHour}
+                  onChangeText={setEditHour}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  selectTextOnFocus
+                />
+              </View>
+              <Text style={tlStyles.timeEditColon}>:</Text>
+              <View style={tlStyles.timeEditField}>
+                <Text style={tlStyles.timeEditLabel}>Min</Text>
+                <TextInput
+                  style={tlStyles.timeEditInput}
+                  value={editMinute}
+                  onChangeText={setEditMinute}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  selectTextOnFocus
+                />
+              </View>
+              <View style={tlStyles.amPmToggle}>
+                {(["AM", "PM"] as const).map(v => (
+                  <Pressable
+                    key={v}
+                    onPress={() => setEditAmPm(v)}
+                    style={[tlStyles.amPmBtn, editAmPm === v && tlStyles.amPmBtnActive]}
+                  >
+                    <Text style={[tlStyles.amPmText, editAmPm === v && tlStyles.amPmTextActive]}>{v}</Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
           </View>
+
           <View style={tlStyles.timeEditActions}>
             <Pressable
               onPress={() => setTimeEditTarget(null)}
@@ -556,7 +634,7 @@ function ScheduleTimeline({
                 key={insp.id}
                 insp={insp}
                 isLast={idx === active.length - 1}
-                onTimeChange={onTimeChange}
+                onTimeChange={handleDragTimeChange}
                 onEditTime={handleEditTime}
               />
             ))}
@@ -584,7 +662,7 @@ function ScheduleTimeline({
                   key={insp.id}
                   insp={insp}
                   isLast={idx === completed.length - 1}
-                  onTimeChange={onTimeChange}
+                  onTimeChange={handleDragTimeChange}
                   onEditTime={handleEditTime}
                 />
               ))}
@@ -677,10 +755,25 @@ const tlStyles = StyleSheet.create({
   timeEditOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.4)" },
   timeEditSheet: {
     backgroundColor: Colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 20, paddingBottom: 36, gap: 20,
+    padding: 20, paddingBottom: 36, gap: 16,
   },
   timeEditHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.borderLight, alignSelf: "center" },
   timeEditTitle: { fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, textAlign: "center" },
+  timeEditSectionLabel: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 },
+  datePicker: { marginHorizontal: -20 },
+  datePickerContent: { paddingHorizontal: 20, gap: 4 },
+  dateCell: { alignItems: "center", gap: 3, paddingVertical: 6, paddingHorizontal: 4, borderRadius: 12, width: DATE_CELL_W },
+  dateCellSelected: { backgroundColor: Colors.primary },
+  dateDayName: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.3 },
+  dateDayNameSelected: { color: "rgba(255,255,255,0.65)" },
+  dateDayNum: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  dateDayNumSelected: { backgroundColor: Colors.accent },
+  dateDayNumToday: { borderWidth: 1.5, borderColor: Colors.secondary },
+  dateDayNumText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  dateDayNumTextSelected: { color: Colors.primary },
+  dateDayNumTextToday: { color: Colors.secondary },
+  dateMonthText: { fontSize: 9, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  dateMonthTextSelected: { color: "rgba(255,255,255,0.55)" },
   timeEditRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
   timeEditField: { alignItems: "center", gap: 4 },
   timeEditLabel: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
@@ -739,6 +832,7 @@ export default function HomeScreen() {
   const { scheduleInspectionReminders, prefs } = useNotifications();
   const [selectedDate, setSelectedDate] = useState(toLocalDateStr(new Date()));
   const [localTimes, setLocalTimes] = useState<Record<number, string>>({});
+  const [localDates, setLocalDates] = useState<Record<number, string>>({});
 
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
@@ -757,9 +851,10 @@ export default function HomeScreen() {
   const inspections = useMemo(() => {
     return (rawInspections as any[]).map((i) => ({
       ...i,
+      scheduledDate: localDates[i.id] || i.scheduledDate,
       displayTime: localTimes[i.id] || getDisplayTime(i),
     }));
-  }, [rawInspections, localTimes]);
+  }, [rawInspections, localTimes, localDates]);
 
   const inspectionDates = useMemo(() => {
     const s = new Set<string>();
@@ -771,8 +866,9 @@ export default function HomeScreen() {
     return inspections.filter((i) => i.scheduledDate === selectedDate);
   }, [inspections, selectedDate]);
 
-  const handleTimeChange = useCallback(async (inspId: number, newTime: string) => {
+  const handleScheduleChange = useCallback(async (inspId: number, newTime: string, newDate: string) => {
     setLocalTimes((prev) => ({ ...prev, [inspId]: newTime }));
+    setLocalDates((prev) => ({ ...prev, [inspId]: newDate }));
     try {
       await fetch(`${baseUrl}/api/inspections/${inspId}`, {
         method: "PUT",
@@ -780,7 +876,7 @@ export default function HomeScreen() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ scheduledTime: newTime }),
+        body: JSON.stringify({ scheduledTime: newTime, scheduledDate: newDate }),
       });
     } catch {}
   }, [baseUrl, token]);
@@ -853,7 +949,7 @@ export default function HomeScreen() {
       <ScheduleTimeline
         inspections={inspectionsForDay}
         selectedDate={selectedDate}
-        onTimeChange={handleTimeChange}
+        onScheduleChange={handleScheduleChange}
       />
 
     </ScrollView>
