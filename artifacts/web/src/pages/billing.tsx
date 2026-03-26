@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
 import {
   CreditCard, CheckCircle2, ArrowRight, Shield, Zap, Building2,
   BarChart3, Users, FileText, Infinity, X
@@ -8,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { AppLayout } from "@/components/layout/AppLayout";
 
 const API = (path: string) => `/api${path}`;
 
@@ -90,7 +90,6 @@ interface Plan {
 }
 
 export default function Billing() {
-  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
@@ -181,38 +180,13 @@ export default function Billing() {
     return p.find(x => x.interval === "month") ?? null;
   }
 
-  const navItems = [
-    { label: "Dashboard", href: "/dashboard" },
-    { label: "Projects", href: "/projects" },
-    { label: "Billing", href: "/billing", active: true },
-  ];
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-[#0B1933] text-white px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <span className="font-bold text-lg tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            InspectProof
-          </span>
-          <nav className="hidden md:flex gap-6">
-            {navItems.map(n => (
-              <button
-                key={n.href}
-                onClick={() => setLocation(n.href)}
-                className={`text-sm font-medium transition-colors ${n.active ? "text-[#C5D92D]" : "text-gray-300 hover:text-white"}`}
-              >
-                {n.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-        <Button variant="ghost" size="sm" className="text-gray-300 hover:text-white" onClick={() => setLocation("/dashboard")}>
-          Back to app
-        </Button>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-4 py-12">
+    <AppLayout>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-[#0B1933] tracking-tight">Plans & Billing</h1>
+        <p className="text-muted-foreground mt-1">Manage your subscription and payment details.</p>
+      </div>
+      <div className="max-w-6xl">
         {/* Current usage */}
         {subData && (
           <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-10">
@@ -396,7 +370,7 @@ export default function Billing() {
           Prices in AUD. Cancel or change plan at any time via the billing portal. &nbsp;
           <a href="mailto:support@inspectproof.com.au" className="underline hover:text-gray-600">Contact support</a>
         </p>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }

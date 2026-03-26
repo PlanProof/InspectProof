@@ -4,8 +4,11 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   User, Lock, Bell, Building2, Palette, Loader2,
   CheckCircle2, ChevronRight, Shield, Database, Download,
-  ToggleLeft, Upload, Trash2, PenLine,
+  ToggleLeft, Upload, Trash2, PenLine, CreditCard, Zap, BarChart3,
+  ArrowRight,
 } from "lucide-react";
+import { useLocation } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
 function apiBase() {
@@ -25,7 +28,7 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return res.json();
 }
 
-type Tab = "profile" | "security" | "notifications" | "organisation" | "platform";
+type Tab = "profile" | "security" | "notifications" | "organisation" | "platform" | "billing";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "profile",       label: "Profile",        icon: User },
@@ -33,6 +36,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "notifications", label: "Notifications",  icon: Bell },
   { id: "organisation",  label: "Organisation",   icon: Building2 },
   { id: "platform",      label: "Platform",       icon: Palette },
+  { id: "billing",       label: "Billing",        icon: CreditCard },
 ];
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -202,6 +206,7 @@ export default function Settings() {
           {activeTab === "notifications" && <NotificationsTab />}
           {activeTab === "organisation"  && <OrganisationTab />}
           {activeTab === "platform"      && <PlatformTab />}
+          {activeTab === "billing"       && <BillingTab />}
         </div>
       </div>
     </AppLayout>
@@ -847,6 +852,182 @@ function PlatformTab() {
           <Button onClick={save}>Save Platform Settings</Button>
         </div>
       </div>
+    </>
+  );
+}
+
+// ── Billing Tab ────────────────────────────────────────────────────────────────
+
+function BillingTab() {
+  const [, setLocation] = useLocation();
+
+  const authHeader = () => ({
+    Authorization: `Bearer ${localStorage.getItem("inspectproof_token") ?? ""}`,
+    "Content-Type": "application/json",
+  });
+
+  const { data: subData, isLoading } = useQuery({
+    queryKey: ["settings-billing-subscription"],
+    queryFn: async () => {
+      const r = await fetch(`${apiBase()}/api/billing/subscription`, { headers: authHeader() });
+      return r.json();
+    },
+  });
+
+  const portalMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`${apiBase()}/api/billing/portal`, { method: "POST", headers: authHeader() });
+      return r.json();
+    },
+    onSuccess: (data) => {
+      if (data.url) window.location.href = data.url;
+    },
+  });
+
+  const plan = subData?.plan ?? "free_trial";
+  const limits = subData?.limits ?? {};
+  const usage = subData?.usage ?? { projects: 0, inspections: 0 };
+  const sub = subData?.subscription;
+
+  const PLAN_LABELS: Record<string, string> = {
+    free_trial: "Free Trial",
+    starter: "Starter",
+    professional: "Professional",
+    enterprise: "Enterprise",
+  };
+
+  const PLAN_COLORS: Record<string, string> = {
+    free_trial: "text-gray-500 bg-gray-100 border-gray-200",
+    starter: "text-[#466DB5] bg-blue-50 border-blue-200",
+    professional: "text-[#7a5c00] bg-yellow-50 border-yellow-200",
+    enterprise: "text-[#0B1933] bg-slate-100 border-slate-200",
+  };
+
+  return (
+    <>
+      <SectionCard title="Current Subscription" description="Your active plan and usage this billing period">
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-muted-foreground py-4">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading subscription…
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Plan</p>
+                <span className={cn(
+                  "inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1 rounded-full border",
+                  PLAN_COLORS[plan] ?? PLAN_COLORS.free_trial
+                )}>
+                  {PLAN_LABELS[plan] ?? plan}
+                </span>
+                {sub && (
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {sub.cancelAtPeriodEnd
+                      ? "Cancels at end of billing period"
+                      : `Renews ${new Date(sub.currentPeriodEnd * 1000).toLocaleDateString("en-AU")}`}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-6">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-sidebar">{usage.projects}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {limits.maxProjects ? `of ${limits.maxProjects} projects` : "projects (unlimited)"}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-sidebar">{usage.inspections}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {limits.maxInspectionsMonthly
+                      ? `of ${limits.maxInspectionsMonthly} this month`
+                      : limits.maxInspectionsTotal
+                      ? `of ${limits.maxInspectionsTotal} total`
+                      : "inspections (unlimited)"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3 pt-1 border-t border-border/50">
+              {subData?.stripeCustomerId && (
+                <button
+                  onClick={() => portalMutation.mutate()}
+                  disabled={portalMutation.isPending}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-border text-sidebar hover:bg-muted/30 transition disabled:opacity-50"
+                >
+                  {portalMutation.isPending
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <CreditCard className="h-4 w-4" />}
+                  Manage payment & invoices
+                </button>
+              )}
+              <button
+                onClick={() => setLocation("/billing")}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-sidebar text-white hover:bg-sidebar/90 transition"
+              >
+                <Zap className="h-4 w-4" />
+                View all plans
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Payment Method" description="Credit card and payment details on file">
+        {subData?.stripeCustomerId ? (
+          <SettingRow
+            label="Manage payment details"
+            description="Update your credit card, billing address, or download invoices via the Stripe billing portal."
+          >
+            <button
+              onClick={() => portalMutation.mutate()}
+              disabled={portalMutation.isPending}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold border border-border text-sidebar hover:bg-muted/30 transition disabled:opacity-50"
+            >
+              <CreditCard className="h-4 w-4" />
+              Open billing portal
+            </button>
+          </SettingRow>
+        ) : (
+          <div className="py-2 text-sm text-muted-foreground">
+            No payment method on file. <button onClick={() => setLocation("/billing")} className="text-[#466DB5] underline font-medium">Upgrade your plan</button> to add one.
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Upgrade Your Plan" description="Unlock more projects, inspections, and team members">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[
+            { label: "Starter", price: "$59/mo", features: ["10 projects", "50 inspections/month", "3 team members"], color: "border-[#466DB5]", textColor: "text-[#466DB5]" },
+            { label: "Professional", price: "$149/mo", features: ["Unlimited projects", "Unlimited inspections", "10 team members"], color: "border-[#C5D92D]", textColor: "text-[#7a5c00]" },
+          ].map(p => (
+            <div key={p.label} className={cn("rounded-xl border-2 p-4 space-y-2", p.color)}>
+              <div className="flex items-center justify-between">
+                <p className={cn("font-bold text-sm", p.textColor)}>{p.label}</p>
+                <p className="text-sm font-semibold text-sidebar">{p.price}</p>
+              </div>
+              <ul className="space-y-1">
+                {p.features.map(f => (
+                  <li key={f} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#C5D92D] shrink-0" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div className="pt-2">
+          <button
+            onClick={() => setLocation("/billing")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-sidebar text-white hover:bg-sidebar/90 transition"
+          >
+            See all plans & pricing <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </SectionCard>
     </>
   );
 }
