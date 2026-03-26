@@ -167,10 +167,19 @@ router.get("/:id", async (req, res) => {
       description: r.item.description,
       codeReference: r.item.codeReference,
       riskLevel: r.item.riskLevel,
+      requirePhoto: r.item.requirePhoto ?? false,
+      defectTrigger: r.item.defectTrigger ?? false,
+      recommendedActionDefault: r.item.recommendedAction ?? null,
       result: r.result.result,
       notes: r.result.notes,
       photoUrls: r.result.photoUrls ? JSON.parse(r.result.photoUrls) : [],
       photoMarkups: r.result.photoMarkups ? JSON.parse(r.result.photoMarkups) : {},
+      severity: r.result.severity ?? null,
+      location: r.result.location ?? null,
+      tradeAllocated: r.result.tradeAllocated ?? null,
+      defectStatus: r.result.defectStatus ?? "open",
+      clientVisible: r.result.clientVisible ?? true,
+      recommendedAction: r.result.recommendedAction ?? null,
       orderIndex: r.item.orderIndex,
     }));
 
@@ -306,10 +315,19 @@ router.get("/:id/checklist", async (req, res) => {
       description: r.item.description,
       codeReference: r.item.codeReference,
       riskLevel: r.item.riskLevel,
+      requirePhoto: r.item.requirePhoto ?? false,
+      defectTrigger: r.item.defectTrigger ?? false,
+      recommendedActionDefault: r.item.recommendedAction ?? null,
       result: r.result.result,
       notes: r.result.notes,
       photoUrls: r.result.photoUrls ? JSON.parse(r.result.photoUrls) : [],
       photoMarkups: r.result.photoMarkups ? JSON.parse(r.result.photoMarkups) : {},
+      severity: r.result.severity ?? null,
+      location: r.result.location ?? null,
+      tradeAllocated: r.result.tradeAllocated ?? null,
+      defectStatus: r.result.defectStatus ?? "open",
+      clientVisible: r.result.clientVisible ?? true,
+      recommendedAction: r.result.recommendedAction ?? null,
       orderIndex: r.item.orderIndex,
     })));
   } catch (err) {
@@ -327,9 +345,17 @@ router.post("/:id/checklist", async (req, res) => {
       const existing = await db.select().from(checklistResultsTable)
         .where(sql`${checklistResultsTable.inspectionId} = ${id} AND ${checklistResultsTable.checklistItemId} = ${r.checklistItemId}`);
 
+      const extraFields: any = {};
+      if (r.severity !== undefined) extraFields.severity = r.severity;
+      if (r.location !== undefined) extraFields.location = r.location;
+      if (r.tradeAllocated !== undefined) extraFields.tradeAllocated = r.tradeAllocated;
+      if (r.defectStatus !== undefined) extraFields.defectStatus = r.defectStatus;
+      if (r.clientVisible !== undefined) extraFields.clientVisible = r.clientVisible;
+      if (r.recommendedAction !== undefined) extraFields.recommendedAction = r.recommendedAction;
+
       if (existing.length > 0) {
         await db.update(checklistResultsTable)
-          .set({ result: r.result, notes: r.notes, updatedAt: new Date() })
+          .set({ result: r.result, notes: r.notes, ...extraFields, updatedAt: new Date() })
           .where(sql`${checklistResultsTable.inspectionId} = ${id} AND ${checklistResultsTable.checklistItemId} = ${r.checklistItemId}`);
       } else {
         await db.insert(checklistResultsTable).values({
@@ -337,6 +363,7 @@ router.post("/:id/checklist", async (req, res) => {
           checklistItemId: r.checklistItemId,
           result: r.result,
           notes: r.notes,
+          ...extraFields,
         });
       }
     }
@@ -429,13 +456,19 @@ router.post("/:id/apply-checklist", async (req, res) => {
 router.patch("/:id/checklist/:resultId", async (req, res) => {
   try {
     const resultId = parseInt(req.params.resultId);
-    const { result, notes, photoUrls, photoMarkups } = req.body;
+    const { result, notes, photoUrls, photoMarkups, severity, location, tradeAllocated, defectStatus, clientVisible, recommendedAction } = req.body;
 
     const updateData: any = { updatedAt: new Date() };
     if (result !== undefined) updateData.result = result;
     if (notes !== undefined) updateData.notes = notes;
     if (photoUrls !== undefined) updateData.photoUrls = JSON.stringify(photoUrls);
     if (photoMarkups !== undefined) updateData.photoMarkups = JSON.stringify(photoMarkups);
+    if (severity !== undefined) updateData.severity = severity;
+    if (location !== undefined) updateData.location = location;
+    if (tradeAllocated !== undefined) updateData.tradeAllocated = tradeAllocated;
+    if (defectStatus !== undefined) updateData.defectStatus = defectStatus;
+    if (clientVisible !== undefined) updateData.clientVisible = clientVisible;
+    if (recommendedAction !== undefined) updateData.recommendedAction = recommendedAction;
 
     const [updated] = await db.update(checklistResultsTable)
       .set(updateData)
@@ -458,10 +491,19 @@ router.patch("/:id/checklist/:resultId", async (req, res) => {
       description: item[0]?.description,
       codeReference: item[0]?.codeReference,
       riskLevel: item[0]?.riskLevel,
+      requirePhoto: item[0]?.requirePhoto ?? false,
+      defectTrigger: item[0]?.defectTrigger ?? false,
+      recommendedActionDefault: item[0]?.recommendedAction ?? null,
       result: updated.result,
       notes: updated.notes,
       photoUrls: updated.photoUrls ? JSON.parse(updated.photoUrls) : [],
       photoMarkups: updated.photoMarkups ? JSON.parse(updated.photoMarkups) : {},
+      severity: updated.severity ?? null,
+      location: updated.location ?? null,
+      tradeAllocated: updated.tradeAllocated ?? null,
+      defectStatus: updated.defectStatus ?? "open",
+      clientVisible: updated.clientVisible ?? true,
+      recommendedAction: updated.recommendedAction ?? null,
       orderIndex: item[0]?.orderIndex,
     });
   } catch (err) {

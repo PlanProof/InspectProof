@@ -23,6 +23,10 @@ export const checklistItemsTable = pgTable("checklist_items", {
   codeReference: text("code_reference"),
   riskLevel: text("risk_level").notNull().default("medium"),
   isRequired: boolean("is_required").notNull().default(true),
+  requirePhoto: boolean("require_photo").notNull().default(false),
+  defectTrigger: boolean("defect_trigger").notNull().default(false),
+  recommendedAction: text("recommended_action"),
+  includeInReport: boolean("include_in_report").notNull().default(true),
 });
 
 export const checklistResultsTable = pgTable("checklist_results", {
@@ -33,6 +37,12 @@ export const checklistResultsTable = pgTable("checklist_results", {
   notes: text("notes"),
   photoUrls: text("photo_urls"),
   photoMarkups: text("photo_markups"),
+  severity: text("severity"),
+  location: text("location"),
+  tradeAllocated: text("trade_allocated"),
+  defectStatus: text("defect_status").default("open"),
+  clientVisible: boolean("client_visible").notNull().default(true),
+  recommendedAction: text("recommended_action"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

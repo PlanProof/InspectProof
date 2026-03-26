@@ -28,10 +28,14 @@ import { getSuggestionsForItem } from "@/constants/noteSuggestions";
 const RESULT_OPTS = [
   { key: "pass", label: "Pass", icon: "check-circle", color: "#22c55e", bg: "#f0fdf4" },
   { key: "fail", label: "Fail", icon: "x-circle", color: "#ef4444", bg: "#fef2f2" },
+  { key: "monitor", label: "Monitor", icon: "eye", color: "#f59e0b", bg: "#fffbeb" },
   { key: "na", label: "N/A", icon: "minus-circle", color: "#94a3b8", bg: "#f1f5f9" },
 ];
 
-type ResultKey = "pass" | "fail" | "na" | "pending";
+type ResultKey = "pass" | "fail" | "monitor" | "na" | "pending";
+
+const SEVERITY_OPTS = ["critical", "major", "minor", "cosmetic"] as const;
+const DEFECT_STATUS_OPTS = ["open", "in_progress", "resolved", "deferred"] as const;
 
 interface Stroke {
   points: { x: number; y: number }[];
@@ -53,10 +57,19 @@ interface ChecklistItem {
   description: string;
   codeReference?: string;
   riskLevel: string;
+  requirePhoto?: boolean;
+  defectTrigger?: boolean;
+  recommendedActionDefault?: string | null;
   result: ResultKey;
   notes?: string;
   photoUrls?: string[];
   photoMarkups?: Record<string, MarkupData>;
+  severity?: string | null;
+  location?: string | null;
+  tradeAllocated?: string | null;
+  defectStatus?: string;
+  clientVisible?: boolean;
+  recommendedAction?: string | null;
   orderIndex: number;
 }
 
@@ -82,6 +95,10 @@ export default function ConductInspectionScreen() {
   const [activeItem, setActiveItem] = useState<ChecklistItem | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [editResult, setEditResult] = useState<ResultKey>("pending");
+  const [editSeverity, setEditSeverity] = useState<string | null>(null);
+  const [editLocation, setEditLocation] = useState<string>("");
+  const [editTradeAllocated, setEditTradeAllocated] = useState<string>("");
+  const [editRecommendedAction, setEditRecommendedAction] = useState<string>("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -139,11 +156,12 @@ export default function ConductInspectionScreen() {
 
   const passCount = checklistItems.filter(i => i.result === "pass").length;
   const failCount = checklistItems.filter(i => i.result === "fail").length;
+  const monitorCount = checklistItems.filter(i => i.result === "monitor").length;
   const naCount = checklistItems.filter(i => i.result === "na").length;
   const pendingCount = checklistItems.filter(i => i.result === "pending").length;
   const total = checklistItems.length;
   const progress = total > 0 ? ((total - pendingCount) / total) : 0;
-  // Score only counts pass/fail — N/A items are excluded
+  // Score only counts pass/fail — N/A and monitor items are excluded from pass rate
   const scored = passCount + failCount;
   const passRate = scored > 0 ? passCount / scored : null;
 
@@ -158,7 +176,7 @@ export default function ConductInspectionScreen() {
       inspection.status !== "follow_up_required"
     ) {
       autoCompletedRef.current = true;
-      const newStatus = failCount > 0 ? "follow_up_required" : "completed";
+      const newStatus = (failCount > 0 || monitorCount > 0) ? "follow_up_required" : "completed";
       fetchWithAuth(`/api/inspections/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -179,12 +197,20 @@ export default function ConductInspectionScreen() {
     setActiveItem(item);
     setEditResult(item.result);
     setEditNotes(item.notes || "");
+    setEditSeverity(item.severity || null);
+    setEditLocation(item.location || "");
+    setEditTradeAllocated(item.tradeAllocated || "");
+    setEditRecommendedAction(item.recommendedAction || item.recommendedActionDefault || "");
   };
 
   const closeModal = () => {
     setActiveItem(null);
     setEditNotes("");
     setEditResult("pending");
+    setEditSeverity(null);
+    setEditLocation("");
+    setEditTradeAllocated("");
+    setEditRecommendedAction("");
   };
 
   const quickPass = async (item: ChecklistItem) => {
@@ -235,6 +261,7 @@ export default function ConductInspectionScreen() {
   const saveItem = async () => {
     if (!activeItem) return;
     setSavingItem(true);
+    const showDefectFields = editResult === "fail" || editResult === "monitor";
     try {
       await fetchWithAuth(`/api/inspections/${id}/checklist/${activeItem.id}`, {
         method: "PATCH",
@@ -243,6 +270,12 @@ export default function ConductInspectionScreen() {
           result: editResult,
           notes: editNotes || null,
           photoUrls: activeItem.photoUrls || [],
+          ...(showDefectFields ? {
+            severity: editSeverity || null,
+            location: editLocation || null,
+            tradeAllocated: editTradeAllocated || null,
+            recommendedAction: editRecommendedAction || null,
+          } : {}),
         }),
       });
       await refetchChecklist();
@@ -447,6 +480,7 @@ export default function ConductInspectionScreen() {
               <View style={styles.resultChips}>
                 <Text style={[styles.resultChip, { color: "#22c55e" }]}>✓ {passCount}</Text>
                 <Text style={[styles.resultChip, { color: "#ef4444" }]}>✗ {failCount}</Text>
+                {monitorCount > 0 && <Text style={[styles.resultChip, { color: "#f59e0b" }]}>◉ {monitorCount}</Text>}
                 {naCount > 0 && <Text style={[styles.resultChip, { color: "#94a3b8" }]}>— {naCount}</Text>}
                 {pendingCount > 0 && <Text style={[styles.resultChip, { color: Colors.textTertiary }]}>⏳ {pendingCount}</Text>}
               </View>
@@ -558,10 +592,18 @@ export default function ConductInspectionScreen() {
             item={activeItem}
             result={editResult}
             notes={editNotes}
+            severity={editSeverity}
+            location={editLocation}
+            tradeAllocated={editTradeAllocated}
+            recommendedAction={editRecommendedAction}
             baseUrl={baseUrl}
             documents={projectDocuments}
             onResultChange={setEditResult}
             onNotesChange={setEditNotes}
+            onSeverityChange={setEditSeverity}
+            onLocationChange={setEditLocation}
+            onTradeAllocatedChange={setEditTradeAllocated}
+            onRecommendedActionChange={setEditRecommendedAction}
             onSave={saveItem}
             onClose={closeModal}
             onUploadPhoto={uploadPhoto}
@@ -626,6 +668,7 @@ function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA }: { ite
           !isNA && isPending && styles.checkRowPending,
           !isNA && item.result === "pass" && styles.checkRowPass,
           !isNA && item.result === "fail" && styles.checkRowFail,
+          !isNA && item.result === "monitor" && styles.checkRowMonitor,
         ]}
         onPress={onPress}
       >
@@ -820,13 +863,18 @@ function DocumentsPanel({
 }
 
 function ItemModal({
-  item, result, notes, baseUrl, documents, onResultChange, onNotesChange, onSave, onClose,
+  item, result, notes, severity, location, tradeAllocated, recommendedAction,
+  baseUrl, documents, onResultChange, onNotesChange, onSeverityChange, onLocationChange,
+  onTradeAllocatedChange, onRecommendedActionChange, onSave, onClose,
   onUploadPhoto, onTakePhoto, onRemovePhoto, onAnnotateDoc, saving, uploadingPhoto, insets,
   inspectionId,
 }: {
   item: ChecklistItem; result: ResultKey; notes: string; baseUrl: string;
+  severity: string | null; location: string; tradeAllocated: string; recommendedAction: string;
   documents: ProjectDocument[];
   onResultChange: (r: ResultKey) => void; onNotesChange: (n: string) => void;
+  onSeverityChange: (s: string | null) => void; onLocationChange: (l: string) => void;
+  onTradeAllocatedChange: (t: string) => void; onRecommendedActionChange: (r: string) => void;
   onSave: () => void; onClose: () => void; onUploadPhoto: () => void;
   onTakePhoto: () => void; onRemovePhoto: (p: string) => void;
   onAnnotateDoc: (doc: ProjectDocument) => void;
@@ -919,6 +967,71 @@ function ItemModal({
             ))}
           </View>
         </View>
+
+        {/* Defect Detail Fields — visible when result is Fail or Monitor */}
+        {(result === "fail" || result === "monitor") && (
+          <View style={modalStyles.defectCard}>
+            <Text style={modalStyles.defectCardTitle}>
+              {result === "fail" ? "Defect Details" : "Monitor Details"}
+            </Text>
+
+            {/* Severity */}
+            <Text style={modalStyles.sectionLabel}>Severity</Text>
+            <View style={modalStyles.chipRow}>
+              {SEVERITY_OPTS.map(s => {
+                const colours: Record<string, { bg: string; color: string }> = {
+                  critical: { bg: "#fef2f2", color: "#dc2626" },
+                  major: { bg: "#fff7ed", color: "#ea580c" },
+                  minor: { bg: "#fefce8", color: "#ca8a04" },
+                  cosmetic: { bg: "#f0fdf4", color: "#16a34a" },
+                };
+                const c = colours[s] ?? { bg: "#f1f5f9", color: "#64748b" };
+                return (
+                  <Pressable
+                    key={s}
+                    style={[modalStyles.severityChip, severity === s && { backgroundColor: c.bg, borderColor: c.color }]}
+                    onPress={() => onSeverityChange(severity === s ? null : s)}
+                  >
+                    <Text style={[modalStyles.severityChipText, severity === s && { color: c.color, fontWeight: "600" }]}>
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Location */}
+            <Text style={[modalStyles.sectionLabel, { marginTop: 12 }]}>Location / Area</Text>
+            <TextInput
+              style={modalStyles.defectInput}
+              value={location}
+              onChangeText={onLocationChange}
+              placeholder="e.g. Bedroom 2, North wall"
+              placeholderTextColor={Colors.textTertiary}
+            />
+
+            {/* Trade Allocated */}
+            <Text style={[modalStyles.sectionLabel, { marginTop: 12 }]}>Trade Allocated</Text>
+            <TextInput
+              style={modalStyles.defectInput}
+              value={tradeAllocated}
+              onChangeText={onTradeAllocatedChange}
+              placeholder="e.g. Plumber, Electrician, Builder"
+              placeholderTextColor={Colors.textTertiary}
+            />
+
+            {/* Recommended Action */}
+            <Text style={[modalStyles.sectionLabel, { marginTop: 12 }]}>Recommended Action</Text>
+            <TextInput
+              style={[modalStyles.defectInput, { minHeight: 60 }]}
+              value={recommendedAction}
+              onChangeText={onRecommendedActionChange}
+              placeholder="Describe the corrective action required…"
+              placeholderTextColor={Colors.textTertiary}
+              multiline
+            />
+          </View>
+        )}
 
         {/* Notes */}
         <View style={modalStyles.section}>
@@ -1226,6 +1339,7 @@ const styles = StyleSheet.create({
   checkRowPending: { borderColor: Colors.border, opacity: 0.9 },
   checkRowPass: { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" },
   checkRowFail: { backgroundColor: "#fff5f5", borderColor: "#fecaca" },
+  checkRowMonitor: { backgroundColor: "#fffbeb", borderColor: "#fde68a" },
   checkRowNA: { backgroundColor: "#f8fafc", borderColor: "#e2e8f0", opacity: 0.6 },
   checkDescNA: { textDecorationLine: "line-through", color: Colors.textTertiary },
   naAction: {
@@ -1395,6 +1509,45 @@ const modalStyles = StyleSheet.create({
     borderColor: Colors.border,
   },
   resultLabel: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  defectCard: {
+    backgroundColor: "#fffbeb",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    gap: 4,
+  },
+  defectCardTitle: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: "#92400e",
+    marginBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  severityChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  severityChipText: { fontSize: 13, fontFamily: "PlusJakartaSans_500Medium", color: Colors.textSecondary },
+  defectInput: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.text,
+    marginTop: 4,
+  },
   suggestionsRow: { paddingBottom: 4, gap: 8 },
   suggestionChip: {
     backgroundColor: Colors.infoLight,

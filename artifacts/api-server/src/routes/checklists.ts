@@ -29,6 +29,10 @@ function formatItem(i: any) {
     codeReference: i.codeReference ?? null,
     riskLevel: i.riskLevel,
     isRequired: i.isRequired,
+    requirePhoto: i.requirePhoto ?? false,
+    defectTrigger: i.defectTrigger ?? false,
+    recommendedAction: i.recommendedAction ?? null,
+    includeInReport: i.includeInReport ?? true,
   };
 }
 
