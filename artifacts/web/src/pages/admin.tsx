@@ -1146,6 +1146,12 @@ export default function Admin() {
         )}
       </main>
 
+      <footer className="border-t border-gray-200 py-4 px-8 text-center bg-[#F2F3F4]">
+        <p className="text-xs text-gray-400">
+          InspectProof &mdash; a product of PlanProof Technologies Pty Ltd
+        </p>
+      </footer>
+
       {/* ── Modals ── */}
       {userModal.open && (
         <UserModal

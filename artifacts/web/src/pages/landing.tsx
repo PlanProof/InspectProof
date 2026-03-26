@@ -607,9 +607,12 @@ function Footer() {
         </div>
 
         {/* Bottom row */}
-        <div className="border-t border-white/10 pt-6">
+        <div className="border-t border-white/10 pt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <p className="text-xs text-white/30">
             © {new Date().getFullYear()} InspectProof. All rights reserved.
+          </p>
+          <p className="text-xs text-white/20">
+            InspectProof &mdash; a product of PlanProof Technologies Pty Ltd
           </p>
         </div>
 

@@ -90,6 +90,9 @@ export default function Login() {
 
           {mode === "signin" ? <SignInForm /> : <SignUpFlow />}
         </div>
+        <p className="mt-8 text-xs text-muted-foreground/60 text-center">
+          InspectProof &mdash; a product of PlanProof Technologies Pty Ltd
+        </p>
       </div>
     </div>
   );

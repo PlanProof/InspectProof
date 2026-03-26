@@ -17,6 +17,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           {children}
         </div>
+        <footer className="border-t border-border/50 mt-4 py-4 px-6 text-center">
+          <p className="text-xs text-muted-foreground">
+            InspectProof &mdash; a product of PlanProof Technologies Pty Ltd
+          </p>
+        </footer>
       </main>
     </div>
   );
