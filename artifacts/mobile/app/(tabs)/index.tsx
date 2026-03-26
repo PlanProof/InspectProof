@@ -236,43 +236,18 @@ interface DraggableCardProps {
   insp: any;
   isLast: boolean;
   onTimeChange: (id: number, newTime: string) => void;
+  onEditTime: (inspId: number, currentTime: string) => void;
 }
 
-function DraggableCard({ insp, onTimeChange }: DraggableCardProps) {
+function DraggableCard({ insp, onTimeChange, onEditTime }: DraggableCardProps) {
   const translateY = useRef(new Animated.Value(0)).current;
   const [dragging, setDragging] = useState(false);
   const [previewTime, setPreviewTime] = useState<string | null>(null);
   const baseMinutesRef = useRef(timeToMinutes(insp.displayTime));
 
-  // Time editor state
-  const [timeEditOpen, setTimeEditOpen] = useState(false);
-  const [editHour, setEditHour] = useState("9");
-  const [editMinute, setEditMinute] = useState("00");
-  const [editAmPm, setEditAmPm] = useState<"AM" | "PM">("AM");
-
   useEffect(() => {
     baseMinutesRef.current = timeToMinutes(insp.displayTime);
   }, [insp.displayTime]);
-
-  const openTimeEdit = () => {
-    const [h, m] = insp.displayTime.split(":").map(Number);
-    const isPM = h >= 12;
-    const hour12 = h % 12 || 12;
-    setEditHour(String(hour12));
-    setEditMinute(String(m).padStart(2, "0"));
-    setEditAmPm(isPM ? "PM" : "AM");
-    setTimeEditOpen(true);
-  };
-
-  const confirmTimeEdit = () => {
-    const h = Math.max(1, Math.min(12, parseInt(editHour) || 12));
-    const m = Math.max(0, Math.min(59, parseInt(editMinute) || 0));
-    let h24 = h % 12;
-    if (editAmPm === "PM") h24 += 12;
-    const newTime = `${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-    onTimeChange(insp.id, newTime);
-    setTimeEditOpen(false);
-  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -334,7 +309,7 @@ function DraggableCard({ insp, onTimeChange }: DraggableCardProps) {
               <Feather name="clipboard" size={11} color={Colors.secondary} />
               <Text style={tlStyles.typeText}>{typeLabel}</Text>
             </View>
-            <Pressable onPress={openTimeEdit} style={({ pressed }) => [tlStyles.timePill, pressed && { opacity: 0.6 }]}>
+            <Pressable onPress={() => onEditTime(insp.id, insp.displayTime)} style={({ pressed }) => [tlStyles.timePill, pressed && { opacity: 0.6 }]}>
               <Feather name="clock" size={11} color={Colors.secondary} />
               <Text style={[tlStyles.timeInCard, { color: Colors.secondary }, previewTime && tlStyles.timePreview]}>{displayedTime}</Text>
               <Feather name="edit-2" size={9} color={Colors.secondary + "99"} />
@@ -408,9 +383,77 @@ function DraggableCard({ insp, onTimeChange }: DraggableCardProps) {
         </View>
       </View>
 
-      {/* Time edit sheet */}
-      <Modal visible={timeEditOpen} transparent animationType="slide" onRequestClose={() => setTimeEditOpen(false)}>
-        <Pressable style={tlStyles.timeEditOverlay} onPress={() => setTimeEditOpen(false)} />
+    </Animated.View>
+  );
+}
+
+function ScheduleTimeline({
+  inspections,
+  selectedDate,
+  onTimeChange,
+}: {
+  inspections: any[];
+  selectedDate: string;
+  onTimeChange: (id: number, newTime: string) => void;
+}) {
+  const today = toLocalDateStr(new Date());
+
+  // Time editor — single shared modal lifted out of cards
+  const [timeEditTarget, setTimeEditTarget] = useState<{ inspId: number } | null>(null);
+  const [editHour, setEditHour] = useState("9");
+  const [editMinute, setEditMinute] = useState("00");
+  const [editAmPm, setEditAmPm] = useState<"AM" | "PM">("AM");
+
+  const handleEditTime = useCallback((inspId: number, currentTime: string) => {
+    const [h, m] = currentTime.split(":").map(Number);
+    const isPM = h >= 12;
+    const hour12 = h % 12 || 12;
+    setEditHour(String(hour12));
+    setEditMinute(String(m).padStart(2, "0"));
+    setEditAmPm(isPM ? "PM" : "AM");
+    setTimeEditTarget({ inspId });
+  }, []);
+
+  const confirmTimeEdit = useCallback(() => {
+    if (!timeEditTarget) return;
+    const h = Math.max(1, Math.min(12, parseInt(editHour) || 12));
+    const m = Math.max(0, Math.min(59, parseInt(editMinute) || 0));
+    let h24 = h % 12;
+    if (editAmPm === "PM") h24 += 12;
+    const newTime = `${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    onTimeChange(timeEditTarget.inspId, newTime);
+    setTimeEditTarget(null);
+  }, [timeEditTarget, editHour, editMinute, editAmPm, onTimeChange]);
+
+  const isToday = selectedDate === today;
+  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return toLocalDateStr(d); })();
+  const isTomorrow = selectedDate === tomorrow;
+
+  const dateLabel = isToday
+    ? "Today"
+    : isTomorrow
+    ? "Tomorrow"
+    : new Date(selectedDate + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" });
+
+  const { active, completed } = useMemo(() => {
+    const all = [...inspections].sort((a, b) => a.displayTime.localeCompare(b.displayTime));
+    return {
+      active:    all.filter(i => i.status !== "completed" && i.status !== "cancelled"),
+      completed: all.filter(i => i.status === "completed" || i.status === "cancelled"),
+    };
+  }, [inspections]);
+
+  const sorted = [...active, ...completed];
+
+  const timeEditModal = (
+    <Modal
+      visible={!!timeEditTarget}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setTimeEditTarget(null)}
+    >
+      <View style={tlStyles.timeEditModalWrap}>
+        <Pressable style={tlStyles.timeEditOverlay} onPress={() => setTimeEditTarget(null)} />
         <View style={tlStyles.timeEditSheet}>
           <View style={tlStyles.timeEditHandle} />
           <Text style={tlStyles.timeEditTitle}>Change Time</Text>
@@ -451,121 +494,104 @@ function DraggableCard({ insp, onTimeChange }: DraggableCardProps) {
             </View>
           </View>
           <View style={tlStyles.timeEditActions}>
-            <Pressable onPress={() => setTimeEditOpen(false)} style={({ pressed }) => [tlStyles.timeEditCancel, pressed && { opacity: 0.7 }]}>
+            <Pressable
+              onPress={() => setTimeEditTarget(null)}
+              style={({ pressed }) => [tlStyles.timeEditCancel, pressed && { opacity: 0.7 }]}
+            >
               <Text style={tlStyles.timeEditCancelText}>Cancel</Text>
             </Pressable>
-            <Pressable onPress={confirmTimeEdit} style={({ pressed }) => [tlStyles.timeEditConfirm, pressed && { opacity: 0.8 }]}>
+            <Pressable
+              onPress={confirmTimeEdit}
+              style={({ pressed }) => [tlStyles.timeEditConfirm, pressed && { opacity: 0.8 }]}
+            >
               <Text style={tlStyles.timeEditConfirmText}>Confirm</Text>
             </Pressable>
           </View>
         </View>
-      </Modal>
-    </Animated.View>
+      </View>
+    </Modal>
   );
-}
-
-function ScheduleTimeline({
-  inspections,
-  selectedDate,
-  onTimeChange,
-}: {
-  inspections: any[];
-  selectedDate: string;
-  onTimeChange: (id: number, newTime: string) => void;
-}) {
-  const today = toLocalDateStr(new Date());
-  const isToday = selectedDate === today;
-  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return toLocalDateStr(d); })();
-  const isTomorrow = selectedDate === tomorrow;
-
-  const dateLabel = isToday
-    ? "Today"
-    : isTomorrow
-    ? "Tomorrow"
-    : new Date(selectedDate + "T00:00:00").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" });
-
-  const { active, completed } = useMemo(() => {
-    const all = [...inspections].sort((a, b) => a.displayTime.localeCompare(b.displayTime));
-    return {
-      active:    all.filter(i => i.status !== "completed" && i.status !== "cancelled"),
-      completed: all.filter(i => i.status === "completed" || i.status === "cancelled"),
-    };
-  }, [inspections]);
-
-  const sorted = [...active, ...completed];
 
   if (sorted.length === 0) {
     return (
-      <View style={tlStyles.emptyWrap}>
-        <View style={tlStyles.emptyIcon}>
-          <Feather name="calendar" size={22} color={Colors.textTertiary} />
+      <>
+        <View style={tlStyles.emptyWrap}>
+          <View style={tlStyles.emptyIcon}>
+            <Feather name="calendar" size={22} color={Colors.textTertiary} />
+          </View>
+          <Text style={tlStyles.emptyTitle}>No inspections {isToday ? "today" : "this day"}</Text>
+          <Text style={tlStyles.emptySub}>
+            {isToday ? "Enjoy the break — or schedule one now." : "Nothing booked for this date."}
+          </Text>
+          <Pressable
+            onPress={() => router.push("/inspection/create" as any)}
+            style={({ pressed }) => [tlStyles.emptyBtn, pressed && { opacity: 0.8 }]}
+          >
+            <Feather name="plus" size={14} color={Colors.primary} />
+            <Text style={tlStyles.emptyBtnText}>Schedule Inspection</Text>
+          </Pressable>
         </View>
-        <Text style={tlStyles.emptyTitle}>No inspections {isToday ? "today" : "this day"}</Text>
-        <Text style={tlStyles.emptySub}>
-          {isToday ? "Enjoy the break — or schedule one now." : "Nothing booked for this date."}
-        </Text>
-        <Pressable
-          onPress={() => router.push("/inspection/create" as any)}
-          style={({ pressed }) => [tlStyles.emptyBtn, pressed && { opacity: 0.8 }]}
-        >
-          <Feather name="plus" size={14} color={Colors.primary} />
-          <Text style={tlStyles.emptyBtnText}>Schedule Inspection</Text>
-        </Pressable>
-      </View>
+        {timeEditModal}
+      </>
     );
   }
 
   return (
-    <View style={tlStyles.wrap}>
-      <View style={tlStyles.headerRow}>
-        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
-          <Text style={tlStyles.dateLabel}>{dateLabel}</Text>
-          <Text style={tlStyles.countLabel}>{active.length} inspection{active.length !== 1 ? "s" : ""}</Text>
-        </View>
-      </View>
-
-      {/* Active inspections */}
-      {active.length > 0 && (
-        <View style={tlStyles.list}>
-          {active.map((insp, idx) => (
-            <DraggableCard
-              key={insp.id}
-              insp={insp}
-              isLast={idx === active.length - 1}
-              onTimeChange={onTimeChange}
-            />
-          ))}
-        </View>
-      )}
-
-      {active.length === 0 && (
-        <View style={tlStyles.allDoneBox}>
-          <Feather name="check-circle" size={15} color={Colors.success} />
-          <Text style={tlStyles.allDoneText}>All done for {dateLabel.toLowerCase()}!</Text>
-        </View>
-      )}
-
-      {/* Completed section */}
-      {completed.length > 0 && (
-        <View style={tlStyles.completedSection}>
-          <View style={tlStyles.completedHeader}>
-            <Feather name="check-circle" size={13} color={Colors.success} />
-            <Text style={tlStyles.completedHeading}>Completed</Text>
-            <Text style={tlStyles.completedCount}>{completed.length}</Text>
+    <>
+      <View style={tlStyles.wrap}>
+        <View style={tlStyles.headerRow}>
+          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
+            <Text style={tlStyles.dateLabel}>{dateLabel}</Text>
+            <Text style={tlStyles.countLabel}>{active.length} inspection{active.length !== 1 ? "s" : ""}</Text>
           </View>
+        </View>
+
+        {/* Active inspections */}
+        {active.length > 0 && (
           <View style={tlStyles.list}>
-            {completed.map((insp, idx) => (
+            {active.map((insp, idx) => (
               <DraggableCard
                 key={insp.id}
                 insp={insp}
-                isLast={idx === completed.length - 1}
+                isLast={idx === active.length - 1}
                 onTimeChange={onTimeChange}
+                onEditTime={handleEditTime}
               />
             ))}
           </View>
-        </View>
-      )}
-    </View>
+        )}
+
+        {active.length === 0 && (
+          <View style={tlStyles.allDoneBox}>
+            <Feather name="check-circle" size={15} color={Colors.success} />
+            <Text style={tlStyles.allDoneText}>All done for {dateLabel.toLowerCase()}!</Text>
+          </View>
+        )}
+
+        {/* Completed section */}
+        {completed.length > 0 && (
+          <View style={tlStyles.completedSection}>
+            <View style={tlStyles.completedHeader}>
+              <Feather name="check-circle" size={13} color={Colors.success} />
+              <Text style={tlStyles.completedHeading}>Completed</Text>
+              <Text style={tlStyles.completedCount}>{completed.length}</Text>
+            </View>
+            <View style={tlStyles.list}>
+              {completed.map((insp, idx) => (
+                <DraggableCard
+                  key={insp.id}
+                  insp={insp}
+                  isLast={idx === completed.length - 1}
+                  onTimeChange={onTimeChange}
+                  onEditTime={handleEditTime}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+      {timeEditModal}
+    </>
   );
 }
 
@@ -645,7 +671,8 @@ const tlStyles = StyleSheet.create({
     paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7,
   },
   viewBtnText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
-  timeEditOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
+  timeEditModalWrap: { flex: 1, justifyContent: "flex-end" },
+  timeEditOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.4)" },
   timeEditSheet: {
     backgroundColor: Colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: 20, paddingBottom: 36, gap: 20,
