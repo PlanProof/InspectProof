@@ -265,7 +265,7 @@ const PROFESSIONALS = [
     description:
       "Manage the full statutory inspection lifecycle from a single platform. InspectProof gives building surveyors a professional system for issuing compliant inspection certificates, managing hold points and delivering client-ready reports — from minor works to complex Class 2–9 developments.",
     bullets: [
-      "NCC 2022 and BCA-aligned inspection checklists",
+      "NCC and BCA-aligned inspection checklists",
       "Statutory hold point and mandatory inspection management",
       "Occupation and compliance certificate documentation",
       "Client-facing PDF report and certificate delivery",
