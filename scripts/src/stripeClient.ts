@@ -19,7 +19,7 @@ async function getCredentials() {
     headers: { 'Accept': 'application/json', 'X-Replit-Token': xReplitToken },
   });
 
-  const data = await response.json();
+  const data = await response.json() as { items?: Array<{ settings?: { secret?: string } }> };
   const settings = data.items?.[0]?.settings;
   if (!settings?.secret) throw new Error('Stripe development connection not found');
 

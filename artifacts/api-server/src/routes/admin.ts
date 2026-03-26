@@ -80,7 +80,7 @@ router.get('/admin/users/:id', requireAdmin, async (req, res) => {
     } catch {}
   }
 
-  res.json({ user, subscription: stripeSubscription });
+  return res.json({ user, subscription: stripeSubscription });
 });
 
 router.patch('/admin/users/:id', requireAdmin, async (req, res) => {
@@ -153,7 +153,7 @@ router.post('/admin/users/:id/sync-plan', requireAdmin, async (req, res) => {
     .where(eq(usersTable.id, user.id))
     .returning();
 
-  res.json({ user: updated });
+  return res.json({ user: updated });
 });
 
 export default router;

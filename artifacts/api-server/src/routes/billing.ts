@@ -26,7 +26,7 @@ router.get('/billing/plans', async (_req, res) => {
 
     const plans = products.data
       .filter(p => p.metadata?.inspectproof_plan)
-      .sort((a, b) => (a.metadata.sort_order ?? 0) - (b.metadata.sort_order ?? 0))
+      .sort((a, b) => Number(a.metadata.sort_order ?? 0) - Number(b.metadata.sort_order ?? 0))
       .map(product => {
         const productPrices = prices.data.filter(pr => pr.product === product.id);
         return {
@@ -98,7 +98,7 @@ router.get('/billing/subscription', async (req: any, res) => {
     } catch {}
   }
 
-  res.json({
+  return res.json({
     plan: user.plan ?? 'free_trial',
     limits,
     usage: {
@@ -149,7 +149,7 @@ router.post('/billing/checkout', async (req: any, res) => {
     metadata: { userId: String(userId) },
   });
 
-  res.json({ url: session.url });
+  return res.json({ url: session.url });
 });
 
 router.post('/billing/portal', async (req: any, res) => {
@@ -166,13 +166,13 @@ router.post('/billing/portal', async (req: any, res) => {
     return_url: `https://${domain}/billing`,
   });
 
-  res.json({ url: session.url });
+  return res.json({ url: session.url });
 });
 
 router.get('/billing/enterprise-enquiry', async (req: any, res) => {
   const userId = getUserId(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-  res.json({
+  return res.json({
     message: 'Enterprise enquiry received.',
     email: 'enterprise@inspectproof.com.au',
   });
