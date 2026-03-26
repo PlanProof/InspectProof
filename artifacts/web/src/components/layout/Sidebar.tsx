@@ -10,6 +10,7 @@ import {
   Settings,
   LogOut,
   FileText,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -25,7 +26,7 @@ const navigation = [
 
 export function Sidebar() {
   const [location] = useLocation();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl">
@@ -71,6 +72,20 @@ export function Sidebar() {
       </div>
 
       <div className="border-t border-white/10 p-4 space-y-1">
+        {user?.isAdmin && (
+          <Link
+            href="/admin"
+            className={cn(
+              "group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              location === "/admin" || location.startsWith("/admin/")
+                ? "bg-[#C5D92D]/20 text-[#C5D92D]"
+                : "text-[#C5D92D]/70 hover:bg-[#C5D92D]/10 hover:text-[#C5D92D]"
+            )}
+          >
+            <ShieldCheck className="mr-3 h-5 w-5 flex-shrink-0" />
+            Admin dashboard
+          </Link>
+        )}
         <Link
           href="/settings"
           className={cn(

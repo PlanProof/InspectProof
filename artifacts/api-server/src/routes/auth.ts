@@ -146,6 +146,8 @@ router.get("/me", async (req, res) => {
       avatar: user.avatar,
       signatureUrl: user.signatureUrl ?? null,
       isActive: user.isActive,
+      isAdmin: user.isAdmin ?? false,
+      plan: user.plan,
       createdAt: user.createdAt.toISOString(),
     });
   } catch (err) {

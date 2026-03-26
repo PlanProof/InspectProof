@@ -11,6 +11,10 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
 const API = (path: string) => `/api${path}`;
+const authHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem("inspectproof_token") ?? ""}`,
+  "Content-Type": "application/json",
+});
 
 const PLAN_LABELS: Record<string, string> = {
   free_trial: "Free Trial",
@@ -251,7 +255,7 @@ export default function Admin() {
   const { data: usersData, isLoading: usersLoading } = useQuery({
     queryKey: ["admin-users"],
     queryFn: async () => {
-      const r = await fetch(API("/admin/users"));
+      const r = await fetch(API("/admin/users"), { headers: authHeaders() });
       if (!r.ok) throw new Error("Admin access required");
       return r.json();
     },
@@ -260,7 +264,7 @@ export default function Admin() {
   const { data: statsData } = useQuery({
     queryKey: ["admin-stats"],
     queryFn: async () => {
-      const r = await fetch(API("/admin/stats"));
+      const r = await fetch(API("/admin/stats"), { headers: authHeaders() });
       return r.json();
     },
   });
@@ -269,7 +273,7 @@ export default function Admin() {
     mutationFn: async ({ id, data }: { id: number; data: any }) => {
       const r = await fetch(API(`/admin/users/${id}`), {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify(data),
       });
       return r.json();
