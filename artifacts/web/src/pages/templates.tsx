@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useListChecklistTemplates, useGetChecklistTemplate } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -786,6 +786,9 @@ export default function Templates() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [reordering, setReordering] = useState(false);
+  const [folderOrder, setFolderOrder] = useState<string[]>([]);
+  const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<string | null>(null);
+  const [deletingFolder, setDeletingFolder] = useState(false);
 
   const { data: allTemplates, isLoading, refetch } = useListChecklistTemplates(
     { discipline },
@@ -815,10 +818,40 @@ export default function Templates() {
     });
 
   const classOrder = discipline === "Building Surveyor" ? Object.keys(NCC_CLASSES) : [];
-  const folderKeys = [
-    ...classOrder.filter(f => !search || grouped[f] || NCC_CLASSES[f]?.toLowerCase().includes(search.toLowerCase())),
-    ...Object.keys(grouped).filter(f => !classOrder.includes(f)),
-  ];
+
+  // Derive canonical folder list from API data (alphabetical initially)
+  const apiGroupedKeys = Object.keys(grouped).filter(f => !classOrder.includes(f));
+
+  // folderOrder is the user-set order for non-BS disciplines; sync from API keys when discipline changes
+  useEffect(() => {
+    const saved = localStorage.getItem(`folderOrder_${discipline}`);
+    if (saved) {
+      try {
+        const parsed: string[] = JSON.parse(saved);
+        // Merge: keep saved order, add any new folders from API at the end
+        const merged = [
+          ...parsed.filter(f => apiGroupedKeys.includes(f)),
+          ...apiGroupedKeys.filter(f => !parsed.includes(f)),
+        ];
+        setFolderOrder(merged);
+        return;
+      } catch {}
+    }
+    setFolderOrder(apiGroupedKeys);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discipline, templates.length]);
+
+  const activeFolderKeys = discipline === "Building Surveyor"
+    ? [
+        ...classOrder.filter(f => !search || grouped[f] || NCC_CLASSES[f]?.toLowerCase().includes(search.toLowerCase())),
+        ...apiGroupedKeys.filter(f => !classOrder.includes(f)),
+      ]
+    : (search
+        ? folderOrder.filter(f => grouped[f])  // only folders with matching templates when searching
+        : folderOrder.filter(f => apiGroupedKeys.includes(f))  // only folders that exist in DB
+      );
+
+  const folderKeys = activeFolderKeys;
 
   const moveTemplate = async (folder: string, idx: number, dir: -1 | 1) => {
     const items = grouped[folder] ?? [];
@@ -836,6 +869,38 @@ export default function Templates() {
       refetch();
     } catch {}
     setReordering(false);
+  };
+
+  const moveFolder = async (fi: number, dir: -1 | 1) => {
+    const newFi = fi + dir;
+    if (newFi < 0 || newFi >= folderOrder.length) return;
+    const next = [...folderOrder];
+    [next[fi], next[newFi]] = [next[newFi], next[fi]];
+    setFolderOrder(next);
+    localStorage.setItem(`folderOrder_${discipline}`, JSON.stringify(next));
+    try {
+      await apiFetch("/api/checklist-templates/folder-reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discipline, folders: next }),
+      });
+    } catch {}
+  };
+
+  const deleteFolder = async (folder: string) => {
+    setDeletingFolder(true);
+    try {
+      await apiFetch(`/api/checklist-templates/folder?discipline=${encodeURIComponent(discipline)}&folder=${encodeURIComponent(folder)}`, {
+        method: "DELETE",
+      });
+      const next = folderOrder.filter(f => f !== folder);
+      setFolderOrder(next);
+      localStorage.setItem(`folderOrder_${discipline}`, JSON.stringify(next));
+      if (selectedId && (grouped[folder] ?? []).some(t => t.id === selectedId)) setSelectedId(null);
+      refetch();
+    } catch {}
+    setDeletingFolder(false);
+    setConfirmDeleteFolder(null);
   };
 
   const dm = DISCIPLINE_META[discipline] ?? DISCIPLINE_META["Building Surveyor"];
@@ -900,27 +965,81 @@ export default function Templates() {
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">No checklists found.</div>
               )}
 
-              {folderKeys.map(folder => {
+              {folderKeys.map((folder, fi) => {
                 const isOpen = openFolders.has(folder);
                 const FolderIcon = isOpen ? FolderOpen : Folder;
                 const items = grouped[folder] ?? [];
+                const canReorder = discipline !== "Building Surveyor" && !search;
+                const isConfirmingDelete = confirmDeleteFolder === folder;
 
                 return (
-                  <div key={folder}>
-                    <button
-                      onClick={() => toggleFolder(folder)}
-                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-sidebar hover:bg-muted/40 transition-colors"
-                    >
-                      {isOpen
-                        ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      }
-                      <FolderIcon className="h-4 w-4 text-amber-500 shrink-0" />
-                      <span className="flex-1 text-left truncate">{folder}</span>
-                      <span className="text-xs font-normal text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-full shrink-0">
-                        {items.length}
-                      </span>
-                    </button>
+                  <div key={folder} className="group/folder">
+                    <div className="flex items-center">
+                      <button
+                        onClick={() => toggleFolder(folder)}
+                        className="flex-1 flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-sidebar hover:bg-muted/40 transition-colors min-w-0"
+                      >
+                        {isOpen
+                          ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        }
+                        <FolderIcon className="h-4 w-4 text-amber-500 shrink-0" />
+                        <span className="flex-1 text-left truncate">{folder}</span>
+                        <span className="text-xs font-normal text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-full shrink-0">
+                          {items.length}
+                        </span>
+                      </button>
+
+                      {/* Folder controls — reorder + delete (non-BS only) */}
+                      {canReorder && (
+                        <div className="flex items-center gap-0.5 pr-2 opacity-0 group-hover/folder:opacity-100 transition-opacity">
+                          <div className="flex flex-col">
+                            <button
+                              disabled={fi === 0}
+                              onClick={() => moveFolder(fi, -1)}
+                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar disabled:opacity-20"
+                              title="Move folder up"
+                            >
+                              <ChevronUp className="h-3 w-3" />
+                            </button>
+                            <button
+                              disabled={fi === folderKeys.length - 1}
+                              onClick={() => moveFolder(fi, 1)}
+                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-sidebar disabled:opacity-20"
+                              title="Move folder down"
+                            >
+                              <ChevronRight className="h-3 w-3 rotate-90" />
+                            </button>
+                          </div>
+                          {isConfirmingDelete ? (
+                            <div className="flex items-center gap-1 ml-1">
+                              <button
+                                onClick={() => deleteFolder(folder)}
+                                disabled={deletingFolder}
+                                className="text-[10px] px-1.5 py-0.5 rounded bg-red-500 text-white hover:bg-red-600 font-semibold"
+                                title="Confirm delete"
+                              >
+                                {deletingFolder ? "…" : "Delete"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteFolder(null)}
+                                className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground hover:bg-muted/80"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteFolder(folder)}
+                              className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors ml-0.5"
+                              title="Delete folder"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
 
                     {isOpen && NCC_CLASSES[folder] && (
                       <div className="mx-4 mb-1 px-2 py-1 text-[10px] text-muted-foreground bg-muted/30 rounded italic leading-snug">

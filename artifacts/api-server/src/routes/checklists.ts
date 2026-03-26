@@ -282,6 +282,75 @@ router.post("/reorder", async (req, res) => {
   }
 });
 
+// Reorder folders — assigns sortOrders in 1000-item buckets per folder
+router.post("/folder-reorder", async (req, res) => {
+  try {
+    const { discipline, folders } = req.body as { discipline: string; folders: string[] };
+    if (!discipline || !Array.isArray(folders)) {
+      res.status(400).json({ error: "discipline and folders required" });
+      return;
+    }
+
+    const all = await db.select().from(checklistTemplatesTable)
+      .where(eq(checklistTemplatesTable.discipline, discipline))
+      .orderBy(sql`${checklistTemplatesTable.sortOrder} ASC`);
+
+    const grouped: Record<string, typeof all> = {};
+    for (const t of all) {
+      if (!grouped[t.folder]) grouped[t.folder] = [];
+      grouped[t.folder].push(t);
+    }
+
+    const updates: { id: number; sortOrder: number }[] = [];
+    folders.forEach((folder, fi) => {
+      (grouped[folder] ?? []).forEach((t, ti) => {
+        updates.push({ id: t.id, sortOrder: fi * 1000 + ti });
+      });
+    });
+
+    await Promise.all(updates.map(({ id, sortOrder }) =>
+      db.update(checklistTemplatesTable).set({ sortOrder }).where(eq(checklistTemplatesTable.id, id))
+    ));
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Folder reorder error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// Delete all templates (and their items) in a folder
+router.delete("/folder", async (req, res) => {
+  try {
+    const { discipline, folder } = req.query as { discipline: string; folder: string };
+    if (!discipline || !folder) {
+      res.status(400).json({ error: "discipline and folder required" });
+      return;
+    }
+
+    const templates = await db.select({ id: checklistTemplatesTable.id })
+      .from(checklistTemplatesTable)
+      .where(and(
+        eq(checklistTemplatesTable.discipline, discipline),
+        eq(checklistTemplatesTable.folder, folder)
+      ));
+
+    await Promise.all(templates.map(t =>
+      db.delete(checklistItemsTable).where(eq(checklistItemsTable.templateId, t.id))
+    ));
+    await db.delete(checklistTemplatesTable)
+      .where(and(
+        eq(checklistTemplatesTable.discipline, discipline),
+        eq(checklistTemplatesTable.folder, folder)
+      ));
+
+    res.json({ success: true, deleted: templates.length });
+  } catch (err) {
+    req.log.error({ err }, "Delete folder error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 router.delete("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
