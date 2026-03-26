@@ -54,10 +54,19 @@ interface ChecklistResult {
   description: string;
   codeReference?: string;
   riskLevel?: string;
-  result: "pass" | "fail" | "na" | null;
+  requirePhoto?: boolean;
+  defectTrigger?: boolean;
+  recommendedActionDefault?: string | null;
+  result: "pass" | "fail" | "monitor" | "na" | null;
   notes?: string;
   photoUrls?: string[];
   photoMarkups?: Record<string, ChecklistMarkupData>;
+  severity?: string | null;
+  location?: string | null;
+  tradeAllocated?: string | null;
+  defectStatus?: string;
+  clientVisible?: boolean;
+  recommendedAction?: string | null;
   orderIndex: number;
 }
 
@@ -98,6 +107,7 @@ interface Inspection {
   checklistTemplateName?: string;
   passCount: number;
   failCount: number;
+  monitorCount: number;
   naCount: number;
   checklistResults: ChecklistResult[];
   issues: Issue[];
@@ -326,7 +336,7 @@ export default function InspectionDetail() {
     );
   }
 
-  const total = inspection.passCount + inspection.failCount + inspection.naCount;
+  const total = inspection.passCount + inspection.failCount + (inspection.monitorCount ?? 0) + inspection.naCount;
   const scored = inspection.passCount + inspection.failCount;
   const passRate = scored > 0 ? Math.round((inspection.passCount / scored) * 100) : null;
 
@@ -394,6 +404,11 @@ export default function InspectionDetail() {
                   <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">
                     <XCircle className="h-3 w-3" /> {inspection.failCount} Fail
                   </span>
+                  {(inspection.monitorCount ?? 0) > 0 && (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                      <Eye className="h-3 w-3" /> {inspection.monitorCount} Monitor
+                    </span>
+                  )}
                   <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-gray-50 text-gray-500 border border-gray-200">
                     <MinusCircle className="h-3 w-3" /> {inspection.naCount} N/A
                   </span>
@@ -494,7 +509,7 @@ export default function InspectionDetail() {
           onReload={load}
         />
       )}
-      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults} docsByItem={docsByItem} />}
+      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} />}
       {tab === "Issues" && <IssuesTab issues={inspection.issues} />}
       {tab === "Documents" && (
         <DocumentsTab
@@ -1274,26 +1289,129 @@ function OverviewTab({
 
 // ── Checklist Tab ─────────────────────────────────────────────────────────────
 
+const SEVERITY_COLORS: Record<string, string> = {
+  critical: "bg-red-50 text-red-700 border-red-300",
+  major: "bg-orange-50 text-orange-700 border-orange-200",
+  minor: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  cosmetic: "bg-green-50 text-green-700 border-green-200",
+};
+
+type ResultKey = "pass" | "fail" | "monitor" | "na" | "pending";
+
+interface ItemDraft {
+  result: ResultKey;
+  notes: string;
+  severity: string;
+  location: string;
+  tradeAllocated: string;
+  recommendedAction: string;
+}
+
+function makeDefaultDraft(item: ChecklistResult): ItemDraft {
+  return {
+    result: (item.result as ResultKey) ?? "pending",
+    notes: item.notes ?? "",
+    severity: item.severity ?? "",
+    location: item.location ?? "",
+    tradeAllocated: item.tradeAllocated ?? "",
+    recommendedAction: item.recommendedAction ?? item.recommendedActionDefault ?? "",
+  };
+}
+
 function ChecklistTab({
-  results,
+  results: initialResults,
   docsByItem,
+  inspectionId,
+  onReload,
 }: {
   results: ChecklistResult[];
   docsByItem: Record<number, { id: number; name: string; mimeType?: string }[]>;
+  inspectionId: number;
+  onReload: () => void;
 }) {
-  if (results.length === 0) {
+  const [localResults, setLocalResults] = useState<ChecklistResult[]>(initialResults);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [drafts, setDrafts] = useState<Record<number, ItemDraft>>({});
+  const [saving, setSaving] = useState<number | null>(null);
+
+  const RESULT_OPTS: { key: ResultKey; label: string; icon: React.ReactNode; activeClass: string; pendingClass: string }[] = [
+    { key: "pass",    label: "Pass",    icon: <CheckCircle2 className="h-4 w-4" />, activeClass: "bg-green-50 border-green-400 text-green-700",  pendingClass: "hover:bg-green-50/50" },
+    { key: "fail",    label: "Fail",    icon: <XCircle className="h-4 w-4" />,      activeClass: "bg-red-50 border-red-400 text-red-700",        pendingClass: "hover:bg-red-50/50" },
+    { key: "monitor", label: "Monitor", icon: <Eye className="h-4 w-4" />,          activeClass: "bg-amber-50 border-amber-400 text-amber-700",  pendingClass: "hover:bg-amber-50/50" },
+    { key: "na",      label: "N/A",     icon: <MinusCircle className="h-4 w-4" />,  activeClass: "bg-gray-100 border-gray-400 text-gray-600",    pendingClass: "hover:bg-gray-50" },
+  ];
+
+  const openEdit = (item: ChecklistResult) => {
+    setEditingId(item.id);
+    if (!drafts[item.id]) {
+      setDrafts(d => ({ ...d, [item.id]: makeDefaultDraft(item) }));
+    }
+  };
+
+  const updateDraft = (itemId: number, patch: Partial<ItemDraft>) => {
+    setDrafts(d => ({ ...d, [itemId]: { ...d[itemId], ...patch } }));
+  };
+
+  const handleResultClick = (item: ChecklistResult, key: ResultKey) => {
+    const currentDraft = drafts[item.id] ?? makeDefaultDraft(item);
+    const newDraft = { ...currentDraft, result: key };
+    setDrafts(d => ({ ...d, [item.id]: newDraft }));
+    if (key === "fail" || key === "monitor") {
+      setEditingId(item.id);
+    } else {
+      saveItem(item.id, newDraft);
+    }
+  };
+
+  const saveItem = async (itemId: number, draft: ItemDraft) => {
+    setSaving(itemId);
+    const showDefect = draft.result === "fail" || draft.result === "monitor";
+    try {
+      await apiFetch(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          result: draft.result === "pending" ? null : draft.result,
+          notes: draft.notes || null,
+          ...(showDefect ? {
+            severity: draft.severity || null,
+            location: draft.location || null,
+            tradeAllocated: draft.tradeAllocated || null,
+            recommendedAction: draft.recommendedAction || null,
+          } : {}),
+        }),
+      });
+      setLocalResults(rs => rs.map(r => r.id !== itemId ? r : {
+        ...r,
+        result: draft.result === "pending" ? null : draft.result,
+        notes: draft.notes || undefined,
+        severity: showDefect ? (draft.severity || null) : r.severity,
+        location: showDefect ? (draft.location || null) : r.location,
+        tradeAllocated: showDefect ? (draft.tradeAllocated || null) : r.tradeAllocated,
+        recommendedAction: showDefect ? (draft.recommendedAction || null) : r.recommendedAction,
+      }));
+      setEditingId(null);
+      onReload();
+    } catch {
+      alert("Failed to save. Please try again.");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  if (localResults.length === 0) {
     return (
       <div className="text-center py-16 text-muted-foreground">
         <ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
-        <p className="font-medium">No checklist results recorded</p>
-        <p className="text-sm mt-1">Results are recorded via the mobile app during the field inspection.</p>
+        <p className="font-medium">No checklist items</p>
+        <p className="text-sm mt-1">Apply a checklist template from the Overview tab to load items.</p>
       </div>
     );
   }
 
-  const categories = Array.from(new Set(results.map(r => r.category)));
+  const categories = Array.from(new Set(localResults.map(r => r.category)));
   const grouped: Record<string, ChecklistResult[]> = {};
-  for (const r of results) {
+  for (const r of localResults) {
     if (!grouped[r.category]) grouped[r.category] = [];
     grouped[r.category].push(r);
   }
@@ -1308,118 +1426,236 @@ function ChecklistTab({
             <span className="flex-1 border-t border-muted/40" />
           </div>
           <div className="space-y-2">
-            {grouped[cat].map((item, idx) => (
-              <div
-                key={item.id}
-                className={cn(
-                  "flex items-start gap-3 p-3.5 rounded-lg border transition-colors",
-                  item.result === "pass" && "bg-green-50/60 border-green-200",
-                  item.result === "fail" && "bg-red-50/60 border-red-200",
-                  item.result === "na" && "bg-gray-50 border-gray-200",
-                  !item.result && "bg-card border-muted/50",
-                )}
-              >
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-muted/60 text-muted-foreground text-[10px] font-bold flex items-center justify-center mt-0.5">
-                  {idx + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-sidebar font-medium leading-snug">{item.description}</p>
-                  <div className="flex flex-wrap gap-2 mt-1.5">
-                    {item.codeReference && (
-                      <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-mono">
-                        {item.codeReference}
-                      </span>
-                    )}
-                    {item.riskLevel && (
-                      <span className={cn(
-                        "text-xs px-1.5 py-0.5 rounded capitalize border font-medium",
-                        item.riskLevel === "high" && "bg-red-50 text-red-700 border-red-200",
-                        item.riskLevel === "medium" && "bg-amber-50 text-amber-700 border-amber-200",
-                        item.riskLevel === "low" && "bg-green-50 text-green-700 border-green-200",
-                      )}>
-                        {item.riskLevel} Risk
-                      </span>
-                    )}
-                  </div>
-                  {item.notes && (
-                    <p className="text-xs text-muted-foreground mt-1.5 italic">"{item.notes}"</p>
+            {grouped[cat].map((item, idx) => {
+              const draft = drafts[item.id] ?? makeDefaultDraft(item);
+              const activeResult = draft.result !== "pending" ? draft.result : (item.result ?? "pending");
+              const isEditing = editingId === item.id;
+              const showDefect = activeResult === "fail" || activeResult === "monitor";
+              const isSaving = saving === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  className={cn(
+                    "rounded-lg border transition-colors",
+                    activeResult === "pass"    && "bg-green-50/60 border-green-200",
+                    activeResult === "fail"    && "bg-red-50/60 border-red-200",
+                    activeResult === "monitor" && "bg-amber-50/60 border-amber-200",
+                    activeResult === "na"      && "bg-gray-50 border-gray-200",
+                    activeResult === "pending" && "bg-card border-muted/50",
                   )}
-                  {/* Photos with markup overlay */}
-                  {item.photoUrls && item.photoUrls.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {item.photoUrls.map((photoPath, pi) => {
-                        const markup = item.photoMarkups?.[photoPath];
-                        return (
-                          <a
-                            key={pi}
-                            href={`${apiBase()}/api/storage${photoPath}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="relative block rounded-md overflow-hidden border border-border hover:border-secondary/60 transition-colors flex-shrink-0"
-                            style={{ width: 72, height: 72 }}
-                          >
-                            <img
-                              src={`${apiBase()}/api/storage${photoPath}`}
-                              alt={`Photo ${pi + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                            {markup && markup.strokes.length > 0 && (
-                              <svg
-                                className="absolute inset-0 w-full h-full"
-                                viewBox={`0 0 ${markup.w} ${markup.h}`}
-                                preserveAspectRatio="xMidYMid meet"
+                >
+                  {/* ── Main row ── */}
+                  <div className="flex items-start gap-3 p-3.5">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-muted/60 text-muted-foreground text-[10px] font-bold flex items-center justify-center mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-sidebar font-medium leading-snug">{item.description}</p>
+                      <div className="flex flex-wrap gap-2 mt-1.5">
+                        {item.codeReference && (
+                          <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-mono">
+                            {item.codeReference}
+                          </span>
+                        )}
+                        {item.riskLevel && (
+                          <span className={cn(
+                            "text-xs px-1.5 py-0.5 rounded capitalize border font-medium",
+                            item.riskLevel === "high"   && "bg-red-50 text-red-700 border-red-200",
+                            item.riskLevel === "medium" && "bg-amber-50 text-amber-700 border-amber-200",
+                            item.riskLevel === "low"    && "bg-green-50 text-green-700 border-green-200",
+                          )}>
+                            {item.riskLevel} Risk
+                          </span>
+                        )}
+                        {/* Defect badges for saved data */}
+                        {item.severity && !isEditing && (
+                          <span className={cn("text-xs px-1.5 py-0.5 rounded capitalize border font-medium", SEVERITY_COLORS[item.severity] ?? "bg-gray-50 text-gray-600 border-gray-200")}>
+                            {item.severity}
+                          </span>
+                        )}
+                        {item.location && !isEditing && (
+                          <span className="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded font-medium">
+                            📍 {item.location}
+                          </span>
+                        )}
+                        {item.tradeAllocated && !isEditing && (
+                          <span className="text-xs bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded font-medium">
+                            🔧 {item.tradeAllocated}
+                          </span>
+                        )}
+                      </div>
+                      {item.notes && !isEditing && (
+                        <p className="text-xs text-muted-foreground mt-1.5 italic">"{item.notes}"</p>
+                      )}
+                      {item.recommendedAction && !isEditing && (
+                        <p className="text-xs text-amber-700 mt-1 font-medium">→ {item.recommendedAction}</p>
+                      )}
+                      {/* Photos */}
+                      {item.photoUrls && item.photoUrls.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {item.photoUrls.map((photoPath, pi) => {
+                            const markup = item.photoMarkups?.[photoPath];
+                            return (
+                              <a
+                                key={pi}
+                                href={`${apiBase()}/api/storage${photoPath}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="relative block rounded-md overflow-hidden border border-border hover:border-secondary/60 transition-colors flex-shrink-0"
+                                style={{ width: 72, height: 72 }}
                               >
-                                {markup.strokes.map((stroke, si) => {
-                                  const d = stroke.points.map((p, pi2) =>
-                                    `${pi2 === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`
-                                  ).join(" ");
-                                  return (
-                                    <path
-                                      key={si}
-                                      d={d}
-                                      stroke={stroke.color}
-                                      strokeWidth={stroke.width}
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      fill="none"
-                                    />
-                                  );
-                                })}
-                              </svg>
-                            )}
-                            {markup && markup.strokes.length > 0 && (
-                              <span className="absolute bottom-1 left-1 bg-secondary text-white text-[8px] px-1 rounded leading-tight font-semibold">
-                                Markup
-                              </span>
-                            )}
-                          </a>
-                        );
-                      })}
+                                <img src={`${apiBase()}/api/storage${photoPath}`} alt={`Photo ${pi + 1}`} className="w-full h-full object-cover" />
+                                {markup && markup.strokes.length > 0 && (
+                                  <>
+                                    <svg className="absolute inset-0 w-full h-full" viewBox={`0 0 ${markup.w} ${markup.h}`} preserveAspectRatio="xMidYMid meet">
+                                      {markup.strokes.map((stroke, si) => (
+                                        <path key={si} d={stroke.points.map((p, i2) => `${i2 === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ")} stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                                      ))}
+                                    </svg>
+                                    <span className="absolute bottom-1 left-1 bg-secondary text-white text-[8px] px-1 rounded leading-tight font-semibold">Markup</span>
+                                  </>
+                                )}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* Linked docs */}
+                      {(docsByItem[item.checklistItemId] ?? []).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {docsByItem[item.checklistItemId].map(doc => (
+                            <span key={doc.id} className="inline-flex items-center gap-1 text-[11px] bg-secondary/8 text-secondary border border-secondary/20 px-2 py-0.5 rounded-full font-medium">
+                              <Paperclip className="h-2.5 w-2.5 shrink-0" /> {doc.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {/* Linked documents */}
-                  {(docsByItem[item.checklistItemId] ?? []).length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {docsByItem[item.checklistItemId].map(doc => (
-                        <span
-                          key={doc.id}
-                          className="inline-flex items-center gap-1 text-[11px] bg-secondary/8 text-secondary border border-secondary/20 px-2 py-0.5 rounded-full font-medium"
+                    {/* ── Result buttons ── */}
+                    <div className="shrink-0 flex flex-col items-end gap-1.5">
+                      <div className="flex items-center gap-1">
+                        {RESULT_OPTS.map(opt => (
+                          <button
+                            key={opt.key}
+                            onClick={() => handleResultClick(item, opt.key)}
+                            disabled={isSaving}
+                            title={opt.label}
+                            className={cn(
+                              "inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded border transition-colors",
+                              activeResult === opt.key ? opt.activeClass : `text-muted-foreground border-muted/50 bg-card ${opt.pendingClass}`,
+                            )}
+                          >
+                            {opt.icon}
+                            <span className="hidden sm:inline">{opt.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                      {(activeResult === "fail" || activeResult === "monitor") && !isEditing && (
+                        <button
+                          onClick={() => openEdit(item)}
+                          className="text-[11px] text-amber-700 underline underline-offset-2 hover:text-amber-900 transition-colors"
                         >
-                          <Paperclip className="h-2.5 w-2.5 shrink-0" />
-                          {doc.name}
-                        </span>
-                      ))}
+                          {item.severity || item.location ? "Edit defect details" : "Add defect details"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Defect / Monitor detail panel ── */}
+                  {isEditing && showDefect && (
+                    <div className="border-t border-amber-200 bg-amber-50/80 px-4 py-4 rounded-b-lg space-y-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-amber-800">
+                        {activeResult === "fail" ? "Defect Details" : "Monitor Details"}
+                      </p>
+
+                      {/* Severity chips */}
+                      <div>
+                        <p className="text-xs text-muted-foreground font-medium mb-1.5">Severity</p>
+                        <div className="flex flex-wrap gap-2">
+                          {(["critical", "major", "minor", "cosmetic"] as const).map(s => (
+                            <button
+                              key={s}
+                              onClick={() => updateDraft(item.id, { severity: draft.severity === s ? "" : s })}
+                              className={cn(
+                                "text-xs px-3 py-1 rounded-full border font-medium capitalize transition-colors",
+                                draft.severity === s
+                                  ? (SEVERITY_COLORS[s] ?? "bg-gray-100 border-gray-400 text-gray-700")
+                                  : "bg-white border-amber-200 text-muted-foreground hover:border-amber-400",
+                              )}
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Location */}
+                      <div>
+                        <label className="text-xs text-muted-foreground font-medium block mb-1">Location / Area</label>
+                        <input
+                          type="text"
+                          value={draft.location}
+                          onChange={e => updateDraft(item.id, { location: e.target.value })}
+                          placeholder="e.g. Bedroom 2, North wall"
+                          className="w-full text-sm border border-amber-200 rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                        />
+                      </div>
+
+                      {/* Trade */}
+                      <div>
+                        <label className="text-xs text-muted-foreground font-medium block mb-1">Trade Allocated</label>
+                        <input
+                          type="text"
+                          value={draft.tradeAllocated}
+                          onChange={e => updateDraft(item.id, { tradeAllocated: e.target.value })}
+                          placeholder="e.g. Plumber, Electrician, Builder"
+                          className="w-full text-sm border border-amber-200 rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                        />
+                      </div>
+
+                      {/* Recommended action */}
+                      <div>
+                        <label className="text-xs text-muted-foreground font-medium block mb-1">Recommended Action</label>
+                        <textarea
+                          value={draft.recommendedAction}
+                          onChange={e => updateDraft(item.id, { recommendedAction: e.target.value })}
+                          placeholder="Describe the corrective action required…"
+                          rows={2}
+                          className="w-full text-sm border border-amber-200 rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400 resize-none"
+                        />
+                      </div>
+
+                      {/* Notes */}
+                      <div>
+                        <label className="text-xs text-muted-foreground font-medium block mb-1">Notes</label>
+                        <textarea
+                          value={draft.notes}
+                          onChange={e => updateDraft(item.id, { notes: e.target.value })}
+                          placeholder="Inspector notes…"
+                          rows={2}
+                          className="w-full text-sm border border-amber-200 rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400 resize-none"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        <button onClick={() => setEditingId(null)} className="text-sm text-muted-foreground hover:text-sidebar transition-colors px-3 py-1">
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => saveItem(item.id, draft)}
+                          disabled={isSaving}
+                          className="inline-flex items-center gap-1.5 text-sm font-semibold bg-primary text-white px-4 py-1.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
+                        >
+                          {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckSquare className="h-3.5 w-3.5" />}
+                          Save
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
-                <div className="shrink-0">
-                  {item.result === "pass" && <CheckCircle2 className="h-5 w-5 text-green-600" />}
-                  {item.result === "fail" && <XCircle className="h-5 w-5 text-red-600" />}
-                  {item.result === "na" && <MinusCircle className="h-5 w-5 text-gray-400" />}
-                  {!item.result && <MinusCircle className="h-5 w-5 text-muted-foreground/30" />}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ))}

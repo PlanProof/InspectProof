@@ -9,8 +9,9 @@ async function getInspectionCounts(inspectionId: number) {
     .where(eq(checklistResultsTable.inspectionId, inspectionId));
   const passCount = results.filter(r => r.result === "pass").length;
   const failCount = results.filter(r => r.result === "fail").length;
+  const monitorCount = results.filter(r => r.result === "monitor").length;
   const naCount = results.filter(r => r.result === "na").length;
-  return { passCount, failCount, naCount };
+  return { passCount, failCount, monitorCount, naCount };
 }
 
 async function formatInspection(i: any) {
