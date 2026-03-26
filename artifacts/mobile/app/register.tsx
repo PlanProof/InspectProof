@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { getApiUrl } from "@/constants/api";
 
 const WEB_TOP = Platform.OS === "web" ? 67 : 0;
 
@@ -27,42 +28,69 @@ const ROLES = [
   { key: "other", label: "Other" },
 ];
 
-const PLANS = [
+const PLAN_PRICE_MAP: Record<string, { price: string; priceNote: string }> = {
+  free_trial: { price: "Free", priceNote: "Forever" },
+  starter: { price: "$59", priceNote: "AUD/month" },
+  professional: { price: "$149", priceNote: "AUD/month" },
+  enterprise: { price: "Custom", priceNote: "Contact us" },
+};
+
+const FALLBACK_PLANS = [
+  {
+    key: "free_trial",
+    name: "Free Trial",
+    price: "Free",
+    priceNote: "Forever",
+    features: ["1 active project", "10 total inspections", "1 team member", "Basic report generation"],
+    highlight: false,
+    badge: null as string | null,
+  },
   {
     key: "starter",
     name: "Starter",
-    price: "Free",
-    priceNote: "Forever",
-    features: ["5 active projects", "50 inspections/month", "Basic reports", "Email support"],
+    price: "$59",
+    priceNote: "AUD/month",
+    features: ["10 active projects", "50 inspections per month", "3 team members", "All report types"],
     highlight: false,
-    badge: null,
+    badge: null as string | null,
   },
   {
     key: "professional",
     name: "Professional",
-    price: "$49",
-    priceNote: "per user / month",
-    features: ["Unlimited projects", "Unlimited inspections", "All report types", "Photo markup", "Priority support"],
+    price: "$149",
+    priceNote: "AUD/month",
+    features: ["Unlimited projects", "Unlimited inspections", "10 team members", "Full template customisation", "Priority support"],
     highlight: true,
-    badge: "Most Popular",
+    badge: "Most Popular" as string | null,
   },
   {
     key: "enterprise",
     name: "Enterprise",
     price: "Custom",
     priceNote: "Contact us",
-    features: ["Everything in Pro", "Multi-office teams", "Custom templates", "API access", "Dedicated support"],
+    features: ["Unlimited projects", "Unlimited inspections", "Unlimited team members", "Dedicated account manager", "Custom integrations"],
     highlight: false,
-    badge: null,
+    badge: null as string | null,
   },
 ];
 
 type Step = "profile" | "plan";
 
+type PlanOption = {
+  key: string;
+  name: string;
+  price: string;
+  priceNote: string;
+  features: string[];
+  highlight: boolean;
+  badge: string | null;
+};
+
 export default function RegisterScreen() {
   const { login } = useAuth();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<Step>("profile");
+  const [plans, setPlans] = useState<PlanOption[]>(FALLBACK_PLANS);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -71,9 +99,32 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("certifier");
-  const [selectedPlan, setSelectedPlan] = useState("professional");
+  const [selectedPlan, setSelectedPlan] = useState("free_trial");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    fetch(getApiUrl("/billing/plan-configs"))
+      .then(r => r.json())
+      .then(data => {
+        if (data?.plans?.length) {
+          const mapped: PlanOption[] = data.plans.map((p: any) => {
+            const pricing = PLAN_PRICE_MAP[p.planKey] ?? { price: "Custom", priceNote: "Contact us" };
+            return {
+              key: p.planKey,
+              name: p.label,
+              price: pricing.price,
+              priceNote: pricing.priceNote,
+              features: Array.isArray(p.features) ? p.features : JSON.parse(p.features || "[]"),
+              highlight: p.isPopular || p.isBestValue,
+              badge: p.isBestValue ? "Best Value" : p.isPopular ? "Most Popular" : null,
+            };
+          });
+          setPlans(mapped);
+        }
+      })
+      .catch(() => {}); // Keep fallback on network failure
+  }, []);
 
   const validateProfile = () => {
     if (!firstName.trim()) return "Please enter your first name.";
@@ -283,7 +334,7 @@ export default function RegisterScreen() {
           </View>
         ) : (
           <View style={styles.planWrap}>
-            {PLANS.map((plan) => (
+            {plans.map((plan) => (
               <Pressable
                 key={plan.key}
                 onPress={() => setSelectedPlan(plan.key)}

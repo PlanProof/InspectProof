@@ -1,5 +1,5 @@
 import { Router, type IRouter } from 'express';
-import { db, usersTable, projectsTable, inspectionsTable } from '@workspace/db';
+import { db, usersTable, projectsTable, inspectionsTable, planConfigsTable } from '@workspace/db';
 import { eq, count, and, ne, gte, sql } from 'drizzle-orm';
 import { getUncachableStripeClient, getStripePublishableKey } from '../stripeClient';
 import { getLimits, PLAN_LIMITS } from '../lib/planLimits';
@@ -17,6 +17,15 @@ function getUserId(req: any): number | null {
     return null;
   }
 }
+
+router.get('/billing/plan-configs', async (_req, res) => {
+  try {
+    const plans = await db.select().from(planConfigsTable).orderBy(planConfigsTable.sortOrder);
+    res.json({ plans: plans.map(p => ({ ...p, features: JSON.parse(p.features || '[]') })) });
+  } catch {
+    res.json({ plans: [] });
+  }
+});
 
 router.get('/billing/plans', async (_req, res) => {
   try {

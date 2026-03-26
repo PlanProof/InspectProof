@@ -15,56 +15,18 @@ function formatAUD(cents: number) {
   return `$${(cents / 100).toFixed(0)}`;
 }
 
-const PLAN_METADATA: Record<string, {
-  icon: any; color: string; features: string[]; badge?: string;
-}> = {
-  free_trial: {
-    icon: Shield,
-    color: "text-gray-500",
-    features: [
-      "1 active project",
-      "10 total inspections",
-      "1 team member",
-      "Basic report generation",
-    ],
-  },
-  starter: {
-    icon: Zap,
-    color: "text-[#466DB5]",
-    badge: "Popular",
-    features: [
-      "10 active projects",
-      "50 inspections per month",
-      "3 team members",
-      "All report types",
-      "Standard checklist templates",
-    ],
-  },
-  professional: {
-    icon: BarChart3,
-    color: "text-[#C5D92D]",
-    badge: "Best Value",
-    features: [
-      "Unlimited projects",
-      "Unlimited inspections",
-      "10 team members",
-      "All report types",
-      "Full template customisation",
-      "Priority support",
-    ],
-  },
-  enterprise: {
-    icon: Building2,
-    color: "text-[#0B1933]",
-    features: [
-      "Unlimited projects",
-      "Unlimited inspections",
-      "Unlimited team members",
-      "Full customisation",
-      "Dedicated support",
-      "Custom integrations & SLA",
-    ],
-  },
+const PLAN_ICONS: Record<string, any> = {
+  free_trial: Shield,
+  starter: Zap,
+  professional: BarChart3,
+  enterprise: Building2,
+};
+
+const PLAN_ICON_COLORS: Record<string, string> = {
+  free_trial: "text-gray-500",
+  starter: "text-[#466DB5]",
+  professional: "text-[#C5D92D]",
+  enterprise: "text-[#0B1933]",
 };
 
 interface StripePrice {
@@ -124,6 +86,15 @@ export default function Billing() {
     },
   });
 
+  const { data: planConfigsData } = useQuery({
+    queryKey: ["billing-plan-configs"],
+    queryFn: async () => {
+      const r = await fetch(API("/billing/plan-configs"));
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
+
   const checkoutMutation = useMutation({
     mutationFn: async (priceId: string) => {
       const r = await fetch(API("/billing/checkout"), {
@@ -155,18 +126,40 @@ export default function Billing() {
 
   const stripePlans: Plan[] = plansData?.plans ?? [];
 
+  const planConfigs: Record<string, { label: string; description: string; features: string[]; isPopular: boolean; isBestValue: boolean }> =
+    Object.fromEntries(
+      (planConfigsData?.plans ?? []).map((p: any) => [
+        p.planKey,
+        {
+          label: p.label,
+          description: p.description ?? "",
+          features: Array.isArray(p.features) ? p.features : JSON.parse(p.features || "[]"),
+          isPopular: p.isPopular,
+          isBestValue: p.isBestValue,
+        },
+      ])
+    );
+
+  const getPlanConfig = (planKey: string) => planConfigs[planKey] ?? {
+    label: planKey,
+    description: "",
+    features: [],
+    isPopular: false,
+    isBestValue: false,
+  };
+
   const freePlan = {
     plan: "free_trial",
-    name: "Free Trial",
-    description: "Try InspectProof with no commitment.",
+    name: getPlanConfig("free_trial").label || "Free Trial",
+    description: getPlanConfig("free_trial").description || "Try InspectProof with no commitment.",
     prices: [],
     limits: { maxProjects: 1, maxInspectionsTotal: 10, maxInspectionsMonthly: null, maxTeamMembers: 1, label: "Free Trial" },
   };
 
   const enterprisePlan = {
     plan: "enterprise",
-    name: "Enterprise",
-    description: "Custom solutions for large organisations.",
+    name: getPlanConfig("enterprise").label || "Enterprise",
+    description: getPlanConfig("enterprise").description || "Custom solutions for large organisations.",
     prices: [],
     limits: { maxProjects: null, maxInspectionsTotal: null, maxInspectionsMonthly: null, maxTeamMembers: null, label: "Enterprise" },
   };
@@ -262,11 +255,13 @@ export default function Billing() {
         {/* Plan cards */}
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5 mb-12">
           {allPlans.map((plan) => {
-            const meta = PLAN_METADATA[plan.plan] ?? PLAN_METADATA.starter;
-            const Icon = meta.icon;
+            const config = getPlanConfig(plan.plan);
+            const Icon = PLAN_ICONS[plan.plan] ?? Shield;
+            const iconColor = PLAN_ICON_COLORS[plan.plan] ?? "text-gray-500";
             const price = getPrice(plan as any);
             const isCurrent = plan.plan === currentPlan;
             const isPro = plan.plan === "professional";
+            const showBadge = config.isPopular || config.isBestValue;
 
             return (
               <div
@@ -275,20 +270,20 @@ export default function Billing() {
                   isPro ? "border-[#C5D92D] shadow-lg" : isCurrent ? "border-[#466DB5]" : "border-gray-200 hover:border-gray-300"
                 }`}
               >
-                {meta.badge && (
+                {showBadge && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className={isPro ? "bg-[#C5D92D] text-[#0B1933] hover:bg-[#C5D92D]" : "bg-[#466DB5] text-white hover:bg-[#466DB5]"}>
-                      {meta.badge}
+                    <Badge className={config.isBestValue ? "bg-[#C5D92D] text-[#0B1933] hover:bg-[#C5D92D]" : "bg-[#466DB5] text-white hover:bg-[#466DB5]"}>
+                      {config.isBestValue ? "Best Value" : "Popular"}
                     </Badge>
                   </div>
                 )}
-                {isCurrent && !meta.badge && (
+                {isCurrent && !showBadge && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <Badge className="bg-[#466DB5] text-white hover:bg-[#466DB5]">Current plan</Badge>
                   </div>
                 )}
 
-                <div className={`w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center mb-4 ${meta.color}`}>
+                <div className={`w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center mb-4 ${iconColor}`}>
                   <Icon className="w-5 h-5" />
                 </div>
 
@@ -322,7 +317,7 @@ export default function Billing() {
                 </div>
 
                 <ul className="space-y-2 flex-1 mb-6">
-                  {meta.features.map(f => (
+                  {(config.features.length ? config.features : ["No features listed"]).map(f => (
                     <li key={f} className="flex items-start gap-2 text-sm text-gray-600">
                       <CheckCircle2 className="w-4 h-4 text-[#C5D92D] mt-0.5 shrink-0" />
                       {f}
