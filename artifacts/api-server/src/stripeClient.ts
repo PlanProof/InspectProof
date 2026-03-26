@@ -1,8 +1,6 @@
 import Stripe from 'stripe';
 
-let connectionSettings: any;
-
-async function getCredentials() {
+async function getReplitCredentials(): Promise<{ publishableKey: string; secretKey: string } | null> {
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
     ? 'repl ' + process.env.REPL_IDENTITY
@@ -10,37 +8,49 @@ async function getCredentials() {
       ? 'depl ' + process.env.WEB_REPL_RENEWAL
       : null;
 
-  if (!xReplitToken) {
-    throw new Error('X-Replit-Token not found for repl/depl');
+  if (!hostname || !xReplitToken) return null;
+
+  try {
+    const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
+    const targetEnvironment = isProduction ? 'production' : 'development';
+
+    const url = new URL(`https://${hostname}/api/v2/connection`);
+    url.searchParams.set('include_secrets', 'true');
+    url.searchParams.set('connector_names', 'stripe');
+    url.searchParams.set('environment', targetEnvironment);
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Accept': 'application/json',
+        'X-Replit-Token': xReplitToken,
+      },
+    });
+
+    const data = await response.json() as { items?: Array<{ settings?: { publishable?: string; secret?: string } }> };
+    const conn = data.items?.[0];
+    if (!conn?.settings?.publishable || !conn?.settings?.secret) return null;
+
+    return {
+      publishableKey: conn.settings.publishable,
+      secretKey: conn.settings.secret,
+    };
+  } catch {
+    return null;
   }
+}
 
-  const connectorName = 'stripe';
-  const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
-  const targetEnvironment = isProduction ? 'production' : 'development';
+async function getCredentials(): Promise<{ publishableKey: string; secretKey: string }> {
+  const replit = await getReplitCredentials();
+  if (replit) return replit;
 
-  const url = new URL(`https://${hostname}/api/v2/connection`);
-  url.searchParams.set('include_secrets', 'true');
-  url.searchParams.set('connector_names', connectorName);
-  url.searchParams.set('environment', targetEnvironment);
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+  if (secretKey && publishableKey) return { secretKey, publishableKey };
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Accept': 'application/json',
-      'X-Replit-Token': xReplitToken,
-    },
-  });
-
-  const data = await response.json() as { items?: Array<{ settings?: { publishable?: string; secret?: string } }> };
-  connectionSettings = data.items?.[0];
-
-  if (!connectionSettings || (!connectionSettings.settings.publishable || !connectionSettings.settings.secret)) {
-    throw new Error(`Stripe ${targetEnvironment} connection not found`);
-  }
-
-  return {
-    publishableKey: connectionSettings.settings.publishable,
-    secretKey: connectionSettings.settings.secret,
-  };
+  throw new Error(
+    'Stripe credentials not found. Set STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY, ' +
+    'or connect via the Replit Stripe integration.'
+  );
 }
 
 export async function getUncachableStripeClient() {
@@ -64,9 +74,14 @@ export async function getStripeSync() {
   if (!stripeSync) {
     const { StripeSync } = await import('stripe-replit-sync');
     const secretKey = await getStripeSecretKey();
+    const connectionString =
+      process.env.DATABASE_URL ||
+      process.env.POSTGRES_URL_NON_POOLING ||
+      process.env.SUPABASE_DATABASE_URL;
+    if (!connectionString) throw new Error('No database URL for Stripe sync');
     stripeSync = new StripeSync({
       poolConfig: {
-        connectionString: process.env.DATABASE_URL!,
+        connectionString,
         max: 2,
       },
       stripeSecretKey: secretKey,

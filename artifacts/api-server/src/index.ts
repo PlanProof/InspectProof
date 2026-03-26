@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { ensureSupabaseBucket, isSupabaseStorageAvailable } from "./lib/supabaseStorage";
 
 const rawPort = process.env["PORT"];
 
@@ -46,6 +47,14 @@ async function initStripe() {
 }
 
 await initStripe();
+
+if (isSupabaseStorageAvailable()) {
+  logger.info('Supabase Storage detected — ensuring bucket exists...');
+  await ensureSupabaseBucket();
+  logger.info('Supabase Storage bucket ready');
+} else {
+  logger.info('Supabase Storage not configured — using Replit Object Storage');
+}
 
 app.listen(port, (err) => {
   if (err) {
