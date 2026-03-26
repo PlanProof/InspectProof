@@ -7,17 +7,21 @@ if [ -z "$GITHUB_PERSONAL_ACCESS_TOKEN" ]; then
   exit 1
 fi
 
-REPO="https://github.com/PlanProof/InspectProof.git"
-REMOTE_URL="https://${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/PlanProof/InspectProof.git"
+REPO_URL="https://github.com/PlanProof/InspectProof.git"
 
-echo "==> Configuring remote..."
-git remote set-url github "$REMOTE_URL" 2>/dev/null || git remote add github "$REMOTE_URL"
+echo "==> Ensuring remote 'github' points to ${REPO_URL}..."
+if git remote get-url github &>/dev/null; then
+  git remote set-url github "$REPO_URL"
+else
+  git remote add github "$REPO_URL"
+fi
 
 echo "==> Pushing master → main..."
-git push github master:main --force
-
-echo "==> Cleaning token from remote URL..."
-git remote set-url github "$REPO"
+# Pass credentials via git's credential helper (token never appears in the URL
+# or process list — only passed through git's internal stdin protocol).
+git \
+  -c "credential.helper=!f(){ echo username=x; echo password=\$GITHUB_PERSONAL_ACCESS_TOKEN; }; f" \
+  push github master:main --force
 
 echo ""
-echo "✓ Successfully pushed to github.com/PlanProof/InspectProof (main)"
+echo "Successfully pushed to github.com/PlanProof/InspectProof (main)"
