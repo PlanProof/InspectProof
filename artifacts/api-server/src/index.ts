@@ -13,9 +13,12 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function initStripe() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl =
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL_NON_POOLING ||
+    process.env.SUPABASE_DATABASE_URL;
   if (!databaseUrl) {
-    logger.warn('DATABASE_URL not set — skipping Stripe init');
+    logger.warn('No database URL set — skipping Stripe init');
     return;
   }
   try {
