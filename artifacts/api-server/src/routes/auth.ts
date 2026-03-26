@@ -156,4 +156,106 @@ router.get("/me", async (req, res) => {
   }
 });
 
+// ── Update profile ─────────────────────────────────────────────────────────────
+
+router.patch("/profile", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      res.status(401).json({ error: "unauthorized", message: "No token" });
+      return;
+    }
+    const token = authHeader.slice(7);
+    const decoded = Buffer.from(token, "base64").toString("utf-8");
+    const [userIdStr] = decoded.split(":");
+    const userId = parseInt(userIdStr);
+    if (isNaN(userId)) {
+      res.status(401).json({ error: "unauthorized", message: "Invalid token" });
+      return;
+    }
+
+    const { firstName, lastName, phone, avatar } = req.body;
+    const updates: Record<string, any> = { updatedAt: new Date() };
+    if (firstName !== undefined) updates.firstName = firstName.trim();
+    if (lastName !== undefined) updates.lastName = lastName.trim();
+    if (phone !== undefined) updates.phone = phone?.trim() || null;
+    if (avatar !== undefined) updates.avatar = avatar || null;
+
+    const [updated] = await db
+      .update(usersTable)
+      .set(updates)
+      .where(eq(usersTable.id, userId))
+      .returning();
+
+    res.json({
+      id: updated.id,
+      email: updated.email,
+      firstName: updated.firstName,
+      lastName: updated.lastName,
+      role: updated.role,
+      phone: updated.phone,
+      avatar: updated.avatar,
+      isActive: updated.isActive,
+      createdAt: updated.createdAt.toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Update profile error");
+    res.status(500).json({ error: "internal_error", message: "Server error" });
+  }
+});
+
+// ── Change password ────────────────────────────────────────────────────────────
+
+router.post("/change-password", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      res.status(401).json({ error: "unauthorized", message: "No token" });
+      return;
+    }
+    const token = authHeader.slice(7);
+    const decoded = Buffer.from(token, "base64").toString("utf-8");
+    const [userIdStr] = decoded.split(":");
+    const userId = parseInt(userIdStr);
+    if (isNaN(userId)) {
+      res.status(401).json({ error: "unauthorized", message: "Invalid token" });
+      return;
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ error: "bad_request", message: "Current and new password are required" });
+      return;
+    }
+    if (newPassword.length < 8) {
+      res.status(400).json({ error: "bad_request", message: "New password must be at least 8 characters" });
+      return;
+    }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) {
+      res.status(404).json({ error: "not_found", message: "User not found" });
+      return;
+    }
+
+    const isBcryptHash = user.passwordHash.startsWith("$2a$") || user.passwordHash.startsWith("$2b$");
+    const match = isBcryptHash
+      ? await bcrypt.compare(currentPassword, user.passwordHash)
+      : user.passwordHash === currentPassword;
+
+    if (!match) {
+      res.status(401).json({ error: "unauthorized", message: "Current password is incorrect" });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await db.update(usersTable).set({ passwordHash, updatedAt: new Date() }).where(eq(usersTable.id, userId));
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Change password error");
+    res.status(500).json({ error: "internal_error", message: "Server error" });
+  }
+});
+
 export default router;

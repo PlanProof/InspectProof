@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, Pressable,
-  Platform, Switch, Alert,
+  Platform, Switch, Alert, Image,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,6 +11,20 @@ import { useAuth } from "@/context/AuthContext";
 import { useNotifications } from "@/context/NotificationsContext";
 
 const WEB_TOP = Platform.OS === "web" ? 67 : 0;
+
+const ROLE_LABELS: Record<string, string> = {
+  certifier: "Building Certifier",
+  inspector: "Site Inspector",
+  engineer: "Engineer",
+  plumber: "Plumbing Inspector",
+  project_manager: "Project Manager",
+  supervisor: "Supervisor",
+  whs: "WHS Officer",
+  pre_purchase: "Pre-Purchase Inspector",
+  fire_engineer: "Fire Engineer",
+  builder: "Builder / Contractor",
+  staff: "Office Staff",
+};
 
 function SettingRow({
   icon, label, sublabel, onPress, value, toggle, danger,
@@ -57,34 +71,85 @@ export default function SettingsScreen() {
   const [show24h, setShow24h] = useState(false);
 
   const handleClearCache = () => {
-    Alert.alert("Clear Cache", "This will clear locally cached data and reload from the server.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Clear", onPress: () => Alert.alert("Done", "Cache cleared.") },
-    ]);
+    Alert.alert(
+      "Clear Cache",
+      "This will clear locally cached data and reload from the server.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Clear", onPress: () => Alert.alert("Done", "Cache cleared.") },
+      ]
+    );
   };
+
+  const handleSignOut = () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign Out", style: "destructive", onPress: logout },
+      ]
+    );
+  };
+
+  const initials = `${(user?.firstName ?? "?")[0]}${(user?.lastName ?? "?")[0]}`.toUpperCase();
 
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + WEB_TOP + 16 }]}>
-        <View style={styles.headerTop}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Feather name="chevron-left" size={22} color={Colors.text} />
-          </Pressable>
-          <Text style={styles.title}>Settings</Text>
-        </View>
+        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Feather name="chevron-left" size={22} color={Colors.text} />
+        </Pressable>
+        <Text style={styles.title}>Settings</Text>
       </View>
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile */}
+        {/* Profile Card */}
+        <Pressable
+          onPress={() => router.push("/profile" as any)}
+          style={({ pressed }) => [styles.profileCard, pressed && { opacity: 0.85 }]}
+        >
+          <View style={styles.profileLeft}>
+            {user?.avatar ? (
+              <Image source={{ uri: user.avatar }} style={styles.profileAvatar} />
+            ) : (
+              <View style={[styles.profileAvatar, styles.profileAvatarFallback]}>
+                <Text style={styles.profileInitials}>{initials}</Text>
+              </View>
+            )}
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileName}>{user?.firstName} {user?.lastName}</Text>
+              <Text style={styles.profileRole}>
+                {ROLE_LABELS[user?.role ?? ""] ?? (user?.role ?? "Professional")}
+              </Text>
+              <Text style={styles.profileEmail}>{user?.email}</Text>
+            </View>
+          </View>
+          <View style={styles.profileEditBadge}>
+            <Feather name="edit-2" size={14} color={Colors.secondary} />
+            <Text style={styles.profileEditText}>Edit</Text>
+          </View>
+        </Pressable>
+
+        {/* Account */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
           <View style={styles.group}>
-            <SettingRow icon="user" label="Profile" sublabel={`${user?.firstName} ${user?.lastName}`} onPress={() => {}} />
-            <SettingRow icon="mail" label="Email" value={user?.email} />
-            <SettingRow icon="shield" label="Role" value={user?.role?.toUpperCase()} />
+            <SettingRow
+              icon="user"
+              label="Edit Profile"
+              sublabel="Update your name, phone and photo"
+              onPress={() => router.push("/profile" as any)}
+            />
+            <SettingRow
+              icon="lock"
+              label="Change Password"
+              sublabel="Update your account password"
+              onPress={() => router.push("/change-password" as any)}
+            />
           </View>
         </View>
 
@@ -97,12 +162,6 @@ export default function SettingsScreen() {
               label="Inspection Reminders"
               sublabel="Get notified before scheduled inspections"
               toggle={{ value: prefs.remindersEnabled, onChange: (v) => updatePrefs({ remindersEnabled: v }) }}
-            />
-            <SettingRow
-              icon="alert-circle"
-              label="Issue Alerts"
-              sublabel="Notify when issues are raised or resolved"
-              value="Via reminders"
             />
             <SettingRow
               icon="settings"
@@ -132,32 +191,37 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Data */}
+        {/* App */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Data</Text>
+          <Text style={styles.sectionTitle}>App</Text>
           <View style={styles.group}>
-            <SettingRow icon="refresh-cw" label="Clear Local Cache" sublabel="Force-refresh from server" onPress={handleClearCache} />
-            <SettingRow icon="database" label="App Version" value="1.0.0" />
+            <SettingRow
+              icon="refresh-cw"
+              label="Clear Local Cache"
+              sublabel="Force-refresh data from server"
+              onPress={handleClearCache}
+            />
+            <SettingRow icon="info" label="App Version" value="1.0.0" />
             <SettingRow icon="globe" label="Region" value="Australia" />
           </View>
         </View>
 
-        {/* Compliance */}
+        {/* Support & Sign Out */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Compliance</Text>
+          <Text style={styles.sectionTitle}>Support</Text>
           <View style={styles.group}>
-            <SettingRow icon="book" label="NCC Edition" value="NCC 2022" />
-            <SettingRow icon="check-circle" label="BCA Compliance" value="Enabled" />
-            <SettingRow icon="map-pin" label="Jurisdiction" value="National" />
-          </View>
-        </View>
-
-        {/* Account Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <View style={styles.group}>
-            <SettingRow icon="help-circle" label="Help & Support" onPress={() => router.push("/help" as any)} />
-            <SettingRow icon="log-out" label="Sign Out" onPress={logout} danger />
+            <SettingRow
+              icon="help-circle"
+              label="Help & Support"
+              sublabel="FAQs, contact and feedback"
+              onPress={() => router.push("/help" as any)}
+            />
+            <SettingRow
+              icon="log-out"
+              label="Sign Out"
+              onPress={handleSignOut}
+              danger
+            />
           </View>
         </View>
       </ScrollView>
@@ -171,11 +235,33 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     paddingHorizontal: 16, paddingBottom: 14,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
+    flexDirection: "row", alignItems: "center", gap: 10,
   },
-  headerTop: { flexDirection: "row", alignItems: "center", gap: 10 },
   backBtn: { padding: 4 },
   title: { fontSize: 22, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   content: { padding: 16, gap: 20 },
+
+  profileCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14, borderWidth: 1, borderColor: Colors.border,
+    padding: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+  },
+  profileLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  profileAvatar: { width: 56, height: 56, borderRadius: 28 },
+  profileAvatarFallback: {
+    backgroundColor: Colors.secondary, alignItems: "center", justifyContent: "center",
+  },
+  profileInitials: { fontSize: 20, fontFamily: "PlusJakartaSans_700Bold", color: "#fff" },
+  profileInfo: { flex: 1 },
+  profileName: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  profileRole: { fontSize: 12, color: Colors.secondary, fontFamily: "PlusJakartaSans_600SemiBold", marginTop: 1 },
+  profileEmail: { fontSize: 11, color: Colors.textTertiary, fontFamily: "PlusJakartaSans_400Regular", marginTop: 2 },
+  profileEditBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: Colors.infoLight, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+  },
+  profileEditText: { fontSize: 12, color: Colors.secondary, fontFamily: "PlusJakartaSans_600SemiBold" },
+
   section: { gap: 8 },
   sectionTitle: {
     fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold",
@@ -197,6 +283,6 @@ const styles = StyleSheet.create({
   },
   rowBody: { flex: 1 },
   rowLabel: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
-  rowSublabel: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, marginTop: 2 },
+  rowSublabel: { fontSize: 11, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textTertiary, marginTop: 2 },
   rowValue: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
 });
