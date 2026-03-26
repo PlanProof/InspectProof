@@ -433,7 +433,7 @@ export default function ConductInspectionScreen() {
       });
       queryClient.invalidateQueries({ queryKey: ["inspections"] });
       queryClient.invalidateQueries({ queryKey: ["inspection", id] });
-      router.back();
+      if (router.canGoBack()) router.back(); else router.replace("/(tabs)/inspections" as any);
     } catch (e: any) {
       Alert.alert("Error", "Failed to complete inspection.");
     } finally {
@@ -454,7 +454,7 @@ export default function ConductInspectionScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={12}>
+        <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/inspections" as any)} style={styles.backBtn} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.text} />
         </Pressable>
         <View style={styles.headerCenter}>
