@@ -94,7 +94,7 @@ router.post('/admin/users', requireAdmin, async (req, res) => {
     isActive: isActive ?? true,
   }).returning();
 
-  res.status(201).json({ user: { id: created.id, email: created.email, firstName: created.firstName, lastName: created.lastName, role: created.role, plan: created.plan } });
+  return res.status(201).json({ user: { id: created.id, email: created.email, firstName: created.firstName, lastName: created.lastName, role: created.role, plan: created.plan } });
 });
 
 router.get('/admin/users/:id', requireAdmin, async (req, res) => {
@@ -142,7 +142,7 @@ router.delete('/admin/users/:id', requireAdmin, async (req, res) => {
   if (targetId === adminId) return res.status(400).json({ error: 'Cannot delete your own account' });
 
   await db.delete(usersTable).where(eq(usersTable.id, targetId));
-  res.json({ success: true });
+  return res.json({ success: true });
 });
 
 // ── Stats ──────────────────────────────────────────────────────────────────────
@@ -312,7 +312,7 @@ router.get('/admin/revenue', requireAdmin, async (req, res) => {
             const customer = await stripe.customers.retrieve(inv.customer as string);
             if (!('deleted' in customer)) {
               customerEmail = customer.email;
-              customerName = customer.name;
+              customerName = customer.name ?? null;
             }
           } catch {}
         }
