@@ -318,12 +318,8 @@ function NewProjectDialog({ open, onOpenChange, onSuccess }: { open: boolean, on
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Project Type</Label>
-              <select name="projectType" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" required>
-                <option value="residential">Residential</option>
-                <option value="commercial">Commercial</option>
-                <option value="industrial">Industrial</option>
-              </select>
+              <Label>Description</Label>
+              <Input name="projectType" placeholder="e.g. Dwelling, Shed" />
             </div>
             <div className="col-span-2 space-y-2">
               <Label>
