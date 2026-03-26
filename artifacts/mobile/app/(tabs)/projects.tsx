@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -13,17 +13,33 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
+import { PROJECT_STAGES } from "@/constants/api";
 import { ProjectCard } from "@/components/ProjectCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/context/AuthContext";
 
 const WEB_TOP = Platform.OS === "web" ? 67 : 0;
 
+const STATUS_FILTERS: { key: string; label: string }[] = [
+  { key: "all",       label: "All" },
+  { key: "active",    label: "Active" },
+  { key: "on_hold",   label: "On Hold" },
+  { key: "completed", label: "Completed" },
+  { key: "archived",  label: "Archived" },
+];
+
+const STAGE_FILTERS: { key: string; label: string }[] = [
+  { key: "all", label: "All Stages" },
+  ...Object.entries(PROJECT_STAGES).map(([key, label]) => ({ key, label })),
+];
 
 export default function ProjectsScreen() {
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("active");
+  const [stageFilter, setStageFilter] = useState("all");
+
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   const { data: projects = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
@@ -38,19 +54,26 @@ export default function ProjectsScreen() {
     enabled: !!token,
   });
 
-  const filtered = projects.filter(p => {
-    if (p.status !== "active") return false;
-    if (search.trim()) {
-      const s = search.toLowerCase();
-      return p.name.toLowerCase().includes(s) ||
-        p.siteAddress.toLowerCase().includes(s) ||
-        p.clientName.toLowerCase().includes(s) ||
-        p.suburb.toLowerCase().includes(s);
-    }
-    return true;
-  });
+  const filtered = useMemo(() => {
+    return projects.filter(p => {
+      if (statusFilter !== "all" && p.status !== statusFilter) return false;
+      if (stageFilter  !== "all" && p.stage  !== stageFilter)  return false;
+      if (search.trim()) {
+        const s = search.toLowerCase();
+        return (
+          p.name.toLowerCase().includes(s) ||
+          p.siteAddress.toLowerCase().includes(s) ||
+          p.clientName.toLowerCase().includes(s) ||
+          p.suburb.toLowerCase().includes(s)
+        );
+      }
+      return true;
+    });
+  }, [projects, statusFilter, stageFilter, search]);
 
   const handleRefresh = useCallback(() => { refetch(); }, [refetch]);
+
+  const activeFilters = (statusFilter !== "all" ? 1 : 0) + (stageFilter !== "all" ? 1 : 0);
 
   return (
     <View style={styles.container}>
@@ -80,6 +103,62 @@ export default function ProjectsScreen() {
           )}
         </View>
 
+        {/* Status filter chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          {STATUS_FILTERS.map(f => {
+            const active = statusFilter === f.key;
+            return (
+              <Pressable
+                key={f.key}
+                onPress={() => setStatusFilter(f.key)}
+                style={[styles.chip, active && styles.chipActive]}
+              >
+                {active && f.key !== "all" && (
+                  <View style={[styles.chipDot, styles.chipDotActive]} />
+                )}
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  {f.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* Stage filter chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          {STAGE_FILTERS.map(f => {
+            const active = stageFilter === f.key;
+            return (
+              <Pressable
+                key={f.key}
+                onPress={() => setStageFilter(f.key)}
+                style={[styles.chip, styles.chipStage, active && styles.chipStageActive]}
+              >
+                <Text style={[styles.chipText, styles.chipTextStage, active && styles.chipTextStageActive]}>
+                  {f.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* Active filter summary + clear */}
+        {activeFilters > 0 && (
+          <Pressable style={styles.clearRow} onPress={() => { setStatusFilter("all"); setStageFilter("all"); }}>
+            <Feather name="filter" size={12} color={Colors.secondary} />
+            <Text style={styles.clearText}>
+              {activeFilters} filter{activeFilters > 1 ? "s" : ""} active · tap to clear
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       {/* List */}
@@ -93,8 +172,14 @@ export default function ProjectsScreen() {
         ) : filtered.length === 0 ? (
           <EmptyState
             icon="folder"
-            title={search ? "No projects found" : "No projects yet"}
-            description={search ? "Try a different search term" : "Projects will appear here once created"}
+            title={search ? "No projects found" : "No matching projects"}
+            description={
+              search
+                ? "Try a different search term"
+                : activeFilters > 0
+                ? "Try adjusting or clearing your filters"
+                : "Projects will appear here once created"
+            }
           />
         ) : (
           filtered.map(p => <ProjectCard key={p.id} project={p} />)
@@ -110,10 +195,10 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: Colors.surface,
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 12,
+    gap: 10,
   },
   headerTop: {
     flexDirection: "row",
@@ -154,6 +239,74 @@ const styles = StyleSheet.create({
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
   },
+
+  filterRow: {
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 0,
+  },
+
+  /* Status chips — solid primary fill when active */
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.background,
+  },
+  chipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  chipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.accent,
+  },
+  chipDotActive: {},
+  chipText: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textSecondary,
+  },
+  chipTextActive: {
+    color: "#fff",
+  },
+
+  /* Stage chips — accent tint when active */
+  chipStage: {
+    borderColor: Colors.border,
+    backgroundColor: Colors.background,
+  },
+  chipStageActive: {
+    backgroundColor: Colors.infoLight,
+    borderColor: Colors.secondary,
+  },
+  chipTextStage: {
+    color: Colors.textSecondary,
+  },
+  chipTextStageActive: {
+    color: Colors.secondary,
+  },
+
+  clearRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    alignSelf: "flex-start",
+    paddingVertical: 2,
+  },
+  clearText: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.secondary,
+  },
+
   list: {
     padding: 16,
     gap: 10,
