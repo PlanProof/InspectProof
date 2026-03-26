@@ -48,3 +48,9 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+SUPABASE_URL = "https://heckmhedgjsodypzfjqt.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlY2ttaGVkZ2pzb2R5cHpmanF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NDY4MjYsImV4cCI6MjA5MDEyMjgyNn0.95_ZIISNb-Phti1CcIqco9eYPx2fkB3G2zfAoyHBYjg"
