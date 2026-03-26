@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 
 if (process.env.EXPO_PUBLIC_DOMAIN) {
@@ -112,6 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthTokenGetter(() => null);
     setToken(null);
     setUser(null);
+    router.replace("/login");
   };
 
   const refreshUser = async () => {
