@@ -150,6 +150,94 @@ interface ProjectDocument {
   createdAt: string;
 }
 
+// ── Doc template integration ──────────────────────────────────────────────────
+
+interface DocTemplate {
+  id: string;
+  name: string;
+  content: string;
+  backgroundImage?: string;
+  linkedChecklistIds: number[];
+  defaultReportType?: string;
+}
+
+function loadDocTemplates(): DocTemplate[] {
+  try {
+    const raw = localStorage.getItem("inspectproof_doc_templates");
+    const parsed = raw ? JSON.parse(raw) : [];
+    return parsed.map((t: any) => ({ ...t, linkedChecklistIds: t.linkedChecklistIds ?? [] }));
+  } catch { return []; }
+}
+
+function getLinkedDocTemplate(checklistTemplateId: number | undefined): DocTemplate | null {
+  if (!checklistTemplateId) return null;
+  try {
+    return loadDocTemplates().find(dt => dt.linkedChecklistIds.includes(checklistTemplateId)) ?? null;
+  } catch { return null; }
+}
+
+function buildChecklistTable(results: any[]): string {
+  if (!results || results.length === 0) return "<p style='color:#666;font-style:italic;'>No checklist items recorded.</p>";
+  const rows = results
+    .slice()
+    .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+    .map((r, i) => {
+      const color = r.result === "pass" ? "#15803d" : r.result === "fail" ? "#b91c1c" : r.result === "pending" ? "#9333ea" : "#6b7280";
+      const bg = r.result === "pass" ? "#f0fdf4" : r.result === "fail" ? "#fef2f2" : "transparent";
+      return `<tr style="background:${bg};">
+        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#374151;">${i + 1}</td>
+        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;">${r.description ?? ""}</td>
+        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:600;color:${color};">${(r.result ?? "pending").toUpperCase()}</td>
+        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280;">${r.notes ?? ""}</td>
+      </tr>`;
+    }).join("");
+  return `<table style="width:100%;border-collapse:collapse;margin:8px 0;">
+    <thead><tr style="background:#f3f4f6;">
+      <th style="text-align:left;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;width:32px;">#</th>
+      <th style="text-align:left;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;">Description</th>
+      <th style="text-align:center;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;width:80px;">Result</th>
+      <th style="text-align:left;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;">Notes</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function fillDocTemplate(template: DocTemplate, inspection: any, project: any): string {
+  const today = new Date();
+  const au = (d: string) => { try { return new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }); } catch { return d; } };
+  const vals: Record<string, string> = {
+    "{{project_name}}":     inspection.projectName ?? "",
+    "{{project_address}}":  project?.siteAddress ?? "",
+    "{{council_number}}":   project?.councilRef ?? "",
+    "{{ncc_class}}":        project?.nccClass ?? "",
+    "{{lot_number}}":       project?.lotNumber ?? "",
+    "{{da_number}}":        project?.daNumber ?? "",
+    "{{inspection_type}}":  (inspection.inspectionType ?? "").replace(/_/g, " "),
+    "{{inspection_date}}":  inspection.scheduledDate ? au(inspection.scheduledDate) : "",
+    "{{inspection_time}}":  inspection.scheduledTime ?? "",
+    "{{result}}":           `${inspection.passCount ?? 0} Pass / ${inspection.failCount ?? 0} Fail`,
+    "{{notes}}":            inspection.siteNotes ?? "",
+    "{{inspector_name}}":   inspection.inspectorName ?? "",
+    "{{certifier_name}}":   inspection.inspectorName ?? "",
+    "{{license_number}}":   "",
+    "{{company_name}}":     "InspectProof",
+    "{{company_address}}":  "",
+    "{{phone}}":            "",
+    "{{email}}":            "",
+    "{{today}}":            today.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }),
+    "{{time_now}}":         today.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" }),
+    "{{year}}":             today.getFullYear().toString(),
+    "{{signature_line}}":   `<div style="margin-top:16px;border-top:1px solid #000;width:220px;padding-top:4px;font-size:12px;color:#555;">Signature</div>`,
+    "{{signature_block}}":  `<div style="margin-top:16px;"><div style="border-top:1px solid #000;width:220px;margin-bottom:4px;"></div><div style="font-size:12px;color:#555;">Signature &amp; Date</div></div>`,
+    "{{checklist_items}}":  buildChecklistTable(inspection.checklistResults ?? []),
+  };
+  return template.content.replace(/\{\{[a-z_]+\}\}/g, m => vals[m] ?? m);
+}
+
+function isHtmlContent(content: string): boolean {
+  return content.trim().startsWith("<") && /<[a-z][\s\S]*>/i.test(content);
+}
+
 // ── Status / severity helpers ─────────────────────────────────────────────────
 
 function statusColors(status: string) {
@@ -271,10 +359,11 @@ export default function InspectionDetail() {
   const [generatedReport, setGeneratedReport] = useState<any>(null);
   const [submittingReport, setSubmittingReport] = useState(false);
 
-  // Inspector / checklist / documents data
+  // Inspector / checklist / documents / project data
   const [inspectors, setInspectors] = useState<Inspector[]>([]);
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>([]);
+  const [project, setProject] = useState<any>(null);
 
   const openReportDialog = useCallback((inspection: Inspection) => {
     const suggested = getSuggestedReportType(inspection);
@@ -290,12 +379,13 @@ export default function InspectionDetail() {
       setInspection(data);
 
       // Parallel loads
-      const [docsWithLinks, reports, users, tmpls, projDocs] = await Promise.all([
+      const [docsWithLinks, reports, users, tmpls, projDocs, proj] = await Promise.all([
         data.projectId ? apiFetch(`/api/projects/${data.projectId}/documents-with-links`).catch(() => []) : Promise.resolve([]),
         apiFetch(`/api/reports?inspectionId=${inspId}`).catch(() => []),
         apiFetch("/api/users").catch(() => []),
         apiFetch("/api/checklist-templates").catch(() => []),
         data.projectId ? apiFetch(`/api/projects/${data.projectId}/documents`).catch(() => []) : Promise.resolve([]),
+        data.projectId ? apiFetch(`/api/projects/${data.projectId}`).catch(() => null) : Promise.resolve(null),
       ]);
 
       // Build docsByItem map
@@ -311,6 +401,7 @@ export default function InspectionDetail() {
       setInspectors(users);
       setTemplates(tmpls);
       setProjectDocuments(projDocs);
+      setProject(proj);
     } catch {
       setError("Failed to load inspection");
     } finally {
@@ -326,15 +417,37 @@ export default function InspectionDetail() {
   const REPORT_TYPES_DESKTOP = ALL_REPORT_TYPES_META.filter(rt => disciplineReportTypes.includes(rt.key));
 
   const generateReport = async () => {
+    if (!inspection) return;
     setGeneratingReport(true);
     setGeneratedReport(null);
     try {
-      const data = await apiFetch("/api/reports/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inspectionId: inspId, reportType: selectedReportType, userId: 1 }),
-      });
-      setGeneratedReport(data);
+      const linkedTemplate = getLinkedDocTemplate(inspection.checklistTemplateId);
+
+      if (linkedTemplate) {
+        // Use the linked doc template — fill tokens and save directly as a report
+        const html = fillDocTemplate(linkedTemplate, inspection, project);
+        const typeLabel = ALL_REPORT_TYPE_LABELS[selectedReportType] ?? selectedReportType;
+        const data = await apiFetch("/api/reports", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            inspectionId: inspId,
+            projectId: inspection.projectId,
+            title: `${typeLabel} — ${inspection.projectName}`,
+            reportType: selectedReportType,
+            content: html,
+          }),
+        });
+        setGeneratedReport({ ...data, isHtml: true });
+      } else {
+        // Fall back to the AI/plain-text generator
+        const data = await apiFetch("/api/reports/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inspectionId: inspId, reportType: selectedReportType, userId: 1 }),
+        });
+        setGeneratedReport(data);
+      }
     } catch {
     } finally {
       setGeneratingReport(false);
@@ -669,6 +782,7 @@ export default function InspectionDetail() {
                 {inspection && (() => {
                   const suggested = getSuggestedReportType(inspection);
                   const discipline = inspection.checklistTemplateDiscipline;
+                  const linkedTpl = getLinkedDocTemplate(inspection.checklistTemplateId);
                   return (
                     <>
                       {discipline && (
@@ -677,12 +791,21 @@ export default function InspectionDetail() {
                           <span>Showing report types for <span className="font-semibold text-foreground">{discipline}</span></span>
                         </div>
                       )}
+                      {linkedTpl && (
+                        <div className="flex items-center gap-2 p-2.5 rounded-lg bg-brand-pear/10 border border-brand-pear/30 text-xs text-sidebar">
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-brand-pear" />
+                          <span>
+                            Using doc template letterhead: <span className="font-semibold">{linkedTpl.name}</span>
+                            {" "}— checklist items and inspection data will be filled automatically.
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2 p-3 rounded-lg bg-sidebar text-white text-xs">
                         <Zap className="h-3.5 w-3.5 text-brand-pear shrink-0" />
                         <span>
                           <span className="font-semibold text-brand-pear">{ALL_REPORT_TYPE_LABELS[suggested]}</span>
                           {" "}has been pre-selected based on your results
-                          {inspection.checklistTemplateId ? " and linked template settings" : ""}.
+                          {linkedTpl ? " and linked template settings" : ""}.
                           You can change it below.
                         </span>
                       </div>
@@ -743,10 +866,17 @@ export default function InspectionDetail() {
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 Report generated — {generatedReport.reportTypeLabel}
               </div>
-              <div className="flex-1 overflow-auto bg-muted/30 rounded-lg border border-border">
-                <pre className="text-xs font-mono leading-relaxed p-4 whitespace-pre-wrap text-sidebar">
-                  {generatedReport.content}
-                </pre>
+              <div className="flex-1 overflow-auto bg-white rounded-lg border border-border">
+                {generatedReport.isHtml || isHtmlContent(generatedReport.content ?? "") ? (
+                  <div
+                    className="p-4 text-sm"
+                    dangerouslySetInnerHTML={{ __html: generatedReport.content ?? "" }}
+                  />
+                ) : (
+                  <pre className="text-xs font-mono leading-relaxed p-4 whitespace-pre-wrap text-sidebar">
+                    {generatedReport.content}
+                  </pre>
+                )}
               </div>
               <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
                 <Button variant="outline" size="sm" onClick={() => setGeneratedReport(null)}>
@@ -794,6 +924,14 @@ export default function InspectionDetail() {
 // ── Reports Tab ───────────────────────────────────────────────────────────────
 
 function renderReportContent(content: string) {
+  if (isHtmlContent(content)) {
+    return (
+      <div
+        className="p-4 text-sm bg-white"
+        dangerouslySetInnerHTML={{ __html: content }}
+      />
+    );
+  }
   return (
     <pre className="text-xs font-mono leading-relaxed p-4 whitespace-pre-wrap text-sidebar bg-muted/30 rounded-lg border border-border">
       {content}
