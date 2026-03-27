@@ -137,6 +137,7 @@ Duration:             ${inspection?.duration ? `${inspection.duration} minutes` 
         if (item.tradeAllocated) block += `   Trade: ${item.tradeAllocated}\n`;
         if (item.recommendedAction) block += `   Recommended Action: ${item.recommendedAction}\n`;
         if (item.notes)         block += `   Notes: ${item.notes}\n`;
+        if (item.photoCount > 0) block += `   Photos: ${item.photoCount} photo(s) attached — see images below\n`;
       });
     });
     return block;
@@ -479,14 +480,28 @@ router.post("/generate", async (req, res) => {
       .innerJoin(checklistItemsTable, eq(checklistResultsTable.checklistItemId, checklistItemsTable.id))
       .where(eq(checklistResultsTable.inspectionId, inspection.id));
 
-    let checklistResults = checklistRows.map(r => ({
-      result: r.result.result,
-      notes: r.result.notes,
-      category: r.item.category,
-      description: r.item.description,
-      codeReference: r.item.codeReference,
-      riskLevel: r.item.riskLevel,
-    }));
+    let checklistResults = checklistRows.map(r => {
+      let photoCount = 0;
+      if (r.result.photoUrls) {
+        try {
+          const parsed = Array.isArray(r.result.photoUrls) ? r.result.photoUrls : JSON.parse(r.result.photoUrls as string);
+          photoCount = parsed.length;
+        } catch { photoCount = 0; }
+      }
+      return {
+        result: r.result.result,
+        notes: r.result.notes,
+        severity: r.result.severity,
+        location: r.result.location,
+        tradeAllocated: r.result.tradeAllocated,
+        recommendedAction: r.result.recommendedAction,
+        photoCount,
+        category: r.item.category,
+        description: r.item.description,
+        codeReference: r.item.codeReference,
+        riskLevel: r.item.riskLevel,
+      };
+    });
 
     // If no results yet but a template is linked, fall back to template items as "pending"
     if (checklistResults.length === 0 && inspection.checklistTemplateId) {
@@ -541,6 +556,7 @@ router.post("/generate", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const data = req.body;
+    const generatedById = data.generatedById ?? data.userId ?? 1;
     const [report] = await db.insert(reportsTable).values({
       projectId: data.projectId,
       inspectionId: data.inspectionId,
@@ -548,7 +564,7 @@ router.post("/", async (req, res) => {
       reportType: data.reportType || "summary",
       status: "draft",
       content: data.content,
-      generatedById: data.generatedById,
+      generatedById,
     }).returning();
 
     res.status(201).json(await formatReport(report));
@@ -844,9 +860,14 @@ function buildPdf(
         const descKey = desc.toLowerCase().trim();
         const photoPaths = photosByDesc.get(descKey) || [];
         if (photoPaths.length > 0) {
-          const photoSize = 72;
-          const photoCols = Math.floor((contentW - 43) / (photoSize + 4));
-          let photoX = MARGIN + 43;
+          const photoW = 165;
+          const photoH = 124;
+          const photoGap = 6;
+          const photoIndent = MARGIN + 43;
+          const availW = contentW - 43;
+          const photoCols = Math.max(1, Math.floor((availW + photoGap) / (photoW + photoGap)));
+
+          let photoX = photoIndent;
           let photoY = doc.y;
           let colIdx = 0;
 
@@ -854,16 +875,19 @@ function buildPdf(
             const buf = photoBuffers.get(photoPath);
             if (!buf) continue;
 
-            checkPageBreak(photoSize + 8);
-            if (colIdx === 0) photoY = doc.y;
+            if (colIdx === 0) {
+              checkPageBreak(photoH + 16);
+              photoY = doc.y;
+            }
 
             try {
-              doc.roundedRect(photoX, photoY, photoSize, photoSize, 3)
-                .strokeColor("#E5E7EB").lineWidth(0.5).stroke();
-              doc.image(buf, photoX + 1, photoY + 1, {
-                width: photoSize - 2,
-                height: photoSize - 2,
-                fit: [photoSize - 2, photoSize - 2],
+              // Subtle border + rounded rect
+              doc.roundedRect(photoX, photoY, photoW, photoH, 4)
+                .strokeColor("#D1D5DB").lineWidth(0.75).stroke();
+              doc.image(buf, photoX + 2, photoY + 2, {
+                width: photoW - 4,
+                height: photoH - 4,
+                fit: [photoW - 4, photoH - 4],
                 align: "center",
                 valign: "center",
               });
@@ -871,19 +895,19 @@ function buildPdf(
               // skip broken image silently
             }
 
-            photoX += photoSize + 4;
+            photoX += photoW + photoGap;
             colIdx++;
             if (colIdx >= photoCols) {
               colIdx = 0;
-              photoX = MARGIN + 43;
-              doc.y = photoY + photoSize + 4;
+              photoX = photoIndent;
+              doc.y = photoY + photoH + photoGap;
               photoY = doc.y;
             }
           }
           if (colIdx > 0) {
-            doc.y = photoY + photoSize + 6;
+            doc.y = photoY + photoH + photoGap;
           }
-          doc.moveDown(0.3);
+          doc.moveDown(0.5);
         }
       }
       continue;
@@ -1038,8 +1062,11 @@ router.get("/:id/pdf", async (req, res) => {
         await Promise.allSettled(checklistRows.map(async (row) => {
           const rawUrls = row.result.photoUrls;
           if (!rawUrls) return;
-          const paths: string[] = JSON.parse(rawUrls);
-          if (!paths.length) return;
+          let paths: string[];
+          try {
+            paths = Array.isArray(rawUrls) ? rawUrls : JSON.parse(rawUrls as string);
+          } catch { return; }
+          if (!paths || !paths.length) return;
 
           const descKey = (row.item.description || "").toLowerCase().trim();
           if (!photosByDesc!.has(descKey)) photosByDesc!.set(descKey, []);
