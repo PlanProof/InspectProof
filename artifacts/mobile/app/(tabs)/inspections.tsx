@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -6,7 +6,7 @@ import {
   StyleSheet,
   Pressable,
   RefreshControl,
-  Platform,
+  TextInput,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,10 +28,28 @@ const STATUS_VALUES: Record<string, string | null> = {
   "Follow-Up": "follow_up_required",
 };
 
+const INSPECTION_TYPE_LABELS: Record<string, string> = {
+  footing: "Footing",
+  slab: "Slab",
+  frame: "Frame",
+  lock_up: "Lock Up",
+  pre_plaster: "Pre-Plaster",
+  final: "Final",
+  waterproofing: "Waterproofing",
+  pool_barrier: "Pool Barrier",
+  compliance: "Compliance",
+  fire_safety: "Fire Safety",
+  structural: "Structural",
+  electrical: "Electrical",
+  plumbing: "Plumbing",
+  hvac: "HVAC",
+};
+
 export default function InspectionsScreen() {
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const [activeFilter, setActiveFilter] = useState("All");
+  const [search, setSearch] = useState("");
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   const { data: inspections = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
@@ -46,10 +64,27 @@ export default function InspectionsScreen() {
     enabled: !!token,
   });
 
-  const filtered = inspections.filter(i => {
+  const filtered = useMemo(() => {
+    let result = inspections;
+
     const statusVal = STATUS_VALUES[activeFilter];
-    return !statusVal || i.status === statusVal;
-  });
+    if (statusVal) result = result.filter(i => i.status === statusVal);
+
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter(i =>
+        (i.projectName || "").toLowerCase().includes(q) ||
+        (i.projectAddress || "").toLowerCase().includes(q) ||
+        (i.projectSuburb || "").toLowerCase().includes(q) ||
+        (i.inspectionType || "").toLowerCase().includes(q) ||
+        (INSPECTION_TYPE_LABELS[i.inspectionType] || "").toLowerCase().includes(q) ||
+        (i.checklistTemplateName || "").toLowerCase().includes(q) ||
+        String(i.id).includes(q)
+      );
+    }
+
+    return result;
+  }, [inspections, activeFilter, search]);
 
   // Group by upcoming vs past
   const now = new Date().toISOString().split("T")[0];
@@ -57,6 +92,12 @@ export default function InspectionsScreen() {
   const past = filtered.filter(i => i.scheduledDate < now || i.status === "completed");
 
   const handleRefresh = useCallback(() => { refetch(); }, [refetch]);
+
+  const emptyDescription = search.trim()
+    ? `No inspections match "${search.trim()}"`
+    : activeFilter !== "All"
+    ? `No ${activeFilter.toLowerCase()} inspections`
+    : "Inspections will appear here once scheduled";
 
   return (
     <View style={styles.container}>
@@ -73,6 +114,27 @@ export default function InspectionsScreen() {
             </Pressable>
           </View>
         </View>
+
+        {/* Search bar */}
+        <View style={styles.searchWrap}>
+          <Feather name="search" size={15} color={Colors.textTertiary} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search by address, type, project…"
+            placeholderTextColor={Colors.textTertiary}
+            autoCorrect={false}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          {search.length > 0 && (
+            <Pressable onPress={() => setSearch("")} hitSlop={10}>
+              <Feather name="x-circle" size={15} color={Colors.textTertiary} />
+            </Pressable>
+          )}
+        </View>
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
           {STATUS_FILTERS.map(f => (
             <Pressable
@@ -90,11 +152,16 @@ export default function InspectionsScreen() {
         contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 90 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => <View key={i} style={styles.skeleton} />)
         ) : filtered.length === 0 ? (
-          <EmptyState icon="check-circle" title="No inspections" description="Inspections will appear here once scheduled" />
+          <EmptyState
+            icon={search.trim() ? "search" : "check-circle"}
+            title={search.trim() ? "No results found" : "No inspections"}
+            description={emptyDescription}
+          />
         ) : (
           <>
             {upcoming.length > 0 && (
@@ -170,6 +237,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.secondary,
+  },
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 10,
+    height: 40,
+    gap: 8,
+  },
+  searchIcon: { flexShrink: 0 },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.text,
+    paddingVertical: 0,
   },
   filters: { gap: 8, paddingRight: 4 },
   chip: {
