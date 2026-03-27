@@ -560,6 +560,15 @@ export default function DocTemplates() {
     persist(templates.map(t => t.id === selected.id ? { ...t, linkedChecklistIds: updated, updatedAt: new Date().toISOString() } : t));
   }
 
+  function toggleAllChecklists(ids: number[], allLinked: boolean) {
+    if (!selected) return;
+    const current = selected.linkedChecklistIds ?? [];
+    const updated = allLinked
+      ? current.filter(id => !ids.includes(id))
+      : [...new Set([...current, ...ids])];
+    persist(templates.map(t => t.id === selected.id ? { ...t, linkedChecklistIds: updated, updatedAt: new Date().toISOString() } : t));
+  }
+
   function handleBgUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !selected) return;
@@ -889,16 +898,46 @@ export default function DocTemplates() {
                   </div>
                 ) : (() => {
                     const folders = Array.from(new Set(checklistTemplates.map((ct: any) => ct.folder ?? "Other")));
+                    const allIds = checklistTemplates.map((ct: any) => ct.id as number);
+                    const allLinked = allIds.every(id => selected.linkedChecklistIds.includes(id));
+                    const someLinked = !allLinked && allIds.some(id => selected.linkedChecklistIds.includes(id));
                     return (
                       <div className="space-y-3">
+                        {/* Master select-all row */}
+                        <button
+                          onClick={() => toggleAllChecklists(allIds, allLinked)}
+                          className="w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-2 bg-muted/40 hover:bg-muted border border-muted/60"
+                        >
+                          <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center ${allLinked ? "bg-secondary border-secondary" : someLinked ? "bg-secondary/40 border-secondary/60" : "border-muted-foreground/40 bg-white"}`}>
+                            {allLinked && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+                            {someLinked && <div className="w-1.5 h-1.5 rounded-sm bg-secondary" />}
+                          </div>
+                          <span className={`font-semibold ${allLinked ? "text-secondary" : "text-muted-foreground"}`}>
+                            {allLinked ? "Deselect all" : "Select all"}
+                          </span>
+                          <span className="ml-auto text-[10px] text-muted-foreground">
+                            {selected.linkedChecklistIds.filter(id => allIds.includes(id)).length}/{allIds.length}
+                          </span>
+                        </button>
+
                         {folders.map(folder => {
                           const items = checklistTemplates.filter((ct: any) => (ct.folder ?? "Other") === folder);
+                          const folderIds = items.map((ct: any) => ct.id as number);
+                          const folderAllLinked = folderIds.every(id => selected.linkedChecklistIds.includes(id));
+                          const folderSomeLinked = !folderAllLinked && folderIds.some(id => selected.linkedChecklistIds.includes(id));
                           return (
                             <div key={folder}>
-                              <div className="flex items-center gap-1.5 px-1 mb-1">
+                              <button
+                                onClick={() => toggleAllChecklists(folderIds, folderAllLinked)}
+                                className="flex items-center gap-1.5 px-1 mb-1 w-full group"
+                              >
                                 <Folder className="h-3 w-3 text-amber-500 shrink-0" />
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">{folder}</span>
-                              </div>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate flex-1 text-left">{folder}</span>
+                                <div className={`w-3 h-3 rounded border shrink-0 flex items-center justify-center ${folderAllLinked ? "bg-secondary border-secondary" : folderSomeLinked ? "bg-secondary/40 border-secondary/60" : "border-muted-foreground/30 group-hover:border-secondary/50"}`}>
+                                  {folderAllLinked && <Check className="h-2 w-2 text-white" strokeWidth={3} />}
+                                  {folderSomeLinked && <div className="w-1 h-1 rounded-sm bg-secondary" />}
+                                </div>
+                              </button>
                               <div className="space-y-0.5">
                                 {items.map((ct: any) => {
                                   const isLinked = selected.linkedChecklistIds.includes(ct.id);
