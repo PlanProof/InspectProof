@@ -610,7 +610,7 @@ export default function ConductInspectionScreen() {
                 <Feather
                   name={isCompleted ? "check-circle" : "circle"}
                   size={17}
-                  color={isCompleted ? "#fff" : Colors.textSecondary}
+                  color={Colors.primary}
                 />
                 <Text style={[styles.markCompleteLabel, isCompleted && styles.markCompleteLabelActive]}>
                   {isCompleted ? "Inspection Marked Complete" : "Mark Complete"}
@@ -1509,21 +1509,18 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     marginBottom: 8,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.accent,
   },
   markCompleteRowActive: {
-    backgroundColor: "#22c55e",
-    borderColor: "#22c55e",
+    backgroundColor: Colors.accent,
   },
   markCompleteLabel: {
     fontSize: 15,
     fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textSecondary,
+    color: Colors.primary,
   },
   markCompleteLabelActive: {
-    color: "#fff",
+    color: Colors.primary,
     fontFamily: "PlusJakartaSans_700Bold",
   },
   generateBtn: {
