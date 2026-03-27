@@ -125,7 +125,7 @@ export default function CreateInspectionScreen() {
         const inspection = await res.json();
         queryClient.invalidateQueries({ queryKey: ["inspections"] });
         queryClient.invalidateQueries({ queryKey: ["project-inspections"] });
-        router.replace(`/inspection/${inspection.id}` as any);
+        router.replace(`/inspection/conduct/${inspection.id}` as any);
       } catch (e: any) {
         Alert.alert("Error", e.message || "Failed to create inspection");
       } finally {
@@ -477,8 +477,8 @@ export default function CreateInspectionScreen() {
               <Feather name="info" size={14} color={Colors.secondary} />
               <Text style={styles.infoText}>
                 {mode === "project"
-                  ? "You'll be taken to the inspection detail screen. Start the inspection from there when you're ready."
-                  : "A new inspection record will be created. Open it to start conducting the inspection."}
+                  ? "You'll be taken to the checklist to begin recording results."
+                  : "A new inspection record will be created and you'll go straight to the checklist."}
               </Text>
             </View>
           </View>
@@ -514,9 +514,9 @@ export default function CreateInspectionScreen() {
               <ActivityIndicator size="small" color={Colors.primary} />
             ) : (
               <>
-                <Feather name="check-circle" size={17} color={Colors.primary} />
+                <Feather name="play-circle" size={17} color={Colors.primary} />
                 <Text style={styles.createButtonText}>
-                  {mode === "project" ? "Confirm" : "Create Inspection"}
+                  {mode === "project" ? "Begin Inspection" : "Create & Begin"}
                 </Text>
               </>
             )}

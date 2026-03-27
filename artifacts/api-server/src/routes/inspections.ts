@@ -75,12 +75,12 @@ router.get("/", optionalAuth, async (req, res) => {
       const accessibleProjectIds = allProjects
         .filter(p => p.name === "Test Project" || p.createdById === req.authUser!.id)
         .map(p => p.id);
-      inspections = inspections.filter(i => accessibleProjectIds.includes(i.projectId));
+      inspections = inspections.filter(i => i.projectId !== null && accessibleProjectIds.includes(i.projectId));
     } else if (!req.authUser) {
       const testProjects = await db.select({ id: projectsTable.id }).from(projectsTable)
         .where(eq(projectsTable.name, "Test Project"));
       const testIds = testProjects.map(p => p.id);
-      inspections = inspections.filter(i => testIds.includes(i.projectId));
+      inspections = inspections.filter(i => i.projectId !== null && testIds.includes(i.projectId));
     }
 
     if (projectId) inspections = inspections.filter(i => i.projectId === parseInt(projectId as string));
@@ -169,7 +169,7 @@ router.post("/run-sheet/send", async (req, res) => {
 
 router.get("/:id", optionalAuth, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id));
     const inspections = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, id));
     const inspection = inspections[0];
     if (!inspection) {
@@ -221,8 +221,10 @@ router.get("/:id", optionalAuth, async (req, res) => {
     const notes = await db.select().from(notesTable)
       .where(eq(notesTable.inspectionId, id));
 
-    const project = await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId));
-    const pName = project[0]?.name || "Unknown";
+    const project = inspection.projectId
+      ? await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId))
+      : [];
+    const pName = project[0]?.name || "Standalone";
 
     // Synthesise issues from failed/monitor checklist results so the Issues tab
     // always reflects what was found on the checklist, even if no manual issue

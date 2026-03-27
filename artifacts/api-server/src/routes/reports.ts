@@ -463,10 +463,10 @@ router.post("/generate", async (req, res) => {
     const inspection = inspections[0];
     if (!inspection) { res.status(404).json({ error: "inspection_not_found" }); return; }
 
-    const projects = await db.select().from(projectsTable)
-      .where(eq(projectsTable.id, inspection.projectId));
-    const project = projects[0];
-    if (!project) { res.status(404).json({ error: "project_not_found" }); return; }
+    const projects = inspection.projectId
+      ? await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId))
+      : [];
+    const project = projects[0] || null;
 
     const checklistRows = await db.select({
       result: checklistResultsTable,
