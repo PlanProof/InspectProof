@@ -204,14 +204,19 @@ export default function PhotoMarkupScreen() {
         style={[styles.canvas, { width: drawAreaW, height: drawAreaH }]}
         {...panResponder.panHandlers}
       >
+        {/* pointerEvents="none" on these views is critical — without it the Image
+            (and background View) intercept touch events on web, preventing the
+            PanResponder from receiving any move events */}
         {photoUri ? (
-          <Image
-            source={{ uri: photoUri }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="contain"
-          />
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Image
+              source={{ uri: photoUri }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="contain"
+            />
+          </View>
         ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: "#111" }]} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: "#111" }]} pointerEvents="none" />
         )}
 
         {/* pointerEvents="none" is critical — without it the SVG intercepts touches
