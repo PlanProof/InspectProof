@@ -23,10 +23,6 @@ function NativeTabLayout() {
         <Icon sf={{ default: "folder", selected: "folder.fill" }} />
         <Label>Projects</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="reports">
-        <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
-        <Label>Reports</Label>
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="more">
         <Icon sf={{ default: "ellipsis.circle", selected: "ellipsis.circle.fill" }} />
         <Label>More</Label>
@@ -106,15 +102,7 @@ function ClassicTabLayout() {
       />
       <Tabs.Screen
         name="reports"
-        options={{
-          title: "Reports",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="doc.text" tintColor={color} size={22} />
-            ) : (
-              <Feather name="file-text" size={20} color={color} />
-            ),
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="issues"

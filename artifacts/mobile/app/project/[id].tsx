@@ -28,6 +28,26 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/context/AuthContext";
 import { PROJECT_STAGES } from "@/constants/api";
 
+const REPORT_TYPES: Record<string, string> = {
+  inspection_certificate:   "Inspection Certificate",
+  compliance_report:        "Compliance Report",
+  defect_notice:            "Defect Notice",
+  non_compliance_notice:    "Non-Compliance Notice",
+  summary:                  "Inspection Summary",
+  quality_control_report:   "Quality Control Report",
+  non_conformance_report:   "Non-Conformance Report",
+  safety_inspection_report: "Safety Inspection Report",
+  pre_purchase_report:      "Pre-Purchase Building Report",
+  annual_fire_safety:       "Annual Fire Safety Statement",
+};
+
+const REPORT_STATUS: Record<string, { label: string; color: string; bg: string }> = {
+  draft:     { label: "Draft",     color: "#6b7280", bg: "#f3f4f6" },
+  submitted: { label: "Submitted", color: "#2563eb", bg: "#eff6ff" },
+  approved:  { label: "Approved",  color: "#16a34a", bg: "#f0fdf4" },
+  sent:      { label: "Sent",      color: Colors.secondary, bg: Colors.infoLight },
+};
+
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -67,6 +87,12 @@ export default function ProjectDetailScreen() {
   const { data: inspections = [], refetch: refetchInspections } = useQuery({
     queryKey: ["project-inspections", id, token],
     queryFn: () => fetchWithAuth(`/api/inspections?projectId=${id}`),
+    enabled: !!token && !!id,
+  });
+
+  const { data: reports = [] } = useQuery<any[]>({
+    queryKey: ["project-reports", id, token],
+    queryFn: () => fetchWithAuth(`/api/reports?projectId=${id}`),
     enabled: !!token && !!id,
   });
 
@@ -242,6 +268,40 @@ export default function ProjectDetailScreen() {
               <InspectionCard key={i.id} inspection={i} showProject={false} />
             ))}
           </>
+        )}
+      </View>
+
+      {/* Reports */}
+      <View style={styles.section}>
+        <SectionHeader title={`Reports (${reports.length})`} />
+        {reports.length === 0 ? (
+          <EmptyState icon="file-text" title="No reports yet" description="Reports are generated from completed inspections" />
+        ) : (
+          reports.slice(0, 5).map((r: any) => {
+            const sm = REPORT_STATUS[r.status] || REPORT_STATUS.draft;
+            return (
+              <Pressable
+                key={r.id}
+                style={({ pressed }) => [styles.reportCard, pressed && { opacity: 0.85 }]}
+                onPress={() => router.push({ pathname: "/inspection/[id]", params: { id: r.inspectionId } })}
+              >
+                <View style={styles.reportCardHeader}>
+                  <View style={[styles.reportStatusTag, { backgroundColor: sm.bg }]}>
+                    <Text style={[styles.reportStatusText, { color: sm.color }]}>{sm.label}</Text>
+                  </View>
+                  <Text style={styles.reportDate}>
+                    {new Date(r.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })}
+                  </Text>
+                </View>
+                <Text style={styles.reportType}>{REPORT_TYPES[r.reportType] || r.reportType}</Text>
+                <View style={styles.reportFooter}>
+                  <Feather name="clipboard" size={12} color={Colors.secondary} />
+                  <Text style={styles.reportRef}>Inspection #{r.inspectionId}</Text>
+                  <Feather name="chevron-right" size={15} color={Colors.textTertiary} style={{ marginLeft: "auto" }} />
+                </View>
+              </Pressable>
+            );
+          })
         )}
       </View>
 
@@ -532,6 +592,49 @@ const styles = StyleSheet.create({
   section: {
     marginHorizontal: 16,
     gap: 10,
+  },
+  reportCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+    gap: 6,
+  },
+  reportCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  reportStatusTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  reportStatusText: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+  },
+  reportDate: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.textTertiary,
+  },
+  reportType: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+  },
+  reportFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 2,
+  },
+  reportRef: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.secondary,
   },
   notesCard: {
     backgroundColor: Colors.surface,
