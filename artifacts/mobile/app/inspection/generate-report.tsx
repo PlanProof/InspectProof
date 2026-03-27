@@ -81,35 +81,50 @@ const badgeStyles = StyleSheet.create({
   text: { fontSize: 10, fontFamily: "PlusJakartaSans_700Bold", letterSpacing: 0.3 },
 });
 
+// Left-border colour per result (matches conduct screen style)
+const ITEM_BORDER: Record<string, string> = {
+  pass:    "#22c55e",
+  fail:    "#ef4444",
+  monitor: "#f59e0b",
+  na:      "#94a3b8",
+  pending: "#cbd5e1",
+};
+const ITEM_ICON: Record<string, { name: string; color: string }> = {
+  pass:    { name: "check-circle", color: "#22c55e" },
+  fail:    { name: "x-circle",     color: "#ef4444" },
+  monitor: { name: "alert-circle", color: "#f59e0b" },
+  na:      { name: "minus-circle", color: "#94a3b8" },
+  pending: { name: "clock",        color: "#cbd5e1" },
+};
+
 function ChecklistItemRow({
   item,
-  index,
   baseUrl,
   token,
 }: {
   item: any;
-  index: number;
   baseUrl: string;
   token: string | null;
 }) {
   const photos: string[] = item.photoUrls ?? [];
   const photoW = (SCREEN_WIDTH - 64) / 2;
+  const borderColor = ITEM_BORDER[item.result] ?? ITEM_BORDER.pending;
+  const iconCfg    = ITEM_ICON[item.result]  ?? ITEM_ICON.pending;
 
   return (
-    <View style={itemStyles.wrap}>
-      {/* Row header */}
+    <View style={[itemStyles.wrap, { borderLeftColor: borderColor }]}>
+      {/* Icon + description + code reference */}
       <View style={itemStyles.header}>
-        <Text style={itemStyles.index}>{index + 1}</Text>
+        <Feather name={iconCfg.name as any} size={22} color={iconCfg.color} style={{ marginTop: 1 }} />
         <View style={itemStyles.headerText}>
           <Text style={itemStyles.desc}>{item.description}</Text>
           {item.codeReference ? (
             <Text style={itemStyles.code}>{item.codeReference}</Text>
           ) : null}
         </View>
-        <ResultBadge result={item.result} />
       </View>
 
-      {/* Location / severity */}
+      {/* Location / severity chips */}
       {(item.location || item.severity) ? (
         <View style={itemStyles.metaRow}>
           {item.location ? (
@@ -152,7 +167,7 @@ function ChecklistItemRow({
         </View>
       ) : null}
 
-      {/* Recommended action for fails */}
+      {/* Recommended action for fails/monitors */}
       {(item.result === "fail" || item.result === "monitor") && item.recommendedAction ? (
         <View style={itemStyles.actionWrap}>
           <Feather name="tool" size={11} color="#d97706" />
@@ -169,21 +184,15 @@ const itemStyles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    padding: 12,
+    borderLeftWidth: 4,
+    padding: 14,
     gap: 8,
   },
-  header: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  index: {
-    fontSize: 11,
-    fontFamily: "PlusJakartaSans_700Bold",
-    color: "#94a3b8",
-    minWidth: 18,
-    marginTop: 1,
-  },
-  headerText: { flex: 1, gap: 2 },
-  desc: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: BRAND_NAVY, lineHeight: 18 },
-  code: { fontSize: 10, color: BRAND_BLUE, fontFamily: "PlusJakartaSans_500Medium" },
-  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingLeft: 28 },
+  header: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  headerText: { flex: 1, gap: 4 },
+  desc: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: BRAND_NAVY, lineHeight: 20 },
+  code: { fontSize: 11, color: BRAND_BLUE, fontFamily: "PlusJakartaSans_500Medium" },
+  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingLeft: 34 },
   metaChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -200,7 +209,7 @@ const itemStyles = StyleSheet.create({
     backgroundColor: "#f8fafc",
     borderRadius: 6,
     padding: 8,
-    marginLeft: 28,
+    marginLeft: 34,
     alignItems: "flex-start",
   },
   notes: { flex: 1, fontSize: 12, color: "#475569", lineHeight: 17 },
@@ -208,7 +217,7 @@ const itemStyles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    paddingLeft: 28,
+    marginLeft: 34,
   },
   photo: { borderRadius: 8, backgroundColor: "#f1f5f9" },
   actionWrap: {
@@ -219,7 +228,7 @@ const itemStyles = StyleSheet.create({
     borderLeftColor: "#fcd34d",
     borderRadius: 6,
     padding: 8,
-    marginLeft: 28,
+    marginLeft: 34,
     alignItems: "flex-start",
   },
   actionText: { flex: 1, fontSize: 12, color: "#92400e", lineHeight: 17 },
@@ -314,46 +323,79 @@ function ReportDocument({
       {/* ── Summary ── */}
       {totalDone > 0 && (
         <View style={docStyles.section}>
-          <View style={docStyles.sectionHeader}>
-            <View style={docStyles.sectionHeaderDot} />
-            <Text style={docStyles.sectionTitle}>INSPECTION SUMMARY</Text>
-          </View>
-          <View style={docStyles.summaryRow}>
-            <SummaryChip count={passCount}    label="Pass"    color="#15803d" bg="#f0fdf4" border="#86efac" />
-            <SummaryChip count={failCount}    label="Fail"    color="#dc2626" bg="#fef2f2" border="#fca5a5" />
-            <SummaryChip count={monitorCount} label="Monitor" color="#d97706" bg="#fffbeb" border="#fcd34d" />
-            <SummaryChip count={naCount}      label="N/A"     color="#64748b" bg="#f8fafc" border="#cbd5e1" />
-          </View>
-          {failCount > 0 || monitorCount > 0 ? (
-            <View style={docStyles.summaryAlert}>
-              <Feather name="alert-triangle" size={13} color="#d97706" />
-              <Text style={docStyles.summaryAlertText}>
-                {failCount + monitorCount} item{failCount + monitorCount > 1 ? "s" : ""} require{failCount + monitorCount === 1 ? "s" : ""} attention before the next stage.
-              </Text>
+          <View style={docStyles.summaryCard}>
+            {/* Pass | Fail | Pass Rate horizontal row */}
+            <View style={docStyles.summaryStatRow}>
+              <View style={docStyles.summaryStatItem}>
+                <Text style={[docStyles.summaryStatNum, { color: "#22c55e" }]}>{passCount}</Text>
+                <Text style={[docStyles.summaryStatLabel, { color: "#22c55e" }]}>Pass</Text>
+              </View>
+              <View style={docStyles.summaryDivider} />
+              <View style={docStyles.summaryStatItem}>
+                <Text style={[docStyles.summaryStatNum, { color: "#ef4444" }]}>{failCount}</Text>
+                <Text style={[docStyles.summaryStatLabel, { color: "#ef4444" }]}>Fail</Text>
+              </View>
+              {monitorCount > 0 && (
+                <>
+                  <View style={docStyles.summaryDivider} />
+                  <View style={docStyles.summaryStatItem}>
+                    <Text style={[docStyles.summaryStatNum, { color: "#f59e0b" }]}>{monitorCount}</Text>
+                    <Text style={[docStyles.summaryStatLabel, { color: "#f59e0b" }]}>Monitor</Text>
+                  </View>
+                </>
+              )}
+              {naCount > 0 && (
+                <>
+                  <View style={docStyles.summaryDivider} />
+                  <View style={docStyles.summaryStatItem}>
+                    <Text style={[docStyles.summaryStatNum, { color: "#94a3b8" }]}>{naCount}</Text>
+                    <Text style={[docStyles.summaryStatLabel, { color: "#94a3b8" }]}>N/A</Text>
+                  </View>
+                </>
+              )}
+              <View style={docStyles.summaryDivider} />
+              <View style={docStyles.summaryStatItem}>
+                <Text style={[docStyles.summaryStatNum, { color: "#22c55e" }]}>
+                  {totalDone > 0 ? `${Math.round((passCount / totalDone) * 100)}%` : "—"}
+                </Text>
+                <Text style={[docStyles.summaryStatLabel, { color: "#22c55e" }]}>Pass Rate</Text>
+              </View>
             </View>
-          ) : totalDone > 0 ? (
-            <View style={docStyles.summaryPass}>
-              <Feather name="check-circle" size={13} color="#15803d" />
-              <Text style={docStyles.summaryPassText}>All inspected items comply. Inspection passed.</Text>
-            </View>
-          ) : null}
+
+            {/* Alert / pass banner */}
+            {failCount > 0 || monitorCount > 0 ? (
+              <View style={docStyles.summaryAlert}>
+                <Feather name="alert-triangle" size={13} color="#d97706" />
+                <Text style={docStyles.summaryAlertText}>
+                  {failCount + monitorCount} item{failCount + monitorCount > 1 ? "s" : ""} require{failCount + monitorCount === 1 ? "s" : ""} attention before the next stage.
+                </Text>
+              </View>
+            ) : (
+              <View style={docStyles.summaryPass}>
+                <Feather name="check-circle" size={13} color="#15803d" />
+                <Text style={docStyles.summaryPassText}>All inspected items comply. Inspection passed.</Text>
+              </View>
+            )}
+          </View>
         </View>
       )}
 
       {/* ── Checklist items ── */}
-      {categories.map(cat => (
-        <View key={cat} style={docStyles.section}>
-          <View style={docStyles.categoryHeader}>
-            <Text style={docStyles.categoryTitle}>{cat}</Text>
-            <View style={docStyles.categoryLine} />
-            <Text style={docStyles.categoryCount}>{grouped[cat].length}</Text>
+      {categories.length > 0 && (
+        <View style={docStyles.section}>
+          <View style={docStyles.checklistHeadingRow}>
+            <Text style={docStyles.checklistHeading}>Checklist ({results.length} items)</Text>
           </View>
+        </View>
+      )}
+      {categories.map(cat => (
+        <View key={cat} style={docStyles.categorySection}>
+          <Text style={docStyles.categoryTitle}>{cat.toUpperCase()}</Text>
           <View style={docStyles.itemList}>
-            {grouped[cat].map((item, idx) => (
+            {grouped[cat].map((item) => (
               <ChecklistItemRow
                 key={item.id}
                 item={item}
-                index={idx}
                 baseUrl={baseUrl}
                 token={token}
               />
@@ -451,17 +493,23 @@ const docStyles = StyleSheet.create({
   },
   detailValue: { flex: 1, fontSize: 12, color: BRAND_NAVY, fontFamily: "PlusJakartaSans_500Medium" },
 
-  summaryRow: { flexDirection: "row", gap: 8 },
-  summaryChip: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 10,
-    borderRadius: 10,
+  summaryCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
     borderWidth: 1,
-    gap: 2,
+    borderColor: "#e2e8f0",
+    padding: 16,
+    gap: 12,
   },
-  summaryChipCount: { fontSize: 20, fontFamily: "PlusJakartaSans_700Bold" },
-  summaryChipLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold" },
+  summaryStatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+  },
+  summaryStatItem: { alignItems: "center", gap: 2 },
+  summaryStatNum: { fontSize: 22, fontFamily: "PlusJakartaSans_700Bold" },
+  summaryStatLabel: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold" },
+  summaryDivider: { width: 1, height: 36, backgroundColor: "#e2e8f0" },
   summaryAlert: {
     flexDirection: "row",
     gap: 8,
@@ -485,28 +533,20 @@ const docStyles = StyleSheet.create({
   },
   summaryPassText: { flex: 1, fontSize: 12, color: "#14532d", lineHeight: 17 },
 
-  categoryHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 2,
-  },
-  categoryTitle: {
-    fontSize: 12,
+  checklistHeadingRow: { paddingBottom: 4 },
+  checklistHeading: {
+    fontSize: 16,
     fontFamily: "PlusJakartaSans_700Bold",
     color: BRAND_NAVY,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
-  categoryLine: { flex: 1, height: 1, backgroundColor: "#e2e8f0" },
-  categoryCount: {
+
+  categorySection: { paddingHorizontal: 16, paddingTop: 12, gap: 8 },
+  categoryTitle: {
     fontSize: 11,
-    fontFamily: "PlusJakartaSans_600SemiBold",
+    fontFamily: "PlusJakartaSans_700Bold",
     color: "#94a3b8",
-    backgroundColor: "#f1f5f9",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    letterSpacing: 0.8,
+    marginBottom: 2,
   },
   itemList: { gap: 8 },
 
