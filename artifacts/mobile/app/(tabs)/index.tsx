@@ -907,11 +907,14 @@ export default function HomeScreen() {
         onRequestClose={() => setShowCalendar(false)}
       >
         <View style={calStyles.container}>
-          {/* Modal Header */}
+          {/* Modal Header — navy branded bar */}
           <View style={calStyles.header}>
-            <Text style={calStyles.headerTitle}>Schedule</Text>
-            <Pressable onPress={() => setShowCalendar(false)} hitSlop={12}>
-              <Feather name="x" size={22} color={Colors.text} />
+            <View style={calStyles.headerLeft}>
+              <Feather name="calendar" size={16} color={Colors.accent} />
+              <Text style={calStyles.headerTitle}>Schedule</Text>
+            </View>
+            <Pressable onPress={() => setShowCalendar(false)} hitSlop={12} style={calStyles.closeBtn}>
+              <Feather name="x" size={18} color={Colors.textOnDark} />
             </Pressable>
           </View>
 
@@ -919,24 +922,26 @@ export default function HomeScreen() {
           <View style={calStyles.monthNav}>
             <Pressable
               hitSlop={12}
+              style={calStyles.navBtn}
               onPress={() => setCalendarMonth(({ year, month }) => {
                 const d = new Date(year, month - 1);
                 return { year: d.getFullYear(), month: d.getMonth() };
               })}
             >
-              <Feather name="chevron-left" size={22} color={Colors.text} />
+              <Feather name="chevron-left" size={20} color={Colors.primary} />
             </Pressable>
             <Text style={calStyles.monthLabel}>
               {new Date(calendarMonth.year, calendarMonth.month).toLocaleString("default", { month: "long", year: "numeric" })}
             </Text>
             <Pressable
               hitSlop={12}
+              style={calStyles.navBtn}
               onPress={() => setCalendarMonth(({ year, month }) => {
                 const d = new Date(year, month + 1);
                 return { year: d.getFullYear(), month: d.getMonth() };
               })}
             >
-              <Feather name="chevron-right" size={22} color={Colors.text} />
+              <Feather name="chevron-right" size={20} color={Colors.primary} />
             </Pressable>
           </View>
 
@@ -1009,24 +1014,55 @@ export default function HomeScreen() {
 }
 
 const calStyles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background, paddingTop: 24 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 16 },
-  headerTitle: { fontSize: 18, fontFamily: "PlusJakartaSans_700Bold", color: Colors.text },
-  monthNav: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 12 },
-  monthLabel: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
-  dowRow: { flexDirection: "row", paddingHorizontal: 12, paddingBottom: 4 },
-  dowLabel: { flex: 1, textAlign: "center", fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
-  grid: { flex: 1 },
-  gridContent: { paddingHorizontal: 12, paddingBottom: 32 },
+  container: { flex: 1, backgroundColor: Colors.surface },
+  // ── Navy branded header bar ───────────────────────────────────────────
+  header: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 18,
+  },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerTitle: { fontSize: 18, fontFamily: "PlusJakartaSans_700Bold", color: Colors.textOnDark },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center", justifyContent: "center",
+  },
+  // ── Month navigation ─────────────────────────────────────────────────
+  monthNav: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  navBtn: {
+    width: 36, height: 36, borderRadius: 8,
+    backgroundColor: Colors.background,
+    alignItems: "center", justifyContent: "center",
+  },
+  monthLabel: { fontSize: 15, fontFamily: "PlusJakartaSans_700Bold", color: Colors.primary },
+  // ── Day-of-week header row ────────────────────────────────────────────
+  dowRow: {
+    flexDirection: "row", paddingHorizontal: 12, paddingVertical: 8,
+    backgroundColor: Colors.primary,
+  },
+  dowLabel: { flex: 1, textAlign: "center", fontSize: 11, fontFamily: "PlusJakartaSans_700Bold", color: Colors.accent, letterSpacing: 0.5 },
+  // ── Calendar grid ────────────────────────────────────────────────────
+  grid: { flex: 1, backgroundColor: Colors.surface },
+  gridContent: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 32 },
   week: { flexDirection: "row" },
   cell: { flex: 1, aspectRatio: 1, alignItems: "center", justifyContent: "center", borderRadius: 8, margin: 2 },
+  // Selected (non-today): solid navy background + pear text
   cellSelected: { backgroundColor: Colors.primary },
-  cellToday: { borderWidth: 1.5, borderColor: Colors.secondary },
+  // Today (not selected): pear accent border
+  cellToday: { borderWidth: 2, borderColor: Colors.accent },
   dayNum: { fontSize: 14, fontFamily: "PlusJakartaSans_500Medium", color: Colors.text },
   dayNumSelected: { color: Colors.accent, fontFamily: "PlusJakartaSans_700Bold" },
-  dayNumToday: { color: Colors.secondary, fontFamily: "PlusJakartaSans_700Bold" },
+  dayNumToday: { color: Colors.primary, fontFamily: "PlusJakartaSans_700Bold" },
   dotsRow: { flexDirection: "row", gap: 2, marginTop: 2 },
+  // Regular dots: secondary blue
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.secondary },
+  // Dots on selected (navy bg): pear
   dotSelected: { backgroundColor: Colors.accent },
 });
 
