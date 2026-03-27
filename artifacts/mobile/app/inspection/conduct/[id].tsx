@@ -167,6 +167,28 @@ export default function ConductInspectionScreen() {
   const scored = passCount + failCount;
   const passRate = scored > 0 ? passCount / scored : null;
 
+  // Auto-set to in_progress when inspection is first opened
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (
+      inspection &&
+      inspection.status === "scheduled" &&
+      !startedRef.current
+    ) {
+      startedRef.current = true;
+      fetchWithAuth(`/api/inspections/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "in_progress" }),
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["inspections"] });
+        queryClient.invalidateQueries({ queryKey: ["inspection", id] });
+      }).catch(() => {
+        startedRef.current = false;
+      });
+    }
+  }, [inspection?.status]);
+
   // Auto-mark as completed/follow_up_required when 100% checked off
   useEffect(() => {
     if (
