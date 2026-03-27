@@ -10,7 +10,7 @@ import {
   Award, BarChart2, Send, Download, Zap, X,
   UserCheck, ChevronDown, FolderOpen, Upload, File,
   FileImage, FileSpreadsheet, CheckSquare, PencilLine,
-  RefreshCw, Eye, ShieldCheck, Flame, Home, ClipboardCheck, Trash2, Camera,
+  RefreshCw, Eye, ShieldCheck, Flame, Home, ClipboardCheck, Trash2, Camera, Link2,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -173,6 +173,37 @@ function getLinkedDocTemplate(checklistTemplateId: number | undefined): DocTempl
   if (!checklistTemplateId) return null;
   try {
     return loadDocTemplates().find(dt => dt.linkedChecklistIds.includes(checklistTemplateId)) ?? null;
+  } catch { return null; }
+}
+
+const INSP_DOC_TEMPLATE_KEY = "inspectproof_inspection_doc_templates";
+
+function getDirectDocTemplateId(inspectionId: number): string | null {
+  try {
+    const raw = localStorage.getItem(INSP_DOC_TEMPLATE_KEY);
+    const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+    return map[String(inspectionId)] ?? null;
+  } catch { return null; }
+}
+
+function setDirectDocTemplateId(inspectionId: number, docTemplateId: string | null) {
+  try {
+    const raw = localStorage.getItem(INSP_DOC_TEMPLATE_KEY);
+    const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+    if (docTemplateId) {
+      map[String(inspectionId)] = docTemplateId;
+    } else {
+      delete map[String(inspectionId)];
+    }
+    localStorage.setItem(INSP_DOC_TEMPLATE_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+function getDirectDocTemplate(inspectionId: number): DocTemplate | null {
+  const id = getDirectDocTemplateId(inspectionId);
+  if (!id) return null;
+  try {
+    return loadDocTemplates().find(dt => dt.id === id) ?? null;
   } catch { return null; }
 }
 
@@ -421,7 +452,9 @@ export default function InspectionDetail() {
     setGeneratingReport(true);
     setGeneratedReport(null);
     try {
-      const linkedTemplate = getLinkedDocTemplate(inspection.checklistTemplateId);
+      const linkedTemplate =
+        getDirectDocTemplate(inspection.id) ??
+        getLinkedDocTemplate(inspection.checklistTemplateId);
 
       if (linkedTemplate) {
         // Use the linked doc template — fill tokens and save directly as a report
@@ -1253,6 +1286,19 @@ function OverviewTab({
   const [templateError, setTemplateError] = useState("");
   const [confirmReplaceOpen, setConfirmReplaceOpen] = useState(false);
 
+  // Doc template direct-link state
+  const [docTemplates] = useState<DocTemplate[]>(() => loadDocTemplates());
+  const [selectedDocTemplateId, setSelectedDocTemplateId] = useState<string>(
+    () => getDirectDocTemplateId(inspection.id) ?? ""
+  );
+  const [docTemplateSaved, setDocTemplateSaved] = useState(false);
+
+  const saveDocTemplateLink = () => {
+    setDirectDocTemplateId(inspection.id, selectedDocTemplateId || null);
+    setDocTemplateSaved(true);
+    setTimeout(() => setDocTemplateSaved(false), 2500);
+  };
+
   const saveInspector = async () => {
     setSavingInspector(true);
     try {
@@ -1654,6 +1700,43 @@ function OverviewTab({
               )}
               {templateError && <span className="text-xs text-red-500">{templateError}</span>}
             </div>
+          </div>
+
+          {/* ── Report Template (doc template) picker ── */}
+          <div className="border-t border-border mt-5 pt-5">
+            <h3 className="text-sm font-semibold text-sidebar mb-1 flex items-center gap-2">
+              <FileText className="h-3.5 w-3.5 text-muted-foreground" /> Report Template
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Choose which doc template to use when generating reports for this inspection. Overrides any template auto-detected from the checklist.
+            </p>
+            {docTemplates.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No doc templates found. Create one in Doc Templates first.</p>
+            ) : (
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedDocTemplateId}
+                  onChange={e => setSelectedDocTemplateId(e.target.value)}
+                  className="flex-1 text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+                >
+                  <option value="">— No doc template linked —</option>
+                  {docTemplates.map(dt => (
+                    <option key={dt.id} value={dt.id}>{dt.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={saveDocTemplateLink}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold bg-secondary text-white hover:bg-secondary/90 transition-colors shrink-0"
+                >
+                  <Link2 className="h-3.5 w-3.5" /> Link
+                </button>
+                {docTemplateSaved && (
+                  <span className="flex items-center gap-1 text-xs text-green-600 font-medium whitespace-nowrap">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Linked
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
