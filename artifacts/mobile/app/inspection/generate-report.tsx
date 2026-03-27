@@ -585,7 +585,7 @@ export default function GenerateReportScreen() {
 
   const { data: templates = [], isLoading: loadingTemplates } = useQuery({
     queryKey: ["checklist-templates", token],
-    queryFn: () => fetchWithAuth("/api/checklists"),
+    queryFn: () => fetchWithAuth("/api/checklist-templates"),
     enabled: !!token,
   });
 
