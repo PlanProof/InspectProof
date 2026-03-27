@@ -5,15 +5,15 @@ import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { Colors } from "@/constants/colors";
 
 function NativeTabLayout() {
   return (
     <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>Home</Label>
+      <NativeTabs.Trigger name="inspections">
+        <Icon sf={{ default: "clipboard", selected: "clipboard.fill" }} />
+        <Label>Inspections</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reports">
         <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
@@ -64,22 +64,29 @@ function ClassicTabLayout() {
         },
       }}
     >
+      {/* Home launcher — hidden from tab bar, tab bar itself hidden when here */}
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          tabBarButton: () => null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+
+      {/* Inspections — first visible tab */}
+      <Tabs.Screen
+        name="inspections"
+        options={{
+          title: "Inspections",
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="house" tintColor={color} size={22} />
+              <SymbolView name="clipboard" tintColor={color} size={22} />
             ) : (
-              <Feather name="home" size={20} color={color} />
+              <Feather name="clipboard" size={20} color={color} />
             ),
         }}
       />
-      <Tabs.Screen
-        name="inspections"
-        options={{ href: null }}
-      />
+
       <Tabs.Screen
         name="reports"
         options={{
@@ -92,6 +99,7 @@ function ClassicTabLayout() {
             ),
         }}
       />
+
       <Tabs.Screen
         name="projects"
         options={{
@@ -104,10 +112,12 @@ function ClassicTabLayout() {
             ),
         }}
       />
+
       <Tabs.Screen
         name="issues"
         options={{ href: null }}
       />
+
       <Tabs.Screen
         name="more"
         options={{
