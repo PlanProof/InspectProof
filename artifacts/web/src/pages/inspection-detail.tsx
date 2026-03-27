@@ -383,6 +383,9 @@ export default function InspectionDetail() {
   const [docsByItem, setDocsByItem] = useState<Record<number, { id: number; name: string; mimeType?: string }[]>>({});
   const [reports, setReports] = useState<any[]>([]);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [markCompleteOpen, setMarkCompleteOpen] = useState(false);
+  const [markCompleteNotes, setMarkCompleteNotes] = useState("");
+  const [markingComplete, setMarkingComplete] = useState(false);
   const [viewingReport, setViewingReport] = useState<any | null>(null);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState("inspection_certificate");
@@ -639,6 +642,18 @@ export default function InspectionDetail() {
                 )}
               </div>
             )}
+            {/* Mark as Complete — shown when not already completed */}
+            {inspection.status !== "completed" && inspection.status !== "follow_up_required" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setMarkCompleteOpen(true)}
+                className="gap-1.5 border-green-300 text-green-700 hover:bg-green-50"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Mark as Complete
+              </Button>
+            )}
             {(inspection.status === "completed" || inspection.status === "follow_up_required") && (
               <Button
                 size="sm"
@@ -775,6 +790,73 @@ export default function InspectionDetail() {
           }}
         />
       )}
+
+      {/* ── Mark as Complete Dialog ── */}
+      <Dialog open={markCompleteOpen} onOpenChange={o => { if (!o) setMarkCompleteOpen(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              Mark Inspection as Complete
+            </DialogTitle>
+            <DialogDescription>
+              This will set the inspection status to Completed, unlock report generation, and record today as the completion date.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1">Completion notes (optional)</label>
+              <textarea
+                value={markCompleteNotes}
+                onChange={e => setMarkCompleteNotes(e.target.value)}
+                placeholder="Any final remarks or observations…"
+                rows={3}
+                className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-300 resize-none"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              If photos were taken externally, you can upload them to individual checklist items from the Checklist tab after marking complete.
+            </p>
+          </div>
+          <DialogFooter>
+            <button
+              onClick={() => setMarkCompleteOpen(false)}
+              className="px-4 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={markingComplete}
+              onClick={async () => {
+                setMarkingComplete(true);
+                try {
+                  await apiFetch(`/api/inspections/${inspection.id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      status: "completed",
+                      completedDate: new Date().toISOString().slice(0, 10),
+                      ...(markCompleteNotes ? { notes: markCompleteNotes } : {}),
+                    }),
+                  });
+                  setMarkCompleteOpen(false);
+                  setMarkCompleteNotes("");
+                  await load();
+                  setTab("Reports");
+                } catch {
+                } finally {
+                  setMarkingComplete(false);
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold disabled:opacity-60 transition-colors"
+            >
+              {markingComplete
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Completing…</>
+                : <><CheckCircle2 className="h-4 w-4" /> Mark as Complete</>}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── View Report Content Modal ── */}
       <Dialog open={!!viewingReport} onOpenChange={o => { if (!o) setViewingReport(null); }}>
@@ -1053,7 +1135,7 @@ function ReportsTab({
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [sendEmail, setSendEmail] = useState(inspection.clientEmail ?? "");
   const [sendBusy, setSendBusy] = useState(false);
-  const canGenerate = inspection.status === "completed" || inspection.status === "follow_up_required";
+  const canGenerate = true;
 
   return (
     <div className="space-y-4">
@@ -2048,6 +2130,52 @@ function ChecklistTab({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<number, ItemDraft>>({});
   const [saving, setSaving] = useState<number | null>(null);
+  const [uploadingItemId, setUploadingItemId] = useState<number | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const pendingUploadRef = useRef<{ itemId: number; type: "photo" | "doc" } | null>(null);
+
+  const handleItemFileUpload = async (file: File, itemId: number, type: "photo" | "doc") => {
+    setUploadingItemId(itemId);
+    try {
+      const { uploadURL, objectPath } = await apiFetch("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      const putRes = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+      if (!putRes.ok) throw new Error("Upload failed");
+
+      if (type === "photo") {
+        const item = localResults.find(r => r.id === itemId);
+        const existing = item?.photoUrls ?? [];
+        const updated = [...existing, objectPath];
+        await apiFetch(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ photoUrls: updated }),
+        });
+        setLocalResults(rs => rs.map(r => r.id !== itemId ? r : { ...r, photoUrls: updated }));
+      } else {
+        await apiFetch(`/api/projects/${inspection.projectId}/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: file.name,
+            fileUrl: objectPath,
+            mimeType: file.type,
+            fileSize: file.size,
+            folder: "Inspection Documents",
+            inspectionId,
+          }),
+        });
+        onReload();
+      }
+    } catch {
+    } finally {
+      setUploadingItemId(null);
+    }
+  };
 
   const generatePhotoSheet = () => {
     const allPhotos: { url: string; itemDesc: string; result: string | null; category: string }[] = [];
@@ -2228,6 +2356,32 @@ ${checklistRows}
 
   return (
     <div className="space-y-6">
+      {/* Hidden file inputs — shared across all items */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async e => {
+          const file = e.target.files?.[0];
+          const pending = pendingUploadRef.current;
+          e.target.value = "";
+          if (file && pending) await handleItemFileUpload(file, pending.itemId, "photo");
+        }}
+      />
+      <input
+        ref={docInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
+        className="hidden"
+        onChange={async e => {
+          const file = e.target.files?.[0];
+          const pending = pendingUploadRef.current;
+          e.target.value = "";
+          if (file && pending) await handleItemFileUpload(file, pending.itemId, "doc");
+        }}
+      />
+
       {/* Photo Sheet button */}
       <div className="flex justify-end">
         <button
@@ -2370,6 +2524,35 @@ ${checklistRows}
                           {item.severity || item.location ? "Edit defect details" : "Add defect details"}
                         </button>
                       )}
+                      {/* Photo + Doc upload buttons */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          title="Upload photo"
+                          disabled={uploadingItemId === item.id}
+                          onClick={() => {
+                            pendingUploadRef.current = { itemId: item.id, type: "photo" };
+                            photoInputRef.current?.click();
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border border-muted/50 text-muted-foreground hover:border-secondary/50 hover:text-secondary hover:bg-secondary/5 transition-colors"
+                        >
+                          {uploadingItemId === item.id
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : <Camera className="h-3 w-3" />}
+                          <span className="hidden sm:inline">Photo</span>
+                        </button>
+                        <button
+                          title="Attach document"
+                          disabled={uploadingItemId === item.id}
+                          onClick={() => {
+                            pendingUploadRef.current = { itemId: item.id, type: "doc" };
+                            docInputRef.current?.click();
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border border-muted/50 text-muted-foreground hover:border-secondary/50 hover:text-secondary hover:bg-secondary/5 transition-colors"
+                        >
+                          <Paperclip className="h-3 w-3" />
+                          <span className="hidden sm:inline">Doc</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
