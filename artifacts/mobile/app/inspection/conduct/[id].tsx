@@ -101,7 +101,6 @@ export default function ConductInspectionScreen() {
   const [editRecommendedAction, setEditRecommendedAction] = useState<string>("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
-  const [completing, setCompleting] = useState(false);
   const [activePage, setActivePage] = useState(0);
   const [addItemModal, setAddItemModal] = useState<{ visible: boolean; category: string }>({ visible: false, category: "" });
   const [addItemDesc, setAddItemDesc] = useState("");
@@ -404,42 +403,6 @@ export default function ConductInspectionScreen() {
     } catch { }
   };
 
-  const completeInspection = async () => {
-    if (pendingCount > 0) {
-      Alert.alert(
-        "Incomplete Checklist",
-        `${pendingCount} item(s) still pending. Complete all items before finishing, or mark them N/A.`,
-        [
-          { text: "Continue Anyway", onPress: doComplete },
-          { text: "Go Back", style: "cancel" },
-        ]
-      );
-      return;
-    }
-    doComplete();
-  };
-
-  const doComplete = async () => {
-    setCompleting(true);
-    try {
-      const newStatus = failCount > 0 ? "follow_up_required" : "completed";
-      await fetchWithAuth(`/api/inspections/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: newStatus,
-          completedDate: new Date().toISOString().split("T")[0],
-        }),
-      });
-      queryClient.invalidateQueries({ queryKey: ["inspections"] });
-      queryClient.invalidateQueries({ queryKey: ["inspection", id] });
-      if (router.canGoBack()) router.back(); else router.replace("/(tabs)/inspections" as any);
-    } catch (e: any) {
-      Alert.alert("Error", "Failed to complete inspection.");
-    } finally {
-      setCompleting(false);
-    }
-  };
 
   if (loadingInspection || loadingChecklist) {
     return (
@@ -463,13 +426,7 @@ export default function ConductInspectionScreen() {
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>{inspection?.projectName}</Text>
         </View>
-        <Pressable
-          style={[styles.completeBtn, completing && { opacity: 0.6 }]}
-          onPress={completeInspection}
-          disabled={completing}
-        >
-          {completing ? <ActivityIndicator size="small" color={Colors.primary} /> : <Text style={styles.completeBtnText}>Done</Text>}
-        </Pressable>
+        <View style={{ width: 56 }} />
       </View>
 
       {/* Tab bar */}
@@ -1339,15 +1296,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   docsBadgeText: { fontSize: 9, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
-  completeBtn: {
-    backgroundColor: Colors.accent,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 56,
-    alignItems: "center",
-  },
-  completeBtnText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
   progressSection: {
     backgroundColor: Colors.surface,
     paddingHorizontal: 16,
