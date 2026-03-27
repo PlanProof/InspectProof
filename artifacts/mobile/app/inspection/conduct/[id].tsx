@@ -1521,7 +1521,6 @@ const styles = StyleSheet.create({
   },
   markCompleteLabelActive: {
     color: Colors.primary,
-    fontFamily: "PlusJakartaSans_700Bold",
   },
   generateBtn: {
     flexDirection: "row",
