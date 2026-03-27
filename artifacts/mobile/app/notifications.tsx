@@ -15,7 +15,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useNotifications, ReminderMinutes, MapApp } from "@/context/NotificationsContext";
 
-const WEB_TOP = Platform.OS === "web" ? 67 : 0;
+const WEB_TOP = 0;
 
 const REMINDER_OPTIONS: { value: ReminderMinutes; label: string }[] = [
   { value: 15, label: "15 minutes before" },

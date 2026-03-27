@@ -11,7 +11,7 @@ import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { getApiUrl } from "@/constants/api";
 
-const WEB_TOP = Platform.OS === "web" ? 67 : 0;
+const WEB_TOP = 0;
 
 const ROLE_LABELS: Record<string, string> = {
   certifier: "Building Certifier",

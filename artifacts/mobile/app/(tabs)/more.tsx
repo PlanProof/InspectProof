@@ -16,7 +16,7 @@ import { useAuth } from "@/context/AuthContext";
 
 const logoImage = require("@/assets/images/logo.png");
 
-const WEB_TOP = Platform.OS === "web" ? 67 : 0;
+const WEB_TOP = 0;
 
 interface MenuItemProps {
   icon: string;

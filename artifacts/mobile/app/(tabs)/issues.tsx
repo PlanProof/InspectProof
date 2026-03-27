@@ -15,7 +15,7 @@ import { IssueCard } from "@/components/IssueCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/context/AuthContext";
 
-const WEB_TOP = Platform.OS === "web" ? 67 : 0;
+const WEB_TOP = 0;
 
 const SEVERITY_FILTERS = ["All", "Critical", "High", "Medium", "Low"];
 const SEVERITY_VALUES: Record<string, string | null> = {

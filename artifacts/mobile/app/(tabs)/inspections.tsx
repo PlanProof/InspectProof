@@ -17,7 +17,7 @@ import { InspectionCard } from "@/components/InspectionCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/context/AuthContext";
 
-const WEB_TOP = Platform.OS === "web" ? 67 : 0;
+const WEB_TOP = 0;
 
 const STATUS_FILTERS = ["All", "Scheduled", "In Progress", "Completed", "Follow-Up"];
 const STATUS_VALUES: Record<string, string | null> = {

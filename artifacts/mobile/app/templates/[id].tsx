@@ -10,7 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
-const WEB_TOP = Platform.OS === "web" ? 67 : 0;
+const WEB_TOP = 0;
 
 const RISK_META: Record<string, { label: string; color: string; bg: string }> = {
   critical: { label: "Critical", color: "#ef4444", bg: "#fef2f2" },

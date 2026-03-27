@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
-const WEB_TOP = Platform.OS === "web" ? 67 : 0;
+const WEB_TOP = 0;
 
 const CATEGORIES = ["all", "certificate", "approval", "drawings", "specification", "report", "correspondence", "other"];
 

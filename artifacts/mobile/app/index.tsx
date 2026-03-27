@@ -15,7 +15,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
-const WEB_TOP = Platform.OS === "web" ? 67 : 0;
+const WEB_TOP = 0;
 
 const FEATURES = [
   {

@@ -18,7 +18,7 @@ import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { INSPECTION_TYPES } from "@/constants/api";
 
-const WEB_TOP = Platform.OS === "web" ? 67 : 0;
+const WEB_TOP = 0;
 
 type Mode = "project" | "custom" | null;
 
