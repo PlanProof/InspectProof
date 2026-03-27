@@ -734,7 +734,7 @@ export default function InspectionDetail() {
         />
       )}
       {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults ?? []} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} inspection={inspection} />}
-      {tab === "Issues" && <IssuesTab issues={inspection.issues} />}
+      {tab === "Issues" && <IssuesTab issues={inspection.issues} inspectionId={inspection.id} projectId={inspection.projectId} onReload={load} />}
       {tab === "Documents" && (
         <DocumentsTab
           documents={projectDocuments}
@@ -2554,9 +2554,142 @@ function DocumentsTab({
   );
 }
 
+// ── Defect Correction Panel ───────────────────────────────────────────────────
+
+function DefectCorrectionPanel({ issue, inspectionId, projectId, onDone }: {
+  issue: Issue;
+  inspectionId: number;
+  projectId: number;
+  onDone: () => void;
+}) {
+  const [comment, setComment] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      if (file) {
+        const { uploadURL, objectPath } = await apiFetch("/api/storage/uploads/request-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+        });
+        const putRes = await fetch(uploadURL, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+        if (!putRes.ok) throw new Error("File upload failed");
+        await apiFetch(`/api/projects/${projectId}/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: file.name,
+            fileUrl: objectPath,
+            mimeType: file.type,
+            fileSize: file.size,
+            folder: "Defect Corrections",
+            inspectionId,
+          }),
+        });
+      }
+
+      await apiFetch(`/api/issues/${issue.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "resolved",
+          resolvedDate: new Date().toISOString().slice(0, 10),
+          description: comment
+            ? `${issue.description || ""}\n\nCorrective action: ${comment}`.trim()
+            : issue.description,
+        }),
+      });
+
+      if (issue.checklistResultId) {
+        await apiFetch(`/api/inspections/${inspectionId}/checklist/${issue.checklistResultId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            result: "pass",
+            notes: comment || "Defect corrected",
+          }),
+        });
+      }
+
+      onDone();
+    } catch (err: any) {
+      setError(err.message || "Failed to save correction");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-green-200 space-y-3">
+      <p className="text-[11px] font-bold text-green-700 uppercase tracking-wide flex items-center gap-1.5">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Record Correction
+      </p>
+
+      <textarea
+        value={comment}
+        onChange={e => setComment(e.target.value)}
+        placeholder="Describe the corrective action taken…"
+        rows={3}
+        className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-green-300 resize-none bg-white"
+      />
+
+      <div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,.pdf,.doc,.docx"
+          className="hidden"
+          onChange={e => setFile(e.target.files?.[0] ?? null)}
+        />
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="flex items-center gap-2 px-3 py-2 text-xs font-medium border border-dashed border-muted-foreground/30 rounded-lg hover:border-green-400 hover:bg-green-50 transition-colors w-full text-muted-foreground"
+        >
+          <Paperclip className="h-3.5 w-3.5 shrink-0" />
+          <span className="flex-1 text-left truncate">{file ? file.name : "Attach photo or document (optional)"}</span>
+          {file && (
+            <X
+              className="h-3 w-3 shrink-0 hover:text-red-500"
+              onClick={e => { e.stopPropagation(); setFile(null); }}
+            />
+          )}
+        </button>
+      </div>
+
+      {error && <p className="text-xs text-red-600 flex items-center gap-1"><AlertTriangle className="h-3 w-3" />{error}</p>}
+
+      <button
+        onClick={submit}
+        disabled={saving}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold disabled:opacity-60 transition-colors shadow-sm"
+      >
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+        {saving ? "Saving…" : "Mark as Corrected — update checklist to Pass"}
+      </button>
+    </div>
+  );
+}
+
 // ── Issues Tab ────────────────────────────────────────────────────────────────
 
-function IssuesTab({ issues }: { issues: Issue[] }) {
+function IssuesTab({ issues, inspectionId, projectId, onReload }: {
+  issues: Issue[];
+  inspectionId: number;
+  projectId: number;
+  onReload: () => void;
+}) {
+  const [expandedCorrection, setExpandedCorrection] = useState<number | null>(null);
+
   if (issues.length === 0) {
     return (
       <div className="text-center py-16 text-muted-foreground">
@@ -2581,60 +2714,97 @@ function IssuesTab({ issues }: { issues: Issue[] }) {
             <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{checklistIssues.length}</span>
           </div>
           <div className="space-y-3">
-            {checklistIssues.map(issue => (
-              <div
-                key={issue.id}
-                className={cn(
-                  "bg-card border rounded-xl p-5",
-                  issue.result === "monitor"
-                    ? "border-amber-200 bg-amber-50/30"
-                    : "border-red-200 bg-red-50/20"
-                )}
-              >
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                      {issue.result === "monitor" ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200">
-                          <Eye className="h-3 w-3" /> Monitor
+            {checklistIssues.map(issue => {
+              const isResolved = issue.status === "resolved";
+              const isExpanded = expandedCorrection === issue.id;
+              return (
+                <div
+                  key={issue.id}
+                  className={cn(
+                    "bg-card border rounded-xl p-5 transition-all",
+                    isResolved
+                      ? "border-green-200 bg-green-50/20"
+                      : issue.result === "monitor"
+                        ? "border-amber-200 bg-amber-50/30"
+                        : "border-red-200 bg-red-50/20"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-4 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        {isResolved ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border bg-green-50 text-green-700 border-green-200">
+                            <CheckCircle2 className="h-3 w-3" /> Corrected
+                          </span>
+                        ) : issue.result === "monitor" ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200">
+                            <Eye className="h-3 w-3" /> Monitor
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border bg-red-50 text-red-700 border-red-200">
+                            <XCircle className="h-3 w-3" /> Fail
+                          </span>
+                        )}
+                        {issue.severity && (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded border capitalize ${severityColors(issue.severity)}`}>
+                            {issue.severity}
+                          </span>
+                        )}
+                        {issue.category && (
+                          <span className="text-xs text-muted-foreground border border-muted/50 rounded px-2 py-0.5">
+                            {issue.category}
+                          </span>
+                        )}
+                        <span className="text-xs text-muted-foreground capitalize border border-muted/50 rounded px-2 py-0.5">
+                          {(issue.status ?? "open").replace(/_/g, " ")}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border bg-red-50 text-red-700 border-red-200">
-                          <XCircle className="h-3 w-3" /> Fail
-                        </span>
-                      )}
-                      {issue.severity && (
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded border capitalize ${severityColors(issue.severity)}`}>
-                          {issue.severity}
-                        </span>
-                      )}
-                      {issue.category && (
-                        <span className="text-xs text-muted-foreground border border-muted/50 rounded px-2 py-0.5">
-                          {issue.category}
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground capitalize border border-muted/50 rounded px-2 py-0.5">
-                        {(issue.status ?? "open").replace(/_/g, " ")}
-                      </span>
+                      </div>
+                      <h3 className="font-semibold text-sidebar leading-snug">{issue.title}</h3>
                     </div>
-                    <h3 className="font-semibold text-sidebar leading-snug">{issue.title}</h3>
+
+                    {/* Correct button */}
+                    {!isResolved && (
+                      <button
+                        onClick={() => setExpandedCorrection(isExpanded ? null : issue.id)}
+                        className={cn(
+                          "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
+                          isExpanded
+                            ? "bg-green-600 text-white border-green-600"
+                            : "border-green-300 text-green-700 hover:bg-green-50"
+                        )}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {isExpanded ? "Cancel" : "Correct"}
+                      </button>
+                    )}
                   </div>
-                </div>
-                {issue.description && (
-                  <p className="text-sm text-muted-foreground leading-relaxed mb-2">{issue.description}</p>
-                )}
-                {issue.recommendedAction && (
-                  <div className="mt-2 p-2.5 rounded-lg bg-sidebar/5 border border-sidebar/10 text-xs text-sidebar">
-                    <span className="font-semibold">Recommended action:</span> {issue.recommendedAction}
+
+                  {issue.description && (
+                    <p className="text-sm text-muted-foreground leading-relaxed mb-2">{issue.description}</p>
+                  )}
+                  {issue.recommendedAction && (
+                    <div className="mt-2 p-2.5 rounded-lg bg-sidebar/5 border border-sidebar/10 text-xs text-sidebar">
+                      <span className="font-semibold">Recommended action:</span> {issue.recommendedAction}
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                    {issue.location && <span><span className="font-medium">Location:</span> {issue.location}</span>}
+                    {issue.codeReference && <span><span className="font-medium">Code ref:</span> {issue.codeReference}</span>}
+                    {issue.responsibleParty && <span><span className="font-medium">Trade:</span> {issue.responsibleParty}</span>}
                   </div>
-                )}
-                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
-                  {issue.location && <span><span className="font-medium">Location:</span> {issue.location}</span>}
-                  {issue.codeReference && <span><span className="font-medium">Code ref:</span> {issue.codeReference}</span>}
-                  {issue.responsibleParty && <span><span className="font-medium">Trade:</span> {issue.responsibleParty}</span>}
+
+                  {/* Inline correction form */}
+                  {isExpanded && !isResolved && (
+                    <DefectCorrectionPanel
+                      issue={issue}
+                      inspectionId={inspectionId}
+                      projectId={projectId}
+                      onDone={() => { setExpandedCorrection(null); onReload(); }}
+                    />
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
