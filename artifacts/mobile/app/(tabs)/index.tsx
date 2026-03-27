@@ -216,8 +216,9 @@ function InspCard({ insp, onEditTime, reportSent, hasReport }: InspCardProps) {
   const typeLabel = INSPECTION_TYPE_LABELS[insp.inspectionType] ?? insp.inspectionType;
   const hasAddress = !!(insp.projectAddress);
   const addressLine = [insp.projectAddress, insp.projectSuburb].filter(Boolean).join(", ");
-  const isCompleted = insp.status === "completed" || insp.status === "follow_up_required";
+  const isCompleted = insp.status === "completed";
   const isInProgress = insp.status === "in_progress";
+  const isFollowUp = insp.status === "follow_up_required";
 
   return (
     <View style={tlStyles.item}>
@@ -278,11 +279,19 @@ function InspCard({ insp, onEditTime, reportSent, hasReport }: InspCardProps) {
           {!isCompleted && insp.status !== "cancelled" && (
             <Pressable
               onPress={() => router.push(`/inspection/conduct/${insp.id}` as any)}
-              style={({ pressed }) => [tlStyles.actionBtn, isInProgress && tlStyles.actionBtnContinue, pressed && { opacity: 0.8 }]}
+              style={({ pressed }) => [
+                tlStyles.actionBtn,
+                (isInProgress || isFollowUp) && tlStyles.actionBtnContinue,
+                pressed && { opacity: 0.8 },
+              ]}
             >
-              <Feather name={isInProgress ? "play-circle" : "arrow-right"} size={13} color={isInProgress ? Colors.secondary : Colors.primary} />
-              <Text style={[tlStyles.actionText, isInProgress && tlStyles.actionTextContinue]}>
-                {isInProgress ? "Continue Inspection" : "Start Inspection"}
+              <Feather
+                name={isInProgress || isFollowUp ? "play-circle" : "arrow-right"}
+                size={13}
+                color={isInProgress || isFollowUp ? Colors.secondary : Colors.primary}
+              />
+              <Text style={[tlStyles.actionText, (isInProgress || isFollowUp) && tlStyles.actionTextContinue]}>
+                {isInProgress ? "Continue Inspection" : isFollowUp ? "Continue Inspection" : "Start Inspection"}
               </Text>
             </Pressable>
           )}
