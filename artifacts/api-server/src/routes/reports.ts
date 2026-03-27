@@ -488,7 +488,7 @@ router.post("/generate", async (req, res) => {
     if (checklistResults.length === 0 && inspection.checklistTemplateId) {
       const templateItems = await db.select().from(checklistItemsTable)
         .where(eq(checklistItemsTable.templateId, inspection.checklistTemplateId))
-        .orderBy(sql`${checklistItemsTable.sortOrder} ASC`);
+        .orderBy(checklistItemsTable.orderIndex);
       checklistResults = templateItems.map(item => ({
         result: "pending" as any,
         notes: null,

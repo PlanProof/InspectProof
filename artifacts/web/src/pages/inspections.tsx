@@ -325,9 +325,10 @@ export default function Inspections() {
   };
 
   const filtered = inspections?.filter(i => {
-    const matchesSearch =
-      i.projectName.toLowerCase().includes(search.toLowerCase()) ||
-      i.inspectionType.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = !search.trim() || (
+      (i.projectName ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (i.inspectionType ?? "").toLowerCase().includes(search.toLowerCase())
+    );
     const matchesStatus = statusFilter === "all" || i.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -342,7 +343,7 @@ export default function Inspections() {
     const dir = sortDir === "asc" ? 1 : -1;
     switch (sortCol) {
       case "projectName":    return (a.projectName ?? "").localeCompare(b.projectName ?? "") * dir;
-      case "inspectionType": return a.inspectionType.localeCompare(b.inspectionType) * dir;
+      case "inspectionType": return (a.inspectionType ?? "").localeCompare(b.inspectionType ?? "") * dir;
       case "scheduledDate":  return (a.scheduledDate ?? "").localeCompare(b.scheduledDate ?? "") * dir;
       case "status":         return a.status.localeCompare(b.status) * dir;
       case "inspectorName":  return (a.inspectorName ?? "").localeCompare(b.inspectorName ?? "") * dir;
