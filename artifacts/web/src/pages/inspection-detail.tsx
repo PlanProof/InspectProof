@@ -751,12 +751,18 @@ export default function InspectionDetail() {
           onGenerate={() => openReportDialog(inspection)}
           onDownload={downloadReportPdf}
           onView={setViewingReport}
-          onSendReport={async (report) => {
+          onFinalise={async (report) => {
+            try {
+              await apiFetch(`/api/reports/${report.id}/approve`, { method: "POST" });
+              await refreshReports();
+            } catch {}
+          }}
+          onSendReport={async (report, email) => {
             try {
               await apiFetch(`/api/reports/${report.id}/send`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: inspection.clientEmail ?? "" }),
+                body: JSON.stringify({ sentTo: email }),
               });
               await refreshReports();
             } catch {}
@@ -973,11 +979,54 @@ function renderReportContent(content: string) {
 }
 
 const REPORT_STATUS_STYLES: Record<string, string> = {
-  draft:     "bg-yellow-50 text-yellow-700 border-yellow-200",
-  submitted: "bg-blue-50 text-blue-700 border-blue-200",
-  approved:  "bg-green-50 text-green-700 border-green-200",
-  sent:      "bg-purple-50 text-purple-700 border-purple-200",
+  draft:          "bg-yellow-50 text-yellow-700 border-yellow-200",
+  pending_review: "bg-blue-50 text-blue-700 border-blue-200",
+  approved:       "bg-green-50 text-green-700 border-green-200",
+  sent:           "bg-purple-50 text-purple-700 border-purple-200",
 };
+
+const REPORT_STATUS_LABELS: Record<string, string> = {
+  draft:          "Draft",
+  pending_review: "In Review",
+  approved:       "Finalised",
+  sent:           "Sent",
+};
+
+// Progress step bar: Draft → Finalised → Sent
+function ReportProgressBar({ status }: { status: string }) {
+  const steps = [
+    { key: "draft",    label: "Draft" },
+    { key: "approved", label: "Finalised" },
+    { key: "sent",     label: "Sent" },
+  ];
+  const activeIdx = status === "sent" ? 2 : status === "approved" ? 1 : 0;
+  return (
+    <div className="flex items-center gap-0 text-[11px] font-medium">
+      {steps.map((step, i) => {
+        const done    = i < activeIdx;
+        const current = i === activeIdx;
+        return (
+          <div key={step.key} className="flex items-center">
+            <div className={cn(
+              "flex items-center gap-1 px-2.5 py-1 rounded-full border transition-colors",
+              done    ? "bg-green-50 text-green-700 border-green-200"
+              : current ? (status === "draft" ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                         : status === "approved" ? "bg-blue-50 text-blue-700 border-blue-200"
+                         : "bg-purple-50 text-purple-700 border-purple-200")
+              : "bg-muted/40 text-muted-foreground border-muted/40"
+            )}>
+              {done ? <CheckCircle2 className="h-3 w-3" /> : null}
+              {step.label}
+            </div>
+            {i < steps.length - 1 && (
+              <div className={cn("w-6 h-px mx-0.5", done ? "bg-green-300" : "bg-muted/40")} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function ReportsTab({
   reports,
@@ -985,6 +1034,7 @@ function ReportsTab({
   onGenerate,
   onDownload,
   onView,
+  onFinalise,
   onSendReport,
   onDelete,
 }: {
@@ -993,11 +1043,16 @@ function ReportsTab({
   onGenerate: () => void;
   onDownload: (r: any) => void;
   onView: (r: any) => void;
-  onSendReport: (r: any) => void;
+  onFinalise: (r: any) => Promise<void>;
+  onSendReport: (r: any, email: string) => Promise<void>;
   onDelete: (r: any) => Promise<void>;
 }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [finalisingId, setFinalisingId] = useState<number | null>(null);
+  const [sendingId, setSendingId] = useState<number | null>(null);
+  const [sendEmail, setSendEmail] = useState(inspection.clientEmail ?? "");
+  const [sendBusy, setSendBusy] = useState(false);
   const canGenerate = inspection.status === "completed" || inspection.status === "follow_up_required";
 
   return (
@@ -1047,26 +1102,28 @@ function ReportsTab({
 
       {/* Report cards */}
       {reports.map((report) => {
-        const statusStyle = REPORT_STATUS_STYLES[report.status] ?? "bg-gray-50 text-gray-600 border-gray-200";
         const date = report.createdAt
           ? new Date(report.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })
           : null;
         const preview = typeof report.content === "string"
           ? report.content.slice(0, 220).replace(/\n+/g, " ").trim()
           : null;
+        const isFinalising = finalisingId === report.id;
+        const isSendOpen   = sendingId === report.id;
 
         return (
           <div key={report.id} className="bg-card border border-border rounded-xl overflow-hidden">
             {/* Card header */}
             <div className="px-5 py-4 flex items-start gap-4">
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-sidebar/5 border border-sidebar/10 shrink-0">
+              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-sidebar/5 border border-sidebar/10 shrink-0 mt-0.5">
                 <FileText className="h-5 w-5 text-sidebar" />
               </div>
               <div className="flex-1 min-w-0">
+                {/* Progress bar */}
+                <div className="mb-2">
+                  <ReportProgressBar status={report.status} />
+                </div>
                 <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border capitalize ${statusStyle}`}>
-                    {report.status}
-                  </span>
                   <span className="text-xs text-muted-foreground border border-muted/40 rounded-full px-2 py-0.5">
                     {ALL_REPORT_TYPE_LABELS[report.reportType] ?? report.reportType}
                   </span>
@@ -1083,12 +1140,17 @@ function ReportsTab({
                       <Calendar className="h-3 w-3" /> {date}
                     </span>
                   )}
+                  {report.sentTo && (
+                    <span className="flex items-center gap-1 text-purple-600">
+                      <Send className="h-3 w-3" /> Sent to {report.sentTo}
+                    </span>
+                  )}
                 </div>
               </div>
+
               {/* Actions */}
               <div className="flex items-center gap-2 shrink-0">
                 {confirmDeleteId === report.id ? (
-                  /* Inline delete confirmation */
                   <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
                     <span className="text-xs text-red-700 font-medium">Delete this report?</span>
                     <button
@@ -1104,51 +1166,58 @@ function ReportsTab({
                       {deleting ? "Deleting…" : "Yes, delete"}
                     </button>
                     <span className="text-red-300">|</span>
-                    <button
-                      onClick={() => setConfirmDeleteId(null)}
-                      disabled={deleting}
-                      className="text-xs text-muted-foreground hover:text-sidebar transition-colors"
-                    >
+                    <button onClick={() => setConfirmDeleteId(null)} disabled={deleting}
+                      className="text-xs text-muted-foreground hover:text-sidebar transition-colors">
                       Cancel
                     </button>
                   </div>
                 ) : (
                   <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onView(report)}
-                      className="gap-1.5 text-xs h-8"
-                    >
+                    <Button size="sm" variant="outline" onClick={() => onView(report)} className="gap-1.5 text-xs h-8">
                       <Eye className="h-3.5 w-3.5" /> View
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onDownload(report)}
-                      className="gap-1.5 text-xs h-8"
-                    >
+                    <Button size="sm" variant="outline" onClick={() => onDownload(report)} className="gap-1.5 text-xs h-8">
                       <Download className="h-3.5 w-3.5" /> PDF
                     </Button>
+
+                    {/* Finalise — shown for draft only */}
+                    {report.status === "draft" && (
+                      <Button
+                        size="sm"
+                        disabled={isFinalising}
+                        onClick={async () => {
+                          setFinalisingId(report.id);
+                          await onFinalise(report);
+                          setFinalisingId(null);
+                        }}
+                        className="gap-1.5 text-xs h-8 bg-sidebar hover:bg-sidebar/90 text-white"
+                      >
+                        {isFinalising
+                          ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Finalising…</>
+                          : <><CheckCircle2 className="h-3.5 w-3.5" /> Finalise</>}
+                      </Button>
+                    )}
+
+                    {/* Send to client — shown for approved/finalised */}
                     {report.status === "approved" && (
                       <Button
                         size="sm"
-                        onClick={() => onSendReport(report)}
+                        onClick={() => { setSendingId(report.id); setSendEmail(inspection.clientEmail ?? ""); }}
                         className="gap-1.5 text-xs h-8 bg-secondary hover:bg-secondary/90 text-white"
                       >
-                        <Send className="h-3.5 w-3.5" /> Send
+                        <Send className="h-3.5 w-3.5" /> Send to Client
                       </Button>
                     )}
+
+                    {/* Sent indicator */}
                     {report.status === "sent" && (
-                      <span className="flex items-center gap-1 text-xs text-purple-600 font-medium">
+                      <span className="flex items-center gap-1 text-xs text-purple-600 font-semibold">
                         <CheckCircle2 className="h-3.5 w-3.5" /> Sent
                       </span>
                     )}
-                    <button
-                      onClick={() => setConfirmDeleteId(report.id)}
-                      title="Delete report"
-                      className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
-                    >
+
+                    <button onClick={() => setConfirmDeleteId(report.id)} title="Delete report"
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </>
@@ -1156,8 +1225,46 @@ function ReportsTab({
               </div>
             </div>
 
+            {/* ── Send to Client panel ── */}
+            {isSendOpen && (
+              <div className="border-t border-secondary/20 bg-secondary/5 px-5 py-4 space-y-3">
+                <p className="text-xs font-bold text-secondary uppercase tracking-wide flex items-center gap-1.5">
+                  <Send className="h-3.5 w-3.5" /> Send Report to Client
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={sendEmail}
+                    onChange={e => setSendEmail(e.target.value)}
+                    placeholder="client@example.com"
+                    className="flex-1 text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-white"
+                  />
+                  <button
+                    disabled={sendBusy || !sendEmail.trim()}
+                    onClick={async () => {
+                      setSendBusy(true);
+                      await onSendReport(report, sendEmail.trim());
+                      setSendBusy(false);
+                      setSendingId(null);
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary hover:bg-secondary/90 text-white text-xs font-semibold disabled:opacity-60 transition-colors"
+                  >
+                    {sendBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    {sendBusy ? "Sending…" : "Send"}
+                  </button>
+                  <button onClick={() => setSendingId(null)}
+                    className="px-3 py-2 rounded-lg border border-border text-xs text-muted-foreground hover:bg-muted transition-colors">
+                    Cancel
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  The report will be marked as sent and the recipient email recorded.
+                </p>
+              </div>
+            )}
+
             {/* Content preview */}
-            {preview && (
+            {preview && !isSendOpen && (
               <div className="px-5 pb-4">
                 <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 font-mono leading-relaxed line-clamp-3">
                   {preview}{preview.length < (report.content?.length ?? 0) ? "…" : ""}
