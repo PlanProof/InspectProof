@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { useParams, Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Badge, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import { DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -392,6 +393,7 @@ export default function InspectionDetail() {
   const [generatingReport, setGeneratingReport] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<any>(null);
   const [submittingReport, setSubmittingReport] = useState(false);
+  const { toast } = useToast();
 
   // Inspector / checklist / documents / project data
   const [inspectors, setInspectors] = useState<Inspector[]>([]);
@@ -484,7 +486,13 @@ export default function InspectionDetail() {
         });
         setGeneratedReport(data);
       }
-    } catch {
+    } catch (err) {
+      console.error("generateReport error:", err);
+      toast({
+        title: "Report generation failed",
+        description: err instanceof Error ? err.message : "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setGeneratingReport(false);
     }
