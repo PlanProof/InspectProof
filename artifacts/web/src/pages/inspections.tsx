@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useListInspections, useListProjects, useListUsers, useCreateInspection } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
@@ -87,9 +87,21 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [allocatedTypes, setAllocatedTypes] = useState<{ templateId: number; name: string; inspectionType: string; folder: string }[]>([]);
+
+  useEffect(() => {
+    if (!form.projectId) { setAllocatedTypes([]); return; }
+    const token = localStorage.getItem("inspectproof_token");
+    fetch(`/api/projects/${form.projectId}/inspection-types`, {
+      headers: token ? { Authorization: `Basic ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then((data: any[]) => setAllocatedTypes(data.filter(t => t.isSelected)))
+      .catch(() => setAllocatedTypes([]));
+  }, [form.projectId]);
 
   function set(key: string, val: string) {
-    setForm(f => ({ ...f, [key]: val }));
+    setForm(f => ({ ...f, [key]: val, ...(key === "projectId" ? { inspectionType: "" } : {}) }));
     setError("");
   }
 
@@ -169,13 +181,23 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
                 className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-sidebar focus:outline-none focus:ring-2 focus:ring-secondary/50 pr-9"
               >
                 <option value="">Select type…</option>
-                {INSPECTION_TYPES.map(group => (
-                  <optgroup key={group.group} label={group.group}>
-                    {group.items.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </optgroup>
-                ))}
+                {form.projectId && allocatedTypes.length > 0 ? (
+                  Array.from(new Set(allocatedTypes.map(t => t.folder))).sort().map(folder => (
+                    <optgroup key={folder} label={folder}>
+                      {allocatedTypes.filter(t => t.folder === folder).map(t => (
+                        <option key={t.templateId} value={t.inspectionType}>{t.name}</option>
+                      ))}
+                    </optgroup>
+                  ))
+                ) : (
+                  INSPECTION_TYPES.map(group => (
+                    <optgroup key={group.group} label={group.group}>
+                      {group.items.map(t => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </optgroup>
+                  ))
+                )}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             </div>

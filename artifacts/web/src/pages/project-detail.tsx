@@ -1327,13 +1327,17 @@ function BookInspectionDialog({
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [allocatedTypes, setAllocatedTypes] = useState<InspectionTypeRow[]>([]);
 
   useEffect(() => {
     if (open) {
       setForm({ inspectionType: defaultInspectionType ?? "", scheduledDate: today, scheduledTime: "", inspectorId: "", notes: "" });
       setError("");
+      apiFetch(`/api/projects/${projectId}/inspection-types`)
+        .then((data: any) => setAllocatedTypes((data as InspectionTypeRow[]).filter(t => t.isSelected)))
+        .catch(() => setAllocatedTypes([]));
     }
-  }, [open, defaultInspectionType]);
+  }, [open, projectId, defaultInspectionType]);
 
   function set(key: string, val: string) {
     setForm(f => ({ ...f, [key]: val }));
@@ -1410,9 +1414,19 @@ function BookInspectionDialog({
               required
             >
               <option value="">— Select type —</option>
-              {INSPECTION_TYPES.map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
+              {allocatedTypes.length > 0 ? (
+                Array.from(new Set(allocatedTypes.map(t => t.folder))).sort().map(folder => (
+                  <optgroup key={folder} label={folder}>
+                    {allocatedTypes.filter(t => t.folder === folder).map(t => (
+                      <option key={t.templateId} value={t.inspectionType}>{t.name}</option>
+                    ))}
+                  </optgroup>
+                ))
+              ) : (
+                INSPECTION_TYPES.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))
+              )}
             </select>
           </div>
           )}
