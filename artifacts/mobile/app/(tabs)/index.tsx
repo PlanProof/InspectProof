@@ -208,17 +208,20 @@ interface InspCardProps {
   insp: any;
   isLast: boolean;
   onEditTime: (inspId: number, currentTime: string, currentDate: string) => void;
+  reportSent?: boolean;
+  hasReport?: boolean;
 }
 
-function InspCard({ insp, onEditTime }: InspCardProps) {
-  const cfg = STATUS_CONFIG[insp.status] ?? STATUS_CONFIG.scheduled;
+function InspCard({ insp, onEditTime, reportSent, hasReport }: InspCardProps) {
   const typeLabel = INSPECTION_TYPE_LABELS[insp.inspectionType] ?? insp.inspectionType;
   const hasAddress = !!(insp.projectAddress);
   const addressLine = [insp.projectAddress, insp.projectSuburb].filter(Boolean).join(", ");
+  const isCompleted = insp.status === "completed" || insp.status === "follow_up_required";
+  const isInProgress = insp.status === "in_progress";
 
   return (
     <View style={tlStyles.item}>
-      <View style={[tlStyles.card, insp.status === "completed" && tlStyles.cardCompleted]}>
+      <View style={[tlStyles.card, isCompleted && tlStyles.cardCompleted]}>
         <View style={tlStyles.cardInner}>
           <View style={tlStyles.cardTop}>
             <View style={[tlStyles.typePill, { backgroundColor: Colors.infoLight }]}>
@@ -236,7 +239,7 @@ function InspCard({ insp, onEditTime }: InspCardProps) {
           </View>
 
           <Text
-            style={[tlStyles.projectName, insp.status === "completed" && { color: Colors.textSecondary }]}
+            style={[tlStyles.projectName, isCompleted && { color: Colors.textSecondary }]}
             numberOfLines={1}
           >{insp.projectName}</Text>
 
@@ -248,7 +251,7 @@ function InspCard({ insp, onEditTime }: InspCardProps) {
             </View>
           )}
 
-          {insp.status === "completed" && (
+          {isCompleted && (
             <View style={tlStyles.completedActions}>
               <Pressable
                 onPress={() => router.push({
@@ -272,16 +275,32 @@ function InspCard({ insp, onEditTime }: InspCardProps) {
             </View>
           )}
 
-          {insp.status !== "completed" && insp.status !== "cancelled" && (
+          {!isCompleted && insp.status !== "cancelled" && (
             <Pressable
               onPress={() => router.push(`/inspection/conduct/${insp.id}` as any)}
-              style={({ pressed }) => [tlStyles.actionBtn, pressed && { opacity: 0.8 }]}
+              style={({ pressed }) => [tlStyles.actionBtn, isInProgress && tlStyles.actionBtnContinue, pressed && { opacity: 0.8 }]}
             >
-              <Feather name={insp.status === "in_progress" ? "play-circle" : "arrow-right"} size={13} color={Colors.primary} />
-              <Text style={tlStyles.actionText}>
-                {insp.status === "in_progress" ? "Continue" : "Start Inspection"}
+              <Feather name={isInProgress ? "play-circle" : "arrow-right"} size={13} color={isInProgress ? Colors.secondary : Colors.primary} />
+              <Text style={[tlStyles.actionText, isInProgress && tlStyles.actionTextContinue]}>
+                {isInProgress ? "Continue Inspection" : "Start Inspection"}
               </Text>
             </Pressable>
+          )}
+
+          {/* Report Sent badge — bottom-right of card */}
+          {isCompleted && (
+            <View style={tlStyles.reportSentRow}>
+              <View style={[tlStyles.reportSentBadge, reportSent ? tlStyles.reportSentBadgeDone : tlStyles.reportSentBadgePending]}>
+                <Feather
+                  name={reportSent ? "check-square" : "square"}
+                  size={11}
+                  color={reportSent ? Colors.success : Colors.textTertiary}
+                />
+                <Text style={[tlStyles.reportSentText, reportSent && tlStyles.reportSentTextDone]}>
+                  {reportSent ? "Report Sent" : hasReport ? "Report Draft" : "No Report"}
+                </Text>
+              </View>
+            </View>
           )}
         </View>
       </View>
@@ -312,10 +331,12 @@ function ScheduleTimeline({
   inspections,
   selectedDate,
   onScheduleChange,
+  reportMap = {},
 }: {
   inspections: any[];
   selectedDate: string;
   onScheduleChange: (id: number, newTime: string, newDate: string) => void;
+  reportMap?: Record<number, { hasReport: boolean; isSent: boolean }>;
 }) {
   const today = toLocalDateStr(new Date());
 
@@ -528,6 +549,8 @@ function ScheduleTimeline({
                 insp={insp}
                 isLast={idx === active.length - 1}
                 onEditTime={handleEditTime}
+                hasReport={reportMap[insp.id]?.hasReport}
+                reportSent={reportMap[insp.id]?.isSent}
               />
             ))}
           </View>
@@ -555,6 +578,8 @@ function ScheduleTimeline({
                   insp={insp}
                   isLast={idx === completed.length - 1}
                   onEditTime={handleEditTime}
+                  hasReport={reportMap[insp.id]?.hasReport}
+                  reportSent={reportMap[insp.id]?.isSent}
                 />
               ))}
             </View>
@@ -615,7 +640,22 @@ const tlStyles = StyleSheet.create({
     backgroundColor: Colors.accent + "30",
     paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, marginTop: 2,
   },
+  actionBtnContinue: {
+    backgroundColor: Colors.secondary + "18",
+  },
   actionText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  actionTextContinue: { color: Colors.secondary },
+  reportSentRow: {
+    flexDirection: "row", justifyContent: "flex-end", marginTop: 6,
+  },
+  reportSentBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
+  },
+  reportSentBadgeDone: { backgroundColor: Colors.successLight },
+  reportSentBadgePending: { backgroundColor: Colors.borderLight },
+  reportSentText: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  reportSentTextDone: { color: Colors.success },
   completedActions: {
     flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2,
   },
@@ -724,6 +764,22 @@ export default function HomeScreen() {
 
   const { data: rawInspections = [], isRefetching, refetch } = useApiData<any[]>("/api/inspections");
   const { data: analytics } = useApiData<any>("/api/analytics/dashboard");
+  const { data: rawReports = [] } = useApiData<any[]>("/api/reports");
+
+  const reportMap = useMemo(() => {
+    const m: Record<number, { hasReport: boolean; isSent: boolean }> = {};
+    (rawReports as any[]).forEach((r) => {
+      if (!r.inspectionId) return;
+      const existing = m[r.inspectionId];
+      const isSent = !!r.sentAt;
+      if (!existing) {
+        m[r.inspectionId] = { hasReport: true, isSent };
+      } else {
+        m[r.inspectionId] = { hasReport: true, isSent: existing.isSent || isSent };
+      }
+    });
+    return m;
+  }, [rawReports]);
 
   const handleRefresh = useCallback(() => { refetch(); }, [refetch]);
 
@@ -840,6 +896,7 @@ export default function HomeScreen() {
         inspections={inspectionsForDay}
         selectedDate={selectedDate}
         onScheduleChange={handleScheduleChange}
+        reportMap={reportMap}
       />
 
       {/* Full Calendar Modal */}
