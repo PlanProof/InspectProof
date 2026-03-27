@@ -283,7 +283,6 @@ export default function InspectionDetailScreen() {
           <View style={styles.typeChip}>
             <Text style={styles.typeText}>{INSPECTION_TYPES[inspection.inspectionType] || inspection.inspectionType}</Text>
           </View>
-          <Badge label={inspection.status.replace("_", " ")} variant="status" value={inspection.status} />
         </View>
         <Text style={styles.projectName}>{inspection.projectName}</Text>
         {inspection.projectAddress ? (
@@ -309,7 +308,8 @@ export default function InspectionDetailScreen() {
           )}
         </View>
 
-        {inspection.status !== "completed" && inspection.status !== "cancelled" && (
+        {/* Start / Continue — for scheduled and in-progress */}
+        {(inspection.status === "scheduled" || inspection.status === "in_progress") && (
           <Pressable
             style={styles.conductBtn}
             onPress={() => router.push(`/inspection/conduct/${inspection.id}` as any)}
@@ -321,43 +321,58 @@ export default function InspectionDetailScreen() {
             <Feather name="arrow-right" size={16} color={Colors.primary} />
           </Pressable>
         )}
+
+        {/* Re-Do — for completed / follow-up */}
         {(inspection.status === "completed" || inspection.status === "follow_up_required") && (
-          <Pressable
-            style={styles.reportBtn}
-            onPress={() => router.push({ pathname: "/inspection/generate-report", params: { id: inspection.id } } as any)}
-          >
-            <Feather name="file-text" size={18} color={Colors.surface} />
-            <Text style={styles.reportBtnText}>Generate Report</Text>
-            <Feather name="arrow-right" size={16} color={Colors.surface} />
-          </Pressable>
-        )}
-        {/* Cancelled state: restore + reschedule side by side */}
-        {inspection.status === "cancelled" && (
-          <View style={styles.cancelledActions}>
-            <Pressable style={styles.restoreBtn} onPress={restoreInspection}>
-              <Feather name="refresh-cw" size={14} color={Colors.secondary} />
-              <Text style={styles.restoreBtnText}>Restore</Text>
+          <>
+            <Pressable
+              style={styles.reportBtn}
+              onPress={() => router.push({ pathname: "/inspection/generate-report", params: { id: inspection.id } } as any)}
+            >
+              <Feather name="file-text" size={18} color={Colors.surface} />
+              <Text style={styles.reportBtnText}>Generate Report</Text>
+              <Feather name="arrow-right" size={16} color={Colors.surface} />
             </Pressable>
-            <Pressable style={styles.rescheduleBtn} onPress={openReschedule}>
-              <Feather name="calendar" size={14} color={Colors.secondary} />
-              <Text style={styles.rescheduleBtnText}>Reschedule</Text>
+            <Pressable
+              style={styles.redoBtn}
+              onPress={() => {
+                Alert.alert(
+                  "Re-Do Inspection",
+                  "This will reset the inspection back to 'In Progress' and clear the completed date. Are you sure you want to continue?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Re-Do",
+                      style: "destructive",
+                      onPress: async () => {
+                        try {
+                          await fetchWithAuth(`/api/inspections/${inspection.id}`, {
+                            method: "PUT",
+                            body: JSON.stringify({ status: "in_progress", completedDate: null }),
+                          });
+                          queryClient.invalidateQueries({ queryKey: ["inspection", id] });
+                          router.push(`/inspection/conduct/${inspection.id}` as any);
+                        } catch {
+                          Alert.alert("Error", "Failed to restart inspection.");
+                        }
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              <Feather name="refresh-cw" size={16} color={Colors.textSecondary} />
+              <Text style={styles.redoBtnText}>Re-Do Inspection</Text>
             </Pressable>
-          </View>
+          </>
         )}
 
-        {/* Active inspections: reschedule + cancel as text links */}
-        {inspection.status !== "cancelled" && inspection.status !== "completed" && (
-          <View style={styles.secondaryActions}>
-            <Pressable style={styles.rescheduleLink} onPress={openReschedule}>
-              <Feather name="calendar" size={13} color={Colors.secondary} />
-              <Text style={styles.rescheduleLinkText}>Reschedule</Text>
-            </Pressable>
-            <Text style={styles.actionDivider}>·</Text>
-            <Pressable style={styles.cancelInspBtn} onPress={cancelInspection}>
-              <Feather name="x-circle" size={13} color="#dc2626" />
-              <Text style={styles.cancelInspBtnText}>Cancel</Text>
-            </Pressable>
-          </View>
+        {/* Cancelled: restore only */}
+        {inspection.status === "cancelled" && (
+          <Pressable style={styles.restoreBtn} onPress={restoreInspection}>
+            <Feather name="refresh-cw" size={14} color={Colors.secondary} />
+            <Text style={styles.restoreBtnText}>Restore Inspection</Text>
+          </Pressable>
         )}
       </View>
 
@@ -779,10 +794,15 @@ const styles = StyleSheet.create({
   // Cancelled state: restore + reschedule buttons
   cancelledActions: { flexDirection: "row", gap: 10, marginTop: 6 },
   restoreBtn: {
-    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    borderWidth: 1.5, borderColor: Colors.secondary, borderRadius: 10, paddingVertical: 11,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    borderWidth: 1.5, borderColor: Colors.secondary, borderRadius: 10, paddingVertical: 11, marginTop: 6,
   },
   restoreBtnText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  redoBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    borderWidth: 1.5, borderColor: Colors.border, borderRadius: 10, paddingVertical: 10, marginTop: 8,
+  },
+  redoBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
   rescheduleBtn: {
     flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
     borderWidth: 1.5, borderColor: Colors.secondary, borderRadius: 10, paddingVertical: 11,
