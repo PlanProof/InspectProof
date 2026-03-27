@@ -38,6 +38,7 @@ export default function Login() {
         <div className="z-10">
           <div className="flex items-center gap-3 text-white mb-12">
             <img src={`${import.meta.env.BASE_URL}logo.png`} alt="InspectProof" className="h-10 w-auto" />
+            <span className="text-white leading-none text-xl" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
           </div>
           <h1 className="text-4xl font-bold text-white max-w-md leading-tight mt-24">
             Faster inspections.<br />Clear compliance.<br /><span className="text-[#C5D92D]">Better</span> outcomes.
@@ -60,6 +61,7 @@ export default function Login() {
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
             <img src={`${import.meta.env.BASE_URL}logo.png`} alt="InspectProof" className="h-8 w-auto" />
+            <span className="leading-none text-lg text-[#0B1933]" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
           </div>
 
           {/* Tab toggle */}
