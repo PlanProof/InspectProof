@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useListUsers } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, Button } from "@/components/ui";
 import {
@@ -7,86 +8,55 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ── Mock Inspector Data ───────────────────────────────────────────────────────
-const MOCK_INSPECTORS = [
-  {
-    id: 1,
-    firstName: "Rachel",
-    lastName: "Chen",
-    email: "rachel@inspectproof.com.au",
-    phone: "0412 345 678",
-    role: "Inspector",
-    status: "active",
-    appAccess: "app_only",
-    platformAccess: false,
-    lastActive: "Today, 9:14 AM",
-    inspectionsCompleted: 34,
-    initials: "RC",
-    color: "bg-teal-500",
-  },
-  {
-    id: 2,
-    firstName: "David",
-    lastName: "Kovacs",
-    email: "david@inspectproof.com.au",
-    phone: "0423 456 789",
-    role: "Inspector",
-    status: "active",
-    appAccess: "app_only",
-    platformAccess: false,
-    lastActive: "Yesterday, 4:30 PM",
-    inspectionsCompleted: 28,
-    initials: "DK",
-    color: "bg-blue-500",
-  },
-  {
-    id: 3,
-    firstName: "James",
-    lastName: "Thornton",
-    email: "james@inspectproof.com.au",
-    phone: "0434 567 890",
-    role: "Certifier",
-    status: "active",
-    appAccess: "full",
-    platformAccess: true,
-    lastActive: "Today, 11:02 AM",
-    inspectionsCompleted: 61,
-    initials: "JT",
-    color: "bg-violet-500",
-  },
-  {
-    id: 4,
-    firstName: "Emily",
-    lastName: "Walsh",
-    email: "emily@inspectproof.com.au",
-    phone: "0445 678 901",
-    role: "Staff",
-    status: "invited",
-    appAccess: "invited",
-    platformAccess: false,
-    lastActive: "Never",
-    inspectionsCompleted: 0,
-    initials: "EW",
-    color: "bg-rose-400",
-  },
-  {
-    id: 5,
-    firstName: "Tom",
-    lastName: "Nguyen",
-    email: "tom.nguyen@inspectproof.com.au",
-    phone: "0456 789 012",
-    role: "Inspector",
-    status: "active",
-    appAccess: "app_only",
-    platformAccess: false,
-    lastActive: "2 days ago",
-    inspectionsCompleted: 15,
-    initials: "TN",
-    color: "bg-amber-500",
-  },
+// ── Inspector type ─────────────────────────────────────────────────────────────
+type Inspector = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  role: string;
+  status: string;
+  appAccess: string;
+  platformAccess: boolean;
+  lastActive: string;
+  inspectionsCompleted: number;
+  initials: string;
+  color: string;
+};
+
+const AVATAR_COLORS = [
+  "bg-teal-500", "bg-blue-500", "bg-violet-500", "bg-amber-500",
+  "bg-rose-400", "bg-emerald-500", "bg-sky-500", "bg-orange-500",
 ];
 
-type Inspector = (typeof MOCK_INSPECTORS)[0];
+const ROLE_MAP: Record<string, string> = {
+  inspector: "Inspector",
+  building_inspector: "Inspector",
+  certifier: "Certifier",
+  admin: "Admin",
+  staff: "Staff",
+};
+
+function apiUserToInspector(u: any): Inspector {
+  const initials = `${u.firstName?.[0] ?? ""}${u.lastName?.[0] ?? ""}`.toUpperCase();
+  const color = AVATAR_COLORS[u.id % AVATAR_COLORS.length];
+  return {
+    id: u.id,
+    firstName: u.firstName ?? "",
+    lastName: u.lastName ?? "",
+    email: u.email ?? "",
+    phone: u.phone ?? "",
+    role: ROLE_MAP[u.role] ?? u.role,
+    status: u.isActive ? "active" : "invited",
+    appAccess: "app_only",
+    platformAccess: false,
+    lastActive: "—",
+    inspectionsCompleted: 0,
+    initials,
+    color,
+  };
+}
 
 const ROLES = ["Inspector", "Certifier", "Staff"];
 
@@ -94,7 +64,7 @@ const ROLE_BADGE: Record<string, string> = {
   Inspector: "bg-blue-50 text-blue-700 border-blue-200",
   Certifier: "bg-violet-50 text-violet-700 border-violet-200",
   Staff: "bg-muted text-muted-foreground border-muted/60",
-  admin: "bg-sidebar/10 text-sidebar border-sidebar/20",
+  Admin: "bg-sidebar/10 text-sidebar border-sidebar/20",
 };
 
 const APP_ACCESS_LABELS: Record<string, { label: string; badge: string }> = {
@@ -368,28 +338,31 @@ function InspectorRow({
 // ── Inspectors Page ───────────────────────────────────────────────────────────
 
 export default function Inspectors() {
-  const [inspectors, setInspectors] = useState(MOCK_INSPECTORS);
+  const { data: rawUsers, isLoading } = useListUsers({});
+  const [overrides, setOverrides] = useState<Record<number, Partial<Inspector>>>({});
   const [inviteSentFor, setInviteSentFor] = useState<number | null>(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [editingInspector, setEditingInspector] = useState<Inspector | null>(null);
 
+  const inspectors: Inspector[] = useMemo(() => {
+    if (!rawUsers) return [];
+    return (rawUsers as any[]).map(u => ({ ...apiUserToInspector(u), ...(overrides[u.id] ?? {}) }));
+  }, [rawUsers, overrides]);
+
   const togglePlatform = (id: number) => {
-    setInspectors(prev =>
-      prev.map(i => i.id === id ? { ...i, platformAccess: !i.platformAccess } : i)
-    );
+    const current = inspectors.find(i => i.id === id)?.platformAccess ?? false;
+    setOverrides(prev => ({ ...prev, [id]: { ...prev[id], platformAccess: !current } }));
   };
 
   const sendInvite = (id: number) => {
     setInviteSentFor(id);
-    setInspectors(prev =>
-      prev.map(i => i.id === id ? { ...i, appAccess: "invited", status: "invited" } : i)
-    );
+    setOverrides(prev => ({ ...prev, [id]: { ...prev[id], appAccess: "invited", status: "invited" } }));
     setTimeout(() => setInviteSentFor(null), 3000);
   };
 
   const saveInspector = (updated: Inspector) => {
-    setInspectors(prev => prev.map(i => i.id === updated.id ? updated : i));
+    setOverrides(prev => ({ ...prev, [updated.id]: updated }));
   };
 
   const activeCount = inspectors.filter(i => i.status === "active").length;
@@ -497,6 +470,14 @@ export default function Inspectors() {
 
         {/* Rows */}
         <div className="divide-y divide-muted/40">
+          {isLoading && (
+            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading team…
+            </div>
+          )}
+          {!isLoading && inspectors.length === 0 && (
+            <div className="py-12 text-center text-sm text-muted-foreground">No team members found.</div>
+          )}
           {inspectors.map(inspector => (
             <InspectorRow
               key={inspector.id}

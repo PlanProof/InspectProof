@@ -239,7 +239,7 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
               >
                 <option value="">Unassigned</option>
                 {inspectors.map((u: any) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
+                  <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
