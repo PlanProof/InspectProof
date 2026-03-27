@@ -85,7 +85,8 @@ interface ProjectDocument {
 }
 
 export default function ConductInspectionScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, editMode } = useLocalSearchParams<{ id: string; editMode?: string }>();
+  const isEditMode = editMode === "1";
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const queryClient = useQueryClient();
@@ -106,7 +107,8 @@ export default function ConductInspectionScreen() {
   const [addItemDesc, setAddItemDesc] = useState("");
   const [addingItem, setAddingItem] = useState(false);
   const pageScrollRef = useRef<ScrollView>(null);
-  const autoCompletedRef = useRef(false);
+  // In edit mode, suppress auto-completion — user is intentionally modifying a finished inspection
+  const autoCompletedRef = useRef(isEditMode);
 
   const scrollToPage = useCallback((page: number) => {
     pageScrollRef.current?.scrollTo({ x: page * screenW, animated: true });
@@ -438,18 +440,35 @@ export default function ConductInspectionScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isEditMode && styles.headerEditMode]}>
         <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/inspections" as any)} style={styles.backBtn} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.text} />
+          <Feather name="arrow-left" size={20} color={isEditMode ? Colors.secondary : Colors.text} />
         </Pressable>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {inspection?.inspectionType?.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) || "Inspection"}
+          <Text style={[styles.headerTitle, isEditMode && { color: Colors.secondary }]} numberOfLines={1}>
+            {isEditMode ? "Edit Inspection" : (inspection?.inspectionType?.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) || "Inspection")}
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>{inspection?.projectName}</Text>
         </View>
-        <View style={{ width: 56 }} />
+        {isEditMode ? (
+          <Pressable
+            style={styles.doneEditingBtn}
+            onPress={() => router.canGoBack() ? router.back() : router.replace(`/inspection/${id}` as any)}
+          >
+            <Text style={styles.doneEditingText}>Done</Text>
+          </Pressable>
+        ) : (
+          <View style={{ width: 56 }} />
+        )}
       </View>
+
+      {/* Edit mode banner */}
+      {isEditMode && (
+        <View style={styles.editModeBanner}>
+          <Feather name="edit-2" size={13} color={Colors.secondary} />
+          <Text style={styles.editModeBannerText}>Edit mode — changes are saved automatically</Text>
+        </View>
+      )}
 
       {/* Tab bar */}
       <View style={styles.tabBar}>
@@ -1292,10 +1311,27 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
     gap: 8,
   },
+  headerEditMode: {
+    borderBottomColor: Colors.secondary,
+    borderBottomWidth: 2,
+  },
   backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   headerCenter: { flex: 1 },
   headerTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   headerSub: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, marginTop: 1 },
+  doneEditingBtn: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    backgroundColor: Colors.secondary,
+    borderRadius: 8,
+  },
+  doneEditingText: { fontSize: 13, fontFamily: "PlusJakartaSans_700Bold", color: Colors.surface },
+  editModeBanner: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: Colors.infoLight,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderBottomWidth: 1, borderBottomColor: Colors.secondary + "33",
+  },
+  editModeBannerText: { fontSize: 12, fontFamily: "PlusJakartaSans_500Medium", color: Colors.secondary, flex: 1 },
   docsBtn: {
     width: 38,
     height: 38,

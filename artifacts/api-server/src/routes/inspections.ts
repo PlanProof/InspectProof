@@ -443,6 +443,31 @@ router.post("/:id/checklist", async (req, res) => {
   }
 });
 
+// Reset all checklist results to "pending" (used by Re-Do Inspection)
+router.post("/:id/reset-checklist", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    await db.update(checklistResultsTable)
+      .set({
+        result: "pending",
+        notes: null,
+        photoUrls: null,
+        photoMarkups: null,
+        severity: null,
+        location: null,
+        tradeAllocated: null,
+        recommendedAction: null,
+        defectStatus: "open",
+        updatedAt: new Date(),
+      })
+      .where(eq(checklistResultsTable.inspectionId, id));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Reset checklist error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 // Apply a checklist template to an inspection (replaces pending items)
 router.post("/:id/apply-checklist", async (req, res) => {
   try {

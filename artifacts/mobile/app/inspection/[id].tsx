@@ -322,7 +322,7 @@ export default function InspectionDetailScreen() {
           </Pressable>
         )}
 
-        {/* Re-Do — for completed / follow-up */}
+        {/* Re-Do + Edit — for completed / follow-up */}
         {(inspection.status === "completed" || inspection.status === "follow_up_required") && (
           <>
             <Pressable
@@ -333,12 +333,23 @@ export default function InspectionDetailScreen() {
               <Text style={styles.reportBtnText}>Generate Report</Text>
               <Feather name="arrow-right" size={16} color={Colors.surface} />
             </Pressable>
+
+            {/* Edit Inspection — keep results, allow re-ticking + photo changes */}
+            <Pressable
+              style={styles.editInspBtn}
+              onPress={() => router.push({ pathname: `/inspection/conduct/${inspection.id}`, params: { editMode: "1" } } as any)}
+            >
+              <Feather name="edit-2" size={16} color={Colors.secondary} />
+              <Text style={styles.editInspBtnText}>Edit Inspection</Text>
+            </Pressable>
+
+            {/* Re-Do Inspection — clears all results, fresh start */}
             <Pressable
               style={styles.redoBtn}
               onPress={() => {
                 Alert.alert(
                   "Re-Do Inspection",
-                  "This will reset the inspection back to 'In Progress' and clear the completed date. Are you sure you want to continue?",
+                  "This will clear all checklist results and restart the inspection from scratch. Continue?",
                   [
                     { text: "Cancel", style: "cancel" },
                     {
@@ -346,11 +357,13 @@ export default function InspectionDetailScreen() {
                       style: "destructive",
                       onPress: async () => {
                         try {
+                          await fetchWithAuth(`/api/inspections/${inspection.id}/reset-checklist`, { method: "POST" });
                           await fetchWithAuth(`/api/inspections/${inspection.id}`, {
                             method: "PUT",
                             body: JSON.stringify({ status: "in_progress", completedDate: null }),
                           });
                           queryClient.invalidateQueries({ queryKey: ["inspection", id] });
+                          queryClient.invalidateQueries({ queryKey: ["inspection-checklist", id] });
                           router.push(`/inspection/conduct/${inspection.id}` as any);
                         } catch {
                           Alert.alert("Error", "Failed to restart inspection.");
@@ -798,9 +811,15 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.secondary, borderRadius: 10, paddingVertical: 11, marginTop: 6,
   },
   restoreBtnText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  editInspBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    borderWidth: 1.5, borderColor: Colors.secondary, borderRadius: 10, paddingVertical: 11, marginTop: 8,
+    backgroundColor: Colors.infoLight,
+  },
+  editInspBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   redoBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    borderWidth: 1.5, borderColor: Colors.border, borderRadius: 10, paddingVertical: 10, marginTop: 8,
+    borderWidth: 1.5, borderColor: Colors.border, borderRadius: 10, paddingVertical: 10, marginTop: 6,
   },
   redoBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
   rescheduleBtn: {
