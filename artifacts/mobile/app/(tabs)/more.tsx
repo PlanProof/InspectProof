@@ -122,12 +122,6 @@ export default function MoreScreen() {
             sublabel="Trends, compliance rates, defect analysis"
             onPress={() => router.push("/analytics")}
           />
-          <MenuItem
-            icon="book"
-            label="Documents"
-            sublabel="Project documents and certificates"
-            onPress={() => router.push("/documents" as any)}
-          />
         </View>
       </View>
 
@@ -136,43 +130,11 @@ export default function MoreScreen() {
         <Text style={styles.sectionTitle}>Tools</Text>
         <View style={styles.menuGroup}>
           <MenuItem
-            icon="clipboard"
-            label="Checklist Templates"
-            sublabel="Browse, create and manage inspection checklists"
-            onPress={() => router.push("/templates" as any)}
-          />
-          <MenuItem
             icon="bell"
             label="Notifications"
             sublabel="Reminders, alerts, and map preferences"
             onPress={() => router.push("/notifications" as any)}
           />
-          <MenuItem
-            icon="users"
-            label="Team Members"
-            sublabel="View inspectors and staff"
-            onPress={() => router.push("/team" as any)}
-          />
-        </View>
-      </View>
-
-      {/* Compliance References */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Compliance References</Text>
-        <View style={styles.referenceGrid}>
-          {[
-            { code: "NCC 2022", desc: "National Construction Code" },
-            { code: "AS 1684.2", desc: "Timber Framing" },
-            { code: "AS 3600", desc: "Concrete Structures" },
-            { code: "AS 3660.1", desc: "Termite Management" },
-            { code: "AS 2870", desc: "Residential Slabs" },
-            { code: "AS 1926.1", desc: "Pool Barriers" },
-          ].map(r => (
-            <View key={r.code} style={styles.refCard}>
-              <Text style={styles.refCode}>{r.code}</Text>
-              <Text style={styles.refDesc}>{r.desc}</Text>
-            </View>
-          ))}
         </View>
       </View>
 
