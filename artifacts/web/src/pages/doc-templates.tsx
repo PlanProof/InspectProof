@@ -98,30 +98,36 @@ const FIELD_GROUPS = [
   },
 ];
 
-// ── LocalStorage helpers ───────────────────────────────────────────────────────
-const STORAGE_KEY = "inspectproof_doc_templates";
+// ── API helpers ────────────────────────────────────────────────────────────────
+const API_BASE = "/api/doc-templates";
 
-function loadTemplates(): DocTemplate[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return parsed.map((t: any) => ({ ...t, linkedChecklistIds: t.linkedChecklistIds ?? [] }));
-  } catch {
-    return [];
-  }
+async function apiFetch(path: string, opts?: RequestInit) {
+  const token = localStorage.getItem("inspectproof_token");
+  const res = await fetch(path, {
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Basic ${token}` } : {}),
+      ...(opts?.headers as Record<string, string> ?? {}),
+    },
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
 }
 
-function saveTemplates(templates: DocTemplate[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
-}
-
-function newTemplate(): DocTemplate {
-  const now = new Date().toISOString();
+function fromApi(t: any): DocTemplate {
   return {
-    id: `tmpl_${Date.now()}`,
-    name: "Untitled Template",
-    linkedChecklistIds: [],
-    content: `<h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0B1933;">INSPECTION REPORT</h2>
+    id: String(t.id),
+    name: t.name,
+    content: t.content ?? "",
+    backgroundImage: t.backgroundImage ?? undefined,
+    linkedChecklistIds: Array.isArray(t.linkedChecklistIds) ? t.linkedChecklistIds : [],
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  };
+}
+
+const DEFAULT_TEMPLATE_CONTENT = `<h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:#0B1933;">INSPECTION REPORT</h2>
 <p style="margin:0 0 8px;"><strong>Project:</strong> {{project_name}}</p>
 <p style="margin:0 0 8px;"><strong>Site Address:</strong> {{project_address}}</p>
 <p style="margin:0 0 8px;"><strong>Inspection Type:</strong> {{inspection_type}}</p>
@@ -133,11 +139,7 @@ function newTemplate(): DocTemplate {
 <p style="margin:0 0 16px;"><strong>Checklist:</strong></p>
 {{checklist_items}}
 <p style="margin:32px 0 4px;border-top:1px solid #ccc;padding-top:12px;font-size:13px;color:#666;">{{certifier_name}} — License No. {{license_number}}</p>
-<p style="margin:0;font-size:13px;color:#666;">{{company_name}}</p>`,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
+<p style="margin:0;font-size:13px;color:#666;">{{company_name}}</p>`;
 
 // ── Test Project sample data (used in Preview mode and field panel) ────────────
 const TEST_PREVIEW_DATA: Record<string, string> = {
@@ -523,12 +525,21 @@ function ChecklistsPanel({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function DocTemplates() {
-  const [templates, setTemplates] = useState<DocTemplate[]>(loadTemplates);
-  const [selectedId, setSelectedId] = useState<string | null>(() => {
-    const saved = loadTemplates();
-    return saved.length > 0 ? saved[0].id : null;
-  });
+  const [templates, setTemplates] = useState<DocTemplate[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
   const [mode, setMode] = useState<"edit" | "preview">("preview");
+
+  useEffect(() => {
+    apiFetch(API_BASE)
+      .then((rows: any[]) => {
+        const ts = rows.map(fromApi);
+        setTemplates(ts);
+        if (ts.length > 0) setSelectedId(ts[0].id);
+      })
+      .catch(console.error)
+      .finally(() => setTemplatesLoading(false));
+  }, []);
   const [rightTab, setRightTab] = useState<"fields" | "checklists">("fields");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -569,40 +580,54 @@ export default function DocTemplates() {
   const previewInspection = previewProjectInspections.find((i: any) => String(i.id) === previewInspectionId) ?? previewProjectInspections[0] ?? null;
   const previewData = previewProject ? buildPreviewData(previewProject, previewInspection) : TEST_PREVIEW_DATA;
 
-  function persist(updated: DocTemplate[]) {
-    setTemplates(updated);
-    saveTemplates(updated);
+  async function createTemplate() {
+    try {
+      const result = await apiFetch(API_BASE, {
+        method: "POST",
+        body: JSON.stringify({ name: "Untitled Template", content: DEFAULT_TEMPLATE_CONTENT }),
+      });
+      const t = fromApi(result);
+      setTemplates(prev => [...prev, t]);
+      setSelectedId(t.id);
+      setMode("edit");
+    } catch (err) { console.error(err); }
   }
 
-  function createTemplate() {
-    const t = newTemplate();
-    persist([...templates, t]);
-    setSelectedId(t.id);
-    setMode("edit");
+  async function deleteTemplate(id: string) {
+    try {
+      await apiFetch(`${API_BASE}/${id}`, { method: "DELETE" });
+      setTemplates(prev => {
+        const updated = prev.filter(t => t.id !== id);
+        if (selectedId === id) setSelectedId(updated.length > 0 ? updated[0].id : null);
+        return updated;
+      });
+    } catch (err) { console.error(err); }
   }
 
-  function deleteTemplate(id: string) {
-    const updated = templates.filter(t => t.id !== id);
-    persist(updated);
-    if (selectedId === id) setSelectedId(updated.length > 0 ? updated[0].id : null);
-  }
-
-  function duplicateTemplate(id: string) {
+  async function duplicateTemplate(id: string) {
     const src = templates.find(t => t.id === id);
     if (!src) return;
-    const now = new Date().toISOString();
-    const copy: DocTemplate = { ...src, id: `tmpl_${Date.now()}`, name: `${src.name} (Copy)`, createdAt: now, updatedAt: now };
-    const updated = [...templates, copy];
-    persist(updated);
-    setSelectedId(copy.id);
+    try {
+      const result = await apiFetch(API_BASE, {
+        method: "POST",
+        body: JSON.stringify({ name: `${src.name} (Copy)`, content: src.content, linkedChecklistIds: src.linkedChecklistIds, backgroundImage: src.backgroundImage ?? null }),
+      });
+      const copy = fromApi(result);
+      setTemplates(prev => [...prev, copy]);
+      setSelectedId(copy.id);
+    } catch (err) { console.error(err); }
   }
 
   function startRename(t: DocTemplate) { setRenamingId(t.id); setRenameValue(t.name); }
 
-  function commitRename() {
+  async function commitRename() {
     if (!renamingId || !renameValue.trim()) { setRenamingId(null); return; }
-    persist(templates.map(t => t.id === renamingId ? { ...t, name: renameValue.trim(), updatedAt: new Date().toISOString() } : t));
+    const name = renameValue.trim();
+    setTemplates(prev => prev.map(t => t.id === renamingId ? { ...t, name, updatedAt: new Date().toISOString() } : t));
     setRenamingId(null);
+    try {
+      await apiFetch(`${API_BASE}/${renamingId}`, { method: "PUT", body: JSON.stringify({ name }) });
+    } catch (err) { console.error(err); }
   }
 
   useEffect(() => {
@@ -611,11 +636,15 @@ export default function DocTemplates() {
     }
   }, [selectedId]);
 
-  function saveContent() {
+  async function saveContent() {
     if (!editorRef.current || !selected) return;
-    persist(templates.map(t => t.id === selected.id ? { ...t, content: editorRef.current!.innerHTML, updatedAt: new Date().toISOString() } : t));
+    const content = editorRef.current.innerHTML;
+    setTemplates(prev => prev.map(t => t.id === selected.id ? { ...t, content, updatedAt: new Date().toISOString() } : t));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+    try {
+      await apiFetch(`${API_BASE}/${selected.id}`, { method: "PUT", body: JSON.stringify({ content }) });
+    } catch (err) { console.error(err); }
   }
 
   function insertToken(token: string) {
@@ -634,34 +663,51 @@ export default function DocTemplates() {
     }
   }
 
-  function toggleChecklistLink(checklistId: number) {
+  async function toggleChecklistLink(checklistId: number) {
     if (!selected) return;
     const ids = selected.linkedChecklistIds ?? [];
     const updated = ids.includes(checklistId)
       ? ids.filter(id => id !== checklistId)
       : [...ids, checklistId];
-    persist(templates.map(t => t.id === selected.id ? { ...t, linkedChecklistIds: updated, updatedAt: new Date().toISOString() } : t));
+    setTemplates(prev => prev.map(t => t.id === selected.id ? { ...t, linkedChecklistIds: updated, updatedAt: new Date().toISOString() } : t));
+    try {
+      await apiFetch(`${API_BASE}/${selected.id}`, { method: "PUT", body: JSON.stringify({ linkedChecklistIds: updated }) });
+    } catch (err) { console.error(err); }
   }
 
-  function toggleAllChecklists(ids: number[], allLinked: boolean) {
+  async function toggleAllChecklists(ids: number[], allLinked: boolean) {
     if (!selected) return;
     const current = selected.linkedChecklistIds ?? [];
     const updated = allLinked
       ? current.filter(id => !ids.includes(id))
       : [...new Set([...current, ...ids])];
-    persist(templates.map(t => t.id === selected.id ? { ...t, linkedChecklistIds: updated, updatedAt: new Date().toISOString() } : t));
+    setTemplates(prev => prev.map(t => t.id === selected.id ? { ...t, linkedChecklistIds: updated, updatedAt: new Date().toISOString() } : t));
+    try {
+      await apiFetch(`${API_BASE}/${selected.id}`, { method: "PUT", body: JSON.stringify({ linkedChecklistIds: updated }) });
+    } catch (err) { console.error(err); }
   }
 
   function handleBgUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !selected) return;
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       const dataUrl = ev.target?.result as string;
-      persist(templates.map(t => t.id === selected.id ? { ...t, backgroundImage: dataUrl, updatedAt: new Date().toISOString() } : t));
+      setTemplates(prev => prev.map(t => t.id === selected.id ? { ...t, backgroundImage: dataUrl, updatedAt: new Date().toISOString() } : t));
+      try {
+        await apiFetch(`${API_BASE}/${selected.id}`, { method: "PUT", body: JSON.stringify({ backgroundImage: dataUrl }) });
+      } catch (err) { console.error(err); }
     };
     reader.readAsDataURL(file);
     e.target.value = "";
+  }
+
+  async function removeBgImage() {
+    if (!selected) return;
+    setTemplates(prev => prev.map(t => t.id === selected.id ? { ...t, backgroundImage: undefined, updatedAt: new Date().toISOString() } : t));
+    try {
+      await apiFetch(`${API_BASE}/${selected.id}`, { method: "PUT", body: JSON.stringify({ backgroundImage: null }) });
+    } catch (err) { console.error(err); }
   }
 
   function execCmd(cmd: string, value?: string) {
@@ -673,6 +719,28 @@ export default function DocTemplates() {
     new Date(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
 
   const linkedCount = selected?.linkedChecklistIds.length ?? 0;
+
+  const [migrating, setMigrating] = useState(false);
+  const localCount = (() => { try { return JSON.parse(localStorage.getItem("inspectproof_doc_templates") ?? "[]").length; } catch { return 0; } })();
+
+  async function migrateFromLocal() {
+    setMigrating(true);
+    try {
+      const raw: any[] = JSON.parse(localStorage.getItem("inspectproof_doc_templates") ?? "[]");
+      const migrated: DocTemplate[] = [];
+      for (const t of raw) {
+        const result = await apiFetch(API_BASE, {
+          method: "POST",
+          body: JSON.stringify({ name: t.name, content: t.content ?? "", linkedChecklistIds: t.linkedChecklistIds ?? [], backgroundImage: t.backgroundImage ?? null }),
+        });
+        migrated.push(fromApi(result));
+      }
+      localStorage.removeItem("inspectproof_doc_templates");
+      setTemplates(prev => [...prev, ...migrated]);
+      if (migrated.length > 0 && !selectedId) setSelectedId(migrated[0].id);
+    } catch (err) { console.error(err); }
+    setMigrating(false);
+  }
 
   return (
     <AppLayout>
@@ -688,6 +756,23 @@ export default function DocTemplates() {
         </Button>
       </div>
 
+      {/* Migration banner — shown when localStorage has templates not yet imported */}
+      {localCount > 0 && !templatesLoading && (
+        <div className="flex items-center gap-3 mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
+          <Folder className="h-4 w-4 text-amber-600 shrink-0" />
+          <span className="flex-1 text-amber-800">
+            You have <strong>{localCount}</strong> template{localCount !== 1 ? "s" : ""} stored locally in this browser. Import them into the database to sync with mobile.
+          </span>
+          <button
+            onClick={migrateFromLocal}
+            disabled={migrating}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition-colors shrink-0 disabled:opacity-60"
+          >
+            {migrating ? "Importing…" : "Import Now"}
+          </button>
+        </div>
+      )}
+
       <div className="flex gap-4 h-[calc(100vh-200px)] min-h-[560px]">
 
         {/* ── Left: Template list ───────────────────────────────────────────── */}
@@ -696,7 +781,12 @@ export default function DocTemplates() {
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Templates</p>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-            {templates.length === 0 ? (
+            {templatesLoading ? (
+              <div className="py-8 text-center">
+                <div className="h-5 w-5 border-2 border-secondary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Loading…</p>
+              </div>
+            ) : templates.length === 0 ? (
               <div className="py-8 text-center">
                 <FileText className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
                 <p className="text-xs text-muted-foreground">No templates yet</p>
@@ -785,7 +875,7 @@ export default function DocTemplates() {
                       <Image className="h-3.5 w-3.5" />Background
                     </button>
                     {selected.backgroundImage && (
-                      <button onClick={() => persist(templates.map(t => t.id === selected.id ? { ...t, backgroundImage: undefined } : t))} className="p-1.5 rounded-lg border border-border bg-card hover:bg-red-50 hover:text-red-600 text-muted-foreground shadow-sm">
+                      <button onClick={removeBgImage} className="p-1.5 rounded-lg border border-border bg-card hover:bg-red-50 hover:text-red-600 text-muted-foreground shadow-sm">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     )}

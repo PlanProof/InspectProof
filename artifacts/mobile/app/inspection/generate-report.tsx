@@ -584,12 +584,12 @@ export default function GenerateReportScreen() {
   });
 
   const { data: templates = [], isLoading: loadingTemplates } = useQuery({
-    queryKey: ["checklist-templates", token],
-    queryFn: () => fetchWithAuth("/api/checklist-templates"),
+    queryKey: ["doc-templates", token],
+    queryFn: () => fetchWithAuth("/api/doc-templates"),
     enabled: !!token,
   });
 
-  const selectedTemplate = (templates as any[]).find((t: any) => t.id === selectedTemplateId);
+  const selectedTemplate = (templates as any[]).find((t: any) => String(t.id) === String(selectedTemplateId));
 
   const openExistingReport = async (reportId: number) => {
     setLoadingExisting(true);
@@ -800,7 +800,9 @@ export default function GenerateReportScreen() {
           ) : (
             <View style={styles.typeList}>
               {(templates as any[]).map((tmpl: any) => {
-                const isSelected = selectedTemplateId === tmpl.id;
+                const isSelected = String(selectedTemplateId) === String(tmpl.id);
+                const linkedCount = Array.isArray(tmpl.linkedChecklistIds) ? tmpl.linkedChecklistIds.length : 0;
+                const updatedAt = tmpl.updatedAt ? new Date(tmpl.updatedAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : null;
                 return (
                   <Pressable
                     key={tmpl.id}
@@ -808,18 +810,15 @@ export default function GenerateReportScreen() {
                     onPress={() => setSelectedTemplateId(tmpl.id)}
                   >
                     <View style={[styles.typeIcon, isSelected && styles.typeIconSelected]}>
-                      <Feather name="book" size={22} color={isSelected ? Colors.secondary : Colors.textSecondary} />
+                      <Feather name="file-text" size={22} color={isSelected ? Colors.secondary : Colors.textSecondary} />
                     </View>
                     <View style={styles.typeInfo}>
                       <Text style={[styles.typeLabel, isSelected && styles.typeLabelSelected]}>{tmpl.name}</Text>
-                      {tmpl.description ? (
-                        <Text style={styles.typeDesc} numberOfLines={2}>{tmpl.description}</Text>
-                      ) : tmpl.discipline ? (
-                        <Text style={styles.typeDesc}>{tmpl.discipline}</Text>
+                      {linkedCount > 0 ? (
+                        <Text style={styles.typeDesc}>{linkedCount} linked checklist{linkedCount !== 1 ? "s" : ""}</Text>
+                      ) : updatedAt ? (
+                        <Text style={styles.typeDesc}>Updated {updatedAt}</Text>
                       ) : null}
-                      {tmpl.itemCount > 0 && (
-                        <Text style={styles.typeItemCount}>{tmpl.itemCount} checklist items</Text>
-                      )}
                     </View>
                     <View style={[styles.typeRadio, isSelected && styles.typeRadioSelected]}>
                       {isSelected && <View style={styles.typeRadioInner} />}

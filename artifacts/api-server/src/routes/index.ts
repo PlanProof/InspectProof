@@ -15,6 +15,7 @@ import storageRouter from "./storage";
 import billingRouter from "./billing";
 import adminRouter from "./admin";
 import invitesRouter from "./invites";
+import docTemplatesRouter from "./docTemplates";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(storageRouter);
 router.use(billingRouter);
 router.use(adminRouter);
 router.use("/invites", invitesRouter);
+router.use("/doc-templates", docTemplatesRouter);
 
 export default router;
