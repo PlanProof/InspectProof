@@ -17,147 +17,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
-const ALL_REPORT_TYPES = [
-  {
-    key: "inspection_certificate",
-    label: "Inspection Certificate",
-    desc: "Formal certificate confirming compliance with NCC requirements",
-    icon: "award",
-    color: "#16a34a",
-    bg: "#f0fdf4",
-    border: "#86efac",
-  },
-  {
-    key: "compliance_report",
-    label: "Compliance Report",
-    desc: "Detailed report with full checklist results and compliance status",
-    icon: "clipboard",
-    color: "#2563eb",
-    bg: "#eff6ff",
-    border: "#93c5fd",
-  },
-  {
-    key: "defect_notice",
-    label: "Defect Notice",
-    desc: "Notice of defects requiring rectification before next stage",
-    icon: "alert-triangle",
-    color: "#d97706",
-    bg: "#fffbeb",
-    border: "#fcd34d",
-  },
-  {
-    key: "non_compliance_notice",
-    label: "Non-Compliance Notice",
-    desc: "Formal notice of non-compliant work under the Building Act",
-    icon: "x-octagon",
-    color: "#dc2626",
-    bg: "#fef2f2",
-    border: "#fca5a5",
-  },
-  {
-    key: "summary",
-    label: "Inspection Summary",
-    desc: "Brief narrative summary of overall inspection outcomes",
-    icon: "file-text",
-    color: "#475569",
-    bg: "#f8fafc",
-    border: "#cbd5e1",
-  },
-  {
-    key: "quality_control_report",
-    label: "Quality Control Report",
-    desc: "QC results against approved plans and project specifications",
-    icon: "check-square",
-    color: "#0891b2",
-    bg: "#ecfeff",
-    border: "#67e8f9",
-  },
-  {
-    key: "non_conformance_report",
-    label: "Non-Conformance Report",
-    desc: "Formal record of non-conformances against design standards",
-    icon: "alert-triangle",
-    color: "#c026d3",
-    bg: "#fdf4ff",
-    border: "#e879f9",
-  },
-  {
-    key: "safety_inspection_report",
-    label: "Safety Inspection Report",
-    desc: "WHS site inspection findings and safety compliance status",
-    icon: "shield",
-    color: "#059669",
-    bg: "#ecfdf5",
-    border: "#6ee7b7",
-  },
-  {
-    key: "hazard_assessment_report",
-    label: "Hazard Assessment Report",
-    desc: "Site hazard identification and risk control requirements",
-    icon: "alert-octagon",
-    color: "#ea580c",
-    bg: "#fff7ed",
-    border: "#fdba74",
-  },
-  {
-    key: "corrective_action_report",
-    label: "Corrective Action Report",
-    desc: "Status of open corrective actions from prior inspections",
-    icon: "refresh-cw",
-    color: "#7c3aed",
-    bg: "#f5f3ff",
-    border: "#c4b5fd",
-  },
-  {
-    key: "pre_purchase_report",
-    label: "Pre-Purchase Building Report",
-    desc: "Property condition assessment for prospective buyers (AS 4349.1)",
-    icon: "home",
-    color: "#0369a1",
-    bg: "#f0f9ff",
-    border: "#7dd3fc",
-  },
-  {
-    key: "annual_fire_safety",
-    label: "Annual Fire Safety Statement",
-    desc: "Annual certification of essential fire safety measures",
-    icon: "activity",
-    color: "#b91c1c",
-    bg: "#fff1f2",
-    border: "#fda4af",
-  },
-  {
-    key: "fire_inspection_report",
-    label: "Fire Safety Inspection Report",
-    desc: "Fire safety compliance inspection findings and required actions",
-    icon: "zap",
-    color: "#b45309",
-    bg: "#fefce8",
-    border: "#fde68a",
-  },
-] as const;
-
-const DISCIPLINE_REPORT_TYPES: Record<string, string[]> = {
-  "Building Surveyor":      ["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice", "summary"],
-  "Structural Engineer":    ["compliance_report", "non_conformance_report", "defect_notice", "summary"],
-  "Plumbing Officer":       ["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice"],
-  "Builder / QC":           ["quality_control_report", "defect_notice", "non_conformance_report", "corrective_action_report", "summary"],
-  "WHS Officer":            ["safety_inspection_report", "hazard_assessment_report", "corrective_action_report", "non_compliance_notice"],
-  "Pre-Purchase Inspector": ["pre_purchase_report", "defect_notice", "summary", "compliance_report"],
-  "Fire Safety Engineer":   ["annual_fire_safety", "fire_inspection_report", "compliance_report", "defect_notice"],
-};
-
-const DEFAULT_TYPES = ["inspection_certificate", "compliance_report", "defect_notice", "summary"];
-
-function getReportTypesForDiscipline(discipline?: string | null) {
-  const allowed = discipline && DISCIPLINE_REPORT_TYPES[discipline]
-    ? DISCIPLINE_REPORT_TYPES[discipline]
-    : DEFAULT_TYPES;
-  return ALL_REPORT_TYPES.filter(t => allowed.includes(t.key));
-}
-
-type ReportTypeKey = typeof ALL_REPORT_TYPES[number]["key"];
-
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   draft:     { bg: "#f8fafc", text: "#475569", border: "#cbd5e1" },
   submitted: { bg: "#eff6ff", text: "#2563eb", border: "#93c5fd" },
@@ -166,15 +25,13 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }
 };
 
 export default function GenerateReportScreen() {
-  const { id, autoType } = useLocalSearchParams<{ id: string; autoType?: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { token, user } = useAuth();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   const [step, setStep] = useState<"select" | "preview">("select");
-  const [selectedType, setSelectedType] = useState<string | null>(
-    autoType || null
-  );
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [report, setReport] = useState<any>(null);
@@ -201,19 +58,25 @@ export default function GenerateReportScreen() {
     enabled: !!token && !!id,
   });
 
-  // Fetch existing reports for this inspection
   const { data: existingReports = [] } = useQuery({
     queryKey: ["reports", "inspection", id, token],
     queryFn: () => fetchWithAuth(`/api/reports?inspectionId=${id}`),
     enabled: !!token && !!id,
   });
 
+  const { data: templates = [], isLoading: loadingTemplates } = useQuery({
+    queryKey: ["checklist-templates", token],
+    queryFn: () => fetchWithAuth("/api/checklists"),
+    enabled: !!token,
+  });
+
+  const selectedTemplate = (templates as any[]).find((t: any) => t.id === selectedTemplateId);
+
   const openExistingReport = async (reportId: number) => {
     setLoadingExisting(true);
     try {
       const data = await fetchWithAuth(`/api/reports/${reportId}`);
       setReport(data);
-      setSelectedType(data.reportType);
       setStep("preview");
     } catch {
       Alert.alert("Error", "Could not load this report. Please try again.");
@@ -223,7 +86,7 @@ export default function GenerateReportScreen() {
   };
 
   const generateReport = async () => {
-    if (!selectedType) return;
+    if (!selectedTemplate) return;
     setGenerating(true);
     try {
       const data = await fetchWithAuth("/api/reports/generate", {
@@ -231,13 +94,13 @@ export default function GenerateReportScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           inspectionId: parseInt(id),
-          reportType: selectedType,
+          reportType: selectedTemplate.name,
           userId: (user as any)?.id || 1,
         }),
       });
       setReport(data);
       setStep("preview");
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "Failed to generate report. Please try again.");
     } finally {
       setGenerating(false);
@@ -257,7 +120,7 @@ export default function GenerateReportScreen() {
         "The report has been submitted to the desktop app for final review by the certifier.",
         [{ text: "Done", onPress: () => router.back() }]
       );
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "Failed to submit report. Please try again.");
     } finally {
       setSubmitting(false);
@@ -288,15 +151,12 @@ export default function GenerateReportScreen() {
         `The report has been sent to ${clientEmail.trim()} and uploaded for desktop review.`,
         [{ text: "Done", onPress: () => router.back() }]
       );
-    } catch (e) {
+    } catch {
       Alert.alert("Error", "Failed to send report. Please try again.");
     } finally {
       setSending(false);
     }
   };
-
-  const REPORT_TYPES = getReportTypesForDiscipline(inspection?.checklistTemplateDiscipline);
-  const selectedTypeObj = ALL_REPORT_TYPES.find(t => t.key === selectedType);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -307,15 +167,15 @@ export default function GenerateReportScreen() {
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>
-            {step === "select" ? "Generate Report" : step === "preview" ? "Report Preview" : "Submit Report"}
+            {step === "select" ? "Generate Report" : "Report Preview"}
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>{inspection?.projectName}</Text>
         </View>
         {step === "select" && (
           <Pressable
-            style={[styles.nextBtn, !selectedType && styles.nextBtnDisabled]}
+            style={[styles.nextBtn, !selectedTemplateId && styles.nextBtnDisabled]}
             onPress={generateReport}
-            disabled={!selectedType || generating}
+            disabled={!selectedTemplateId || generating}
           >
             {generating
               ? <ActivityIndicator size="small" color={Colors.primary} />
@@ -329,11 +189,11 @@ export default function GenerateReportScreen() {
       <View style={styles.stepRow}>
         {["select", "preview"].map((s, idx) => (
           <View key={s} style={styles.stepItem}>
-            <View style={[styles.stepDot, step === s || (step === "preview" && idx === 0) ? styles.stepDotActive : step === "preview" && idx === 1 ? styles.stepDotActive : {}]}>
+            <View style={[styles.stepDot, (step === s || (step === "preview" && idx === 0)) ? styles.stepDotActive : {}]}>
               <Text style={styles.stepDotText}>{idx + 1}</Text>
             </View>
             <Text style={[styles.stepLabel, step === s && styles.stepLabelActive]}>
-              {idx === 0 ? "Select Type" : "Preview & Send"}
+              {idx === 0 ? "Select Template" : "Preview & Send"}
             </Text>
             {idx < 1 && <View style={styles.stepLine} />}
           </View>
@@ -341,20 +201,26 @@ export default function GenerateReportScreen() {
       </View>
 
       {step === "select" && (
-        <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
-
-          {/* ── Existing reports section ───────────────────────── */}
-          {existingReports.length > 0 && (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Existing reports */}
+          {(existingReports as any[]).length > 0 && (
             <View style={styles.existingSection}>
               <View style={styles.existingSectionHeader}>
                 <Feather name="folder" size={15} color={Colors.secondary} />
-                <Text style={styles.existingSectionTitle}>Existing Reports ({existingReports.length})</Text>
+                <Text style={styles.existingSectionTitle}>
+                  Existing Reports ({(existingReports as any[]).length})
+                </Text>
               </View>
               <Text style={styles.existingSectionSub}>Tap a report to open it directly.</Text>
-              {existingReports.map((r: any) => {
-                const typeObj = ALL_REPORT_TYPES.find(t => t.key === r.reportType);
+              {(existingReports as any[]).map((r: any) => {
                 const sc = STATUS_COLORS[r.status] || STATUS_COLORS.draft;
-                const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" }) : "";
+                const dateStr = r.createdAt
+                  ? new Date(r.createdAt).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" })
+                  : "";
                 return (
                   <Pressable
                     key={r.id}
@@ -362,8 +228,8 @@ export default function GenerateReportScreen() {
                     onPress={() => openExistingReport(r.id)}
                     disabled={loadingExisting}
                   >
-                    <View style={[styles.existingIconWrap, { backgroundColor: (typeObj?.color || Colors.secondary) + "18" }]}>
-                      <Feather name={(typeObj?.icon || "file-text") as any} size={18} color={typeObj?.color || Colors.secondary} />
+                    <View style={styles.existingIconWrap}>
+                      <Feather name="file-text" size={18} color={Colors.secondary} />
                     </View>
                     <View style={styles.existingInfo}>
                       <Text style={styles.existingTitle} numberOfLines={2}>{r.title}</Text>
@@ -389,79 +255,82 @@ export default function GenerateReportScreen() {
             </View>
           )}
 
-          <Text style={styles.sectionTitle}>Choose a report type</Text>
+          <Text style={styles.sectionTitle}>Choose a template</Text>
           <Text style={styles.sectionSub}>
-            The report will be auto-filled with inspection results, project details, and checklist items.
+            Select one of your templates below. The report will be auto-filled with inspection results and project details.
           </Text>
 
-          {/* Linked template info */}
-          {(inspection?.checklistTemplateName || inspection?.checklistTemplateDiscipline) && (
-            <View style={styles.templateRow}>
-              <View style={styles.templateIconWrap}>
-                <Feather name="book" size={18} color={Colors.secondary} />
-              </View>
-              <View style={styles.templateTextWrap}>
-                <Text style={styles.templateRowLabel}>Linked Template</Text>
-                <Text style={styles.templateRowSub} numberOfLines={1}>
-                  {inspection.checklistTemplateName || inspection.checklistTemplateDiscipline}
-                </Text>
-              </View>
-              <Feather name="check-circle" size={16} color="#16a34a" />
+          {/* Template list */}
+          {loadingTemplates ? (
+            <View style={styles.emptyWrap}>
+              <ActivityIndicator size="large" color={Colors.secondary} />
+              <Text style={styles.emptyText}>Loading templates…</Text>
             </View>
-          )}
-
-          {autoType && (
-            <View style={styles.recommendedBanner}>
-              <Feather name="zap" size={13} color="#C5D92D" />
-              <Text style={styles.recommendedBannerText}>
-                A report type has been pre-selected based on your inspection results. You can change it below.
+          ) : (templates as any[]).length === 0 ? (
+            <View style={styles.emptyWrap}>
+              <Feather name="book-open" size={40} color={Colors.textTertiary} />
+              <Text style={styles.emptyTitle}>No templates yet</Text>
+              <Text style={styles.emptyText}>
+                Create a template from the Templates section and it will appear here.
               </Text>
             </View>
-          )}
-          <View style={styles.typeList}>
-            {REPORT_TYPES.map(type => {
-              const isSelected = selectedType === type.key;
-              const isRecommended = type.key === autoType;
-              return (
-                <Pressable
-                  key={type.key}
-                  style={[
-                    styles.typeCard,
-                    isSelected && { borderColor: type.color, backgroundColor: type.bg },
-                  ]}
-                  onPress={() => setSelectedType(type.key)}
-                >
-                  <View style={[styles.typeIcon, { backgroundColor: isSelected ? type.color + "20" : Colors.borderLight }]}>
-                    <Feather name={type.icon as any} size={22} color={isSelected ? type.color : Colors.textSecondary} />
-                  </View>
-                  <View style={styles.typeInfo}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Text style={[styles.typeLabel, isSelected && { color: type.color }]}>{type.label}</Text>
-                      {isRecommended && (
-                        <View style={styles.recommendedBadge}>
-                          <Text style={styles.recommendedBadgeText}>Recommended</Text>
-                        </View>
+          ) : (
+            <View style={styles.typeList}>
+              {(templates as any[]).map((tmpl: any) => {
+                const isSelected = selectedTemplateId === tmpl.id;
+                return (
+                  <Pressable
+                    key={tmpl.id}
+                    style={[
+                      styles.typeCard,
+                      isSelected && styles.typeCardSelected,
+                    ]}
+                    onPress={() => setSelectedTemplateId(tmpl.id)}
+                  >
+                    <View style={[styles.typeIcon, isSelected && styles.typeIconSelected]}>
+                      <Feather
+                        name="book"
+                        size={22}
+                        color={isSelected ? Colors.secondary : Colors.textSecondary}
+                      />
+                    </View>
+                    <View style={styles.typeInfo}>
+                      <Text style={[styles.typeLabel, isSelected && styles.typeLabelSelected]}>
+                        {tmpl.name}
+                      </Text>
+                      {tmpl.description ? (
+                        <Text style={styles.typeDesc} numberOfLines={2}>{tmpl.description}</Text>
+                      ) : tmpl.discipline ? (
+                        <Text style={styles.typeDesc}>{tmpl.discipline}</Text>
+                      ) : null}
+                      {tmpl.itemCount > 0 && (
+                        <Text style={styles.typeItemCount}>{tmpl.itemCount} checklist items</Text>
                       )}
                     </View>
-                    <Text style={styles.typeDesc}>{type.desc}</Text>
-                  </View>
-                  <View style={[styles.typeRadio, isSelected && { borderColor: type.color }]}>
-                    {isSelected && <View style={[styles.typeRadioInner, { backgroundColor: type.color }]} />}
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+                    <View style={[styles.typeRadio, isSelected && styles.typeRadioSelected]}>
+                      {isSelected && <View style={styles.typeRadioInner} />}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </ScrollView>
       )}
 
       {step === "preview" && report && (
         <>
-          <ScrollView style={styles.scroll} contentContainerStyle={[styles.previewContent, { paddingBottom: insets.bottom + 120 }]} showsVerticalScrollIndicator={false}>
-            <View style={[styles.previewHeader, selectedTypeObj && { backgroundColor: selectedTypeObj.bg, borderColor: selectedTypeObj.border }]}>
-              <Feather name={(selectedTypeObj?.icon || "file-text") as any} size={20} color={selectedTypeObj?.color || Colors.secondary} />
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={[styles.previewContent, { paddingBottom: insets.bottom + 120 }]}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.previewHeader}>
+              <Feather name="file-text" size={20} color={Colors.secondary} />
               <View style={styles.previewHeaderText}>
-                <Text style={[styles.previewTypeLabel, { color: selectedTypeObj?.color || Colors.secondary }]}>{report.reportTypeLabel}</Text>
+                <Text style={[styles.previewTypeLabel, { color: Colors.secondary }]}>
+                  {report.reportTypeLabel || report.reportType}
+                </Text>
                 <Text style={styles.previewTitle} numberOfLines={2}>{report.title}</Text>
               </View>
             </View>
@@ -499,7 +368,12 @@ export default function GenerateReportScreen() {
       )}
 
       {/* Email modal */}
-      <Modal visible={showEmailModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowEmailModal(false)}>
+      <Modal
+        visible={showEmailModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowEmailModal(false)}
+      >
         <View style={[styles.emailModal, { paddingTop: insets.top + 24 }]}>
           <View style={styles.emailModalHeader}>
             <Pressable onPress={() => setShowEmailModal(false)} hitSlop={12}>
@@ -518,7 +392,9 @@ export default function GenerateReportScreen() {
               style={styles.emailInput}
               value={clientEmail}
               onChangeText={setClientEmail}
-              placeholder={`e.g. ${inspection?.clientName ? inspection.clientName.toLowerCase().replace(/\s+/g, ".") + "@example.com" : "client@example.com"}`}
+              placeholder={`e.g. ${inspection?.clientName
+                ? inspection.clientName.toLowerCase().replace(/\s+/g, ".") + "@example.com"
+                : "client@example.com"}`}
               placeholderTextColor={Colors.textTertiary}
               keyboardType="email-address"
               autoCapitalize="none"
@@ -570,22 +446,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    minWidth: 90,
-    alignItems: "center",
   },
-  nextBtnDisabled: { opacity: 0.4 },
-  nextBtnText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  nextBtnDisabled: { opacity: 0.45 },
+  nextBtnText: { fontSize: 14, fontFamily: "PlusJakartaSans_700Bold", color: Colors.primary },
+
   stepRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
     paddingHorizontal: 24,
-    paddingVertical: 14,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-    gap: 8,
+    gap: 0,
   },
-  stepItem: { flexDirection: "row", alignItems: "center", gap: 8 },
+  stepItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   stepDot: {
     width: 24,
     height: 24,
@@ -595,61 +471,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stepDotActive: { backgroundColor: Colors.secondary },
-  stepDotText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.surface },
-  stepLabel: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
-  stepLabelActive: { color: Colors.secondary },
-  stepLine: { width: 32, height: 1, backgroundColor: Colors.border, marginHorizontal: 4 },
+  stepDotText: { fontSize: 11, fontFamily: "PlusJakartaSans_700Bold", color: "#fff" },
+  stepLabel: { fontSize: 12, fontFamily: "PlusJakartaSans_500Medium", color: Colors.textTertiary },
+  stepLabelActive: { color: Colors.secondary, fontFamily: "PlusJakartaSans_600SemiBold" },
+  stepLine: { width: 32, height: 1, backgroundColor: Colors.border, marginHorizontal: 6 },
+
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, gap: 12 },
-  sectionTitle: { fontSize: 18, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, marginBottom: 4 },
-  sectionSub: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, lineHeight: 20, marginBottom: 8 },
-  recommendedBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#0B1933",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 4,
-  },
-  recommendedBannerText: {
-    flex: 1,
-    fontSize: 12,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: "#C5D92D",
-    lineHeight: 17,
-  },
-  disciplineBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.borderLight,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    marginBottom: 4,
-  },
-  disciplineBannerText: {
-    flex: 1,
-    fontSize: 12,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textSecondary,
-    lineHeight: 17,
-  },
-  recommendedBadge: {
-    backgroundColor: "#C5D92D",
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  recommendedBadgeText: {
-    fontSize: 10,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: "#0B1933",
-    letterSpacing: 0.3,
-  },
-  templateRow: {
+  scrollContent: { padding: 16, gap: 16 },
+
+  existingSection: { gap: 10 },
+  existingSectionHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  existingSectionTitle: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  existingSectionSub: { fontSize: 12, color: Colors.textSecondary, marginTop: -4 },
+  existingCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -657,79 +491,139 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 14,
+    padding: 12,
   },
-  templateIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 9,
-    backgroundColor: Colors.infoLight,
+  existingIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: Colors.secondary + "18",
     alignItems: "center",
     justifyContent: "center",
   },
-  templateTextWrap: { flex: 1 },
-  templateRowLabel: {
-    fontSize: 14,
+  existingInfo: { flex: 1, gap: 4 },
+  existingTitle: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  existingMeta: { flexDirection: "row", alignItems: "center", gap: 8 },
+  existingStatusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  existingStatusText: { fontSize: 10, fontFamily: "PlusJakartaSans_700Bold" },
+  existingDate: { fontSize: 11, color: Colors.textTertiary },
+  existingDivider: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginVertical: 4,
+  },
+  existingDividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
+  existingDividerText: {
+    fontSize: 10,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    letterSpacing: 0.5,
+  },
+
+  sectionTitle: { fontSize: 15, fontFamily: "PlusJakartaSans_700Bold", color: Colors.text },
+  sectionSub: { fontSize: 12, color: Colors.textSecondary, lineHeight: 17, marginTop: -8 },
+
+  emptyWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontSize: 16,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.text,
   },
-  templateRowSub: {
-    fontSize: 12,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.secondary,
-    marginTop: 1,
+  emptyText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 19,
+    maxWidth: 260,
   },
-  templateRowSubEmpty: {
-    fontSize: 12,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textTertiary,
-    marginTop: 1,
-  },
-  typeList: { gap: 12 },
+
+  typeList: { gap: 10 },
   typeCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     backgroundColor: Colors.surface,
     borderRadius: 14,
-    padding: 16,
     borderWidth: 1.5,
     borderColor: Colors.border,
+    padding: 14,
+  },
+  typeCardSelected: {
+    borderColor: Colors.secondary,
+    backgroundColor: Colors.secondary + "08",
   },
   typeIcon: {
     width: 48,
     height: 48,
     borderRadius: 12,
+    backgroundColor: Colors.borderLight,
     alignItems: "center",
     justifyContent: "center",
   },
-  typeInfo: { flex: 1 },
-  typeLabel: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, marginBottom: 3 },
-  typeDesc: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, lineHeight: 17 },
+  typeIconSelected: {
+    backgroundColor: Colors.secondary + "20",
+  },
+  typeInfo: { flex: 1, gap: 3 },
+  typeLabel: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+  },
+  typeLabelSelected: { color: Colors.secondary },
+  typeDesc: { fontSize: 12, color: Colors.textSecondary, lineHeight: 17 },
+  typeItemCount: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    fontFamily: "PlusJakartaSans_500Medium",
+    marginTop: 2,
+  },
   typeRadio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
-  typeRadioInner: { width: 12, height: 12, borderRadius: 6 },
+  typeRadioSelected: { borderColor: Colors.secondary },
+  typeRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.secondary,
+  },
+
   previewContent: { padding: 16, gap: 16 },
   previewHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
-    padding: 16,
+    backgroundColor: Colors.secondary + "0D",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+    borderColor: Colors.secondary + "30",
+    padding: 14,
   },
-  previewHeaderText: { flex: 1, gap: 3 },
-  previewTypeLabel: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8 },
-  previewTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, lineHeight: 20 },
+  previewHeaderText: { flex: 1, gap: 2 },
+  previewTypeLabel: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_700Bold",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  previewTitle: { fontSize: 15, fontFamily: "PlusJakartaSans_700Bold", color: Colors.text },
   previewBody: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
@@ -737,20 +631,13 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     padding: 16,
   },
-  previewText: {
-    fontSize: 12,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.text,
-    lineHeight: 20,
-  },
+  previewText: { fontSize: 13, color: Colors.text, lineHeight: 20 },
+
   actionBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     flexDirection: "row",
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
@@ -761,17 +648,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 12,
   },
   actionBtnOutline: {
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.surface,
     borderWidth: 1.5,
     borderColor: Colors.secondary,
   },
-  actionBtnOutlineText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  actionBtnOutlineText: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.secondary,
+  },
   actionBtnPrimary: { backgroundColor: Colors.accent },
-  actionBtnPrimaryText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  actionBtnPrimaryText: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.primary,
+  },
+
   emailModal: { flex: 1, backgroundColor: Colors.background },
   emailModalHeader: {
     flexDirection: "row",
@@ -782,35 +678,35 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  emailModalTitle: { fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
-  emailModalBody: { flex: 1, padding: 20, gap: 16 },
+  emailModalTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_700Bold", color: Colors.text },
+  emailModalBody: { flex: 1, padding: 20, gap: 14 },
   emailInfo: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.secondary + "10",
     borderRadius: 10,
-    padding: 14,
+    padding: 12,
+  },
+  emailInfoText: { flex: 1, fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  emailLabel: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  emailInput: {
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
-  },
-  emailInfoText: { flex: 1, fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, lineHeight: 18 },
-  emailLabel: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
-  emailInput: {
-    borderWidth: 1.5,
-    borderColor: Colors.border,
     borderRadius: 10,
-    padding: 14,
-    fontSize: 15,
-    fontFamily: "PlusJakartaSans_600SemiBold",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
     color: Colors.text,
-    backgroundColor: Colors.surface,
+    fontFamily: "PlusJakartaSans_400Regular",
   },
-  emailHint: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, lineHeight: 18 },
+  emailHint: { fontSize: 12, color: Colors.textSecondary, lineHeight: 18 },
   emailModalFooter: {
     flexDirection: "row",
-    gap: 12,
-    padding: 20,
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
@@ -818,97 +714,22 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: Colors.surface,
+    paddingVertical: 13,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  emailCancelText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  emailCancelText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
   emailSendBtn: {
-    flex: 1,
+    flex: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 13,
+    borderRadius: 10,
     backgroundColor: Colors.accent,
   },
-  emailSendBtnDisabled: { opacity: 0.4 },
-  emailSendText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
-
-  existingSection: { marginBottom: 4 },
-  existingSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    marginBottom: 3,
-  },
-  existingSectionTitle: {
-    fontSize: 15,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.text,
-  },
-  existingSectionSub: {
-    fontSize: 12,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textSecondary,
-    marginBottom: 10,
-  },
-  existingCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 13,
-    marginBottom: 8,
-  },
-  existingIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  existingInfo: { flex: 1, gap: 4 },
-  existingTitle: {
-    fontSize: 13,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.text,
-    lineHeight: 18,
-  },
-  existingMeta: { flexDirection: "row", alignItems: "center", gap: 8 },
-  existingStatusBadge: {
-    borderRadius: 5,
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  existingStatusText: {
-    fontSize: 9,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    letterSpacing: 0.5,
-  },
-  existingDate: {
-    fontSize: 11,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textTertiary,
-  },
-  existingDivider: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginVertical: 16,
-  },
-  existingDividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
-  existingDividerText: {
-    fontSize: 10,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textTertiary,
-    letterSpacing: 0.8,
-  },
+  emailSendBtnDisabled: { opacity: 0.45 },
+  emailSendText: { fontSize: 14, fontFamily: "PlusJakartaSans_700Bold", color: Colors.primary },
 });
