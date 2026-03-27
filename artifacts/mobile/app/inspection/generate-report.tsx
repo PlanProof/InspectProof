@@ -16,6 +16,8 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
@@ -596,6 +598,7 @@ export default function GenerateReportScreen() {
   const [report, setReport] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sending, setSending] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [clientEmail, setClientEmail] = useState("");
   const [showEmailModal, setShowEmailModal] = useState(false);
 
@@ -714,6 +717,41 @@ export default function GenerateReportScreen() {
       Alert.alert("Error", "Failed to send report. Please try again.");
     } finally {
       setSending(false);
+    }
+  };
+
+  const viewPDF = async () => {
+    if (!report) return;
+    setDownloadingPdf(true);
+    try {
+      const pdfUrl = `${baseUrl}/api/reports/${report.id}/pdf`;
+      const cacheUri: string = (FileSystem.Paths?.cache as any)?.uri
+        ?? (FileSystem as any).cacheDirectory
+        ?? "";
+      const localPath = `${cacheUri}report-${report.id}.pdf`;
+
+      const downloadResult = await FileSystem.downloadAsync(pdfUrl, localPath, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (downloadResult.status !== 200) {
+        throw new Error(`Download failed with status ${downloadResult.status}`);
+      }
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(downloadResult.uri, {
+          mimeType: "application/pdf",
+          UTI: "com.adobe.pdf",
+          dialogTitle: report.title || "Inspection Report",
+        });
+      } else {
+        Alert.alert("Cannot Open PDF", "PDF sharing is not available on this device.");
+      }
+    } catch {
+      Alert.alert("Error", "Could not download the PDF. Please check your connection and try again.");
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
@@ -890,26 +928,41 @@ export default function GenerateReportScreen() {
 
           {/* Action bar */}
           <View style={[styles.actionBar, { paddingBottom: insets.bottom + 16 }]}>
+            {/* View PDF — full width primary button */}
             <Pressable
-              style={[styles.actionBtn, styles.actionBtnOutline, submitting && { opacity: 0.6 }]}
-              onPress={submitForReview}
-              disabled={submitting || sending}
+              style={[styles.actionBtnFull, styles.actionBtnPDF, downloadingPdf && { opacity: 0.6 }]}
+              onPress={viewPDF}
+              disabled={downloadingPdf || submitting || sending}
             >
-              {submitting
-                ? <ActivityIndicator size="small" color={Colors.secondary} />
-                : <Feather name="upload" size={18} color={Colors.secondary} />}
-              <Text style={styles.actionBtnOutlineText}>{submitting ? "Submitting…" : "Submit for Review"}</Text>
+              {downloadingPdf
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Feather name="file-text" size={18} color="#fff" />}
+              <Text style={styles.actionBtnPDFText}>{downloadingPdf ? "Preparing PDF…" : "View PDF"}</Text>
             </Pressable>
-            <Pressable
-              style={[styles.actionBtn, styles.actionBtnPrimary, sending && { opacity: 0.6 }]}
-              onPress={() => setShowEmailModal(true)}
-              disabled={submitting || sending}
-            >
-              {sending
-                ? <ActivityIndicator size="small" color={Colors.primary} />
-                : <Feather name="send" size={18} color={Colors.primary} />}
-              <Text style={styles.actionBtnPrimaryText}>{sending ? "Sending…" : "Send to Client"}</Text>
-            </Pressable>
+
+            {/* Secondary row */}
+            <View style={styles.actionSecondaryRow}>
+              <Pressable
+                style={[styles.actionBtnSm, styles.actionBtnOutline, submitting && { opacity: 0.6 }]}
+                onPress={submitForReview}
+                disabled={submitting || sending || downloadingPdf}
+              >
+                {submitting
+                  ? <ActivityIndicator size="small" color={Colors.secondary} />
+                  : <Feather name="upload" size={15} color={Colors.secondary} />}
+                <Text style={styles.actionBtnOutlineText}>{submitting ? "Submitting…" : "Submit for Review"}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.actionBtnSm, styles.actionBtnPrimary, sending && { opacity: 0.6 }]}
+                onPress={() => setShowEmailModal(true)}
+                disabled={submitting || sending || downloadingPdf}
+              >
+                {sending
+                  ? <ActivityIndicator size="small" color={Colors.primary} />
+                  : <Feather name="send" size={15} color={Colors.primary} />}
+                <Text style={styles.actionBtnPrimaryText}>{sending ? "Sending…" : "Send to Client"}</Text>
+              </Pressable>
+            </View>
           </View>
         </>
       )}
@@ -1099,13 +1152,33 @@ const styles = StyleSheet.create({
   typeRadioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.secondary },
 
   actionBar: {
-    flexDirection: "row",
+    flexDirection: "column",
     gap: 10,
     paddingHorizontal: 16,
     paddingTop: 12,
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
+  },
+  actionBtnFull: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  actionBtnPDF: { backgroundColor: Colors.secondary },
+  actionBtnPDFText: { fontSize: 15, fontFamily: "PlusJakartaSans_700Bold", color: "#fff" },
+  actionSecondaryRow: { flexDirection: "row", gap: 10 },
+  actionBtnSm: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 10,
   },
   actionBtn: {
     flex: 1,
@@ -1117,9 +1190,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   actionBtnOutline: { backgroundColor: Colors.surface, borderWidth: 1.5, borderColor: Colors.secondary },
-  actionBtnOutlineText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  actionBtnOutlineText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   actionBtnPrimary: { backgroundColor: Colors.accent },
-  actionBtnPrimaryText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  actionBtnPrimaryText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
 
   emailModal: { flex: 1, backgroundColor: Colors.background },
   emailModalHeader: {
