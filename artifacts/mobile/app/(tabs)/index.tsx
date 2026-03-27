@@ -21,7 +21,7 @@ import { useNotifications } from "@/context/NotificationsContext";
 const WEB_TOP = 0;
 
 const INSPECTION_TYPE_LABELS: Record<string, string> = {
-  footings: "Footings", slab: "Slab", frame: "Frame", pre_plaster: "Pre-Plaster",
+  footing: "Footing", footings: "Footings", slab: "Slab", frame: "Frame", pre_plaster: "Pre-Plaster",
   waterproofing: "Waterproofing", lock_up: "Lock-Up", pool_barrier: "Pool Barrier",
   final: "Final", special: "Special",
   qc_footing: "QC — Footings", qc_frame: "QC — Frame", qc_fitout: "QC — Fit-Out",
@@ -38,6 +38,9 @@ const INSPECTION_TYPE_LABELS: Record<string, string> = {
   plumbing: "Plumbing", drainage: "Drainage", pressure_test: "Pressure Test",
   electrical: "Electrical",
 };
+
+const toTitleCase = (str: string) =>
+  str.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   scheduled:          { label: "Not Started",      color: Colors.textSecondary, bg: Colors.borderLight },
@@ -213,7 +216,7 @@ interface InspCardProps {
 }
 
 function InspCard({ insp, onEditTime, reportSent, hasReport }: InspCardProps) {
-  const typeLabel = INSPECTION_TYPE_LABELS[insp.inspectionType] ?? insp.inspectionType;
+  const typeLabel = INSPECTION_TYPE_LABELS[insp.inspectionType] ?? toTitleCase(insp.inspectionType ?? "");
   const hasAddress = !!(insp.projectAddress);
   const addressLine = [insp.projectAddress, insp.projectSuburb].filter(Boolean).join(", ");
   const isCompleted = insp.status === "completed";
@@ -281,17 +284,16 @@ function InspCard({ insp, onEditTime, reportSent, hasReport }: InspCardProps) {
               onPress={() => router.push(`/inspection/conduct/${insp.id}` as any)}
               style={({ pressed }) => [
                 tlStyles.actionBtn,
-                (isInProgress || isFollowUp) && tlStyles.actionBtnContinue,
                 pressed && { opacity: 0.8 },
               ]}
             >
               <Feather
-                name={isInProgress || isFollowUp ? "play-circle" : "arrow-right"}
+                name="arrow-right"
                 size={13}
-                color={isInProgress || isFollowUp ? Colors.secondary : Colors.primary}
+                color={Colors.primary}
               />
-              <Text style={[tlStyles.actionText, (isInProgress || isFollowUp) && tlStyles.actionTextContinue]}>
-                {isInProgress ? "Continue Inspection" : isFollowUp ? "Continue Inspection" : "Start Inspection"}
+              <Text style={tlStyles.actionText}>
+                {isInProgress || isFollowUp ? "Continue Inspection" : "Start Inspection"}
               </Text>
             </Pressable>
           )}
@@ -649,11 +651,7 @@ const tlStyles = StyleSheet.create({
     backgroundColor: Colors.accent + "30",
     paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, marginTop: 2,
   },
-  actionBtnContinue: {
-    backgroundColor: Colors.secondary + "18",
-  },
   actionText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
-  actionTextContinue: { color: Colors.secondary },
   reportSentRow: {
     flexDirection: "row", justifyContent: "flex-end", marginTop: 6,
   },

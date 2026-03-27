@@ -281,7 +281,7 @@ export default function InspectionDetailScreen() {
       <View style={styles.hero}>
         <View style={styles.heroHeader}>
           <View style={styles.typeChip}>
-            <Text style={styles.typeText}>{INSPECTION_TYPES[inspection.inspectionType] || inspection.inspectionType}</Text>
+            <Text style={styles.typeText}>{INSPECTION_TYPES[inspection.inspectionType] || (inspection.inspectionType || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</Text>
           </View>
         </View>
         <Text style={styles.projectName}>{inspection.projectName}</Text>

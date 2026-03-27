@@ -63,7 +63,7 @@ export function InspectionCard({ inspection, showProject = true }: InspectionCar
             />
           </View>
           <View>
-            <Text style={styles.type}>{INSPECTION_TYPES[inspection.inspectionType] || inspection.inspectionType} Inspection</Text>
+            <Text style={styles.type}>{INSPECTION_TYPES[inspection.inspectionType] || (inspection.inspectionType || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())} Inspection</Text>
             {showProject && <Text style={styles.projectName} numberOfLines={1}>{inspection.projectName}</Text>}
           </View>
         </View>
