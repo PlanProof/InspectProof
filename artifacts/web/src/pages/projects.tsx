@@ -214,8 +214,11 @@ export default function Projects() {
                 >
                   <TableCell>
                     <Link href={`/projects/${project.id}`} className="block" onClick={e => e.stopPropagation()}>
-                      <div className="font-semibold text-sidebar group-hover:text-secondary transition-colors">
+                      <div className="font-semibold text-sidebar group-hover:text-secondary transition-colors flex items-center gap-2">
                         {project.name}
+                        {project.name === "Test Project" && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-wide">Test</span>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                         <Building className="h-3 w-3" />

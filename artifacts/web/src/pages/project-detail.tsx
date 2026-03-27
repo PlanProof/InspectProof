@@ -207,6 +207,9 @@ export default function ProjectDetail() {
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-sidebar">{project.name}</h1>
               <StatusBadge status={project.status} />
+              {project.name === "Test Project" && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-wide">Test</span>
+              )}
             </div>
             <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
               <Building className="h-3.5 w-3.5" />

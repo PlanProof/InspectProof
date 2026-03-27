@@ -139,12 +139,45 @@ function newTemplate(): DocTemplate {
   };
 }
 
+// ── Test Project sample data (used in Preview mode and field panel) ────────────
+const TEST_PREVIEW_DATA: Record<string, string> = {
+  "{{project_name}}":    "Test Project",
+  "{{project_address}}": "1 Sample Street, Adelaide SA 5000",
+  "{{council_number}}":  "DA-2024/001",
+  "{{ncc_class}}":       "Class 1a — Dwelling",
+  "{{lot_number}}":      "Lot 42",
+  "{{da_number}}":       "DA-2024/001",
+  "{{inspection_type}}": "Footing Inspection",
+  "{{inspection_date}}": "15 March 2024",
+  "{{inspection_time}}": "09:00 AM",
+  "{{result}}":          "8 Pass / 1 Fail",
+  "{{notes}}":           "Footing depths comply with engineering plans. Reinforcement spacing confirmed per structural drawings.",
+  "{{inspector_name}}":  "John Doe",
+  "{{certifier_name}}":  "John Doe",
+  "{{license_number}}":  "BS-12345",
+  "{{company_name}}":    "SA Building Certifications Pty Ltd",
+  "{{company_address}}": "Level 2, 100 King William St, Adelaide SA 5000",
+  "{{phone}}":           "+61 8 8123 4567",
+  "{{email}}":           "john.doe@sabuildcert.com.au",
+  "{{today}}":           new Date().toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }),
+  "{{time_now}}":        new Date().toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" }),
+  "{{year}}":            new Date().getFullYear().toString(),
+  "{{signature_line}}":  `<div style="margin-top:16px;border-top:1px solid #000;width:220px;padding-top:4px;font-size:12px;color:#555;">John Doe</div>`,
+  "{{signature_block}}": `<div style="margin-top:16px;"><div style="border-top:1px solid #000;width:220px;margin-bottom:4px;"></div><div style="font-size:12px;color:#555;">John Doe — 15 March 2024</div></div>`,
+  "{{checklist_items}}": `<table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px;"><thead><tr style="background:#f3f4f6;"><th style="text-align:left;padding:5px 8px;border:1px solid #e5e7eb;">#</th><th style="text-align:left;padding:5px 8px;border:1px solid #e5e7eb;">Description</th><th style="text-align:center;padding:5px 8px;border:1px solid #e5e7eb;">Result</th></tr></thead><tbody><tr style="background:#f0fdf4;"><td style="padding:5px 8px;border:1px solid #e5e7eb;">1</td><td style="padding:5px 8px;border:1px solid #e5e7eb;">Footing depth per engineer's plans</td><td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:center;font-weight:600;color:#15803d;">PASS</td></tr><tr><td style="padding:5px 8px;border:1px solid #e5e7eb;">2</td><td style="padding:5px 8px;border:1px solid #e5e7eb;">Reinforcement bar spacing</td><td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:center;font-weight:600;color:#15803d;">PASS</td></tr><tr style="background:#fef2f2;"><td style="padding:5px 8px;border:1px solid #e5e7eb;">3</td><td style="padding:5px 8px;border:1px solid #e5e7eb;">Setback from boundary</td><td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:center;font-weight:600;color:#b91c1c;">FAIL</td></tr></tbody></table>`,
+};
+
 // ── Token highlight (edit mode) ────────────────────────────────────────────────
 function highlightTokens(html: string): string {
   return html.replace(
     /(\{\{[a-z_]+\}\})/g,
     `<span style="background:#dbeafe;color:#1d4ed8;border-radius:3px;padding:0 3px;font-family:monospace;font-size:12px;">$1</span>`
   );
+}
+
+// ── Fill tokens with test project data (preview mode) ─────────────────────────
+function fillWithTestData(html: string): string {
+  return html.replace(/\{\{[a-z_]+\}\}/g, m => TEST_PREVIEW_DATA[m] ?? m);
 }
 
 // ── Checklist table builder ────────────────────────────────────────────────────
@@ -627,6 +660,14 @@ export default function DocTemplates() {
                 </button>
               </div>
 
+              {/* Preview mode banner */}
+              {mode === "preview" && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs font-medium">
+                  <span className="bg-amber-200 text-amber-900 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">Test Data</span>
+                  Previewing with <strong>Test Project</strong> — 1 Sample Street, Adelaide SA 5000 — John Doe (Certifier)
+                </div>
+              )}
+
               {/* A4 document */}
               <div className="flex-1 overflow-auto bg-muted/30 rounded-xl border border-border p-6 flex justify-center">
                 <div
@@ -642,7 +683,7 @@ export default function DocTemplates() {
                     suppressContentEditableWarning
                     onBlur={saveContent}
                     style={{ padding: "72px 80px", position: "relative", minHeight: "1123px", outline: "none" }}
-                    dangerouslySetInnerHTML={mode === "preview" ? { __html: highlightTokens(selected.content) } : undefined}
+                    dangerouslySetInnerHTML={mode === "preview" ? { __html: fillWithTestData(selected.content) } : undefined}
                   />
                   {mode === "edit" && (
                     <div className="absolute top-2 right-2 text-[10px] text-muted-foreground bg-white/80 rounded px-1.5 py-0.5 pointer-events-none">Click to edit</div>
@@ -691,22 +732,37 @@ export default function DocTemplates() {
 
             {rightTab === "fields" ? (
               <div className="flex-1 overflow-y-auto p-2 space-y-3">
-                <p className="text-[10px] text-muted-foreground px-1 pt-1">Click a field to insert at cursor</p>
+                <div className="px-1 pt-1">
+                  <p className="text-[10px] text-muted-foreground">Click a field to insert at cursor</p>
+                  <div className="mt-1.5 flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+                    <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wide shrink-0">Test Project</span>
+                    <span className="text-[9px] text-amber-600 truncate">1 Sample Street, SA</span>
+                  </div>
+                </div>
                 {FIELD_GROUPS.map(group => (
                   <div key={group.label}>
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-1">{group.label}</p>
                     <div className="space-y-0.5">
-                      {group.fields.map(f => (
-                        <button
-                          key={f.token}
-                          onClick={() => insertToken(f.token)}
-                          title={f.token}
-                          className="w-full text-left px-2 py-1.5 rounded-md text-xs hover:bg-secondary/10 hover:text-secondary transition-colors flex items-center gap-2 group"
-                        >
-                          <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/50 group-hover:text-secondary shrink-0" />
-                          <span className="truncate">{f.label}</span>
-                        </button>
-                      ))}
+                      {group.fields.map(f => {
+                        const sample = TEST_PREVIEW_DATA[f.token];
+                        const displaySample = sample && !sample.startsWith("<") ? sample : null;
+                        return (
+                          <button
+                            key={f.token}
+                            onClick={() => insertToken(f.token)}
+                            title={f.token}
+                            className="w-full text-left px-2 py-1.5 rounded-md text-xs hover:bg-secondary/10 hover:text-secondary transition-colors flex items-start gap-2 group"
+                          >
+                            <ChevronRight className="h-2.5 w-2.5 text-muted-foreground/50 group-hover:text-secondary shrink-0 mt-0.5" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-medium">{f.label}</div>
+                              {displaySample && (
+                                <div className="text-[10px] text-muted-foreground truncate mt-0.5 group-hover:text-secondary/70">{displaySample}</div>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
