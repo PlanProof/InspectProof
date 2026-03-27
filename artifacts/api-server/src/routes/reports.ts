@@ -68,9 +68,10 @@ async function generateReportContent(
   const passItems = checklistResults.filter(i => i.result === "pass");
   const failItems = checklistResults.filter(i => i.result === "fail");
   const naItems = checklistResults.filter(i => i.result === "na");
+  const pendingItems = checklistResults.filter(i => i.result === "pending");
   const total = checklistResults.length;
-  const passRate = total > 0 ? Math.round((passItems.length / Math.max(total - naItems.length, 1)) * 100) : null;
-  const overallResult = failItems.length > 0 ? "FAIL" : passItems.length > 0 ? "PASS" : "PENDING";
+  const passRate = total > 0 && pendingItems.length === 0 ? Math.round((passItems.length / Math.max(total - naItems.length, 1)) * 100) : null;
+  const overallResult = pendingItems.length > 0 ? "PENDING — Inspection not yet conducted" : failItems.length > 0 ? "FAIL" : passItems.length > 0 ? "PASS" : "PENDING";
 
   const formatDate = (d: string | null) =>
     d ? new Date(d).toLocaleDateString("en-AU", { day: "2-digit", month: "long", year: "numeric" }) : "—";
@@ -124,7 +125,7 @@ Duration:             ${inspection?.duration ? `${inspection.duration} minutes` 
     Object.entries(grouped).forEach(([cat, its]) => {
       block += `\n${cat.toUpperCase()}\n${"-".repeat(cat.length)}\n`;
       its.forEach((item, idx) => {
-        const icon = item.result === "pass" ? "✓ PASS" : item.result === "fail" ? "✗ FAIL" : item.result === "monitor" ? "◎ MONITOR" : "— N/A";
+        const icon = item.result === "pass" ? "✓ PASS" : item.result === "fail" ? "✗ FAIL" : item.result === "monitor" ? "◎ MONITOR" : item.result === "pending" ? "○ PENDING" : "— N/A";
         block += `${idx + 1}. [${icon}] ${item.description}\n`;
         if (item.codeReference) block += `   Code Ref: ${item.codeReference}\n`;
         if (item.severity)      block += `   Severity: ${item.severity.toUpperCase()}\n`;
@@ -474,7 +475,7 @@ router.post("/generate", async (req, res) => {
       .innerJoin(checklistItemsTable, eq(checklistResultsTable.checklistItemId, checklistItemsTable.id))
       .where(eq(checklistResultsTable.inspectionId, inspection.id));
 
-    const checklistResults = checklistRows.map(r => ({
+    let checklistResults = checklistRows.map(r => ({
       result: r.result.result,
       notes: r.result.notes,
       category: r.item.category,
@@ -482,6 +483,21 @@ router.post("/generate", async (req, res) => {
       codeReference: r.item.codeReference,
       riskLevel: r.item.riskLevel,
     }));
+
+    // If no results yet but a template is linked, fall back to template items as "pending"
+    if (checklistResults.length === 0 && inspection.checklistTemplateId) {
+      const templateItems = await db.select().from(checklistItemsTable)
+        .where(eq(checklistItemsTable.templateId, inspection.checklistTemplateId))
+        .orderBy(sql`${checklistItemsTable.sortOrder} ASC`);
+      checklistResults = templateItems.map(item => ({
+        result: "pending" as any,
+        notes: null,
+        category: item.category,
+        description: item.description,
+        codeReference: item.codeReference,
+        riskLevel: item.riskLevel,
+      }));
+    }
 
     const issues = await db.select().from(issuesTable)
       .where(eq(issuesTable.inspectionId, inspection.id));

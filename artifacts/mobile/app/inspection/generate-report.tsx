@@ -158,17 +158,25 @@ function getReportTypesForDiscipline(discipline?: string | null) {
 
 type ReportTypeKey = typeof ALL_REPORT_TYPES[number]["key"];
 
+const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  draft:     { bg: "#f8fafc", text: "#475569", border: "#cbd5e1" },
+  submitted: { bg: "#eff6ff", text: "#2563eb", border: "#93c5fd" },
+  approved:  { bg: "#f0fdf4", text: "#16a34a", border: "#86efac" },
+  sent:      { bg: "#fefce8", text: "#b45309", border: "#fde68a" },
+};
+
 export default function GenerateReportScreen() {
   const { id, autoType } = useLocalSearchParams<{ id: string; autoType?: string }>();
   const insets = useSafeAreaInsets();
   const { token, user } = useAuth();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
-  const [step, setStep] = useState<"select" | "preview" | "action">("select");
+  const [step, setStep] = useState<"select" | "preview">("select");
   const [selectedType, setSelectedType] = useState<string | null>(
     autoType || null
   );
   const [generating, setGenerating] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(false);
   const [report, setReport] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sending, setSending] = useState(false);
@@ -192,6 +200,27 @@ export default function GenerateReportScreen() {
     queryFn: () => fetchWithAuth(`/api/inspections/${id}`),
     enabled: !!token && !!id,
   });
+
+  // Fetch existing reports for this inspection
+  const { data: existingReports = [] } = useQuery({
+    queryKey: ["reports", "inspection", id, token],
+    queryFn: () => fetchWithAuth(`/api/reports?inspectionId=${id}`),
+    enabled: !!token && !!id,
+  });
+
+  const openExistingReport = async (reportId: number) => {
+    setLoadingExisting(true);
+    try {
+      const data = await fetchWithAuth(`/api/reports/${reportId}`);
+      setReport(data);
+      setSelectedType(data.reportType);
+      setStep("preview");
+    } catch {
+      Alert.alert("Error", "Could not load this report. Please try again.");
+    } finally {
+      setLoadingExisting(false);
+    }
+  };
 
   const generateReport = async () => {
     if (!selectedType) return;
@@ -313,31 +342,73 @@ export default function GenerateReportScreen() {
 
       {step === "select" && (
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
+
+          {/* ── Existing reports section ───────────────────────── */}
+          {existingReports.length > 0 && (
+            <View style={styles.existingSection}>
+              <View style={styles.existingSectionHeader}>
+                <Feather name="folder" size={15} color={Colors.secondary} />
+                <Text style={styles.existingSectionTitle}>Existing Reports ({existingReports.length})</Text>
+              </View>
+              <Text style={styles.existingSectionSub}>Tap a report to open it directly.</Text>
+              {existingReports.map((r: any) => {
+                const typeObj = ALL_REPORT_TYPES.find(t => t.key === r.reportType);
+                const sc = STATUS_COLORS[r.status] || STATUS_COLORS.draft;
+                const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" }) : "";
+                return (
+                  <Pressable
+                    key={r.id}
+                    style={({ pressed }) => [styles.existingCard, pressed && { opacity: 0.75 }]}
+                    onPress={() => openExistingReport(r.id)}
+                    disabled={loadingExisting}
+                  >
+                    <View style={[styles.existingIconWrap, { backgroundColor: (typeObj?.color || Colors.secondary) + "18" }]}>
+                      <Feather name={(typeObj?.icon || "file-text") as any} size={18} color={typeObj?.color || Colors.secondary} />
+                    </View>
+                    <View style={styles.existingInfo}>
+                      <Text style={styles.existingTitle} numberOfLines={2}>{r.title}</Text>
+                      <View style={styles.existingMeta}>
+                        <View style={[styles.existingStatusBadge, { backgroundColor: sc.bg, borderColor: sc.border }]}>
+                          <Text style={[styles.existingStatusText, { color: sc.text }]}>{r.status.toUpperCase()}</Text>
+                        </View>
+                        {dateStr ? <Text style={styles.existingDate}>{dateStr}</Text> : null}
+                      </View>
+                    </View>
+                    {loadingExisting
+                      ? <ActivityIndicator size="small" color={Colors.secondary} />
+                      : <Feather name="chevron-right" size={16} color={Colors.textTertiary} />
+                    }
+                  </Pressable>
+                );
+              })}
+              <View style={styles.existingDivider}>
+                <View style={styles.existingDividerLine} />
+                <Text style={styles.existingDividerText}>OR GENERATE NEW</Text>
+                <View style={styles.existingDividerLine} />
+              </View>
+            </View>
+          )}
+
           <Text style={styles.sectionTitle}>Choose a report type</Text>
           <Text style={styles.sectionSub}>
             The report will be auto-filled with inspection results, project details, and checklist items.
           </Text>
 
-          {/* Choose Template row */}
-          <Pressable
-            style={({ pressed }) => [styles.templateRow, pressed && { opacity: 0.75 }]}
-            onPress={() => router.push("/templates" as any)}
-          >
-            <View style={styles.templateIconWrap}>
-              <Feather name="book" size={18} color={Colors.secondary} />
+          {/* Linked template info */}
+          {(inspection?.checklistTemplateName || inspection?.checklistTemplateDiscipline) && (
+            <View style={styles.templateRow}>
+              <View style={styles.templateIconWrap}>
+                <Feather name="book" size={18} color={Colors.secondary} />
+              </View>
+              <View style={styles.templateTextWrap}>
+                <Text style={styles.templateRowLabel}>Linked Template</Text>
+                <Text style={styles.templateRowSub} numberOfLines={1}>
+                  {inspection.checklistTemplateName || inspection.checklistTemplateDiscipline}
+                </Text>
+              </View>
+              <Feather name="check-circle" size={16} color="#16a34a" />
             </View>
-            <View style={styles.templateTextWrap}>
-              <Text style={styles.templateRowLabel}>Choose Template</Text>
-              {inspection?.checklistTemplateName ? (
-                <Text style={styles.templateRowSub} numberOfLines={1}>{inspection.checklistTemplateName}</Text>
-              ) : inspection?.checklistTemplateDiscipline ? (
-                <Text style={styles.templateRowSub} numberOfLines={1}>{inspection.checklistTemplateDiscipline}</Text>
-              ) : (
-                <Text style={styles.templateRowSubEmpty}>No template selected — tap to browse</Text>
-              )}
-            </View>
-            <Feather name="chevron-right" size={16} color={Colors.textTertiary} />
-          </Pressable>
+          )}
 
           {autoType && (
             <View style={styles.recommendedBanner}>
@@ -766,4 +837,78 @@ const styles = StyleSheet.create({
   },
   emailSendBtnDisabled: { opacity: 0.4 },
   emailSendText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+
+  existingSection: { marginBottom: 4 },
+  existingSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginBottom: 3,
+  },
+  existingSectionTitle: {
+    fontSize: 15,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+  },
+  existingSectionSub: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textSecondary,
+    marginBottom: 10,
+  },
+  existingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 13,
+    marginBottom: 8,
+  },
+  existingIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  existingInfo: { flex: 1, gap: 4 },
+  existingTitle: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+    lineHeight: 18,
+  },
+  existingMeta: { flexDirection: "row", alignItems: "center", gap: 8 },
+  existingStatusBadge: {
+    borderRadius: 5,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  existingStatusText: {
+    fontSize: 9,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    letterSpacing: 0.5,
+  },
+  existingDate: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+  },
+  existingDivider: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginVertical: 16,
+  },
+  existingDividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
+  existingDividerText: {
+    fontSize: 10,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    letterSpacing: 0.8,
+  },
 });
