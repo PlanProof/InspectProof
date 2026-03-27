@@ -199,7 +199,6 @@ export default function Projects() {
             <TableHeader>
               <TableRow>
                 <SortableHead col="name" label="Project" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
-                <SortableHead col="projectType" label="Type" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="status" label="Status" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="stage" label="Stage" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="clientName" label="Client" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
@@ -224,7 +223,6 @@ export default function Projects() {
                       </div>
                     </Link>
                   </TableCell>
-                  <TableCell className="capitalize text-muted-foreground">{project.projectType.replace('_', ' ')}</TableCell>
                   <TableCell>
                     <StatusBadge status={project.status} />
                   </TableCell>
