@@ -6,7 +6,7 @@ import {
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import Svg, { Path } from "react-native-svg";
 import { captureRef } from "react-native-view-shot";
 import { Feather } from "@expo/vector-icons";
