@@ -393,9 +393,29 @@ export default function DocumentViewerScreen() {
               setDownloadState("idle");
               setDownloadError(null);
               setLocalUri(null);
-              // Trigger re-download
               setDownloadState("downloading");
               setDownloadProgress(0);
+
+              if (Platform.OS === "web") {
+                // Web: fetch with auth headers and create blob URL
+                (async () => {
+                  try {
+                    const res = await fetch(url, {
+                      headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const blob = await res.blob();
+                    setLocalUri(URL.createObjectURL(blob));
+                    setDownloadState("done");
+                  } catch (e: any) {
+                    setDownloadState("error");
+                    setDownloadError(e?.message || "Failed to load document.");
+                  }
+                })();
+                return;
+              }
+
+              // Native: download to cache dir
               (async () => {
                 try {
                   await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
@@ -424,33 +444,50 @@ export default function DocumentViewerScreen() {
         </View>
       )}
 
-      {/* ── Document body (WebView + drawing overlay) ── */}
+      {/* ── Document body ── */}
       {isReady && webviewUri && (
         <View
           ref={containerRef}
           style={[styles.body, { height: bodyH - toolbarH }]}
           collapsable={false}
-          {...(drawing ? panResponder.panHandlers : {})}
+          {...(drawing && Platform.OS !== "web" ? panResponder.panHandlers : {})}
         >
-          <WebView
-            source={{ uri: webviewUri }}
-            style={styles.webview}
-            onLoadStart={() => setWebLoading(true)}
-            onLoadEnd={() => setWebLoading(false)}
-            onError={() => { setWebLoading(false); setWebError(true); }}
-            scrollEnabled={!drawing}
-            bounces={false}
-            originWhitelist={["*", "file://*"]}
-            allowFileAccess
-            allowUniversalAccessFromFileURLs
-            allowFileAccessFromFileURLs
-            javaScriptEnabled
-            domStorageEnabled
-            allowsInlineMediaPlayback
-            mediaPlaybackRequiresUserAction={false}
-          />
+          {Platform.OS === "web" ? (
+            // Web: use a native <iframe> — WebView is native-only
+            React.createElement("iframe", {
+              src: webviewUri,
+              title: name || "Document",
+              style: {
+                width: "100%",
+                height: "100%",
+                border: "none",
+                flex: 1,
+                backgroundColor: "#fff",
+              },
+              onLoad: () => setWebLoading(false),
+              onError: () => { setWebLoading(false); setWebError(true); },
+            })
+          ) : (
+            <WebView
+              source={{ uri: webviewUri }}
+              style={styles.webview}
+              onLoadStart={() => setWebLoading(true)}
+              onLoadEnd={() => setWebLoading(false)}
+              onError={() => { setWebLoading(false); setWebError(true); }}
+              scrollEnabled={!drawing}
+              bounces={false}
+              originWhitelist={["*", "file://*"]}
+              allowFileAccess
+              allowUniversalAccessFromFileURLs
+              allowFileAccessFromFileURLs
+              javaScriptEnabled
+              domStorageEnabled
+              allowsInlineMediaPlayback
+              mediaPlaybackRequiresUserAction={false}
+            />
+          )}
 
-          {/* WebView loading overlay */}
+          {/* Loading overlay */}
           {webLoading && (
             <View style={styles.loadingOverlay}>
               <ActivityIndicator size="large" color={Colors.secondary} />
@@ -460,7 +497,7 @@ export default function DocumentViewerScreen() {
             </View>
           )}
 
-          {/* WebView error */}
+          {/* Render error */}
           {webError && !webLoading && (
             <View style={styles.loadingOverlay}>
               <Feather name="alert-circle" size={36} color={Colors.textTertiary} />
@@ -472,8 +509,8 @@ export default function DocumentViewerScreen() {
             </View>
           )}
 
-          {/* Drawing canvas overlay */}
-          {drawing && (
+          {/* Drawing canvas overlay — native only */}
+          {drawing && Platform.OS !== "web" && (
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
               <Svg width={screenW} height={bodyH - toolbarH}>
                 {strokes.map((s, i) => (
