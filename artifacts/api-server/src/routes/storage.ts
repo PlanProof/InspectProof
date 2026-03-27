@@ -14,7 +14,7 @@ function isSupabasePath(objectPath: string): boolean {
   return objectPath.startsWith("/objects/supabase/");
 }
 
-router.post("/storage/uploads/request-url", async (_req: Request, res: Response) => {
+router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
   try {
     if (isSupabaseStorageAvailable()) {
       const { uploadURL, objectPath } = await getSupabaseSignedUploadURL();
