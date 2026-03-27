@@ -58,6 +58,7 @@
   "dependencies": {
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
     "@react-native-community/datetimepicker": "^8.4.4",
+    "expo-file-system": "^55.0.11",
     "expo-notifications": "^55.0.13",
     "react-native-view-shot": "^4.0.3",
     "react-native-webview": "^13.16.1"

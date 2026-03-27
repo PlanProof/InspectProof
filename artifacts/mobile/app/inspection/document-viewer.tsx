@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
   View, Text, StyleSheet, Pressable, Alert, ActivityIndicator,
   PanResponder, useWindowDimensions, Platform,
@@ -6,6 +6,7 @@ import {
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
+import * as FileSystem from "expo-file-system";
 import Svg, { Path } from "react-native-svg";
 import { captureRef } from "react-native-view-shot";
 import { Feather } from "@expo/vector-icons";
@@ -29,15 +30,27 @@ const PEN_COLORS = [
 ];
 const PEN_WIDTHS = [2, 4, 7];
 
+const CACHE_DIR = FileSystem.cacheDirectory + "inspectproof-docs/";
+
 function pointsToPath(points: { x: number; y: number }[]): string {
   if (points.length < 2) return "";
   return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
 }
 
+function urlToFilename(url: string): string {
+  // Stable filename from URL — keep extension if present
+  const ext = url.split("?")[0].split(".").pop()?.toLowerCase();
+  const safe = url.replace(/[^a-z0-9]/gi, "_");
+  const trimmed = safe.slice(Math.max(0, safe.length - 80));
+  return ext && ext.length <= 4 ? `${trimmed}.${ext}` : trimmed;
+}
+
 // ── Screen ───────────────────────────────────────────────────────────────────
 
 export default function DocumentViewerScreen() {
-  const { url, name, mimeType, inspectionId, itemId, projectId, documentId } = useLocalSearchParams<{
+  const {
+    url, name, mimeType, inspectionId, itemId, projectId,
+  } = useLocalSearchParams<{
     url: string;
     name: string;
     mimeType: string;
@@ -52,6 +65,14 @@ export default function DocumentViewerScreen() {
   const { width: screenW, height: screenH } = useWindowDimensions();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
+  // ── Download state ─────────────────────────────────────────────────────────
+  const [localUri, setLocalUri] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadState, setDownloadState] = useState<"idle" | "cached" | "downloading" | "done" | "error">("idle");
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const downloadRef = useRef<FileSystem.DownloadResumable | null>(null);
+
+  // ── Drawing state ──────────────────────────────────────────────────────────
   const [drawing, setDrawing] = useState(false);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [liveStroke, setLiveStroke] = useState<{ x: number; y: number }[]>([]);
@@ -73,13 +94,66 @@ export default function DocumentViewerScreen() {
   const toolbarH = drawing ? 56 : 0;
   const bodyH = screenH - insets.top - headerH;
 
-  // Build the WebView URL — Google Docs viewer for PDFs on Android
-  const isPdf = mimeType === "application/pdf";
-  const docUrl = isPdf && Platform.OS === "android"
-    ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(url)}`
-    : url;
+  // ── Download / cache logic ─────────────────────────────────────────────────
 
-  // ── Drawing PanResponder ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!url) return;
+    (async () => {
+      try {
+        await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
+        const filename = urlToFilename(url);
+        const destPath = CACHE_DIR + filename;
+
+        // Check if already cached
+        const info = await FileSystem.getInfoAsync(destPath);
+        if (info.exists && info.size && info.size > 0) {
+          setLocalUri(destPath);
+          setDownloadState("cached");
+          return;
+        }
+
+        // Download with auth headers and progress tracking
+        setDownloadState("downloading");
+        setDownloadProgress(0);
+
+        const dl = FileSystem.createDownloadResumable(
+          url,
+          destPath,
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          },
+          (prog) => {
+            if (prog.totalBytesExpectedToWrite > 0) {
+              setDownloadProgress(prog.totalBytesWritten / prog.totalBytesExpectedToWrite);
+            }
+          }
+        );
+        downloadRef.current = dl;
+
+        const result = await dl.downloadAsync();
+        if (result?.uri) {
+          setLocalUri(result.uri);
+          setDownloadState("done");
+        } else {
+          setDownloadState("error");
+          setDownloadError("Download failed — no file returned.");
+        }
+      } catch (e: any) {
+        setDownloadState("error");
+        setDownloadError(e?.message || "Failed to load document.");
+      }
+    })();
+
+    return () => {
+      downloadRef.current?.cancelAsync().catch(() => {});
+    };
+  }, [url, token]);
+
+  // Build WebView source from local file
+  const webviewUri = localUri ? (Platform.OS === "android" ? `file://${localUri}` : localUri) : null;
+  const isPdf = mimeType === "application/pdf" || name?.toLowerCase().endsWith(".pdf");
+
+  // ── Drawing PanResponder ───────────────────────────────────────────────────
 
   const panResponder = useRef(
     PanResponder.create({
@@ -109,7 +183,7 @@ export default function DocumentViewerScreen() {
     })
   ).current;
 
-  // ── Save ─────────────────────────────────────────────────────────────────
+  // ── Save markup ───────────────────────────────────────────────────────────
 
   const fetchWithAuth = useCallback(async (path: string, opts?: RequestInit) => {
     const res = await fetch(`${baseUrl}${path}`, {
@@ -126,14 +200,12 @@ export default function DocumentViewerScreen() {
 
     setUploading(true);
     try {
-      // 1. Capture the visible document + drawn markup as a single image
       const capturedUri = await captureRef(containerRef, {
         format: "jpg",
         quality: 0.85,
         result: "tmpfile",
       });
 
-      // 2. Upload captured image
       const markupFileName = `markup-${(name || "doc").replace(/[^a-z0-9]/gi, "-").toLowerCase()}-${Date.now()}.jpg`;
       const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
         method: "POST",
@@ -146,22 +218,18 @@ export default function DocumentViewerScreen() {
       const objectPath: string = urlRes.objectPath;
 
       if (inspectionId && itemId) {
-        // 3a. Attach to checklist item as a photo
         const currentItem = await fetchWithAuth(`/api/inspections/${inspectionId}/checklist`);
         const item = Array.isArray(currentItem)
           ? currentItem.find((i: any) => i.id === parseInt(itemId))
           : null;
-
         const existingUrls: string[] = item?.photoUrls || [];
         await fetchWithAuth(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ photoUrls: [...existingUrls, objectPath] }),
         });
-
         Alert.alert("Saved", "Markup attached to the checklist item.");
       } else if (projectId) {
-        // 3b. Save as a new document in the project (visible on the desktop)
         const docName = `${name || "Plan"} — Markup`;
         await fetchWithAuth(`/api/projects/${projectId}/documents`, {
           method: "POST",
@@ -176,8 +244,7 @@ export default function DocumentViewerScreen() {
             includedInInspection: true,
           }),
         });
-
-        Alert.alert("Markup saved", `"${docName}" has been saved to the project's Markups folder and is visible on the desktop.`);
+        Alert.alert("Markup saved", `"${docName}" has been saved to the project's Markups folder.`);
       }
 
       router.back();
@@ -188,33 +255,39 @@ export default function DocumentViewerScreen() {
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  const isOffline = downloadState === "cached";
+  const isReady = downloadState === "done" || downloadState === "cached";
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
+
       {/* ── Header ── */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.iconBtn}>
-          <Feather name="arrow-left" size={22} color={Colors.text} />
+          <Feather name="arrow-left" size={22} color="#fff" />
         </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>{name || "Document"}</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle} numberOfLines={1}>{name || "Document"}</Text>
+          {isOffline && (
+            <View style={styles.cachedBadge}>
+              <Feather name="wifi-off" size={9} color="#C5D92D" />
+              <Text style={styles.cachedBadgeText}>Available offline</Text>
+            </View>
+          )}
+        </View>
         <View style={styles.headerActions}>
-          {(inspectionId && itemId || projectId) && (
+          {(inspectionId && itemId || projectId) && isReady && (
             <Pressable
               onPress={() => {
                 if (drawing && strokes.length > 0) {
-                  const saveTarget = (inspectionId && itemId)
-                    ? "attach it to the checklist item"
-                    : "save it to the project";
-                  Alert.alert(
-                    "Save markup?",
-                    `Save your drawings and ${saveTarget}.`,
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      { text: "Save", onPress: saveMarkup },
-                      { text: "Discard", style: "destructive", onPress: () => { setStrokes([]); setDrawing(false); } },
-                    ]
-                  );
+                  const saveTarget = (inspectionId && itemId) ? "attach it to the checklist item" : "save it to the project";
+                  Alert.alert("Save markup?", `Save your drawings and ${saveTarget}.`, [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Save", onPress: saveMarkup },
+                    { text: "Discard", style: "destructive", onPress: () => { setStrokes([]); setDrawing(false); } },
+                  ]);
                 } else {
                   setDrawing(d => !d);
                   if (drawing) { setStrokes([]); setLiveStroke([]); }
@@ -231,7 +304,7 @@ export default function DocumentViewerScreen() {
         </View>
       </View>
 
-      {/* ── Toolbar (drawing mode) ── */}
+      {/* ── Drawing toolbar ── */}
       {drawing && (
         <View style={styles.toolbar}>
           <View style={styles.toolbarColors}>
@@ -260,96 +333,162 @@ export default function DocumentViewerScreen() {
             ))}
           </View>
           <Pressable onPress={() => setStrokes(prev => prev.slice(0, -1))} style={styles.iconBtn} hitSlop={8}>
-            <Feather name="corner-up-left" size={18} color={Colors.text} />
+            <Feather name="corner-up-left" size={18} color="#fff" />
           </Pressable>
           <Pressable onPress={() => { setStrokes([]); setLiveStroke([]); }} style={styles.iconBtn} hitSlop={8}>
-            <Feather name="trash-2" size={18} color={Colors.textSecondary} />
+            <Feather name="trash-2" size={18} color="rgba(255,255,255,0.6)" />
           </Pressable>
           {uploading && <ActivityIndicator size="small" color={Colors.secondary} />}
         </View>
       )}
 
-      {/* ── Document area (WebView + drawing overlay) ── */}
-      <View
-        ref={containerRef}
-        style={[styles.body, { height: bodyH - toolbarH }]}
-        collapsable={false}
-        {...(drawing ? panResponder.panHandlers : {})}
-      >
-        {/* WebView */}
-        <WebView
-          source={{ uri: docUrl }}
-          style={styles.webview}
-          onLoadStart={() => setWebLoading(true)}
-          onLoadEnd={() => setWebLoading(false)}
-          onError={() => { setWebLoading(false); setWebError(true); }}
-          scrollEnabled={!drawing}
-          bounces={false}
-          originWhitelist={["*"]}
-          javaScriptEnabled
-          domStorageEnabled
-          allowsInlineMediaPlayback
-          mediaPlaybackRequiresUserAction={false}
-        />
-
-        {/* Loading overlay */}
-        {webLoading && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color={Colors.secondary} />
-            <Text style={styles.loadingText}>Loading document…</Text>
+      {/* ── Download progress ── */}
+      {downloadState === "downloading" && (
+        <View style={styles.downloadBar}>
+          <View style={styles.downloadBarFill}>
+            <View style={[styles.downloadBarProgress, { width: `${Math.round(downloadProgress * 100)}%` }]} />
           </View>
-        )}
-
-        {/* Error state */}
-        {webError && !webLoading && (
-          <View style={styles.errorOverlay}>
-            <Feather name="alert-circle" size={36} color={Colors.textTertiary} />
-            <Text style={styles.errorText}>Unable to load this document</Text>
-            <Pressable onPress={() => { setWebError(false); setWebLoading(true); }} style={styles.retryBtn}>
-              <Text style={styles.retryText}>Retry</Text>
-            </Pressable>
+          <View style={styles.downloadInfo}>
+            <ActivityIndicator size="small" color={Colors.secondary} />
+            <Text style={styles.downloadText}>
+              {downloadProgress > 0
+                ? `Downloading… ${Math.round(downloadProgress * 100)}%`
+                : "Connecting…"}
+            </Text>
           </View>
-        )}
+        </View>
+      )}
 
-        {/* Drawing canvas overlay */}
-        {drawing && (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Svg width={screenW} height={bodyH - toolbarH}>
-              {strokes.map((s, i) => (
-                <Path
-                  key={i}
-                  d={pointsToPath(s.points)}
-                  stroke={s.color}
-                  strokeWidth={s.width}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-              ))}
-              {liveStroke.length > 1 && (
-                <Path
-                  d={pointsToPath(liveStroke)}
-                  stroke={selectedColor}
-                  strokeWidth={selectedWidth}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-              )}
-            </Svg>
-          </View>
-        )}
+      {/* ── Error state ── */}
+      {downloadState === "error" && (
+        <View style={styles.errorFull}>
+          <Feather name="alert-circle" size={44} color={Colors.textTertiary} />
+          <Text style={styles.errorTitle}>Could not load document</Text>
+          <Text style={styles.errorSub}>{downloadError || "Check your connection and try again."}</Text>
+          <Pressable
+            onPress={() => {
+              setDownloadState("idle");
+              setDownloadError(null);
+              setLocalUri(null);
+              // Trigger re-download
+              setDownloadState("downloading");
+              setDownloadProgress(0);
+              (async () => {
+                try {
+                  await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
+                  const filename = urlToFilename(url);
+                  const destPath = CACHE_DIR + filename;
+                  const dl = FileSystem.createDownloadResumable(
+                    url, destPath,
+                    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+                    (prog) => {
+                      if (prog.totalBytesExpectedToWrite > 0)
+                        setDownloadProgress(prog.totalBytesWritten / prog.totalBytesExpectedToWrite);
+                    }
+                  );
+                  downloadRef.current = dl;
+                  const result = await dl.downloadAsync();
+                  if (result?.uri) { setLocalUri(result.uri); setDownloadState("done"); }
+                  else setDownloadState("error");
+                } catch (e: any) { setDownloadState("error"); setDownloadError(e?.message); }
+              })();
+            }}
+            style={styles.retryBtn}
+          >
+            <Feather name="refresh-cw" size={15} color="#fff" />
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
+        </View>
+      )}
 
-        {/* Draw mode hint */}
-        {drawing && strokes.length === 0 && !webLoading && (
-          <View style={styles.drawHint} pointerEvents="none">
-            <View style={styles.drawHintPill}>
-              <Feather name="edit-2" size={12} color="#fff" />
-              <Text style={styles.drawHintText}>Draw on the document</Text>
+      {/* ── Document body (WebView + drawing overlay) ── */}
+      {isReady && webviewUri && (
+        <View
+          ref={containerRef}
+          style={[styles.body, { height: bodyH - toolbarH }]}
+          collapsable={false}
+          {...(drawing ? panResponder.panHandlers : {})}
+        >
+          <WebView
+            source={{ uri: webviewUri }}
+            style={styles.webview}
+            onLoadStart={() => setWebLoading(true)}
+            onLoadEnd={() => setWebLoading(false)}
+            onError={() => { setWebLoading(false); setWebError(true); }}
+            scrollEnabled={!drawing}
+            bounces={false}
+            originWhitelist={["*", "file://*"]}
+            allowFileAccess
+            allowUniversalAccessFromFileURLs
+            allowFileAccessFromFileURLs
+            javaScriptEnabled
+            domStorageEnabled
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={false}
+          />
+
+          {/* WebView loading overlay */}
+          {webLoading && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color={Colors.secondary} />
+              <Text style={styles.loadingText}>
+                {isPdf ? "Rendering PDF…" : "Opening document…"}
+              </Text>
             </View>
-          </View>
-        )}
-      </View>
+          )}
+
+          {/* WebView error */}
+          {webError && !webLoading && (
+            <View style={styles.loadingOverlay}>
+              <Feather name="alert-circle" size={36} color={Colors.textTertiary} />
+              <Text style={styles.loadingText}>Unable to render this file</Text>
+              <Pressable onPress={() => { setWebError(false); setWebLoading(true); }} style={styles.retryBtn}>
+                <Feather name="refresh-cw" size={15} color="#fff" />
+                <Text style={styles.retryText}>Retry</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* Drawing canvas overlay */}
+          {drawing && (
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <Svg width={screenW} height={bodyH - toolbarH}>
+                {strokes.map((s, i) => (
+                  <Path
+                    key={i}
+                    d={pointsToPath(s.points)}
+                    stroke={s.color}
+                    strokeWidth={s.width}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
+                ))}
+                {liveStroke.length > 1 && (
+                  <Path
+                    d={pointsToPath(liveStroke)}
+                    stroke={selectedColor}
+                    strokeWidth={selectedWidth}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
+                )}
+              </Svg>
+            </View>
+          )}
+
+          {/* Draw mode hint */}
+          {drawing && strokes.length === 0 && !webLoading && (
+            <View style={styles.drawHint} pointerEvents="none">
+              <View style={styles.drawHintPill}>
+                <Feather name="edit-2" size={12} color="#fff" />
+                <Text style={styles.drawHintText}>Draw on the document</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -358,6 +497,7 @@ export default function DocumentViewerScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#000" },
+
   header: {
     height: 56,
     flexDirection: "row",
@@ -366,14 +506,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     gap: 8,
   },
-  headerTitle: {
-    flex: 1,
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
+  headerCenter: { flex: 1 },
+  headerTitle: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  cachedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 2,
   },
+  cachedBadgeText: { color: "#C5D92D", fontSize: 10, fontWeight: "600" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   iconBtn: { padding: 6 },
+
   drawBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -384,12 +528,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.secondary,
   },
-  drawBtnActive: {
-    backgroundColor: Colors.secondary,
-    borderColor: Colors.secondary,
-  },
+  drawBtnActive: { backgroundColor: Colors.secondary, borderColor: Colors.secondary },
   drawBtnText: { color: Colors.secondary, fontSize: 13, fontWeight: "600" },
   drawBtnActiveText: { color: "#fff" },
+
   toolbar: {
     height: 56,
     flexDirection: "row",
@@ -401,25 +543,53 @@ const styles = StyleSheet.create({
     borderTopColor: "rgba(255,255,255,0.1)",
   },
   toolbarColors: { flexDirection: "row", alignItems: "center", gap: 6 },
-  colorDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  colorDotSelected: {
-    transform: [{ scale: 1.3 }],
-    shadowOpacity: 0.5,
-  },
+  colorDot: { width: 20, height: 20, borderRadius: 10, shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
+  colorDotSelected: { transform: [{ scale: 1.3 }], shadowOpacity: 0.5 },
   toolbarWidths: { flexDirection: "row", alignItems: "center", gap: 8 },
   widthBtn: { padding: 4 },
   widthDot: { borderRadius: 20 },
   widthDotSelected: { opacity: 1, transform: [{ scale: 1.3 }] },
+
+  downloadBar: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    paddingTop: 4,
+    gap: 8,
+  },
+  downloadBarFill: {
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  downloadBarProgress: {
+    height: "100%",
+    backgroundColor: "#C5D92D",
+    borderRadius: 2,
+  },
+  downloadInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    justifyContent: "center",
+  },
+  downloadText: { color: "rgba(255,255,255,0.8)", fontSize: 13 },
+
+  errorFull: {
+    flex: 1,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 32,
+  },
+  errorTitle: { fontSize: 17, fontWeight: "600", color: Colors.text, textAlign: "center" },
+  errorSub: { fontSize: 13, color: Colors.textSecondary, textAlign: "center", lineHeight: 19 },
+
   body: { flex: 1, backgroundColor: "#fff" },
   webview: { flex: 1 },
+
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#fff",
@@ -428,29 +598,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: { color: Colors.textSecondary, fontSize: 14 },
-  errorOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-  },
-  errorText: { color: Colors.textSecondary, fontSize: 15, textAlign: "center" },
+
   retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
     backgroundColor: Colors.secondary,
     marginTop: 4,
   },
   retryText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  drawHint: {
-    position: "absolute",
-    top: 16,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-  },
+
+  drawHint: { position: "absolute", top: 16, left: 0, right: 0, alignItems: "center" },
   drawHintPill: {
     flexDirection: "row",
     alignItems: "center",
