@@ -188,6 +188,10 @@ Overall Result:       ${overallResult}
 `;
 
   // ── Content sections per report type ───────────────────────────────────────
+  // Consistent structure for every type:
+  //   1. Type-specific summary stats (where relevant)
+  //   2. Defects / non-conformance highlight block (when fails/monitors exist)
+  //   3. INSPECTION CHECKLIST — FULL RESULTS (all items, always shown)
 
   if (reportType === "defect_notice" || reportType === "non_compliance_notice") {
     const heading = reportType === "non_compliance_notice" ? "NON-COMPLIANCE ITEMS" : "DEFECTS & NON-COMPLIANT ITEMS";
@@ -195,13 +199,14 @@ Overall Result:       ${overallResult}
       ? "Action Required: Rectification required within 14 days; notify certifier upon completion."
       : "Action Required: Rectification required prior to re-inspection.";
     content += defectsBlock(heading, action);
-    content += groupedChecklistBlock(checklistResults, "FULL INSPECTION CHECKLIST");
-  } else if (failItems.length > 0) {
-    content += defectsBlock("DEFECTS IDENTIFIED", "Action Required: Rectification required prior to re-inspection.");
+    content += groupedChecklistBlock(checklistResults, "INSPECTION CHECKLIST — FULL RESULTS");
   }
 
   if (reportType === "inspection_certificate" || reportType === "compliance_report" || reportType === "summary") {
-    content += groupedChecklistBlock(checklistResults, "DETAILED CHECKLIST RESULTS");
+    if (failItems.length > 0 || monitorItems.length > 0) {
+      content += defectsBlock("DEFECTS IDENTIFIED", "Action Required: Rectification required prior to re-inspection.");
+    }
+    content += groupedChecklistBlock(checklistResults, "INSPECTION CHECKLIST — FULL RESULTS");
   }
 
   if (reportType === "quality_control_report") {
@@ -217,10 +222,10 @@ Not Applicable:       ${naItems.length}
 Conformance Rate:     ${passRate !== null ? `${passRate}%` : "—"}
 QC Outcome:           ${failItems.length === 0 ? "CONFORMING" : "NON-CONFORMING — Action Required"}
 `;
-    content += groupedChecklistBlock(checklistResults, "QC ITEM DETAIL");
     if (failItems.length > 0 || monitorItems.length > 0) {
       content += defectsBlock("NON-CONFORMING ITEMS", "Action Required: Corrective work required before sign-off.");
     }
+    content += groupedChecklistBlock(checklistResults, "INSPECTION CHECKLIST — FULL RESULTS");
   }
 
   if (reportType === "non_conformance_report") {
@@ -235,7 +240,7 @@ Under Observation:    ${monitorItems.length}
 Pass Rate:            ${passRate !== null ? `${passRate}%` : "—"}
 `;
     content += defectsBlock("NON-CONFORMANCES IDENTIFIED", "Required Action: Corrective measure to be implemented per project specification and relevant standard.");
-    content += groupedChecklistBlock(checklistResults, "FULL INSPECTION CHECKLIST");
+    content += groupedChecklistBlock(checklistResults, "INSPECTION CHECKLIST — FULL RESULTS");
   }
 
   if (reportType === "safety_inspection_report") {
@@ -251,10 +256,10 @@ Not Applicable:       ${naItems.length}
 Compliance Rate:      ${passRate !== null ? `${passRate}%` : "—"}
 Safety Outcome:       ${failItems.length === 0 ? "COMPLIANT" : "NON-COMPLIANT — Immediate Action Required"}
 `;
-    content += groupedChecklistBlock(checklistResults, "WHS INSPECTION FINDINGS");
     if (failItems.length > 0 || monitorItems.length > 0) {
       content += defectsBlock("WHS BREACHES & CAUTIONS", "Required Action: Immediate rectification required under WHS Act 2011.");
     }
+    content += groupedChecklistBlock(checklistResults, "INSPECTION CHECKLIST — FULL RESULTS");
   }
 
   if (reportType === "hazard_assessment_report") {
@@ -269,10 +274,10 @@ Monitor:              ${monitorItems.length}
 Not Applicable:       ${naItems.length}
 Risk Outcome:         ${failItems.length === 0 ? "ACCEPTABLE RISK" : "UNACCEPTABLE RISK — Action Required"}
 `;
-    content += groupedChecklistBlock(checklistResults, "HAZARD ASSESSMENT FINDINGS");
     if (failItems.length > 0 || monitorItems.length > 0) {
       content += defectsBlock("IDENTIFIED HAZARDS REQUIRING CONTROL", "Required Control Measure: Implement risk control(s) per hierarchy of controls before works resume.");
     }
+    content += groupedChecklistBlock(checklistResults, "INSPECTION CHECKLIST — FULL RESULTS");
   }
 
   if (reportType === "corrective_action_report") {
@@ -285,9 +290,10 @@ Closed Out:           ${passItems.length}
 Open / Pending:       ${failItems.length}
 Under Monitoring:     ${monitorItems.length}
 `;
-    content += defectsBlock("OPEN CORRECTIVE ACTIONS", "Status: Open — Corrective action required. Notify site supervisor upon completion.");
-    content += groupedChecklistBlock(passItems, "CLOSED / COMPLETED ACTIONS");
-    content += groupedChecklistBlock(checklistResults, "FULL INSPECTION CHECKLIST");
+    if (failItems.length > 0 || monitorItems.length > 0) {
+      content += defectsBlock("OPEN CORRECTIVE ACTIONS", "Status: Open — Corrective action required. Notify site supervisor upon completion.");
+    }
+    content += groupedChecklistBlock(checklistResults, "INSPECTION CHECKLIST — FULL RESULTS");
   }
 
   if (reportType === "pre_purchase_report") {
@@ -315,10 +321,10 @@ as observed at the time of inspection. Concealed defects not observable
 without destructive investigation are excluded. This report is prepared
 for the exclusive use of the client named above.
 `;
-    content += groupedChecklistBlock(checklistResults, "PROPERTY CONDITION FINDINGS");
     if (failItems.length > 0 || monitorItems.length > 0) {
       content += defectsBlock("DEFECTS & ITEMS REQUIRING ATTENTION", "Recommended Action: Obtain specialist quotation before settlement.");
     }
+    content += groupedChecklistBlock(checklistResults, "INSPECTION CHECKLIST — FULL RESULTS");
   }
 
   if (reportType === "annual_fire_safety") {
@@ -339,10 +345,10 @@ Under Observation:       ${monitorItems.length}
 Not Applicable:          ${naItems.length}
 Overall Compliance:      ${failItems.length === 0 ? "COMPLIANT" : "NON-COMPLIANT"}
 `;
-    content += groupedChecklistBlock(checklistResults, "ESSENTIAL FIRE SAFETY MEASURES");
-    if (failItems.length > 0) {
+    if (failItems.length > 0 || monitorItems.length > 0) {
       content += defectsBlock("NON-COMPLIANT FIRE SAFETY MEASURES", "Action Required: Rectification required within 14 days. Council must be notified of non-compliance.");
     }
+    content += groupedChecklistBlock(checklistResults, "INSPECTION CHECKLIST — FULL RESULTS");
   }
 
   if (reportType === "fire_inspection_report") {
@@ -358,10 +364,25 @@ Not Applicable:        ${naItems.length}
 Compliance Rate:       ${passRate !== null ? `${passRate}%` : "—"}
 Inspection Outcome:    ${failItems.length === 0 ? "COMPLIANT" : "NON-COMPLIANT — Action Required"}
 `;
-    content += groupedChecklistBlock(checklistResults, "FIRE SAFETY INSPECTION ITEMS");
     if (failItems.length > 0 || monitorItems.length > 0) {
       content += defectsBlock("NON-COMPLIANT FIRE SAFETY ITEMS", "Required Action: Rectification required prior to re-inspection. Do not occupy if fire egress is compromised.");
     }
+    content += groupedChecklistBlock(checklistResults, "INSPECTION CHECKLIST — FULL RESULTS");
+  }
+
+  // ── Fallback: ensure any unrecognised/future report type still gets a full checklist ──
+  const HANDLED_TYPES = new Set([
+    "defect_notice", "non_compliance_notice", "inspection_certificate",
+    "compliance_report", "summary", "quality_control_report",
+    "non_conformance_report", "safety_inspection_report",
+    "hazard_assessment_report", "corrective_action_report",
+    "pre_purchase_report", "annual_fire_safety", "fire_inspection_report",
+  ]);
+  if (!HANDLED_TYPES.has(reportType)) {
+    if (failItems.length > 0 || monitorItems.length > 0) {
+      content += defectsBlock("DEFECTS IDENTIFIED", "Action Required: Rectification required prior to re-inspection.");
+    }
+    content += groupedChecklistBlock(checklistResults, "INSPECTION CHECKLIST — FULL RESULTS");
   }
 
   if (inspection?.notes) {
