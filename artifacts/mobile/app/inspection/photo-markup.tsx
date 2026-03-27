@@ -35,7 +35,12 @@ const PEN_COLORS = [
 const PEN_WIDTHS = [2, 4, 7];
 
 function pointsToPath(points: { x: number; y: number }[]): string {
-  if (points.length < 2) return "";
+  if (points.length === 0) return "";
+  if (points.length === 1) {
+    // Single-point dot: draw a tiny line so it renders
+    const p = points[0];
+    return `M ${p.x.toFixed(1)} ${p.y.toFixed(1)} L ${(p.x + 0.1).toFixed(1)} ${p.y.toFixed(1)}`;
+  }
   return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
 }
 
@@ -56,24 +61,38 @@ export default function PhotoMarkupScreen() {
   const [selectedColor, setSelectedColor] = useState("#EF4444");
   const [selectedWidth, setSelectedWidth] = useState(4);
   const [uploading, setUploading] = useState(false);
-  const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>(null);
 
+  // Refs must be declared BEFORE the PanResponder so the closures capture them
   const currentPoints = useRef<{ x: number; y: number }[]>([]);
-  const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
+  const selectedColorRef = useRef(selectedColor);
+  const selectedWidthRef = useRef(selectedWidth);
+  useEffect(() => { selectedColorRef.current = selectedColor; }, [selectedColor]);
+  useEffect(() => { selectedWidthRef.current = selectedWidth; }, [selectedWidth]);
 
-  useEffect(() => {
-    if (photoUri) {
-      Image.getSize(photoUri, (w, h) => setImageSize({ w, h }), () => {});
-    }
-  }, [photoUri]);
+  const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   const drawAreaH = screenH - insets.top - insets.bottom - 56 - 120;
   const drawAreaW = screenW;
+
+  // Commit the current live stroke to the permanent strokes list
+  const commitStroke = useCallback(() => {
+    if (currentPoints.current.length >= 1) {
+      setStrokes(prev => [...prev, {
+        points: [...currentPoints.current],
+        color: selectedColorRef.current,
+        width: selectedWidthRef.current,
+      }]);
+    }
+    currentPoints.current = [];
+    setLiveStroke([]);
+  }, []);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
         currentPoints.current = [{ x: locationX, y: locationY }];
@@ -85,26 +104,15 @@ export default function PhotoMarkupScreen() {
         setLiveStroke([...currentPoints.current]);
       },
       onPanResponderRelease: () => {
-        if (currentPoints.current.length > 1) {
-          const colorSnap = selectedColorRef.current;
-          const widthSnap = selectedWidthRef.current;
-          setStrokes(prev => [...prev, {
-            points: [...currentPoints.current],
-            color: colorSnap,
-            width: widthSnap,
-          }]);
-        }
-        currentPoints.current = [];
-        setLiveStroke([]);
+        commitStroke();
       },
+      // Also commit on terminate so gesture system cancellations don't drop strokes
+      onPanResponderTerminate: () => {
+        commitStroke();
+      },
+      onShouldBlockNativeResponder: () => true,
     })
   ).current;
-
-  // Refs to capture latest color/width inside PanResponder closure
-  const selectedColorRef = useRef(selectedColor);
-  const selectedWidthRef = useRef(selectedWidth);
-  useEffect(() => { selectedColorRef.current = selectedColor; }, [selectedColor]);
-  useEffect(() => { selectedWidthRef.current = selectedWidth; }, [selectedWidth]);
 
   const undo = () => setStrokes(prev => prev.slice(0, -1));
   const clear = () => { setStrokes([]); setLiveStroke([]); };
@@ -164,7 +172,7 @@ export default function PhotoMarkupScreen() {
       });
 
       router.back();
-    } catch (e) {
+    } catch {
       Alert.alert("Save failed", "Could not save the photo. Please try again.");
     } finally {
       setUploading(false);
@@ -190,8 +198,9 @@ export default function PhotoMarkupScreen() {
         </Pressable>
       </View>
 
-      {/* Drawing canvas */}
+      {/* Drawing canvas — collapsable={false} prevents Android from collapsing the view */}
       <View
+        collapsable={false}
         style={[styles.canvas, { width: drawAreaW, height: drawAreaH }]}
         {...panResponder.panHandlers}
       >
@@ -205,29 +214,33 @@ export default function PhotoMarkupScreen() {
           <View style={[StyleSheet.absoluteFill, { backgroundColor: "#111" }]} />
         )}
 
-        <Svg style={StyleSheet.absoluteFill} width={drawAreaW} height={drawAreaH}>
-          {strokes.map((stroke, i) => (
-            <Path
-              key={i}
-              d={pointsToPath(stroke.points)}
-              stroke={stroke.color}
-              strokeWidth={stroke.width}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          ))}
-          {liveStroke.length > 1 && (
-            <Path
-              d={pointsToPath(liveStroke)}
-              stroke={selectedColor}
-              strokeWidth={selectedWidth}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          )}
-        </Svg>
+        {/* pointerEvents="none" is critical — without it the SVG intercepts touches
+            after strokes are drawn, causing the PanResponder to stop receiving events */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Svg width={drawAreaW} height={drawAreaH}>
+            {strokes.map((stroke, i) => (
+              <Path
+                key={i}
+                d={pointsToPath(stroke.points)}
+                stroke={stroke.color}
+                strokeWidth={stroke.width}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            ))}
+            {liveStroke.length >= 1 && (
+              <Path
+                d={pointsToPath(liveStroke)}
+                stroke={selectedColor}
+                strokeWidth={selectedWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            )}
+          </Svg>
+        </View>
 
         {/* Hint */}
         {strokes.length === 0 && liveStroke.length === 0 && (
