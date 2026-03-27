@@ -89,8 +89,10 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
   const [submitting, setSubmitting] = useState(false);
   const [allocatedTypes, setAllocatedTypes] = useState<{ templateId: number; name: string; inspectionType: string; folder: string }[]>([]);
 
+  const isCustom = form.projectId === "custom";
+
   useEffect(() => {
-    if (!form.projectId) { setAllocatedTypes([]); return; }
+    if (!form.projectId || isCustom) { setAllocatedTypes([]); return; }
     const token = localStorage.getItem("inspectproof_token");
     fetch(`/api/projects/${form.projectId}/inspection-types`, {
       headers: token ? { Authorization: `Basic ${token}` } : {},
@@ -107,14 +109,14 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.projectId) { setError("Please select a project."); return; }
+    if (!form.projectId) { setError("Please select a project or Custom."); return; }
     if (!form.inspectionType) { setError("Please select an inspection type."); return; }
     if (!form.scheduledDate) { setError("Please set a scheduled date."); return; }
     setSubmitting(true);
     try {
       await createInspection.mutateAsync({
         data: {
-          projectId: Number(form.projectId),
+          ...(isCustom ? {} : { projectId: Number(form.projectId) }),
           inspectionType: form.inspectionType,
           scheduledDate: form.scheduledDate,
           scheduledTime: form.scheduledTime || undefined,
@@ -163,6 +165,7 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
                 className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-sidebar focus:outline-none focus:ring-2 focus:ring-secondary/50 pr-9"
               >
                 <option value="">Select a project…</option>
+                <option value="custom">Custom (no project)</option>
                 {projects?.map((p: any) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
