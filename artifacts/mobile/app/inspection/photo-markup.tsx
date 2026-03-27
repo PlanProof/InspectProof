@@ -129,10 +129,12 @@ export default function PhotoMarkupScreen() {
     return res.json();
   }, [baseUrl, token]);
 
-  const save = async () => {
+  const save = async (overrideStrokes?: Stroke[]) => {
     if (!photoUri) { router.back(); return; }
     setUploading(true);
     try {
+      const effectiveStrokes = overrideStrokes ?? strokes;
+
       // 1. Request presigned upload URL
       const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
         method: "POST",
@@ -144,14 +146,14 @@ export default function PhotoMarkupScreen() {
         }),
       });
 
-      // 2. Upload original photo to GCS
+      // 2. Upload original photo to storage
       const blob = await (await fetch(photoUri)).blob();
       const uploadResp = await fetch(urlRes.uploadURL, {
         method: "PUT",
-        headers: { "Content-Type": "image/jpeg" },
+        headers: { "Content-Type": blob.type || "image/jpeg" },
         body: blob,
       });
-      if (!uploadResp.ok) throw new Error("Upload failed");
+      if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
       const objectPath: string = urlRes.objectPath;
 
       // 3. Get current checklist item data then patch
@@ -162,7 +164,7 @@ export default function PhotoMarkupScreen() {
       const existingMarkups: Record<string, MarkupData> = item?.photoMarkups || {};
 
       const newUrls = [...existingUrls, objectPath];
-      const markupData: MarkupData = { w: drawAreaW, h: drawAreaH, strokes };
+      const markupData: MarkupData = { w: drawAreaW, h: drawAreaH, strokes: effectiveStrokes };
       const newMarkups = { ...existingMarkups, [objectPath]: markupData };
 
       await fetchWithAuth(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
@@ -172,7 +174,8 @@ export default function PhotoMarkupScreen() {
       });
 
       router.back();
-    } catch {
+    } catch (err) {
+      console.error("[photo-markup] save error:", err);
       Alert.alert("Save failed", "Could not save the photo. Please try again.");
     } finally {
       setUploading(false);
@@ -302,9 +305,9 @@ export default function PhotoMarkupScreen() {
             <Feather name="trash-2" size={18} color={Colors.danger} />
             <Text style={[styles.toolBtnText, { color: Colors.danger }]}>Clear</Text>
           </Pressable>
-          <Pressable onPress={() => router.back()} style={styles.toolBtn}>
+          <Pressable onPress={() => save([])} disabled={uploading} style={[styles.toolBtn, uploading && { opacity: 0.35 }]}>
             <Feather name="image" size={18} color={Colors.textSecondary} />
-            <Text style={[styles.toolBtnText, { color: Colors.textSecondary }]}>No markup</Text>
+            <Text style={[styles.toolBtnText, { color: Colors.textSecondary }]}>Save without markup</Text>
           </Pressable>
         </View>
       </View>
