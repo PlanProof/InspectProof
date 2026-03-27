@@ -714,6 +714,11 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState(toLocalDateStr(new Date()));
   const [localTimes, setLocalTimes] = useState<Record<number, string>>({});
   const [localDates, setLocalDates] = useState<Record<number, string>>({});
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
 
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
@@ -813,10 +818,14 @@ export default function HomeScreen() {
             <Text style={styles.calendarTitle}>Schedule</Text>
           </View>
           <Pressable
-            onPress={() => router.push("/(tabs)/inspections" as any)}
+            onPress={() => {
+              const now = new Date();
+              setCalendarMonth({ year: now.getFullYear(), month: now.getMonth() });
+              setShowCalendar(true);
+            }}
             style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
           >
-            <Text style={styles.viewAll}>View All</Text>
+            <Text style={styles.viewAll}>Expand</Text>
           </Pressable>
         </View>
         <WeekStrip
@@ -833,9 +842,136 @@ export default function HomeScreen() {
         onScheduleChange={handleScheduleChange}
       />
 
+      {/* Full Calendar Modal */}
+      <Modal
+        visible={showCalendar}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCalendar(false)}
+      >
+        <View style={calStyles.container}>
+          {/* Modal Header */}
+          <View style={calStyles.header}>
+            <Text style={calStyles.headerTitle}>Schedule</Text>
+            <Pressable onPress={() => setShowCalendar(false)} hitSlop={12}>
+              <Feather name="x" size={22} color={Colors.text} />
+            </Pressable>
+          </View>
+
+          {/* Month navigation */}
+          <View style={calStyles.monthNav}>
+            <Pressable
+              hitSlop={12}
+              onPress={() => setCalendarMonth(({ year, month }) => {
+                const d = new Date(year, month - 1);
+                return { year: d.getFullYear(), month: d.getMonth() };
+              })}
+            >
+              <Feather name="chevron-left" size={22} color={Colors.text} />
+            </Pressable>
+            <Text style={calStyles.monthLabel}>
+              {new Date(calendarMonth.year, calendarMonth.month).toLocaleString("default", { month: "long", year: "numeric" })}
+            </Text>
+            <Pressable
+              hitSlop={12}
+              onPress={() => setCalendarMonth(({ year, month }) => {
+                const d = new Date(year, month + 1);
+                return { year: d.getFullYear(), month: d.getMonth() };
+              })}
+            >
+              <Feather name="chevron-right" size={22} color={Colors.text} />
+            </Pressable>
+          </View>
+
+          {/* Day-of-week headers */}
+          <View style={calStyles.dowRow}>
+            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+              <Text key={d} style={calStyles.dowLabel}>{d}</Text>
+            ))}
+          </View>
+
+          {/* Calendar grid */}
+          {(() => {
+            const { year, month } = calendarMonth;
+            const firstDay = new Date(year, month, 1);
+            // Monday-based: Mon=0 … Sun=6
+            const startOffset = (firstDay.getDay() + 6) % 7;
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const cells: (number | null)[] = [
+              ...Array(startOffset).fill(null),
+              ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+            ];
+            // Pad to complete last row
+            while (cells.length % 7 !== 0) cells.push(null);
+            const rows: (number | null)[][] = [];
+            for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+            const todayStr = toLocalDateStr(new Date());
+
+            return (
+              <ScrollView style={calStyles.grid} contentContainerStyle={calStyles.gridContent} showsVerticalScrollIndicator={false}>
+                {rows.map((row, ri) => (
+                  <View key={ri} style={calStyles.week}>
+                    {row.map((day, ci) => {
+                      if (!day) return <View key={ci} style={calStyles.cell} />;
+                      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                      const isToday = dateStr === todayStr;
+                      const isSelected = dateStr === selectedDate;
+                      const hasInspection = inspectionDates.has(dateStr);
+                      const dayInspections = inspections.filter((i) => i.scheduledDate === dateStr);
+                      return (
+                        <Pressable
+                          key={ci}
+                          style={[calStyles.cell, isSelected && calStyles.cellSelected, isToday && !isSelected && calStyles.cellToday]}
+                          onPress={() => {
+                            setSelectedDate(dateStr);
+                            setShowCalendar(false);
+                          }}
+                        >
+                          <Text style={[calStyles.dayNum, isSelected && calStyles.dayNumSelected, isToday && !isSelected && calStyles.dayNumToday]}>
+                            {day}
+                          </Text>
+                          {hasInspection && (
+                            <View style={calStyles.dotsRow}>
+                              {dayInspections.slice(0, 3).map((_, idx) => (
+                                <View key={idx} style={[calStyles.dot, isSelected && calStyles.dotSelected]} />
+                              ))}
+                            </View>
+                          )}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ))}
+              </ScrollView>
+            );
+          })()}
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
+
+const calStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.background, paddingTop: 24 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 16 },
+  headerTitle: { fontSize: 18, fontFamily: "PlusJakartaSans_700Bold", color: Colors.text },
+  monthNav: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 12 },
+  monthLabel: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  dowRow: { flexDirection: "row", paddingHorizontal: 12, paddingBottom: 4 },
+  dowLabel: { flex: 1, textAlign: "center", fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  grid: { flex: 1 },
+  gridContent: { paddingHorizontal: 12, paddingBottom: 32 },
+  week: { flexDirection: "row" },
+  cell: { flex: 1, aspectRatio: 1, alignItems: "center", justifyContent: "center", borderRadius: 8, margin: 2 },
+  cellSelected: { backgroundColor: Colors.primary },
+  cellToday: { borderWidth: 1.5, borderColor: Colors.secondary },
+  dayNum: { fontSize: 14, fontFamily: "PlusJakartaSans_500Medium", color: Colors.text },
+  dayNumSelected: { color: Colors.accent, fontFamily: "PlusJakartaSans_700Bold" },
+  dayNumToday: { color: Colors.secondary, fontFamily: "PlusJakartaSans_700Bold" },
+  dotsRow: { flexDirection: "row", gap: 2, marginTop: 2 },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.secondary },
+  dotSelected: { backgroundColor: Colors.accent },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
