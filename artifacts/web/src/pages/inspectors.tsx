@@ -67,13 +67,6 @@ const ROLE_BADGE: Record<string, string> = {
   Admin: "bg-sidebar/10 text-sidebar border-sidebar/20",
 };
 
-const APP_ACCESS_LABELS: Record<string, { label: string; badge: string }> = {
-  app_only: { label: "APP Only",       badge: "bg-green-50 text-green-700 border-green-200" },
-  full:     { label: "APP + Platform", badge: "bg-secondary/10 text-secondary border-secondary/30" },
-  invited:  { label: "Invite Sent",    badge: "bg-amber-50 text-amber-700 border-amber-200" },
-  none:     { label: "No Access",      badge: "bg-red-50 text-red-700 border-red-200" },
-};
-
 // ── Edit Inspector Modal ──────────────────────────────────────────────────────
 
 function EditInspectorModal({
@@ -222,7 +215,6 @@ function InspectorRow({
   onSendInvite: (id: number) => void;
   onEdit: (inspector: Inspector) => void;
 }) {
-  const appMeta = APP_ACCESS_LABELS[inspector.appAccess] ?? APP_ACCESS_LABELS.none;
   const roleBadge = ROLE_BADGE[inspector.role] ?? ROLE_BADGE.Staff;
   const isInvited = inspector.status === "invited";
 
@@ -272,10 +264,6 @@ function InspectorRow({
 
       {/* APP Access */}
       <div className="flex flex-col items-center min-w-[110px] gap-1">
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${appMeta.badge}`}>
-          <Smartphone className="h-2.5 w-2.5" />
-          {appMeta.label}
-        </span>
         {(inspector.appAccess === "app_only" || inspector.appAccess === "none") && (
           <button
             onClick={() => onSendInvite(inspector.id)}
