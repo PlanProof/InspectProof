@@ -15,7 +15,7 @@ import {
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as WebBrowser from "expo-web-browser";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
@@ -37,10 +37,11 @@ const RESULT_CONFIG: Record<string, { label: string; bg: string; text: string; b
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  draft:     { bg: "#f8fafc", text: "#475569", border: "#cbd5e1" },
-  submitted: { bg: "#eff6ff", text: "#2563eb", border: "#93c5fd" },
-  approved:  { bg: "#f0fdf4", text: "#16a34a", border: "#86efac" },
-  sent:      { bg: "#fefce8", text: "#b45309", border: "#fde68a" },
+  draft:          { bg: "#f8fafc", text: "#475569", border: "#cbd5e1" },
+  submitted:      { bg: "#eff6ff", text: "#2563eb", border: "#93c5fd" },
+  pending_review: { bg: "#eff6ff", text: "#2563eb", border: "#93c5fd" },
+  approved:       { bg: "#f0fdf4", text: "#16a34a", border: "#86efac" },
+  sent:           { bg: "#fefce8", text: "#b45309", border: "#fde68a" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -588,6 +589,7 @@ export default function GenerateReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { token, user } = useAuth();
+  const queryClient = useQueryClient();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   const [step, setStep] = useState<"select" | "preview">("select");
@@ -668,6 +670,28 @@ export default function GenerateReportScreen() {
     } finally {
       setLoadingExisting(false);
     }
+  };
+
+  const deleteReport = (reportId: number, title: string) => {
+    Alert.alert(
+      "Delete Report",
+      `Delete "${title}"? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await fetchWithAuth(`/api/reports/${reportId}`, { method: "DELETE" });
+              queryClient.invalidateQueries({ queryKey: ["reports", "inspection", id, token] });
+            } catch {
+              Alert.alert("Error", "Could not delete this report. Please try again.");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const generateReport = async () => {
@@ -824,35 +848,68 @@ export default function GenerateReportScreen() {
                   Existing Reports ({(existingReports as any[]).length})
                 </Text>
               </View>
-              <Text style={styles.existingSectionSub}>Tap a report to open it directly.</Text>
+              <Text style={styles.existingSectionSub}>Drafts can be opened and deleted. Sent reports are locked.</Text>
               {(existingReports as any[]).map((r: any) => {
                 const sc = STATUS_COLORS[r.status] || STATUS_COLORS.draft;
+                const isSent = r.status === "sent";
                 const dateStr = r.createdAt
                   ? new Date(r.createdAt).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" })
                   : "";
+                const statusLabel = r.status === "pending_review" ? "PENDING REVIEW" : r.status.toUpperCase();
                 return (
-                  <Pressable
-                    key={r.id}
-                    style={({ pressed }) => [styles.existingCard, pressed && { opacity: 0.75 }]}
-                    onPress={() => openExistingReport(r.id)}
-                    disabled={loadingExisting}
-                  >
-                    <View style={styles.existingIconWrap}>
-                      <Feather name="file-text" size={18} color={Colors.secondary} />
-                    </View>
-                    <View style={styles.existingInfo}>
-                      <Text style={styles.existingTitle} numberOfLines={2}>{r.title}</Text>
-                      <View style={styles.existingMeta}>
-                        <View style={[styles.existingStatusBadge, { backgroundColor: sc.bg, borderColor: sc.border }]}>
-                          <Text style={[styles.existingStatusText, { color: sc.text }]}>{r.status.toUpperCase()}</Text>
-                        </View>
-                        {dateStr ? <Text style={styles.existingDate}>{dateStr}</Text> : null}
+                  <View key={r.id} style={styles.existingCard}>
+                    {/* Tappable content area */}
+                    <Pressable
+                      style={({ pressed }) => [styles.existingCardContent, pressed && { opacity: 0.75 }]}
+                      onPress={() => openExistingReport(r.id)}
+                      disabled={loadingExisting}
+                    >
+                      <View style={[styles.existingIconWrap, isSent && styles.existingIconSent]}>
+                        <Feather
+                          name={isSent ? "lock" : "file-text"}
+                          size={18}
+                          color={isSent ? "#b45309" : Colors.secondary}
+                        />
                       </View>
-                    </View>
-                    {loadingExisting
-                      ? <ActivityIndicator size="small" color={Colors.secondary} />
-                      : <Feather name="chevron-right" size={16} color={Colors.textTertiary} />}
-                  </Pressable>
+                      <View style={styles.existingInfo}>
+                        <Text style={styles.existingTitle} numberOfLines={2}>{r.title}</Text>
+                        <View style={styles.existingMeta}>
+                          <View style={[styles.existingStatusBadge, { backgroundColor: sc.bg, borderColor: sc.border }]}>
+                            <Text style={[styles.existingStatusText, { color: sc.text }]}>{statusLabel}</Text>
+                          </View>
+                          {dateStr ? <Text style={styles.existingDate}>{dateStr}</Text> : null}
+                        </View>
+                        {isSent && (
+                          <Text style={styles.existingSentNote}>Sent — view only</Text>
+                        )}
+                      </View>
+                      {loadingExisting
+                        ? <ActivityIndicator size="small" color={Colors.secondary} />
+                        : <Feather name="chevron-right" size={16} color={Colors.textTertiary} />}
+                    </Pressable>
+
+                    {/* Action buttons — only for non-sent reports */}
+                    {!isSent && (
+                      <View style={styles.existingActions}>
+                        <Pressable
+                          style={({ pressed }) => [styles.existingActionBtn, styles.existingEditBtn, pressed && { opacity: 0.7 }]}
+                          onPress={() => openExistingReport(r.id)}
+                          disabled={loadingExisting}
+                        >
+                          <Feather name="edit-2" size={13} color={Colors.secondary} />
+                          <Text style={styles.existingEditText}>Edit</Text>
+                        </Pressable>
+                        <Pressable
+                          style={({ pressed }) => [styles.existingActionBtn, styles.existingDeleteBtn, pressed && { opacity: 0.7 }]}
+                          onPress={() => deleteReport(r.id, r.title)}
+                          disabled={loadingExisting}
+                        >
+                          <Feather name="trash-2" size={13} color={Colors.danger} />
+                          <Text style={styles.existingDeleteText}>Delete</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
                 );
               })}
               <View style={styles.existingDivider}>
@@ -1071,13 +1128,16 @@ const styles = StyleSheet.create({
   existingSectionTitle: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   existingSectionSub: { fontSize: 12, color: Colors.textSecondary, marginTop: -4 },
   existingCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
     backgroundColor: Colors.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
+    overflow: "hidden",
+  },
+  existingCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     padding: 12,
   },
   existingIconWrap: {
@@ -1088,12 +1148,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  existingIconSent: {
+    backgroundColor: "#fef3c7",
+  },
   existingInfo: { flex: 1, gap: 4 },
   existingTitle: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   existingMeta: { flexDirection: "row", alignItems: "center", gap: 8 },
   existingStatusBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1 },
   existingStatusText: { fontSize: 10, fontFamily: "PlusJakartaSans_700Bold" },
   existingDate: { fontSize: 11, color: Colors.textTertiary },
+  existingSentNote: { fontSize: 11, color: "#b45309", fontFamily: "PlusJakartaSans_500Medium" },
+  existingActions: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  existingActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 9,
+  },
+  existingEditBtn: {
+    borderRightWidth: 1,
+    borderRightColor: Colors.border,
+  },
+  existingEditText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  existingDeleteBtn: {},
+  existingDeleteText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.danger },
   existingDivider: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 4 },
   existingDividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
   existingDividerText: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, letterSpacing: 0.5 },
