@@ -68,6 +68,21 @@ router.get("/", optionalAuth, async (req, res) => {
     let inspections = await db.select().from(inspectionsTable)
       .orderBy(sql`${inspectionsTable.scheduledDate} DESC`);
 
+    // Scope inspections to projects owned by the requesting user (unless admin)
+    if (req.authUser && !req.authUser.isAdmin) {
+      const allProjects = await db.select({ id: projectsTable.id, name: projectsTable.name, createdById: projectsTable.createdById })
+        .from(projectsTable);
+      const accessibleProjectIds = allProjects
+        .filter(p => p.name === "Test Project" || p.createdById === req.authUser!.id)
+        .map(p => p.id);
+      inspections = inspections.filter(i => accessibleProjectIds.includes(i.projectId));
+    } else if (!req.authUser) {
+      const testProjects = await db.select({ id: projectsTable.id }).from(projectsTable)
+        .where(eq(projectsTable.name, "Test Project"));
+      const testIds = testProjects.map(p => p.id);
+      inspections = inspections.filter(i => testIds.includes(i.projectId));
+    }
+
     if (projectId) inspections = inspections.filter(i => i.projectId === parseInt(projectId as string));
     if (status) inspections = inspections.filter(i => i.status === status);
     if (inspectorId) inspections = inspections.filter(i => i.inspectorId === parseInt(inspectorId as string));

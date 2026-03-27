@@ -10,6 +10,8 @@ interface CurrentUser {
   plan: string;
   isAdmin: boolean;
   isActive: boolean;
+  profession: string | null;
+  licenceNumber: string | null;
 }
 
 let cachedUser: CurrentUser | null = null;
@@ -64,8 +66,13 @@ export function useAuth() {
       cachedUser = u;
       setUser(u);
       notifyListeners();
+      // New users (no profession set) go to onboarding in Settings
+      if (!u?.profession) {
+        setLocation("/settings?onboarding=1");
+      } else {
+        setLocation("/dashboard");
+      }
     });
-    setLocation("/dashboard");
   };
 
   const logout = () => {

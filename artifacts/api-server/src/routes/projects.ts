@@ -2,18 +2,23 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
 import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable } from "@workspace/db";
 import { checkProjectQuota } from "../lib/quota";
+import { optionalAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
 
 function getUserIdFromRequest(req: any): number | null {
   const auth = req.headers?.authorization;
-  if (!auth?.startsWith('Bearer ')) return null;
+  if (!auth) return null;
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : auth.startsWith('Basic ') ? auth.slice(6) : null;
+  if (!token) return null;
   try {
-    const decoded = Buffer.from(auth.slice(7), 'base64').toString();
+    const decoded = Buffer.from(token, 'base64').toString();
     const [userId] = decoded.split(':');
     return Number(userId) || null;
   } catch { return null; }
 }
+
+const TEST_PROJECT_NAME = "Test Project";
 
 function formatProject(p: any, totalInspections = 0, openIssues = 0) {
   return {
@@ -64,10 +69,21 @@ function formatDoc(d: any) {
   };
 }
 
-router.get("/", async (req, res) => {
+router.get("/", optionalAuth, async (req, res) => {
   try {
     const { status, search } = req.query;
     let projects = await db.select().from(projectsTable).orderBy(sql`${projectsTable.updatedAt} DESC`);
+
+    // Scope projects to the requesting user unless they are an admin
+    if (req.authUser && !req.authUser.isAdmin) {
+      projects = projects.filter(p =>
+        p.name === TEST_PROJECT_NAME ||
+        p.createdById === req.authUser!.id
+      );
+    } else if (!req.authUser) {
+      // Unauthenticated – only show the test project
+      projects = projects.filter(p => p.name === TEST_PROJECT_NAME);
+    }
 
     if (status) {
       projects = projects.filter(p => p.status === status);

@@ -100,7 +100,7 @@ function SettingRow({ label, description, children }: {
 }
 
 function FormField({ label, hint, children }: {
-  label: string;
+  label: React.ReactNode;
   hint?: string;
   children: React.ReactNode;
 }) {
@@ -163,7 +163,9 @@ function Button({
 
 export default function Settings() {
   const { token } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("profile");
+  const [, setLocation] = useLocation();
+  const isOnboarding = new URLSearchParams(window.location.search).get("onboarding") === "1";
+  const [activeTab, setActiveTab] = useState<Tab>(isOnboarding ? "profile" : "profile");
   const [user, setUser] = useState<any>(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
@@ -174,6 +176,19 @@ export default function Settings() {
   return (
     <AppLayout>
       <div className="mb-6">
+        {isOnboarding ? (
+          <div className="mb-4 p-4 rounded-xl bg-secondary/10 border border-secondary/30 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+              <User className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-sidebar">Welcome to InspectProof!</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Complete your profile below — your <strong>Profession</strong> is required so we can load the right inspection checklists for you.
+              </p>
+            </div>
+          </div>
+        ) : null}
         <h1 className="text-3xl font-bold text-sidebar tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">Manage your account, organisation, and platform preferences.</p>
       </div>
@@ -201,7 +216,7 @@ export default function Settings() {
 
         {/* Content */}
         <div className="flex-1 min-w-0 space-y-4">
-          {activeTab === "profile"       && <ProfileTab user={user} loading={loadingUser} />}
+          {activeTab === "profile"       && <ProfileTab user={user} loading={loadingUser} isOnboarding={isOnboarding} onOnboardingComplete={() => setLocation("/dashboard")} />}
           {activeTab === "security"      && <SecurityTab />}
           {activeTab === "notifications" && <NotificationsTab />}
           {activeTab === "organisation"  && <OrganisationTab />}
@@ -227,8 +242,9 @@ const PROFESSION_OPTIONS = [
   "Other",
 ];
 
-function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
+function ProfileTab({ user, loading, isOnboarding = false, onOnboardingComplete }: { user: any; loading: boolean; isOnboarding?: boolean; onOnboardingComplete?: () => void }) {
   const [saved, setSaved] = useState(false);
+  const [professionError, setProfessionError] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [licenceNumber, setLicenceNumber] = useState("");
@@ -264,6 +280,13 @@ function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
   const effectiveProfession = profession === "Other" ? professionCustom.trim() : profession;
 
   const save = async () => {
+    // Validate profession is set (mandatory, especially during onboarding)
+    if (!effectiveProfession) {
+      setProfessionError(true);
+      return;
+    }
+    setProfessionError(false);
+
     const [firstName, ...rest] = name.trim().split(" ");
     const lastName = rest.join(" ");
     try {
@@ -282,7 +305,10 @@ function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
       // silently continue — save banner still shows
     }
     setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setTimeout(() => {
+      setSaved(false);
+      if (isOnboarding && onOnboardingComplete) onOnboardingComplete();
+    }, 1500);
   };
 
   const uploadSignature = async (file: File) => {
@@ -391,11 +417,11 @@ function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
           <FormField label="Phone Number">
             <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+61 400 000 000" />
           </FormField>
-          <FormField label="Profession">
+          <FormField label={<span className="flex items-center gap-1">Profession <span className="text-red-500">*</span></span>}>
             <select
               value={profession}
-              onChange={e => { setProfession(e.target.value); setProfessionCustom(""); }}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onChange={e => { setProfession(e.target.value); setProfessionCustom(""); setProfessionError(false); }}
+              className={`flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${professionError ? "border-red-400 focus-visible:ring-red-300" : "border-input"}`}
             >
               <option value="">— Select your discipline —</option>
               {PROFESSION_OPTIONS.map(p => (
@@ -406,10 +432,13 @@ function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
               <input
                 type="text"
                 value={professionCustom}
-                onChange={e => setProfessionCustom(e.target.value)}
+                onChange={e => { setProfessionCustom(e.target.value); setProfessionError(false); }}
                 placeholder="Enter your discipline…"
                 className="mt-2 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
+            )}
+            {professionError && (
+              <p className="text-xs text-red-500 mt-1">Profession is required — this determines your inspection checklists.</p>
             )}
           </FormField>
           <FormField label="Licence / Registration Number" hint="Your accreditation number as it appears on reports.">

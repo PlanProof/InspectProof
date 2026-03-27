@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, issuesTable, projectsTable, activityLogsTable } from "@workspace/db";
+import { optionalAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -27,11 +28,23 @@ async function formatIssue(i: any) {
   };
 }
 
-router.get("/", async (req, res) => {
+router.get("/", optionalAuth, async (req, res) => {
   try {
     const { projectId, inspectionId, status, severity } = req.query;
     let issues = await db.select().from(issuesTable)
       .orderBy(sql`${issuesTable.createdAt} DESC`);
+
+    // Scope issues to user's accessible projects
+    if (req.authUser && !req.authUser.isAdmin) {
+      const allProjects = await db.select({ id: projectsTable.id, name: projectsTable.name, createdById: projectsTable.createdById })
+        .from(projectsTable);
+      const accessibleIds = allProjects
+        .filter(p => p.name === "Test Project" || p.createdById === req.authUser!.id)
+        .map(p => p.id);
+      issues = issues.filter(i => accessibleIds.includes(i.projectId));
+    } else if (!req.authUser) {
+      issues = [];
+    }
 
     if (projectId) issues = issues.filter(i => i.projectId === parseInt(projectId as string));
     if (inspectionId) issues = issues.filter(i => i.inspectionId === parseInt(inspectionId as string));
