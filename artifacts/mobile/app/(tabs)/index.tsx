@@ -7,8 +7,6 @@ import {
   Pressable,
   RefreshControl,
   Platform,
-  Animated,
-  PanResponder,
   Modal,
   TextInput,
 } from "react-native";
@@ -42,11 +40,11 @@ const INSPECTION_TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  scheduled: { label: "Scheduled", color: Colors.secondary, bg: Colors.infoLight },
-  in_progress: { label: "In Progress", color: "#D69E2E", bg: "#FFFFF0" },
-  completed: { label: "Completed", color: Colors.success, bg: Colors.successLight },
-  follow_up_required: { label: "Follow-up", color: Colors.danger, bg: Colors.dangerLight },
-  cancelled: { label: "Cancelled", color: Colors.textTertiary, bg: Colors.borderLight },
+  scheduled:          { label: "Not Started",      color: Colors.textSecondary, bg: Colors.borderLight },
+  in_progress:        { label: "In Progress",       color: "#B45309",            bg: "#FEF3C7" },
+  completed:          { label: "Complete",           color: Colors.success,       bg: Colors.successLight },
+  follow_up_required: { label: "Action Required",   color: Colors.danger,        bg: Colors.dangerLight },
+  cancelled:          { label: "Cancelled",          color: Colors.textTertiary,  bg: Colors.borderLight },
 };
 
 const INSPECTION_REPORT_TYPE: Record<string, string> = {
@@ -75,25 +73,6 @@ const INSPECTION_REPORT_TYPE: Record<string, string> = {
 function getDisplayTime(insp: any): string {
   return insp.scheduledTime || "TBD";
 }
-
-function timeToMinutes(time: string): number {
-  if (!time || !time.includes(":")) return 9 * 60; // default 9:00 AM
-  const [h, m] = time.split(":").map(Number);
-  return (h || 9) * 60 + (m || 0);
-}
-
-function minutesToTime(minutes: number): string {
-  const clamped = Math.max(6 * 60, Math.min(20 * 60, minutes));
-  const h = Math.floor(clamped / 60);
-  const m = clamped % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-function snapToGrid(minutes: number): number {
-  return Math.round(minutes / 15) * 15;
-}
-
-const PIXELS_PER_15MIN = 28;
 
 function useApiData<T>(url: string) {
   const { token } = useAuth();
@@ -225,86 +204,33 @@ function MapPinButton({ address, suburb }: { address: string; suburb: string | n
   );
 }
 
-interface DraggableCardProps {
+interface InspCardProps {
   insp: any;
   isLast: boolean;
-  onTimeChange: (id: number, newTime: string) => void;
   onEditTime: (inspId: number, currentTime: string, currentDate: string) => void;
 }
 
-function DraggableCard({ insp, onTimeChange, onEditTime }: DraggableCardProps) {
-  const translateY = useRef(new Animated.Value(0)).current;
-  const [dragging, setDragging] = useState(false);
-  const [previewTime, setPreviewTime] = useState<string | null>(null);
-  const baseMinutesRef = useRef(timeToMinutes(insp.displayTime));
-
-  useEffect(() => {
-    baseMinutesRef.current = timeToMinutes(insp.displayTime);
-  }, [insp.displayTime]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 6,
-      onPanResponderGrant: () => {
-        setDragging(true);
-        translateY.setOffset((translateY as any).__getValue?.() ?? 0);
-        translateY.setValue(0);
-      },
-      onPanResponderMove: (_, gs) => {
-        translateY.setValue(gs.dy);
-        const deltaSlots = Math.round(gs.dy / PIXELS_PER_15MIN);
-        const newMins = snapToGrid(baseMinutesRef.current + deltaSlots * 15);
-        setPreviewTime(minutesToTime(newMins));
-      },
-      onPanResponderRelease: (_, gs) => {
-        const deltaSlots = Math.round(gs.dy / PIXELS_PER_15MIN);
-        const newMins = snapToGrid(baseMinutesRef.current + deltaSlots * 15);
-        const newTime = minutesToTime(newMins);
-        translateY.flattenOffset();
-        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 120, friction: 10 }).start();
-        setDragging(false);
-        setPreviewTime(null);
-        onTimeChange(insp.id, newTime);
-      },
-      onPanResponderTerminate: () => {
-        translateY.flattenOffset();
-        Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
-        setDragging(false);
-        setPreviewTime(null);
-      },
-    })
-  ).current;
-
+function InspCard({ insp, onEditTime }: InspCardProps) {
   const cfg = STATUS_CONFIG[insp.status] ?? STATUS_CONFIG.scheduled;
   const typeLabel = INSPECTION_TYPE_LABELS[insp.inspectionType] ?? insp.inspectionType;
   const hasAddress = !!(insp.projectAddress);
   const addressLine = [insp.projectAddress, insp.projectSuburb].filter(Boolean).join(", ");
-  const displayedTime = previewTime || insp.displayTime;
 
   return (
-    <Animated.View
-      style={[
-        tlStyles.item,
-        { transform: [{ translateY }], zIndex: dragging ? 100 : 1 },
-      ]}
-      {...panResponder.panHandlers}
-    >
-      {/* Card */}
-      <View style={[
-        tlStyles.card,
-        insp.status === "completed" && tlStyles.cardCompleted,
-        dragging && tlStyles.cardDragging,
-      ]}>
+    <View style={tlStyles.item}>
+      <View style={[tlStyles.card, insp.status === "completed" && tlStyles.cardCompleted]}>
         <View style={tlStyles.cardInner}>
           <View style={tlStyles.cardTop}>
             <View style={[tlStyles.typePill, { backgroundColor: Colors.infoLight }]}>
               <Feather name="clipboard" size={11} color={Colors.secondary} />
               <Text style={tlStyles.typeText}>{typeLabel}</Text>
             </View>
-            <Pressable onPress={() => onEditTime(insp.id, insp.displayTime, insp.scheduledDate || toLocalDateStr(new Date()))} style={({ pressed }) => [tlStyles.timePill, pressed && { opacity: 0.6 }]}>
+            <Pressable
+              onPress={() => onEditTime(insp.id, insp.displayTime, insp.scheduledDate || toLocalDateStr(new Date()))}
+              style={({ pressed }) => [tlStyles.timePill, pressed && { opacity: 0.6 }]}
+            >
               <Feather name="clock" size={11} color={Colors.secondary} />
-              <Text style={[tlStyles.timeInCard, { color: Colors.secondary }, previewTime && tlStyles.timePreview]}>{displayedTime}</Text>
+              <Text style={[tlStyles.timeInCard, { color: Colors.secondary }]}>{insp.displayTime}</Text>
               <Feather name="edit-2" size={9} color={Colors.secondary + "99"} />
             </Pressable>
             <View style={[tlStyles.statusPill, { backgroundColor: cfg.bg, flexDirection: "row", alignItems: "center", gap: 3 }]}>
@@ -368,15 +294,9 @@ function DraggableCard({ insp, onTimeChange, onEditTime }: DraggableCardProps) {
               </Text>
             </Pressable>
           )}
-
-          {/* Drag handle hint */}
-          <View style={tlStyles.dragHint}>
-            <Feather name="more-horizontal" size={14} color={Colors.borderLight} />
-          </View>
         </View>
       </View>
-
-    </Animated.View>
+    </View>
   );
 }
 
@@ -446,13 +366,6 @@ function ScheduleTimeline({
     onScheduleChange(timeEditTarget.inspId, newTime, editDate);
     setTimeEditTarget(null);
   }, [timeEditTarget, editHour, editMinute, editAmPm, editDate, onScheduleChange]);
-
-  // Drag handler — keeps existing date, changes only time
-  const handleDragTimeChange = useCallback((inspId: number, newTime: string) => {
-    const insp = inspections.find((i: any) => i.id === inspId);
-    const date = insp?.scheduledDate || toLocalDateStr(new Date());
-    onScheduleChange(inspId, newTime, date);
-  }, [inspections, onScheduleChange]);
 
   const isToday = selectedDate === today;
   const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return toLocalDateStr(d); })();
@@ -621,11 +534,10 @@ function ScheduleTimeline({
         {active.length > 0 && (
           <View style={tlStyles.list}>
             {active.map((insp, idx) => (
-              <DraggableCard
+              <InspCard
                 key={insp.id}
                 insp={insp}
                 isLast={idx === active.length - 1}
-                onTimeChange={handleDragTimeChange}
                 onEditTime={handleEditTime}
               />
             ))}
@@ -649,11 +561,10 @@ function ScheduleTimeline({
             </View>
             <View style={tlStyles.list}>
               {completed.map((insp, idx) => (
-                <DraggableCard
+                <InspCard
                   key={insp.id}
                   insp={insp}
                   isLast={idx === completed.length - 1}
-                  onTimeChange={handleDragTimeChange}
                   onEditTime={handleEditTime}
                 />
               ))}
@@ -675,7 +586,6 @@ const tlStyles = StyleSheet.create({
   item: { marginBottom: 10 },
   timePill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, backgroundColor: Colors.background },
   timeInCard: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
-  timePreview: { color: Colors.secondary },
   card: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -688,20 +598,11 @@ const tlStyles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
-  cardDragging: {
-    borderColor: Colors.secondary,
-    borderStyle: "solid",
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    elevation: 8,
-    backgroundColor: "#FAFEFF",
-  },
   cardCompleted: {
     backgroundColor: "#F4F5F6",
     borderColor: "#D8DADD",
     shadowOpacity: 0.02,
   },
-  dragHint: { alignItems: "center", paddingTop: 4 },
   cardInner: { padding: 13, gap: 6 },
   cardTop: { flexDirection: "row", gap: 6, alignItems: "center" },
   typePill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
