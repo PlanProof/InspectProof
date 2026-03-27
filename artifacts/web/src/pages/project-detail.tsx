@@ -7,7 +7,7 @@ import {
 } from "@/components/ui";
 import {
   ArrowLeft, Building, FileText, ClipboardList, CheckSquare, Plus, Upload,
-  FolderPlus, Pencil, Trash2, Eye, EyeOff, File, Folder, FolderOpen,
+  FolderPlus, Pencil, Trash2, Archive, Eye, EyeOff, File, Folder, FolderOpen,
   ChevronRight, ChevronDown, Calendar, Clock, CheckCircle, CheckCircle2, AlertCircle, XCircle, MoreHorizontal,
   Download, Mail, Loader2, Link2, Unlink, Award, Send, BarChart2,
   Smartphone, X, Info, ZoomIn, User
@@ -137,6 +137,8 @@ export default function ProjectDetail() {
   const [error, setError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   const loadProject = useCallback(async () => {
     try {
@@ -159,6 +161,19 @@ export default function ProjectDetail() {
       navigate("/projects");
     } catch {
       setDeleting(false);
+    }
+  };
+
+  const handleArchive = async () => {
+    setArchiving(true);
+    try {
+      await apiFetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "archived" }),
+      });
+      navigate("/projects");
+    } catch {
+      setArchiving(false);
     }
   };
 
@@ -203,15 +218,26 @@ export default function ProjectDetail() {
               <div className="font-medium text-sidebar">{project.totalInspections} Inspections</div>
               <div className="text-muted-foreground">{project.openIssues} open issues</div>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-400"
-              onClick={() => setDeleteOpen(true)}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-              Delete Project
-            </Button>
+            <div className="flex flex-col gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
+                onClick={() => setArchiveOpen(true)}
+              >
+                <Archive className="h-3.5 w-3.5 mr-1.5" />
+                Archive
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-400"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                Delete Project
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -239,6 +265,41 @@ export default function ProjectDetail() {
       {tab === "Inspections" && <InspectionsTab project={project} onRefresh={loadProject} />}
       {tab === "Inspection Types" && <InspectionTypesTab projectId={projectId} />}
       {tab === "Reports" && <ReportsTab projectId={projectId} />}
+
+      {/* Archive Confirmation Dialog */}
+      <Dialog open={archiveOpen} onOpenChange={open => { if (!archiving) setArchiveOpen(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-gray-700">
+              <Archive className="h-5 w-5" />
+              Archive Project
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to archive{" "}
+              <span className="font-semibold text-sidebar">"{project.name}"</span>?
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Archived projects are hidden from the active project list. No data will be deleted and the project can be restored at any time.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setArchiveOpen(false)} disabled={archiving}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-gray-700 hover:bg-gray-800 text-white"
+              onClick={handleArchive}
+              disabled={archiving}
+            >
+              {archiving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Archive className="h-4 w-4 mr-1.5" />}
+              {archiving ? "Archiving…" : "Archive Project"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteOpen} onOpenChange={open => { if (!deleting) setDeleteOpen(open); }}>

@@ -241,6 +241,35 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+router.patch("/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const allowed = ["status", "name", "siteAddress", "suburb", "state", "postcode", "client", "builder",
+      "designer", "stage", "projectType", "daNumber", "certificationNumber", "buildingClassification",
+      "startDate", "expectedCompletion"];
+    const data: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (key in req.body) data[key] = req.body[key];
+    }
+    if (Object.keys(data).length === 0) {
+      res.status(400).json({ error: "no_fields" });
+      return;
+    }
+    const [project] = await db.update(projectsTable)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(projectsTable.id, id))
+      .returning();
+    if (!project) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(formatProject(project, 0, 0));
+  } catch (err) {
+    req.log.error({ err }, "Patch project error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 router.delete("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
