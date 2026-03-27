@@ -8,7 +8,7 @@ import {
   RefreshControl,
   TextInput,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -92,6 +92,8 @@ export default function InspectionsScreen() {
   const past = filtered.filter(i => i.scheduledDate < now || i.status === "completed");
 
   const handleRefresh = useCallback(() => { refetch(); }, [refetch]);
+
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
   const emptyDescription = search.trim()
     ? `No inspections match "${search.trim()}"`

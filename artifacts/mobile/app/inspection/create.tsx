@@ -205,8 +205,8 @@ export default function CreateInspectionScreen() {
           throw new Error(errBody?.error || "Failed to create inspection");
         }
         const inspection = await res.json();
-        queryClient.invalidateQueries({ queryKey: ["inspections"] });
-        queryClient.invalidateQueries({ queryKey: ["project-inspections"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/inspections"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/analytics"] });
         router.replace(`/inspection/conduct/${inspection.id}` as any);
       } catch (e: any) {
         Alert.alert("Error", e.message || "Failed to create inspection");

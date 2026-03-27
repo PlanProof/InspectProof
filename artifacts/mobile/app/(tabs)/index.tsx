@@ -10,7 +10,7 @@ import {
   Modal,
   TextInput,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -789,6 +789,8 @@ export default function HomeScreen() {
   }, [rawReports]);
 
   const handleRefresh = useCallback(() => { refetch(); }, [refetch]);
+
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
   const getGreeting = () => {
     const h = new Date().getHours();
