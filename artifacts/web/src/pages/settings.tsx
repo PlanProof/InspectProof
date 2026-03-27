@@ -5,7 +5,7 @@ import {
   User, Lock, Bell, Building2, Palette, Loader2,
   CheckCircle2, ChevronRight, Shield, Database, Download,
   ToggleLeft, Upload, Trash2, PenLine, CreditCard, Zap, BarChart3,
-  ArrowRight,
+  ArrowRight, Eye, EyeOff,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -540,6 +540,31 @@ function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
 
 // ── Security Tab ──────────────────────────────────────────────────────────────
 
+function PasswordInput({ value, onChange, placeholder, id }: { value: string; onChange: (v: string) => void; placeholder?: string; id?: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pr-10"
+      />
+      <button
+        type="button"
+        onClick={() => setShow(v => !v)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-sidebar transition-colors"
+        tabIndex={-1}
+        aria-label={show ? "Hide password" : "Show password"}
+      >
+        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+}
+
 function SecurityTab() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -561,13 +586,13 @@ function SecurityTab() {
       <SectionCard title="Change Password" description="Use a strong password with a mix of letters, numbers, and symbols">
         <div className="max-w-md space-y-4">
           <FormField label="Current Password">
-            <Input type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="••••••••" />
+            <PasswordInput value={current} onChange={setCurrent} placeholder="••••••••" />
           </FormField>
           <FormField label="New Password">
-            <Input type="password" value={next} onChange={e => setNext(e.target.value)} placeholder="••••••••" />
+            <PasswordInput value={next} onChange={setNext} placeholder="••••••••" />
           </FormField>
           <FormField label="Confirm New Password">
-            <Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="••••••••" />
+            <PasswordInput value={confirm} onChange={setConfirm} placeholder="••••••••" />
           </FormField>
 
           {error && <p className="text-sm text-red-500">{error}</p>}

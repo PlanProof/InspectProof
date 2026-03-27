@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLogin } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Label } from "@/components/ui";
-import { AlertTriangle, Check, ChevronLeft, Loader2, Zap, Rocket, Building2 } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, Loader2, Zap, Rocket, Building2, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const API = (path: string) => `/api${path}`;
@@ -104,6 +104,7 @@ export default function Login() {
 function SignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const { login } = useAuth();
 
   const loginMutation = useLogin({
@@ -147,14 +148,25 @@ function SignInForm() {
                 Forgot password?
               </a>
             </div>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary"
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPw ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-sidebar transition-colors"
+                tabIndex={-1}
+                aria-label={showPw ? "Hide password" : "Show password"}
+              >
+                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
           <Button
             type="submit"
@@ -206,6 +218,8 @@ function AccountStep({
   onNext: () => void;
 }) {
   const [error, setError] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   const handle = (field: keyof AccountDetails) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setAccount((a) => ({ ...a, [field]: e.target.value }));
@@ -274,26 +288,48 @@ function AccountStep({
           </div>
           <div className="space-y-2">
             <Label htmlFor="su-password">Password</Label>
-            <Input
-              id="su-password"
-              type="password"
-              value={account.password}
-              onChange={handle("password")}
-              required
-              minLength={8}
-              className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary"
-            />
+            <div className="relative">
+              <Input
+                id="su-password"
+                type={showPw ? "text" : "password"}
+                value={account.password}
+                onChange={handle("password")}
+                required
+                minLength={8}
+                className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-sidebar transition-colors"
+                tabIndex={-1}
+                aria-label={showPw ? "Hide password" : "Show password"}
+              >
+                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="su-confirm">Confirm password</Label>
-            <Input
-              id="su-confirm"
-              type="password"
-              value={account.confirmPassword}
-              onChange={handle("confirmPassword")}
-              required
-              className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary"
-            />
+            <div className="relative">
+              <Input
+                id="su-confirm"
+                type={showConfirmPw ? "text" : "password"}
+                value={account.confirmPassword}
+                onChange={handle("confirmPassword")}
+                required
+                className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPw(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-sidebar transition-colors"
+                tabIndex={-1}
+                aria-label={showConfirmPw ? "Hide password" : "Show password"}
+              >
+                {showConfirmPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
           <Button
             type="submit"
