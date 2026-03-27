@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useListUsers } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, Button } from "@/components/ui";
@@ -209,11 +209,15 @@ function InspectorRow({
   onTogglePlatform,
   onSendInvite,
   onEdit,
+  isInviting,
+  justSent,
 }: {
   inspector: Inspector;
   onTogglePlatform: (id: number) => void;
   onSendInvite: (id: number) => void;
   onEdit: (inspector: Inspector) => void;
+  isInviting?: boolean;
+  justSent?: boolean;
 }) {
   const roleBadge = ROLE_BADGE[inspector.role] ?? ROLE_BADGE.Staff;
   const isInvited = inspector.status === "invited";
@@ -264,22 +268,29 @@ function InspectorRow({
 
       {/* APP Access */}
       <div className="flex flex-col items-center min-w-[110px] gap-1">
-        {(inspector.appAccess === "app_only" || inspector.appAccess === "none") && (
+        {justSent ? (
+          <span className="flex items-center gap-1 text-[10px] text-green-700 font-semibold">
+            <Check className="h-2.5 w-2.5" /> Sent ✓
+          </span>
+        ) : isInviting ? (
+          <span className="flex items-center gap-1 text-[10px] text-secondary font-medium">
+            <Loader2 className="h-2.5 w-2.5 animate-spin" /> Sending…
+          </span>
+        ) : (inspector.appAccess === "app_only" || inspector.appAccess === "none") ? (
           <button
             onClick={() => onSendInvite(inspector.id)}
             className="flex items-center gap-1 text-[10px] text-secondary hover:underline font-medium"
           >
             <Send className="h-2.5 w-2.5" /> Send APP Invite
           </button>
-        )}
-        {inspector.appAccess === "invited" && (
+        ) : inspector.appAccess === "invited" ? (
           <button
             onClick={() => onSendInvite(inspector.id)}
             className="flex items-center gap-1 text-[10px] text-amber-600 hover:underline font-medium"
           >
             <Send className="h-2.5 w-2.5" /> Resend Invite
           </button>
-        )}
+        ) : null}
       </div>
 
       {/* Platform Access */}
@@ -323,14 +334,24 @@ function InspectorRow({
   );
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function apiBase() {
+  return import.meta.env.BASE_URL.replace(/\/$/, "");
+}
+
 // ── Inspectors Page ───────────────────────────────────────────────────────────
 
 export default function Inspectors() {
   const { data: rawUsers, isLoading } = useListUsers({});
   const [overrides, setOverrides] = useState<Record<number, Partial<Inspector>>>({});
   const [inviteSentFor, setInviteSentFor] = useState<number | null>(null);
+  const [invitingId, setInvitingId] = useState<number | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [newEmail, setNewEmail] = useState("");
+  const [formSending, setFormSending] = useState(false);
+  const [formResult, setFormResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [editingInspector, setEditingInspector] = useState<Inspector | null>(null);
 
   const inspectors: Inspector[] = useMemo(() => {
@@ -343,11 +364,59 @@ export default function Inspectors() {
     setOverrides(prev => ({ ...prev, [id]: { ...prev[id], platformAccess: !current } }));
   };
 
-  const sendInvite = (id: number) => {
-    setInviteSentFor(id);
-    setOverrides(prev => ({ ...prev, [id]: { ...prev[id], appAccess: "invited", status: "invited" } }));
-    setTimeout(() => setInviteSentFor(null), 3000);
-  };
+  const sendInvite = useCallback(async (id: number) => {
+    const inspector = inspectors.find(i => i.id === id);
+    if (!inspector) return;
+    setInvitingId(id);
+    setInviteError(null);
+    try {
+      const res = await fetch(`${apiBase()}/api/invites/app-invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inspector.email, userId: id }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as any;
+        const msg = body?.message || "Failed to send invite";
+        setInviteError(msg);
+        setTimeout(() => setInviteError(null), 5000);
+        return;
+      }
+      setInviteSentFor(id);
+      setOverrides(prev => ({ ...prev, [id]: { ...prev[id], appAccess: "invited", status: "invited" } }));
+      setTimeout(() => setInviteSentFor(null), 4000);
+    } catch {
+      setInviteError("Network error — please try again");
+      setTimeout(() => setInviteError(null), 5000);
+    } finally {
+      setInvitingId(null);
+    }
+  }, [inspectors]);
+
+  const sendFormInvite = useCallback(async () => {
+    if (!newEmail.trim()) return;
+    setFormSending(true);
+    setFormResult(null);
+    try {
+      const res = await fetch(`${apiBase()}/api/invites/app-invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: newEmail.trim() }),
+      });
+      const body = await res.json().catch(() => ({})) as any;
+      if (!res.ok) {
+        setFormResult({ ok: false, msg: body?.message || "Failed to send invite" });
+      } else {
+        setFormResult({ ok: true, msg: `Invite sent to ${newEmail.trim()}` });
+        setNewEmail("");
+        setTimeout(() => { setShowInviteForm(false); setFormResult(null); }, 3000);
+      }
+    } catch {
+      setFormResult({ ok: false, msg: "Network error — please try again" });
+    } finally {
+      setFormSending(false);
+    }
+  }, [newEmail]);
 
   const saveInspector = (updated: Inspector) => {
     setOverrides(prev => ({ ...prev, [updated.id]: updated }));
@@ -385,14 +454,31 @@ export default function Inspectors() {
               placeholder="inspector@email.com.au"
               value={newEmail}
               onChange={e => setNewEmail(e.target.value)}
-              className="flex-1 min-w-48 text-sm border border-input rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30"
+              onKeyDown={e => { if (e.key === "Enter") sendFormInvite(); }}
+              disabled={formSending}
+              className="flex-1 min-w-48 text-sm border border-input rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-60"
             />
-            <Button size="sm" onClick={() => { setNewEmail(""); setShowInviteForm(false); }}>
-              Send Invite
+            <Button size="sm" onClick={sendFormInvite} disabled={formSending || !newEmail.trim()} className="gap-1.5">
+              {formSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              {formSending ? "Sending…" : "Send Invite"}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowInviteForm(false)}>Cancel</Button>
+            <Button size="sm" variant="outline" onClick={() => { setShowInviteForm(false); setFormResult(null); setNewEmail(""); }}>Cancel</Button>
           </div>
+          {formResult && (
+            <div className={`px-5 pb-4 text-sm font-medium flex items-center gap-2 ${formResult.ok ? "text-green-700" : "text-red-600"}`}>
+              {formResult.ok ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+              {formResult.msg}
+            </div>
+          )}
         </Card>
+      )}
+
+      {/* Global invite error banner */}
+      {inviteError && (
+        <div className="mb-4 px-4 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-2">
+          <X className="h-3.5 w-3.5 shrink-0" />
+          {inviteError}
+        </div>
       )}
 
       {/* Stats row */}
@@ -473,6 +559,8 @@ export default function Inspectors() {
               onTogglePlatform={togglePlatform}
               onSendInvite={sendInvite}
               onEdit={setEditingInspector}
+              isInviting={invitingId === inspector.id}
+              justSent={inviteSentFor === inspector.id}
             />
           ))}
         </div>

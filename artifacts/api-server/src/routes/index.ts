@@ -14,6 +14,7 @@ import usersRouter from "./users";
 import storageRouter from "./storage";
 import billingRouter from "./billing";
 import adminRouter from "./admin";
+import invitesRouter from "./invites";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use("/users", usersRouter);
 router.use(storageRouter);
 router.use(billingRouter);
 router.use(adminRouter);
+router.use("/invites", invitesRouter);
 
 export default router;
