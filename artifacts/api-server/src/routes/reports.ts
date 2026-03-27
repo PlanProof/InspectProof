@@ -970,14 +970,21 @@ function buildPdf(
 
 // Download report as PDF
 router.get("/:id/pdf", async (req, res) => {
+  // Support ?_token= query param for browser-based access (mobile in-app browser)
+  if (req.query._token && !req.headers.authorization) {
+    req.headers.authorization = `Bearer ${req.query._token}`;
+  }
+
   try {
     const id = parseInt(req.params.id);
     const reports = await db.select().from(reportsTable).where(eq(reportsTable.id, id));
     const report = reports[0];
     if (!report) { res.status(404).json({ error: "not_found" }); return; }
 
-    const projects = await db.select().from(projectsTable).where(eq(projectsTable.id, report.projectId));
-    const project = projects[0];
+    const projects = report.projectId
+      ? await db.select().from(projectsTable).where(eq(projectsTable.id, report.projectId))
+      : [];
+    const project = projects[0] ?? null;
 
     // Fetch inspector's signature if available
     let signatureBuffer: Buffer | undefined;

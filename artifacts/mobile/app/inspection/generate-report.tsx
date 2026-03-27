@@ -16,8 +16,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
+import * as WebBrowser from "expo-web-browser";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
@@ -721,35 +720,17 @@ export default function GenerateReportScreen() {
   };
 
   const viewPDF = async () => {
-    if (!report) return;
+    if (!report || !token) return;
     setDownloadingPdf(true);
     try {
-      const pdfUrl = `${baseUrl}/api/reports/${report.id}/pdf`;
-      const cacheUri: string = (FileSystem.Paths?.cache as any)?.uri
-        ?? (FileSystem as any).cacheDirectory
-        ?? "";
-      const localPath = `${cacheUri}report-${report.id}.pdf`;
-
-      const downloadResult = await FileSystem.downloadAsync(pdfUrl, localPath, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const pdfUrl = `${baseUrl}/api/reports/${report.id}/pdf?_token=${encodeURIComponent(token)}`;
+      await WebBrowser.openBrowserAsync(pdfUrl, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+        toolbarColor: "#0B1933",
+        controlsColor: "#C5D92D",
       });
-
-      if (downloadResult.status !== 200) {
-        throw new Error(`Download failed with status ${downloadResult.status}`);
-      }
-
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(downloadResult.uri, {
-          mimeType: "application/pdf",
-          UTI: "com.adobe.pdf",
-          dialogTitle: report.title || "Inspection Report",
-        });
-      } else {
-        Alert.alert("Cannot Open PDF", "PDF sharing is not available on this device.");
-      }
     } catch {
-      Alert.alert("Error", "Could not download the PDF. Please check your connection and try again.");
+      Alert.alert("Error", "Could not open the PDF viewer. Please check your connection and try again.");
     } finally {
       setDownloadingPdf(false);
     }
