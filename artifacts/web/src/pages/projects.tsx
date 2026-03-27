@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { useListProjects, useCreateProject } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, Label } from "@/components/ui";
-import { Search, Plus, Building, ChevronDown, X } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { Search, Plus, Building, ChevronDown, ChevronUp, ChevronsUpDown, X } from "lucide-react";
+import { formatDate, cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
 
 // ── NCC Building Classifications ─────────────────────────────────────────────
@@ -141,11 +141,31 @@ export default function Projects() {
   const [, navigate] = useLocation();
   const { data: projects, isLoading, refetch } = useListProjects({});
   const [isNewOpen, setIsNewOpen] = useState(false);
+  const [sortCol, setSortCol] = useState("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  const filtered = projects?.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || 
+  const toggleSort = (col: string) => {
+    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortCol(col); setSortDir("asc"); }
+  };
+
+  const filtered = projects?.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.siteAddress.toLowerCase().includes(search.toLowerCase())
   );
+
+  const sorted = [...(filtered ?? [])].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    switch (sortCol) {
+      case "name":             return a.name.localeCompare(b.name) * dir;
+      case "projectType":      return a.projectType.localeCompare(b.projectType) * dir;
+      case "status":           return a.status.localeCompare(b.status) * dir;
+      case "stage":            return a.stage.localeCompare(b.stage) * dir;
+      case "clientName":       return (a.clientName ?? "").localeCompare(b.clientName ?? "") * dir;
+      case "totalInspections": return ((a.totalInspections ?? 0) - (b.totalInspections ?? 0)) * dir;
+      default: return 0;
+    }
+  });
 
   return (
     <AppLayout>
@@ -178,16 +198,16 @@ export default function Projects() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Project</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead className="text-right">Inspections</TableHead>
+                <SortableHead col="name" label="Project" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="projectType" label="Type" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="status" label="Status" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="stage" label="Stage" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="clientName" label="Client" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="totalInspections" label="Inspections" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="text-right" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered?.map((project) => (
+              {sorted.map((project) => (
                 <TableRow
                   key={project.id}
                   className="group cursor-pointer hover:bg-muted/50"
@@ -213,7 +233,7 @@ export default function Projects() {
                   <TableCell className="text-right font-medium">{project.totalInspections}</TableCell>
                 </TableRow>
               ))}
-              {filtered?.length === 0 && (
+              {sorted.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center p-8 text-muted-foreground">
                     No projects found matching "{search}"
@@ -227,6 +247,25 @@ export default function Projects() {
 
       <NewProjectDialog open={isNewOpen} onOpenChange={setIsNewOpen} onSuccess={refetch} />
     </AppLayout>
+  );
+}
+
+function SortableHead({ col, label, sortCol, sortDir, onSort, className }: {
+  col: string; label: string; sortCol: string; sortDir: "asc" | "desc";
+  onSort: (col: string) => void; className?: string;
+}) {
+  const active = sortCol === col;
+  return (
+    <TableHead className={cn("cursor-pointer select-none group", className)} onClick={() => onSort(col)}>
+      <div className="flex items-center gap-1">
+        {label}
+        {active
+          ? sortDir === "asc"
+            ? <ChevronUp className="h-3.5 w-3.5 text-secondary" />
+            : <ChevronDown className="h-3.5 w-3.5 text-secondary" />
+          : <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors" />}
+      </div>
+    </TableHead>
   );
 }
 

@@ -5,8 +5,8 @@ import {
   Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge,
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui";
-import { Search, Calendar as CalendarIcon, CheckCircle2, XCircle, Clock, Plus, ChevronDown } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { Search, Calendar as CalendarIcon, CheckCircle2, XCircle, Clock, Plus, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import { formatDate, cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 
 const INSPECTION_TYPES = [
@@ -68,6 +68,25 @@ type StatusFilter = typeof STATUS_FILTERS[number];
 // Strip " Template" suffix from checklist template names when used as inspection type labels
 function cleanTypeName(name: string) {
   return name.replace(/\s+template$/i, "").trim();
+}
+
+function SortableHead({ col, label, sortCol, sortDir, onSort, className }: {
+  col: string; label: string; sortCol: string; sortDir: "asc" | "desc";
+  onSort: (col: string) => void; className?: string;
+}) {
+  const active = sortCol === col;
+  return (
+    <TableHead className={cn("cursor-pointer select-none group", className)} onClick={() => onSort(col)}>
+      <div className="flex items-center gap-1">
+        {label}
+        {active
+          ? sortDir === "asc"
+            ? <ChevronUp className="h-3.5 w-3.5 text-secondary" />
+            : <ChevronDown className="h-3.5 w-3.5 text-secondary" />
+          : <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors" />}
+      </div>
+    </TableHead>
+  );
 }
 
 // ── New Inspection Dialog ──────────────────────────────────────────────────────
@@ -297,6 +316,13 @@ export default function Inspections() {
   const [newOpen, setNewOpen] = useState(false);
   const [, navigate] = useLocation();
   const { data: inspections, isLoading, refetch } = useListInspections({});
+  const [sortCol, setSortCol] = useState("scheduledDate");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (col: string) => {
+    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortCol(col); setSortDir("asc"); }
+  };
 
   const filtered = inspections?.filter(i => {
     const matchesSearch =
@@ -304,6 +330,24 @@ export default function Inspections() {
       i.inspectionType.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || i.status === statusFilter;
     return matchesSearch && matchesStatus;
+  });
+
+  // Completed inspections always sink to the bottom (unless explicitly sorting by status)
+  const sorted = [...(filtered ?? [])].sort((a, b) => {
+    if (sortCol !== "status") {
+      const aC = a.status === "completed" ? 1 : 0;
+      const bC = b.status === "completed" ? 1 : 0;
+      if (aC !== bC) return aC - bC;
+    }
+    const dir = sortDir === "asc" ? 1 : -1;
+    switch (sortCol) {
+      case "projectName":    return (a.projectName ?? "").localeCompare(b.projectName ?? "") * dir;
+      case "inspectionType": return a.inspectionType.localeCompare(b.inspectionType) * dir;
+      case "scheduledDate":  return (a.scheduledDate ?? "").localeCompare(b.scheduledDate ?? "") * dir;
+      case "status":         return a.status.localeCompare(b.status) * dir;
+      case "inspectorName":  return (a.inspectorName ?? "").localeCompare(b.inspectorName ?? "") * dir;
+      default: return 0;
+    }
   });
 
   return (
@@ -356,22 +400,22 @@ export default function Inspections() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Project</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Date / Time</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Inspector</TableHead>
+                <SortableHead col="projectName" label="Project" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="inspectionType" label="Type" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="scheduledDate" label="Date / Time" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="status" label="Status" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="inspectorName" label="Inspector" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <TableHead className="text-right">Results</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered?.length === 0 ? (
+              {sorted.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                     No inspections found.
                   </TableCell>
                 </TableRow>
-              ) : filtered?.map((insp) => (
+              ) : sorted.map((insp) => (
                 <TableRow
                   key={insp.id}
                   className="cursor-pointer hover:bg-muted/50 group"

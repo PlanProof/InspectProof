@@ -2,8 +2,27 @@ import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useListIssues } from "@workspace/api-client-react";
 import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, Label } from "@/components/ui";
-import { Search, Plus, ExternalLink, Camera } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { Search, Plus, ExternalLink, Camera, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { formatDate, cn } from "@/lib/utils";
+
+function SortableHead({ col, label, sortCol, sortDir, onSort, className }: {
+  col: string; label: string; sortCol: string; sortDir: "asc" | "desc";
+  onSort: (col: string) => void; className?: string;
+}) {
+  const active = sortCol === col;
+  return (
+    <TableHead className={cn("cursor-pointer select-none group", className)} onClick={() => onSort(col)}>
+      <div className="flex items-center gap-1">
+        {label}
+        {active
+          ? sortDir === "asc"
+            ? <ChevronUp className="h-3.5 w-3.5 text-secondary" />
+            : <ChevronDown className="h-3.5 w-3.5 text-secondary" />
+          : <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors" />}
+      </div>
+    </TableHead>
+  );
+}
 
 export default function Issues() {
   const [search, setSearch] = useState("");
@@ -11,12 +30,34 @@ export default function Issues() {
   const [severityFilter, setSeverityFilter] = useState<string>("All");
   const { data: issues, isLoading } = useListIssues({});
   const [selectedIssue, setSelectedIssue] = useState<any>(null);
+  const [sortCol, setSortCol] = useState("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggleSort = (col: string) => {
+    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortCol(col); setSortDir("asc"); }
+  };
 
   const filtered = issues?.filter(issue => {
     const matchesSearch = issue.title.toLowerCase().includes(search.toLowerCase()) || issue.description.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "All" || issue.status === statusFilter.toLowerCase().replace(" ", "_");
     const matchesSeverity = severityFilter === "All" || issue.severity === severityFilter.toLowerCase();
     return matchesSearch && matchesStatus && matchesSeverity;
+  });
+
+  const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+  const sorted = [...(filtered ?? [])].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    switch (sortCol) {
+      case "id":           return (a.id - b.id) * dir;
+      case "title":        return a.title.localeCompare(b.title) * dir;
+      case "severity":     return ((SEVERITY_ORDER[a.severity] ?? 4) - (SEVERITY_ORDER[b.severity] ?? 4)) * dir;
+      case "status":       return a.status.localeCompare(b.status) * dir;
+      case "projectName":  return (a.projectName ?? "").localeCompare(b.projectName ?? "") * dir;
+      case "assigneeName": return ((a as any).assigneeName ?? "").localeCompare((b as any).assigneeName ?? "") * dir;
+      case "createdAt":    return (a.createdAt ?? "").localeCompare(b.createdAt ?? "") * dir;
+      default: return 0;
+    }
   });
 
   return (
@@ -78,17 +119,17 @@ export default function Issues() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Severity</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Project</TableHead>
-                <TableHead>Assigned To</TableHead>
-                <TableHead className="text-right">Created</TableHead>
+                <SortableHead col="id" label="ID" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="title" label="Title" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="severity" label="Severity" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="status" label="Status" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="projectName" label="Project" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="assigneeName" label="Assigned To" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="createdAt" label="Created" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="text-right" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered?.map((issue) => (
+              {sorted.map((issue) => (
                 <TableRow key={issue.id} className="group cursor-pointer hover:bg-muted/50" onClick={() => setSelectedIssue(issue)}>
                   <TableCell className="font-mono text-xs text-muted-foreground">#{issue.id}</TableCell>
                   <TableCell className="font-medium text-sidebar">{issue.title}</TableCell>
@@ -103,7 +144,7 @@ export default function Issues() {
                   <TableCell className="text-right text-muted-foreground text-sm">{formatDate(issue.createdAt)}</TableCell>
                 </TableRow>
               ))}
-              {filtered?.length === 0 && (
+              {sorted.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center p-8 text-muted-foreground">
                     No issues found matching filters.
