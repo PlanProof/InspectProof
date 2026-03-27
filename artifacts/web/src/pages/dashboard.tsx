@@ -639,10 +639,9 @@ export default function Dashboard() {
       <UpgradeBanner />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 mb-8">
         <StatCard title="Active Projects" value={data.activeProjects} icon={FolderOpen} trend="+2 from last month" />
         <StatCard title="Inspections (Month)" value={data.inspectionsThisMonth} icon={CheckSquare} trend="12 completed" />
-        <StatCard title="Open Issues" value={data.openIssues} icon={AlertTriangle} trend={`${data.criticalIssues} critical`} isAlert={data.criticalIssues > 0} />
         <StatCard title="Reports Pending" value={data.reportsPending} icon={FileText} trend="Requires review" />
       </div>
 
