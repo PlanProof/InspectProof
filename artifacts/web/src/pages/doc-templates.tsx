@@ -5,7 +5,7 @@ import {
   Plus, Trash2, FileText, Image, Eye, Edit3, ChevronRight,
   Copy, Check, X, Link2, ClipboardList, Printer, ChevronDown, Folder,
 } from "lucide-react";
-import { useListChecklistTemplates, useListInspections } from "@workspace/api-client-react";
+import { useListChecklistTemplates, useListInspections, useListProjects } from "@workspace/api-client-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface DocTemplate {
@@ -175,9 +175,41 @@ function highlightTokens(html: string): string {
   );
 }
 
-// ── Fill tokens with test project data (preview mode) ─────────────────────────
-function fillWithTestData(html: string): string {
-  return html.replace(/\{\{[a-z_]+\}\}/g, m => TEST_PREVIEW_DATA[m] ?? m);
+// ── Fill tokens with preview data (preview mode) ──────────────────────────────
+function fillWithData(html: string, data: Record<string, string>): string {
+  return html.replace(/\{\{[a-z_]+\}\}/g, m => data[m] ?? m);
+}
+
+// ── Build preview data from real project/inspection ───────────────────────────
+function buildPreviewData(project: any, inspection: any): Record<string, string> {
+  const today = new Date();
+  const au = (d: string) => { try { return new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }); } catch { return d; } };
+  return {
+    "{{project_name}}":    project?.name ?? "",
+    "{{project_address}}": [project?.siteAddress, project?.suburb, project?.state].filter(Boolean).join(", "),
+    "{{council_number}}":  project?.daNumber ?? "",
+    "{{ncc_class}}":       project?.buildingClassification ?? "",
+    "{{lot_number}}":      "",
+    "{{da_number}}":       project?.daNumber ?? "",
+    "{{inspection_type}}": inspection ? (inspection.inspectionType ?? "").replace(/_/g, " ") : "",
+    "{{inspection_date}}": inspection?.scheduledDate ? au(inspection.scheduledDate) : "",
+    "{{inspection_time}}": inspection?.scheduledTime ?? "",
+    "{{result}}":          inspection ? `${inspection.passCount ?? 0} Pass / ${inspection.failCount ?? 0} Fail` : "",
+    "{{notes}}":           inspection?.siteNotes ?? inspection?.notes ?? "",
+    "{{inspector_name}}":  inspection?.inspectorName ?? "",
+    "{{certifier_name}}":  inspection?.inspectorName ?? "",
+    "{{license_number}}":  "",
+    "{{company_name}}":    "",
+    "{{company_address}}": "",
+    "{{phone}}":           "",
+    "{{email}}":           inspection?.clientEmail ?? "",
+    "{{today}}":           today.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }),
+    "{{time_now}}":        today.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" }),
+    "{{year}}":            today.getFullYear().toString(),
+    "{{signature_line}}":  `<div style="margin-top:16px;border-top:1px solid #000;width:220px;padding-top:4px;font-size:12px;color:#555;">Signature</div>`,
+    "{{signature_block}}": `<div style="margin-top:16px;"><div style="border-top:1px solid #000;width:220px;margin-bottom:4px;"></div><div style="font-size:12px;color:#555;">Signature &amp; Date</div></div>`,
+    "{{checklist_items}}": TEST_PREVIEW_DATA["{{checklist_items}}"],
+  };
 }
 
 // ── Checklist table builder ────────────────────────────────────────────────────
@@ -425,7 +457,34 @@ export default function DocTemplates() {
   const bgInputRef = useRef<HTMLInputElement>(null);
 
   const { data: checklistTemplates } = useListChecklistTemplates({ discipline: checklistDiscipline });
+  const { data: allProjects } = useListProjects({});
+  const { data: allInspections } = useListInspections({});
+  const [previewProjectId, setPreviewProjectId] = useState<string>("");
+  const [previewInspectionId, setPreviewInspectionId] = useState<string>("");
+
   const selected = templates.find(t => t.id === selectedId) ?? null;
+
+  // Default preview project to first project when data loads
+  useEffect(() => {
+    if ((allProjects as any[])?.length && !previewProjectId) {
+      setPreviewProjectId(String((allProjects as any[])[0].id));
+    }
+  }, [allProjects]);
+
+  // Default preview inspection to first inspection of selected project
+  useEffect(() => {
+    const projectInspections = (allInspections as any[] ?? []).filter((i: any) => String(i.projectId) === previewProjectId);
+    if (projectInspections.length) {
+      setPreviewInspectionId(String(projectInspections[0].id));
+    } else {
+      setPreviewInspectionId("");
+    }
+  }, [previewProjectId, allInspections]);
+
+  const previewProject = (allProjects as any[] ?? []).find((p: any) => String(p.id) === previewProjectId) ?? null;
+  const previewProjectInspections = (allInspections as any[] ?? []).filter((i: any) => String(i.projectId) === previewProjectId);
+  const previewInspection = previewProjectInspections.find((i: any) => String(i.id) === previewInspectionId) ?? previewProjectInspections[0] ?? null;
+  const previewData = previewProject ? buildPreviewData(previewProject, previewInspection) : TEST_PREVIEW_DATA;
 
   function persist(updated: DocTemplate[]) {
     setTemplates(updated);
@@ -663,8 +722,14 @@ export default function DocTemplates() {
               {/* Preview mode banner */}
               {mode === "preview" && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs font-medium">
-                  <span className="bg-amber-200 text-amber-900 text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">Test Data</span>
-                  Previewing with <strong>Test Project</strong> — 1 Sample Street, Adelaide SA 5000 — John Doe (Certifier)
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0 ${previewProject ? "bg-green-200 text-green-900" : "bg-amber-200 text-amber-900"}`}>
+                    {previewProject ? "Live Data" : "Test Data"}
+                  </span>
+                  <span className="truncate">
+                    Previewing with <strong>{previewProject?.name ?? "Test Project"}</strong>
+                    {previewProject?.siteAddress ? ` — ${previewProject.siteAddress}` : ""}
+                    {previewInspection ? ` — ${(previewInspection.inspectionType ?? "").replace(/_/g, " ")}` : ""}
+                  </span>
                 </div>
               )}
 
@@ -683,7 +748,7 @@ export default function DocTemplates() {
                     suppressContentEditableWarning
                     onBlur={saveContent}
                     style={{ padding: "72px 80px", position: "relative", minHeight: "1123px", outline: "none" }}
-                    dangerouslySetInnerHTML={mode === "preview" ? { __html: fillWithTestData(selected.content) } : undefined}
+                    dangerouslySetInnerHTML={mode === "preview" ? { __html: fillWithData(selected.content, previewData) } : undefined}
                   />
                   {mode === "edit" && (
                     <div className="absolute top-2 right-2 text-[10px] text-muted-foreground bg-white/80 rounded px-1.5 py-0.5 pointer-events-none">Click to edit</div>
@@ -734,17 +799,42 @@ export default function DocTemplates() {
               <div className="flex-1 overflow-y-auto p-2 space-y-3">
                 <div className="px-1 pt-1">
                   <p className="text-[10px] text-muted-foreground">Click a field to insert at cursor</p>
-                  <div className="mt-1.5 flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
-                    <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wide shrink-0">Test Project</span>
-                    <span className="text-[9px] text-amber-600 truncate">1 Sample Street, SA</span>
+                  <div className="mt-1.5 flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+                    <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wide shrink-0">Project</span>
+                    <select
+                      value={previewProjectId}
+                      onChange={e => setPreviewProjectId(e.target.value)}
+                      className="flex-1 min-w-0 text-[9px] text-amber-700 bg-transparent border-none outline-none cursor-pointer font-medium"
+                    >
+                      {!(allProjects as any[])?.length && <option value="">Loading…</option>}
+                      {(allProjects as any[] ?? []).map((p: any) => (
+                        <option key={p.id} value={String(p.id)}>{p.name}</option>
+                      ))}
+                    </select>
                   </div>
+                  {previewProjectInspections.length > 0 && (
+                    <div className="mt-1 flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-md px-2 py-1">
+                      <span className="text-[9px] font-bold text-blue-700 uppercase tracking-wide shrink-0">Insp</span>
+                      <select
+                        value={previewInspectionId}
+                        onChange={e => setPreviewInspectionId(e.target.value)}
+                        className="flex-1 min-w-0 text-[9px] text-blue-700 bg-transparent border-none outline-none cursor-pointer font-medium"
+                      >
+                        {previewProjectInspections.map((i: any) => (
+                          <option key={i.id} value={String(i.id)}>
+                            {(i.inspectionType ?? "").replace(/_/g, " ")} — {i.scheduledDate}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
                 {FIELD_GROUPS.map(group => (
                   <div key={group.label}>
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-1">{group.label}</p>
                     <div className="space-y-0.5">
                       {group.fields.map(f => {
-                        const sample = TEST_PREVIEW_DATA[f.token];
+                        const sample = previewData[f.token];
                         const displaySample = sample && !sample.startsWith("<") ? sample : null;
                         return (
                           <button
