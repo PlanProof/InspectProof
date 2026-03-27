@@ -808,7 +808,6 @@ function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA }: { ite
                 <Text style={styles.codeRefText}>{item.codeReference}</Text>
               </View>
             )}
-            <RiskBadge risk={item.riskLevel} />
             {item.notes && (
               <View style={styles.notesBadge}>
                 <Feather name="file-text" size={10} color={Colors.textSecondary} />
@@ -832,21 +831,6 @@ function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA }: { ite
         </Pressable>
       </Pressable>
     </Swipeable>
-  );
-}
-
-function RiskBadge({ risk }: { risk: string }) {
-  const colors: Record<string, { bg: string; text: string }> = {
-    critical: { bg: "#fee2e2", text: "#dc2626" },
-    high: { bg: "#ffedd5", text: "#ea580c" },
-    medium: { bg: "#fef9c3", text: "#ca8a04" },
-    low: { bg: "#dcfce7", text: "#16a34a" },
-  };
-  const c = colors[risk] || colors.medium;
-  return (
-    <View style={[styles.riskBadge, { backgroundColor: c.bg }]}>
-      <Text style={[styles.riskText, { color: c.text }]}>{risk.charAt(0).toUpperCase() + risk.slice(1)}</Text>
-    </View>
   );
 }
 
@@ -1064,7 +1048,6 @@ function ItemModal({
                 <Text style={modalStyles.codeRefText}>{item.codeReference}</Text>
               </View>
             )}
-            <RiskBadge risk={item.riskLevel} />
           </View>
         </View>
 

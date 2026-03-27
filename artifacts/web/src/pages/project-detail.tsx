@@ -2190,13 +2190,6 @@ function ReportHTMLViewer({ report, inspection, project }: { report: any; inspec
                         {item.codeReference && (
                           <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-medium">§ {item.codeReference}</span>
                         )}
-                        {item.riskLevel && (
-                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium capitalize",
-                            item.riskLevel === "high" || item.riskLevel === "critical" ? "bg-red-50 text-red-600 border-red-200" :
-                            item.riskLevel === "medium" ? "bg-amber-50 text-amber-600 border-amber-200" :
-                            "bg-gray-50 text-gray-500 border-gray-200"
-                          )}>{item.riskLevel} risk</span>
-                        )}
                         {item.severity && (
                           <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium capitalize",
                             item.severity === "critical" ? "bg-red-50 text-red-700 border-red-200" :

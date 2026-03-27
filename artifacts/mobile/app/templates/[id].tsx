@@ -150,20 +150,15 @@ export default function TemplateDetailScreen() {
             <View key={cat} style={styles.categoryGroup}>
               <Text style={styles.categoryLabel}>{cat}</Text>
               {items.filter((i: any) => i.category === cat).map((item: any) => {
-                const risk = RISK_META[item.riskLevel] || RISK_META.medium;
                 return (
                   <View key={item.id} style={styles.itemCard}>
                     <View style={styles.itemLeft}>
-                      <View style={[styles.riskDot, { backgroundColor: risk.color }]} />
                       <View style={styles.itemBody}>
                         <Text style={styles.itemDesc}>{item.description}</Text>
                         {item.codeReference && (
                           <Text style={styles.itemCode}>{item.codeReference}</Text>
                         )}
                         <View style={styles.itemTags}>
-                          <View style={[styles.riskTag, { backgroundColor: risk.bg }]}>
-                            <Text style={[styles.riskTagText, { color: risk.color }]}>{risk.label}</Text>
-                          </View>
                           {item.isRequired && (
                             <View style={styles.requiredTag}>
                               <Text style={styles.requiredTagText}>Required</Text>
@@ -260,23 +255,6 @@ function AddItemModal({ visible, baseUrl, token, templateId, onClose, onAdded }:
               </Pressable>
             ))}
           </ScrollView>
-
-          <Text style={am.label}>Risk Level</Text>
-          <View style={am.riskRow}>
-            {RISK_LEVELS.map(r => {
-              const meta = RISK_META[r];
-              const active = riskLevel === r;
-              return (
-                <Pressable
-                  key={r}
-                  onPress={() => setRiskLevel(r)}
-                  style={[am.riskChip, active && { backgroundColor: meta.color, borderColor: meta.color }]}
-                >
-                  <Text style={[am.riskText, active && { color: "#fff" }]}>{meta.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
 
           <Text style={am.label}>Code Reference (optional)</Text>
           <TextInput

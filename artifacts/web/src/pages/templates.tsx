@@ -588,9 +588,6 @@ function ReadItem({ item, idx }: { item: any; idx: number }) {
               {item.codeReference}
             </span>
           )}
-          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border capitalize ${RISK_COLORS[item.riskLevel] ?? RISK_COLORS.medium}`}>
-            {item.riskLevel === "critical" ? "Critical Risk" : `${item.riskLevel} Risk`}
-          </span>
           {!item.isRequired && (
             <span className="text-[10px] text-muted-foreground border border-muted/60 rounded px-1.5 py-0.5">Optional</span>
           )}
@@ -664,16 +661,6 @@ function EditableItem({
               placeholder="Code ref (e.g. AS 1684.2 Cl 9)"
               className="flex-1 min-w-[140px] text-xs font-mono bg-white border border-input rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-secondary/40"
             />
-            <select
-              value={item.riskLevel}
-              onChange={e => onChange({ riskLevel: e.target.value })}
-              className={`text-xs font-semibold border rounded-md px-2 py-1 outline-none ${RISK_COLORS[item.riskLevel] ?? RISK_COLORS.medium}`}
-            >
-              <option value="low">Low Risk</option>
-              <option value="medium">Medium Risk</option>
-              <option value="high">High Risk</option>
-              <option value="critical">Critical Risk</option>
-            </select>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -740,16 +727,6 @@ function AddItemForm({
           placeholder="Code reference"
           className="flex-1 min-w-[120px] text-xs font-mono bg-white border border-input rounded-md px-2 py-1 outline-none"
         />
-        <select
-          value={value.riskLevel ?? "medium"}
-          onChange={e => onChange({ ...value, riskLevel: e.target.value })}
-          className={`text-xs font-semibold border rounded-md px-2 py-1 outline-none ${RISK_COLORS[value.riskLevel ?? "medium"]}`}
-        >
-          <option value="low">Low Risk</option>
-          <option value="medium">Medium Risk</option>
-          <option value="high">High Risk</option>
-          <option value="critical">Critical Risk</option>
-        </select>
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
           <input
             type="checkbox"

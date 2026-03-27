@@ -2172,16 +2172,6 @@ ${checklistRows}
                             {item.codeReference}
                           </span>
                         )}
-                        {item.riskLevel && (
-                          <span className={cn(
-                            "text-xs px-1.5 py-0.5 rounded capitalize border font-medium",
-                            item.riskLevel === "high"   && "bg-red-50 text-red-700 border-red-200",
-                            item.riskLevel === "medium" && "bg-amber-50 text-amber-700 border-amber-200",
-                            item.riskLevel === "low"    && "bg-green-50 text-green-700 border-green-200",
-                          )}>
-                            {item.riskLevel} Risk
-                          </span>
-                        )}
                         {/* Defect badges for saved data */}
                         {item.severity && !isEditing && (
                           <span className={cn("text-xs px-1.5 py-0.5 rounded capitalize border font-medium", SEVERITY_COLORS[item.severity] ?? "bg-gray-50 text-gray-600 border-gray-200")}>
