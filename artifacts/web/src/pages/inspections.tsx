@@ -125,7 +125,8 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
     onClose();
   }
 
-  const inspectors = users?.filter((u: any) => u.role === "inspector" || u.role === "admin") ?? [];
+  const INSPECTOR_ROLES = ["inspector", "building_inspector", "certifier", "admin"];
+  const inspectors = users?.filter((u: any) => INSPECTOR_ROLES.includes(u.role)) ?? [];
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>

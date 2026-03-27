@@ -1453,12 +1453,14 @@ function BookInspectionDialog({
               className={fieldClass}
             >
               <option value="">— Unassigned —</option>
-              {(users ?? []).map((u: any) => (
-                <option key={u.id} value={String(u.id)}>
-                  {u.firstName} {u.lastName}
-                  {u.role ? ` (${u.role.replace(/_/g, " ")})` : ""}
-                </option>
-              ))}
+              {(users ?? [])
+                .filter((u: any) => ["inspector", "building_inspector", "certifier", "admin"].includes(u.role))
+                .map((u: any) => (
+                  <option key={u.id} value={String(u.id)}>
+                    {u.firstName} {u.lastName}
+                    {u.role ? ` (${u.role.replace(/_/g, " ")})` : ""}
+                  </option>
+                ))}
             </select>
           </div>
 

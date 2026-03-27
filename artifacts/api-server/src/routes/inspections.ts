@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable, reportsTable } from "@workspace/db";
 import { checkInspectionQuota } from "../lib/quota";
+import { optionalAuth, isInspectorOnly } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -61,7 +62,7 @@ async function formatInspection(i: any) {
   };
 }
 
-router.get("/", async (req, res) => {
+router.get("/", optionalAuth, async (req, res) => {
   try {
     const { projectId, status, inspectorId, fromDate, toDate } = req.query;
     let inspections = await db.select().from(inspectionsTable)
@@ -70,6 +71,11 @@ router.get("/", async (req, res) => {
     if (projectId) inspections = inspections.filter(i => i.projectId === parseInt(projectId as string));
     if (status) inspections = inspections.filter(i => i.status === status);
     if (inspectorId) inspections = inspections.filter(i => i.inspectorId === parseInt(inspectorId as string));
+
+    // Inspector-role users only see inspections assigned to them
+    if (req.authUser && isInspectorOnly(req.authUser)) {
+      inspections = inspections.filter(i => i.inspectorId === req.authUser!.id);
+    }
 
     const result = await Promise.all(inspections.map(formatInspection));
     res.json(result);
@@ -146,13 +152,19 @@ router.post("/run-sheet/send", async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", optionalAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const inspections = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, id));
     const inspection = inspections[0];
     if (!inspection) {
       res.status(404).json({ error: "not_found" });
+      return;
+    }
+
+    // Inspector-role users can only view their own assigned inspections
+    if (req.authUser && isInspectorOnly(req.authUser) && inspection.inspectorId !== req.authUser.id) {
+      res.status(403).json({ error: "forbidden", message: "You can only view inspections assigned to you." });
       return;
     }
 
