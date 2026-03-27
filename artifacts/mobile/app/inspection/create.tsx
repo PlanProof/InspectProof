@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Modal,
+  TouchableOpacity,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,6 +19,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { INSPECTION_TYPES } from "@/constants/api";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 const WEB_TOP = 0;
 
@@ -25,11 +28,44 @@ type Mode = "project" | "custom" | null;
 const STEP_LABELS_PROJECT = ["Project", "Inspection", "Confirm"];
 const STEP_LABELS_CUSTOM  = ["Project", "Template",   "Confirm"];
 
+function dateStrToObj(dateStr: string, timeStr: string): Date {
+  const [y, m, d] = (dateStr || new Date().toISOString().split("T")[0]).split("-").map(Number);
+  const [h, min] = (timeStr || "09:00").split(":").map(Number);
+  return new Date(y, m - 1, d, h || 0, min || 0);
+}
+
+function objToDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function objToTimeStr(d: Date): string {
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${h}:${min}`;
+}
+
 function formatDate(d: string) {
   if (!d) return "";
   const [y, m, day] = d.split("-");
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   return `${parseInt(day)} ${months[parseInt(m) - 1]} ${y}`;
+}
+
+function formatDisplayDate(d: string) {
+  if (!d) return "Select date";
+  const obj = dateStrToObj(d, "00:00");
+  return obj.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "long", year: "numeric" });
+}
+
+function formatDisplayTime(t: string) {
+  if (!t) return "Select time";
+  const [h, m] = t.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 export default function CreateInspectionScreen() {
@@ -49,6 +85,18 @@ export default function CreateInspectionScreen() {
   const [scheduledTime, setScheduledTime] = useState("09:00");
   const [reason, setReason]               = useState("");
   const [submitting, setSubmitting]       = useState(false);
+
+  const [pickerMode, setPickerMode]   = useState<"date" | "time" | null>(null);
+  const [iosPickerDate, setIosPickerDate] = useState<Date>(new Date());
+
+  useEffect(() => {
+    if (mode === "project" && selectedInspection) {
+      const d = selectedInspection.scheduledDate || new Date().toISOString().split("T")[0];
+      const t = selectedInspection.scheduledTime || "09:00";
+      setScheduledDate(d);
+      setScheduledTime(t);
+    }
+  }, [selectedInspection, mode]);
 
   const STEPS = mode === "custom" ? STEP_LABELS_CUSTOM : STEP_LABELS_PROJECT;
 
@@ -95,8 +143,42 @@ export default function CreateInspectionScreen() {
     return true;
   };
 
+  const openPicker = (mode: "date" | "time") => {
+    const d = dateStrToObj(scheduledDate, scheduledTime);
+    setIosPickerDate(d);
+    setPickerMode(mode);
+  };
+
+  const onPickerChange = (_: any, selected?: Date) => {
+    if (Platform.OS === "android") setPickerMode(null);
+    if (!selected) return;
+    if (pickerMode === "date") {
+      setScheduledDate(objToDateStr(selected));
+      if (Platform.OS === "ios") setIosPickerDate(selected);
+    } else {
+      setScheduledTime(objToTimeStr(selected));
+      if (Platform.OS === "ios") setIosPickerDate(selected);
+    }
+  };
+
   const handleCreate = async () => {
     if (mode === "project" && selectedInspection) {
+      setSubmitting(true);
+      try {
+        const orig = selectedInspection;
+        const dateChanged = scheduledDate !== (orig.scheduledDate || "") || scheduledTime !== (orig.scheduledTime || "09:00");
+        if (dateChanged) {
+          await fetch(`${baseUrl}/api/inspections/${orig.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ scheduledDate, scheduledTime }),
+          });
+        }
+      } catch (_) {}
+      setSubmitting(false);
       router.replace(`/inspection/${selectedInspection.id}` as any);
       return;
     }
@@ -408,17 +490,17 @@ export default function CreateInspectionScreen() {
             <Text style={styles.stepHeading}>Confirm</Text>
             <Text style={styles.stepSub}>
               {mode === "project"
-                ? "Review the inspection details and confirm."
+                ? "Review the details and set when you'll do the inspection."
                 : "Set a date and time, then create the inspection."}
             </Text>
 
+            {/* Summary card */}
             <View style={styles.reviewCard}>
               {mode === "project" && selectedInspection && (
                 <>
-                  <ReviewRow icon="home"      label="Project"  value={selectedProject?.name} />
+                  <ReviewRow icon="home"      label="Project"   value={selectedProject?.name} />
                   <ReviewRow icon="clipboard" label="Checklist" value={selectedInspection.checklistTemplateName || INSPECTION_TYPES[selectedInspection.inspectionType] || selectedInspection.inspectionType} />
-                  <ReviewRow icon="tag"       label="Type"     value={INSPECTION_TYPES[selectedInspection.inspectionType] || selectedInspection.inspectionType} />
-                  <ReviewRow icon="calendar"  label="Scheduled" value={formatDate(selectedInspection.scheduledDate) + (selectedInspection.scheduledTime ? ` at ${selectedInspection.scheduledTime}` : "")} />
+                  <ReviewRow icon="tag"       label="Type"      value={INSPECTION_TYPES[selectedInspection.inspectionType] || selectedInspection.inspectionType} />
                   {selectedInspection.totalItems > 0 && (
                     <ReviewRow icon="list" label="Items" value={`${selectedInspection.totalItems} checklist items`} />
                   )}
@@ -432,44 +514,80 @@ export default function CreateInspectionScreen() {
               )}
             </View>
 
+            {/* Date & Time pickers — shown for both modes */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.sectionLabel}>Schedule</Text>
+              <View style={styles.row2}>
+                {Platform.OS === "web" ? (
+                  <>
+                    <View style={{ flex: 1, gap: 6 }}>
+                      <Text style={styles.fieldLabel}>Date</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={scheduledDate}
+                        onChangeText={setScheduledDate}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={Colors.textTertiary}
+                      />
+                    </View>
+                    <View style={{ flex: 1, gap: 6 }}>
+                      <Text style={styles.fieldLabel}>Time</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={scheduledTime}
+                        onChangeText={setScheduledTime}
+                        placeholder="HH:MM"
+                        placeholderTextColor={Colors.textTertiary}
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Pressable style={({ pressed }) => [styles.pickerField, { flex: 1 }, pressed && styles.pickerFieldPressed]} onPress={() => openPicker("date")}>
+                      <Feather name="calendar" size={16} color={Colors.secondary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.pickerFieldLabel}>Date</Text>
+                        <Text style={styles.pickerFieldValue}>{formatDisplayDate(scheduledDate)}</Text>
+                      </View>
+                      <Feather name="chevron-down" size={14} color={Colors.textTertiary} />
+                    </Pressable>
+                    <Pressable style={({ pressed }) => [styles.pickerField, { flex: 1 }, pressed && styles.pickerFieldPressed]} onPress={() => openPicker("time")}>
+                      <Feather name="clock" size={16} color={Colors.secondary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.pickerFieldLabel}>Time</Text>
+                        <Text style={styles.pickerFieldValue}>{formatDisplayTime(scheduledTime)}</Text>
+                      </View>
+                      <Feather name="chevron-down" size={14} color={Colors.textTertiary} />
+                    </Pressable>
+                  </>
+                )}
+              </View>
+
+              {/* Android: show picker inline when active */}
+              {Platform.OS === "android" && pickerMode !== null && (
+                <DateTimePicker
+                  value={dateStrToObj(scheduledDate, scheduledTime)}
+                  mode={pickerMode}
+                  display="default"
+                  onChange={onPickerChange}
+                />
+              )}
+            </View>
+
+            {/* Notes — custom mode only */}
             {mode === "custom" && (
-              <View style={styles.fieldGroup}>
-                <Text style={styles.sectionLabel}>Schedule</Text>
-                <View style={styles.row2}>
-                  <View style={{ flex: 1, gap: 6 }}>
-                    <Text style={styles.fieldLabel}>Date</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={scheduledDate}
-                      onChangeText={setScheduledDate}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={Colors.textTertiary}
-                    />
-                  </View>
-                  <View style={{ flex: 1, gap: 6 }}>
-                    <Text style={styles.fieldLabel}>Time</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={scheduledTime}
-                      onChangeText={setScheduledTime}
-                      placeholder="HH:MM"
-                      placeholderTextColor={Colors.textTertiary}
-                    />
-                  </View>
-                </View>
-                <View style={{ gap: 6, marginTop: 4 }}>
-                  <Text style={styles.fieldLabel}>Notes</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    value={reason}
-                    onChangeText={setReason}
-                    placeholder="Purpose, special conditions, etc."
-                    placeholderTextColor={Colors.textTertiary}
-                    multiline
-                    numberOfLines={3}
-                    textAlignVertical="top"
-                  />
-                </View>
+              <View style={{ gap: 6 }}>
+                <Text style={styles.fieldLabel}>Notes (optional)</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={reason}
+                  onChangeText={setReason}
+                  placeholder="Purpose, special conditions, etc."
+                  placeholderTextColor={Colors.textTertiary}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
               </View>
             )}
 
@@ -482,6 +600,30 @@ export default function CreateInspectionScreen() {
               </Text>
             </View>
           </View>
+        )}
+
+        {/* iOS date/time picker — shown as inline modal */}
+        {Platform.OS === "ios" && pickerMode !== null && (
+          <Modal transparent animationType="slide" visible>
+            <View style={styles.iosPickerOverlay}>
+              <View style={styles.iosPickerSheet}>
+                <View style={styles.iosPickerHeader}>
+                  <Text style={styles.iosPickerTitle}>{pickerMode === "date" ? "Select Date" : "Select Time"}</Text>
+                  <TouchableOpacity onPress={() => setPickerMode(null)} hitSlop={12}>
+                    <Text style={styles.iosPickerDone}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={iosPickerDate}
+                  mode={pickerMode}
+                  display="spinner"
+                  onChange={onPickerChange}
+                  style={{ width: "100%" }}
+                  textColor={Colors.text}
+                />
+              </View>
+            </View>
+          </Modal>
         )}
       </ScrollView>
 
@@ -723,6 +865,45 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   infoText: { flex: 1, fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary, lineHeight: 18 },
+
+  pickerField: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 60,
+  },
+  pickerFieldPressed: { opacity: 0.7, backgroundColor: Colors.borderLight },
+  pickerFieldLabel: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.4 },
+  pickerFieldValue: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, marginTop: 2 },
+
+  iosPickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-end",
+  },
+  iosPickerSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 30,
+    overflow: "hidden",
+  },
+  iosPickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  iosPickerTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  iosPickerDone: { fontSize: 16, fontFamily: "PlusJakartaSans_700Bold", color: Colors.secondary },
 
   footer: {
     flexDirection: "row", alignItems: "center",
