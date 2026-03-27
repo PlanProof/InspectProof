@@ -95,9 +95,9 @@ export default function CreateInspectionScreen() {
     return true;
   };
 
-  const handleBegin = async () => {
+  const handleCreate = async () => {
     if (mode === "project" && selectedInspection) {
-      router.replace(`/inspection/conduct/${selectedInspection.id}` as any);
+      router.replace(`/inspection/${selectedInspection.id}` as any);
       return;
     }
     if (mode === "custom" && selectedTemplate) {
@@ -116,13 +116,16 @@ export default function CreateInspectionScreen() {
             scheduledTime,
             notes: reason,
             checklistTemplateId: selectedTemplate.id,
-            inspectorId: 1,
           }),
         });
-        if (!res.ok) throw new Error("Failed to create inspection");
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody?.error || "Failed to create inspection");
+        }
         const inspection = await res.json();
         queryClient.invalidateQueries({ queryKey: ["inspections"] });
-        router.replace(`/inspection/conduct/${inspection.id}` as any);
+        queryClient.invalidateQueries({ queryKey: ["project-inspections"] });
+        router.replace(`/inspection/${inspection.id}` as any);
       } catch (e: any) {
         Alert.alert("Error", e.message || "Failed to create inspection");
       } finally {
@@ -405,8 +408,8 @@ export default function CreateInspectionScreen() {
             <Text style={styles.stepHeading}>Confirm</Text>
             <Text style={styles.stepSub}>
               {mode === "project"
-                ? "Review the inspection details below and begin."
-                : "Set a date and time, then create and begin the inspection."}
+                ? "Review the inspection details and confirm."
+                : "Set a date and time, then create the inspection."}
             </Text>
 
             <View style={styles.reviewCard}>
@@ -474,8 +477,8 @@ export default function CreateInspectionScreen() {
               <Feather name="info" size={14} color={Colors.secondary} />
               <Text style={styles.infoText}>
                 {mode === "project"
-                  ? "You'll be taken to the checklist conduct screen to begin recording results."
-                  : "A new inspection record will be created and you'll go straight to the checklist."}
+                  ? "You'll be taken to the inspection detail screen. Start the inspection from there when you're ready."
+                  : "A new inspection record will be created. Open it to start conducting the inspection."}
               </Text>
             </View>
           </View>
@@ -504,16 +507,16 @@ export default function CreateInspectionScreen() {
         ) : (
           <Pressable
             style={[styles.createButton, submitting && { opacity: 0.7 }]}
-            onPress={handleBegin}
+            onPress={handleCreate}
             disabled={submitting}
           >
             {submitting ? (
               <ActivityIndicator size="small" color={Colors.primary} />
             ) : (
               <>
-                <Feather name="play-circle" size={17} color={Colors.primary} />
+                <Feather name="check-circle" size={17} color={Colors.primary} />
                 <Text style={styles.createButtonText}>
-                  {mode === "project" ? "Begin Inspection" : "Create & Begin"}
+                  {mode === "project" ? "Confirm" : "Create Inspection"}
                 </Text>
               </>
             )}
