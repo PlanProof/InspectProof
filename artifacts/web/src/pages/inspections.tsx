@@ -65,6 +65,11 @@ const INSPECTION_TYPES = [
 const STATUS_FILTERS = ["all", "scheduled", "in_progress", "completed"] as const;
 type StatusFilter = typeof STATUS_FILTERS[number];
 
+// Strip " Template" suffix from checklist template names when used as inspection type labels
+function cleanTypeName(name: string) {
+  return name.replace(/\s+template$/i, "").trim();
+}
+
 // ── New Inspection Dialog ──────────────────────────────────────────────────────
 function NewInspectionDialog({ open, onClose, onCreated }: {
   open: boolean;
@@ -188,7 +193,7 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
                   Array.from(new Set(allocatedTypes.map(t => t.folder))).sort().map(folder => (
                     <optgroup key={folder} label={folder}>
                       {allocatedTypes.filter(t => t.folder === folder).map(t => (
-                        <option key={t.templateId} value={t.inspectionType}>{t.name}</option>
+                        <option key={t.templateId} value={t.inspectionType}>{cleanTypeName(t.name)}</option>
                       ))}
                     </optgroup>
                   ))

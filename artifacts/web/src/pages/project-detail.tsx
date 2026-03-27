@@ -87,6 +87,11 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return res.json();
 }
 
+// Strip " Template" suffix from checklist template names when used as inspection type labels
+function cleanTypeName(name: string) {
+  return name.replace(/\s+template$/i, "").trim();
+}
+
 function formatBytes(bytes?: number) {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -1418,7 +1423,7 @@ function BookInspectionDialog({
                 Array.from(new Set(allocatedTypes.map(t => t.folder))).sort().map(folder => (
                   <optgroup key={folder} label={folder}>
                     {allocatedTypes.filter(t => t.folder === folder).map(t => (
-                      <option key={t.templateId} value={t.inspectionType}>{t.name}</option>
+                      <option key={t.templateId} value={t.inspectionType}>{cleanTypeName(t.name)}</option>
                     ))}
                   </optgroup>
                 ))
