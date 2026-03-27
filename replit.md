@@ -7,7 +7,7 @@ InspectProof is a full-stack platform for Australian building certifiers and sur
 - **Mobile App** (Expo) — field inspection app at `/mobile/`
 - **API Server** (Express 5) — shared backend with PostgreSQL + Drizzle ORM
 
-**Login credentials:** `admin@inspectproof.com.au` / `password123`
+**Admin login:** `contact@inspectproof.com.au` / `InspectProof2024!`
 
 ## Features
 
@@ -27,9 +27,21 @@ InspectProof is a full-stack platform for Australian building certifiers and sur
 - Secondary: `#466DB5` (BlueYonder)
 - Accent: `#C5D92D` (Pear)
 
+## Production Integrations
+
+| Integration | Replit Dev | Vercel Production |
+|---|---|---|
+| **Database** | Replit PostgreSQL (`DATABASE_URL`) | Supabase PostgreSQL (`POSTGRES_URL_NON_POOLING`) |
+| **File Storage** | Replit Object Storage (sidecar) | Supabase Storage (`inspectproof-files` bucket, auto-created on startup) |
+| **Stripe** | Replit Stripe connector | `STRIPE_SECRET_KEY` + `STRIPE_PUBLISHABLE_KEY` env vars |
+
+Storage auto-detection: paths starting with `/objects/supabase/` route to Supabase Storage; all others use Replit Object Storage. Detection based on presence of `SUPABASE_SERVICE_ROLE_KEY` env var.
+
 ## Seed Data
 
-6 Australian projects (Sydney, Melbourne, Brisbane, Perth, Adelaide), 8 inspections, 5 users, 7 open issues (3 critical), checklist results, documents, notes, reports, activity logs
+Plan configs (4 tiers: free_trial, starter, professional, enterprise) and admin user seeded via `scripts/supabase/seed.sql` — run once in Supabase SQL Editor.
+
+Local dev: 6 Australian projects (Sydney, Melbourne, Brisbane, Perth, Adelaide), 8 inspections, 5 users, 7 open issues (3 critical), checklist results, documents, notes, reports, activity logs
 
 ## Stack
 
