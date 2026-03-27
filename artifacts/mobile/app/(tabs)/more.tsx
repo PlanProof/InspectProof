@@ -123,12 +123,6 @@ export default function MoreScreen() {
             onPress={() => router.push("/analytics")}
           />
           <MenuItem
-            icon="file-text"
-            label="Reports"
-            sublabel="Generate and manage inspection reports"
-            onPress={() => router.push("/reports" as any)}
-          />
-          <MenuItem
             icon="book"
             label="Documents"
             sublabel="Project documents and certificates"

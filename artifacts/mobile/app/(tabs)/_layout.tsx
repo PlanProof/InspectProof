@@ -15,13 +15,17 @@ function NativeTabLayout() {
         <Icon sf={{ default: "house", selected: "house.fill" }} />
         <Label>Home</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="projects">
-        <Icon sf={{ default: "folder", selected: "folder.fill" }} />
-        <Label>Projects</Label>
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="inspections">
         <Icon sf={{ default: "checkmark.circle", selected: "checkmark.circle.fill" }} />
         <Label>Inspections</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="reports">
+        <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
+        <Label>Reports</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="projects">
+        <Icon sf={{ default: "folder", selected: "folder.fill" }} />
+        <Label>Projects</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="more">
         <Icon sf={{ default: "ellipsis.circle", selected: "ellipsis.circle.fill" }} />
@@ -77,18 +81,6 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="projects"
-        options={{
-          title: "Projects",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="folder" tintColor={color} size={22} />
-            ) : (
-              <Feather name="folder" size={20} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
         name="inspections"
         options={{
           title: "Inspections",
@@ -97,6 +89,30 @@ function ClassicTabLayout() {
               <SymbolView name="checkmark.circle" tintColor={color} size={22} />
             ) : (
               <Feather name="check-circle" size={20} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="reports"
+        options={{
+          title: "Reports",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="doc.text" tintColor={color} size={22} />
+            ) : (
+              <Feather name="file-text" size={20} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="projects"
+        options={{
+          title: "Projects",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="folder" tintColor={color} size={22} />
+            ) : (
+              <Feather name="folder" size={20} color={color} />
             ),
         }}
       />

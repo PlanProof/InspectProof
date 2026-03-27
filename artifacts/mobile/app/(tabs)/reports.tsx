@@ -75,9 +75,6 @@ export default function ReportsScreen() {
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + WEB_TOP + 16 }]}>
         <View style={styles.headerTop}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Feather name="chevron-left" size={22} color={Colors.text} />
-          </Pressable>
           <Text style={styles.title}>Reports</Text>
           <View style={styles.countBadge}>
             <Text style={styles.countText}>{filtered.length}</Text>
@@ -120,7 +117,7 @@ export default function ReportsScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
       >
@@ -180,7 +177,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: Colors.border, gap: 10,
   },
   headerTop: { flexDirection: "row", alignItems: "center", gap: 10 },
-  backBtn: { padding: 4 },
   title: { flex: 1, fontSize: 22, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   countBadge: { backgroundColor: Colors.infoLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   countText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
