@@ -15,6 +15,7 @@ import {
   Alert,
   Linking,
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -36,11 +37,18 @@ export default function ProjectDetailScreen() {
   // Book inspection modal state
   const [bookOpen, setBookOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
-  const [bookDate, setBookDate] = useState("");
+  const [bookDate, setBookDate] = useState<Date>(new Date());
   const [bookTime, setBookTime] = useState("");
   const [bookSubmitting, setBookSubmitting] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [quotaError, setQuotaError] = useState<string | null>(null);
+
+  const formatDisplayDate = (d: Date) =>
+    `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+
+  const formatIsoDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
   const fetchWithAuth = async (url: string) => {
     const res = await fetch(`${baseUrl}${url}`, {
@@ -79,16 +87,7 @@ export default function ProjectDetailScreen() {
       Alert.alert("Required", "Please select an inspection type.");
       return;
     }
-    if (!bookDate.trim()) {
-      Alert.alert("Required", "Please enter a date.");
-      return;
-    }
-    // Parse DD/MM/YYYY → YYYY-MM-DD
-    const parts = bookDate.trim().split("/");
-    let isoDate = bookDate.trim();
-    if (parts.length === 3) {
-      isoDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-    }
+    const isoDate = formatIsoDate(bookDate);
     setBookSubmitting(true);
     try {
       const res = await fetch(`${baseUrl}/api/inspections`, {
@@ -114,15 +113,18 @@ export default function ProjectDetailScreen() {
           return;
         }
       }
-      if (!res.ok) throw new Error("Failed");
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error ?? "Failed");
+      }
       setBookOpen(false);
       setSelectedTemplate(null);
-      setBookDate("");
+      setBookDate(new Date());
       setBookTime("");
       refetchInspections();
       refetch();
-    } catch {
-      Alert.alert("Error", "Failed to book inspection. Please try again.");
+    } catch (err: any) {
+      Alert.alert("Error", err.message === "inspection_limit_reached" ? "Inspection limit reached. Please upgrade your plan." : "Failed to book inspection. Please try again.");
     } finally {
       setBookSubmitting(false);
     }
@@ -320,14 +322,40 @@ export default function ProjectDetailScreen() {
           {/* Date */}
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Date *</Text>
-            <TextInput
-              style={styles.fieldInput}
-              value={bookDate}
-              onChangeText={setBookDate}
-              placeholder="DD/MM/YYYY"
-              placeholderTextColor={Colors.textTertiary}
-              keyboardType="numeric"
-            />
+            <Pressable
+              style={styles.datePickerBtn}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Feather name="calendar" size={16} color={Colors.secondary} />
+              <Text style={styles.datePickerText}>{formatDisplayDate(bookDate)}</Text>
+              <Feather name="chevron-down" size={16} color={Colors.textSecondary} />
+            </Pressable>
+
+            {showDatePicker && (
+              <View style={styles.datePickerContainer}>
+                <DateTimePicker
+                  value={bookDate}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "inline" : "calendar"}
+                  minimumDate={new Date()}
+                  accentColor={Colors.secondary}
+                  themeVariant="light"
+                  onChange={(_, selectedDate) => {
+                    if (Platform.OS === "android") setShowDatePicker(false);
+                    if (selectedDate) setBookDate(selectedDate);
+                  }}
+                  style={{ alignSelf: "center" }}
+                />
+                {Platform.OS === "ios" && (
+                  <TouchableOpacity
+                    style={styles.datePickerDone}
+                    onPress={() => setShowDatePicker(false)}
+                  >
+                    <Text style={styles.datePickerDoneText}>Done</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </View>
 
           {/* Time */}
@@ -639,6 +667,44 @@ const styles = StyleSheet.create({
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textTertiary,
     textAlign: "center",
+  },
+  datePickerBtn: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: Colors.secondary + "60",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: Colors.secondary + "08",
+  },
+  datePickerText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+  },
+  datePickerContainer: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    overflow: "hidden",
+    marginTop: 4,
+  },
+  datePickerDone: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: "flex-end",
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+    backgroundColor: Colors.background,
+  },
+  datePickerDoneText: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.secondary,
   },
   bookBtn: {
     backgroundColor: Colors.secondary,
