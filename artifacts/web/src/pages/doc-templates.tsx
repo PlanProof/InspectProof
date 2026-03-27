@@ -528,7 +528,7 @@ export default function DocTemplates() {
     const saved = loadTemplates();
     return saved.length > 0 ? saved[0].id : null;
   });
-  const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const [mode, setMode] = useState<"edit" | "preview">("preview");
   const [rightTab, setRightTab] = useState<"fields" | "checklists">("fields");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -716,7 +716,7 @@ export default function DocTemplates() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => { setSelectedId(t.id); setMode("edit"); }}
+                    onClick={() => { setSelectedId(t.id); setMode("preview"); }}
                     className={`w-full text-left px-2.5 py-2 rounded-lg text-sm transition-colors flex items-start gap-2 ${
                       selectedId === t.id ? "bg-secondary text-white" : "hover:bg-muted text-sidebar"
                     }`}
@@ -862,7 +862,7 @@ export default function DocTemplates() {
         </div>
 
         {/* ── Right panel: Fields + Linked Checklists ───────────────────────── */}
-        {selected && mode === "edit" && (
+        {selected && (
           <div className="w-52 shrink-0 flex flex-col bg-card border border-border rounded-xl overflow-hidden shadow-sm">
             {/* Tab bar */}
             <div className="flex border-b border-border">
