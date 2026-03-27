@@ -46,6 +46,7 @@ router.post("/login", async (req, res) => {
         phone: user.phone,
         avatar: user.avatar,
         signatureUrl: user.signatureUrl ?? null,
+        companyName: user.companyName ?? null,
         isActive: user.isActive,
         createdAt: user.createdAt.toISOString(),
       },
@@ -147,6 +148,7 @@ router.get("/me", async (req, res) => {
       signatureUrl: user.signatureUrl ?? null,
       profession: user.profession ?? null,
       licenceNumber: user.licenceNumber ?? null,
+      companyName: user.companyName ?? null,
       isActive: user.isActive,
       isAdmin: user.isAdmin ?? false,
       plan: user.plan,
@@ -176,12 +178,13 @@ router.patch("/profile", async (req, res) => {
       return;
     }
 
-    const { firstName, lastName, phone, avatar } = req.body;
+    const { firstName, lastName, phone, avatar, companyName } = req.body;
     const updates: Record<string, any> = { updatedAt: new Date() };
     if (firstName !== undefined) updates.firstName = firstName.trim();
     if (lastName !== undefined) updates.lastName = lastName.trim();
     if (phone !== undefined) updates.phone = phone?.trim() || null;
     if (avatar !== undefined) updates.avatar = avatar || null;
+    if (companyName !== undefined) updates.companyName = companyName?.trim() || null;
 
     const [updated] = await db
       .update(usersTable)
@@ -197,6 +200,7 @@ router.patch("/profile", async (req, res) => {
       role: updated.role,
       phone: updated.phone,
       avatar: updated.avatar,
+      companyName: updated.companyName ?? null,
       isActive: updated.isActive,
       createdAt: updated.createdAt.toISOString(),
     });

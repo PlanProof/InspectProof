@@ -16,6 +16,7 @@ function formatUser(u: any) {
     signatureUrl: u.signatureUrl ?? null,
     profession: u.profession ?? null,
     licenceNumber: u.licenceNumber ?? null,
+    companyName: u.companyName ?? null,
     isActive: u.isActive,
     createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : u.createdAt,
   };
@@ -54,7 +55,7 @@ router.post("/", async (req, res) => {
 router.patch("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { phone, firstName, lastName, role, signatureUrl, profession, licenceNumber } = req.body;
+    const { phone, firstName, lastName, role, signatureUrl, profession, licenceNumber, companyName } = req.body;
 
     const updateData: Record<string, any> = { updatedAt: new Date() };
     if (phone !== undefined) updateData.phone = phone;
@@ -64,6 +65,7 @@ router.patch("/:id", async (req, res) => {
     if (signatureUrl !== undefined) updateData.signatureUrl = signatureUrl;
     if (profession !== undefined) updateData.profession = profession;
     if (licenceNumber !== undefined) updateData.licenceNumber = licenceNumber;
+    if (companyName !== undefined) updateData.companyName = companyName;
 
     const [updated] = await db.update(usersTable)
       .set(updateData)

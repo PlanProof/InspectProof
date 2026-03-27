@@ -233,10 +233,6 @@ function InspCard({ insp, onEditTime }: InspCardProps) {
               <Text style={[tlStyles.timeInCard, { color: Colors.secondary }]}>{insp.displayTime}</Text>
               <Feather name="edit-2" size={9} color={Colors.secondary + "99"} />
             </Pressable>
-            <View style={[tlStyles.statusPill, { backgroundColor: cfg.bg, flexDirection: "row", alignItems: "center", gap: 3 }]}>
-              {insp.status === "completed" && <Feather name="check-circle" size={10} color={cfg.color} />}
-              <Text style={[tlStyles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
-            </View>
           </View>
 
           <Text
@@ -249,13 +245,6 @@ function InspCard({ insp, onEditTime }: InspCardProps) {
               <Feather name="map-pin" size={11} color={Colors.textTertiary} />
               <Text style={tlStyles.addressText} numberOfLines={1}>{addressLine}</Text>
               <MapPinButton address={insp.projectAddress} suburb={insp.projectSuburb} />
-            </View>
-          )}
-
-          {insp.inspectorName && (
-            <View style={tlStyles.metaRow}>
-              <Feather name="user" size={11} color={Colors.textTertiary} />
-              <Text style={tlStyles.metaText}>{insp.inspectorName}</Text>
             </View>
           )}
 
@@ -795,8 +784,8 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>{getGreeting()},</Text>
-          <Text style={styles.userName}>{user?.firstName || "Inspector"}</Text>
+          <Text style={styles.greeting}>{getGreeting()}</Text>
+          <Text style={styles.userName}>{user?.companyName || user?.firstName || "Inspector"}</Text>
         </View>
         <View style={styles.headerRight}>
           <Pressable

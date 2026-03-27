@@ -60,6 +60,7 @@ export default function ProfileScreen() {
   const [firstName, setFirstName] = useState(user?.firstName ?? "");
   const [lastName, setLastName] = useState(user?.lastName ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
+  const [companyName, setCompanyName] = useState(user?.companyName ?? "");
   const [avatar, setAvatar] = useState<string | null>(user?.avatar ?? null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -69,6 +70,7 @@ export default function ProfileScreen() {
     firstName !== (user?.firstName ?? "") ||
     lastName !== (user?.lastName ?? "") ||
     phone !== (user?.phone ?? "") ||
+    companyName !== (user?.companyName ?? "") ||
     avatar !== (user?.avatar ?? null);
 
   const getBaseUrl = () =>
@@ -152,7 +154,7 @@ export default function ProfileScreen() {
       const r = await fetch(`${getBaseUrl()}/api/auth/profile`, {
         method: "PATCH",
         headers: authHeader(),
-        body: JSON.stringify({ firstName, lastName, phone, avatar }),
+        body: JSON.stringify({ firstName, lastName, phone, avatar, companyName }),
       });
       const data = await r.json();
       if (!r.ok) { setError(data.message ?? "Failed to save."); return; }
@@ -215,6 +217,22 @@ export default function ProfileScreen() {
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
+
+        {/* Company */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Company</Text>
+          <View style={styles.group}>
+            <Field
+              label="Company name"
+              value={companyName}
+              onChange={setCompanyName}
+              placeholder="e.g. Smith Inspections Pty Ltd"
+            />
+          </View>
+          <Text style={styles.sectionNote}>
+            Shown at the top of the app for all inspectors in your organisation.
+          </Text>
+        </View>
 
         {/* Personal Info */}
         <View style={styles.section}>

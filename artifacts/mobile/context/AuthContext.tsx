@@ -15,7 +15,9 @@ interface User {
   role: string;
   phone?: string | null;
   avatar?: string | null;
+  companyName?: string | null;
   isActive: boolean;
+  isAdmin?: boolean;
   createdAt: string;
 }
 
