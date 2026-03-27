@@ -80,10 +80,14 @@ async function generateReportContent(
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
+  const siteAddress = project
+    ? [project.siteAddress, project.suburb, project.state, project.postcode].filter(Boolean).join(" ")
+    : [inspection?.siteAddress, inspection?.suburb].filter(Boolean).join(" ") || "—";
+
   let content = `${typeLabel.toUpperCase()}
 ${"=".repeat(typeLabel.length)}
 
-DOCUMENT REFERENCE: ${project.certificationNumber || "—"}
+DOCUMENT REFERENCE: ${project?.certificationNumber || "—"}
 DATE ISSUED: ${formatDate(inspection?.completedDate || new Date().toISOString().split("T")[0])}
 PREPARED BY: ${inspector ? `${inspector.firstName} ${inspector.lastName}` : "—"}
 INSPECTOR QUALIFICATIONS: ${ROLE_LABELS[inspector?.role ?? ""] || inspector?.role || "Built Environment Professional"}
@@ -91,14 +95,14 @@ INSPECTOR QUALIFICATIONS: ${ROLE_LABELS[inspector?.role ?? ""] || inspector?.rol
 ────────────────────────────────────────────────────────
 PROJECT DETAILS
 ────────────────────────────────────────────────────────
-Project Name:         ${project.name}
-Site Address:         ${project.siteAddress}, ${project.suburb} ${project.state} ${project.postcode}
-DA / Approval No:     ${project.daNumber || "—"}
-Certification No:     ${project.certificationNumber || "—"}
-Building Class:       ${project.buildingClassification}
-Client / Owner:       ${project.clientName}
-Builder:              ${project.builderName || "—"}
-Designer / Architect:  ${project.designerName || "—"}
+Project Name:         ${project?.name || inspection?.siteAddress || "Standalone Inspection"}
+Site Address:         ${siteAddress}
+DA / Approval No:     ${project?.daNumber || "—"}
+Certification No:     ${project?.certificationNumber || "—"}
+Building Class:       ${project?.buildingClassification || inspection?.buildingClassification || "—"}
+Client / Owner:       ${project?.clientName || inspection?.clientName || "—"}
+Builder:              ${project?.builderName || "—"}
+Designer / Architect:  ${project?.designerName || "—"}
 
 ────────────────────────────────────────────────────────
 INSPECTION DETAILS
@@ -315,9 +319,9 @@ for the exclusive use of the client named above.
 ────────────────────────────────────────────────────────
 ANNUAL FIRE SAFETY STATEMENT
 ────────────────────────────────────────────────────────
-Statement Reference:   ${project.certificationNumber || "—"}
-Building Address:      ${project.siteAddress}, ${project.suburb} ${project.state} ${project.postcode}
-Building Class:        ${project.buildingClassification}
+Statement Reference:   ${project?.certificationNumber || "—"}
+Building Address:      ${siteAddress}
+Building Class:        ${project?.buildingClassification || inspection?.buildingClassification || "—"}
 
 ESSENTIAL FIRE SAFETY MEASURES ASSESSMENT
 ────────────────────────────────────────────────────────
@@ -513,11 +517,12 @@ router.post("/generate", async (req, res) => {
       .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
     const typeLabel = REPORT_TYPE_LABELS[reportType] || reportType;
-    const title = `${typeLabel} — ${inspType} — ${project.name}`;
+    const projectLabel = project?.name ?? inspection.siteAddress ?? "Standalone Inspection";
+    const title = `${typeLabel} — ${inspType} — ${projectLabel}`;
     const content = await generateReportContent(reportType, project, inspection, checklistResults, issues, inspector);
 
     const [report] = await db.insert(reportsTable).values({
-      projectId: project.id,
+      projectId: project?.id ?? null,
       inspectionId: inspection.id,
       title,
       reportType,
