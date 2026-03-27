@@ -158,9 +158,6 @@ export default function ProjectDetailScreen() {
       <View style={styles.hero}>
         <View style={styles.heroHeader}>
           <Badge label={project.status} variant="status" value={project.status} />
-          <Pressable style={styles.backBtn} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={18} color={Colors.textSecondary} />
-          </Pressable>
         </View>
 
         <Text style={styles.projectName}>{project.name}</Text>
