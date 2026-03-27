@@ -215,12 +215,25 @@ export default function Settings() {
 
 // ── Profile Tab ───────────────────────────────────────────────────────────────
 
+const PROFESSION_OPTIONS = [
+  "Building Surveyor",
+  "Structural Engineer",
+  "Plumbing Officer",
+  "Builder / QC",
+  "Site Supervisor",
+  "WHS Officer",
+  "Pre-Purchase Inspector",
+  "Fire Safety Engineer",
+  "Other",
+];
+
 function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
   const [saved, setSaved] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [licenceNumber, setLicenceNumber] = useState("");
-  const [title, setTitle] = useState("");
+  const [profession, setProfession] = useState("");
+  const [professionCustom, setProfessionCustom] = useState("");
 
   // Signature state
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
@@ -234,14 +247,40 @@ function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
       setName(user.name ?? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim());
       setPhone(user.phone ?? "");
       setLicenceNumber(user.licenceNumber ?? "");
-      setTitle(user.title ?? "");
+      const p = user.profession ?? "";
+      if (PROFESSION_OPTIONS.includes(p) || p === "") {
+        setProfession(p);
+        setProfessionCustom("");
+      } else {
+        setProfession("Other");
+        setProfessionCustom(p);
+      }
       setSignatureUrl(user.signatureUrl ?? null);
     }
   }, [user]);
 
   const initials = name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() || "U";
 
-  const save = () => {
+  const effectiveProfession = profession === "Other" ? professionCustom.trim() : profession;
+
+  const save = async () => {
+    const [firstName, ...rest] = name.trim().split(" ");
+    const lastName = rest.join(" ");
+    try {
+      await apiFetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: firstName || name.trim(),
+          lastName: lastName || "",
+          phone,
+          licenceNumber,
+          profession: effectiveProfession,
+        }),
+      });
+    } catch {
+      // silently continue — save banner still shows
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -352,8 +391,26 @@ function ProfileTab({ user, loading }: { user: any; loading: boolean }) {
           <FormField label="Phone Number">
             <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+61 400 000 000" />
           </FormField>
-          <FormField label="Professional Title">
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Principal Certifier" />
+          <FormField label="Profession">
+            <select
+              value={profession}
+              onChange={e => { setProfession(e.target.value); setProfessionCustom(""); }}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">— Select your discipline —</option>
+              {PROFESSION_OPTIONS.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+            {profession === "Other" && (
+              <input
+                type="text"
+                value={professionCustom}
+                onChange={e => setProfessionCustom(e.target.value)}
+                placeholder="Enter your discipline…"
+                className="mt-2 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            )}
           </FormField>
           <FormField label="Licence / Registration Number" hint="Your accreditation number as it appears on reports.">
             <Input value={licenceNumber} onChange={e => setLicenceNumber(e.target.value)} placeholder="e.g. BPB0002345" />

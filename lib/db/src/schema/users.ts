@@ -12,6 +12,8 @@ export const usersTable = pgTable("users", {
   phone: text("phone"),
   avatar: text("avatar"),
   signatureUrl: text("signature_url"),
+  profession: text("profession"),
+  licenceNumber: text("licence_number"),
   isActive: boolean("is_active").notNull().default(true),
   isAdmin: boolean("is_admin").notNull().default(false),
   plan: text("plan").notNull().default("free_trial"),

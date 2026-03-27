@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useListChecklistTemplates, useGetChecklistTemplate } from "@workspace/api-client-react";
+import { useListChecklistTemplates, useGetChecklistTemplate, useGetMe } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, Button } from "@/components/ui";
@@ -42,6 +42,7 @@ const DISCIPLINE_ORDER = [
   "WHS Officer",
   "Pre-Purchase Inspector",
   "Fire Safety Engineer",
+  "Custom",
 ];
 const DISCIPLINE_META: Record<string, { active: string; accent: string }> = {
   "Building Surveyor":     { active: "bg-sidebar text-white",    accent: "text-secondary border-secondary" },
@@ -52,6 +53,7 @@ const DISCIPLINE_META: Record<string, { active: string; accent: string }> = {
   "WHS Officer":           { active: "bg-red-700 text-white",    accent: "text-red-700 border-red-700" },
   "Pre-Purchase Inspector":{ active: "bg-purple-700 text-white", accent: "text-purple-700 border-purple-700" },
   "Fire Safety Engineer":  { active: "bg-rose-700 text-white",   accent: "text-rose-700 border-rose-700" },
+  "Custom":                { active: "bg-slate-700 text-white",  accent: "text-slate-700 border-slate-400" },
 };
 
 const TYPE_META: Record<string, { label: string; color: string; dot: string }> = {
@@ -128,7 +130,7 @@ function TemplateDetail({
   const [addingSectionFor, setAddingSectionFor] = useState<string | null>(null); // which category we're adding item to
   const [newItem, setNewItem] = useState<Partial<LocalItem>>({});
   const [showAddSection, setShowAddSection] = useState(false);
-  const dm = DISCIPLINE_META[discipline] ?? DISCIPLINE_META["Building Surveyor"];
+  const dm = DISCIPLINE_META[discipline] ?? DISCIPLINE_META["Custom"];
 
   const enterEdit = () => {
     if (!data) return;
@@ -782,7 +784,39 @@ function AddItemForm({
 
 // ── Main Templates Page ───────────────────────────────────────────────────────
 export default function Templates() {
-  const [discipline, setDiscipline] = useState("Building Surveyor");
+  const { data: me } = useGetMe({});
+  const isAdmin = (me as any)?.isAdmin ?? false;
+  const userProfession: string = (me as any)?.profession ?? "";
+
+  // Which disciplines are visible for this user
+  // Admins see everything; others see only their discipline + Custom
+  const KNOWN_DISCIPLINES = DISCIPLINE_ORDER.filter(d => d !== "Custom");
+  const userDisciplineInList = KNOWN_DISCIPLINES.includes(userProfession);
+  const visibleDisciplines: string[] = isAdmin
+    ? DISCIPLINE_ORDER
+    : userDisciplineInList
+      ? [userProfession, "Custom"]
+      : DISCIPLINE_ORDER; // profession not set or "Other" → show all
+
+  // "Custom" discipline rename
+  const [customDisciplineName, setCustomDisciplineName] = useState<string>(
+    () => localStorage.getItem("customDisciplineName") ?? "Custom"
+  );
+  const [renamingCustom, setRenamingCustom] = useState(false);
+  const [customNameDraft, setCustomNameDraft] = useState("");
+
+  const saveCustomName = () => {
+    const n = customNameDraft.trim() || "Custom";
+    setCustomDisciplineName(n);
+    localStorage.setItem("customDisciplineName", n);
+    setRenamingCustom(false);
+  };
+
+  // The actual discipline key sent to the API for "Custom" tab
+  const customApiDiscipline = customDisciplineName;
+
+  const defaultDiscipline = !isAdmin && userDisciplineInList ? userProfession : "Building Surveyor";
+  const [discipline, setDiscipline] = useState(defaultDiscipline);
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(["Class 1a"]));
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -793,6 +827,14 @@ export default function Templates() {
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<string | null>(null);
   const [deletingFolder, setDeletingFolder] = useState(false);
 
+  // Sync default discipline when user data loads
+  useEffect(() => {
+    if (me && !isAdmin && userDisciplineInList) {
+      setDiscipline(userProfession);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(me as any)?.id]);
+
   // New Checklist modal state
   const [newOpen, setNewOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -802,9 +844,12 @@ export default function Templates() {
   const [newFolderText, setNewFolderText] = useState("");
   const [newSaving, setNewSaving] = useState(false);
 
+  // When "Custom" tab is selected, we query using the user-defined name
+  const activeDisciplineKey = discipline === "Custom" ? customApiDiscipline : discipline;
+
   const { data: allTemplates, isLoading, refetch } = useListChecklistTemplates(
-    { discipline },
-    { query: { queryKey: ["templates", discipline] } }
+    { discipline: activeDisciplineKey },
+    { query: { queryKey: ["templates", activeDisciplineKey] } }
   );
 
   const templates = allTemplates ?? [];
@@ -836,7 +881,7 @@ export default function Templates() {
 
   // folderOrder is the user-set order for non-BS disciplines; sync from API keys when discipline changes
   useEffect(() => {
-    const saved = localStorage.getItem(`folderOrder_${discipline}`);
+    const saved = localStorage.getItem(`folderOrder_${activeDisciplineKey}`);
     if (saved) {
       try {
         const parsed: string[] = JSON.parse(saved);
@@ -889,12 +934,12 @@ export default function Templates() {
     const next = [...folderOrder];
     [next[fi], next[newFi]] = [next[newFi], next[fi]];
     setFolderOrder(next);
-    localStorage.setItem(`folderOrder_${discipline}`, JSON.stringify(next));
+    localStorage.setItem(`folderOrder_${activeDisciplineKey}`, JSON.stringify(next));
     try {
       await apiFetch("/api/checklist-templates/folder-reorder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ discipline, folders: next }),
+        body: JSON.stringify({ discipline: activeDisciplineKey, folders: next }),
       });
     } catch {}
   };
@@ -905,12 +950,12 @@ export default function Templates() {
     const [moved] = next.splice(fromIdx, 1);
     next.splice(toIdx, 0, moved);
     setFolderOrder(next);
-    localStorage.setItem(`folderOrder_${discipline}`, JSON.stringify(next));
+    localStorage.setItem(`folderOrder_${activeDisciplineKey}`, JSON.stringify(next));
     try {
       await apiFetch("/api/checklist-templates/folder-reorder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ discipline, folders: next }),
+        body: JSON.stringify({ discipline: activeDisciplineKey, folders: next }),
       });
     } catch {}
   };
@@ -936,7 +981,7 @@ export default function Templates() {
           name: newName.trim(),
           inspectionType: newType,
           folder: chosenFolder,
-          discipline,
+          discipline: activeDisciplineKey,
         }),
       });
       setNewOpen(false);
@@ -944,7 +989,7 @@ export default function Templates() {
       if (newFolderMode === "new" && !folderOrder.includes(chosenFolder)) {
         const next = [...folderOrder, chosenFolder];
         setFolderOrder(next);
-        localStorage.setItem(`folderOrder_${discipline}`, JSON.stringify(next));
+        localStorage.setItem(`folderOrder_${activeDisciplineKey}`, JSON.stringify(next));
       }
       refetch();
       setSelectedId(created.id);
@@ -958,12 +1003,12 @@ export default function Templates() {
   const deleteFolder = async (folder: string) => {
     setDeletingFolder(true);
     try {
-      await apiFetch(`/api/checklist-templates/folder?discipline=${encodeURIComponent(discipline)}&folder=${encodeURIComponent(folder)}`, {
+      await apiFetch(`/api/checklist-templates/folder?discipline=${encodeURIComponent(activeDisciplineKey)}&folder=${encodeURIComponent(folder)}`, {
         method: "DELETE",
       });
       const next = folderOrder.filter(f => f !== folder);
       setFolderOrder(next);
-      localStorage.setItem(`folderOrder_${discipline}`, JSON.stringify(next));
+      localStorage.setItem(`folderOrder_${activeDisciplineKey}`, JSON.stringify(next));
       if (selectedId && (grouped[folder] ?? []).some(t => t.id === selectedId)) setSelectedId(null);
       refetch();
     } catch {}
@@ -971,7 +1016,7 @@ export default function Templates() {
     setConfirmDeleteFolder(null);
   };
 
-  const dm = DISCIPLINE_META[discipline] ?? DISCIPLINE_META["Building Surveyor"];
+  const dm = DISCIPLINE_META[discipline] ?? DISCIPLINE_META["Custom"];
 
   return (
     <AppLayout>
@@ -986,24 +1031,63 @@ export default function Templates() {
       </div>
 
       {/* Discipline selector */}
-      <div className="flex items-center gap-2 mb-5">
+      <div className="flex flex-wrap items-center gap-2 mb-5">
         <span className="text-sm font-medium text-muted-foreground mr-1">Discipline:</span>
-        {DISCIPLINE_ORDER.map(d => (
-          <button
-            key={d}
-            onClick={() => { setDiscipline(d); setSelectedId(null); setOpenFolders(new Set(d === "Building Surveyor" ? ["Class 1a"] : [])); }}
-            className={cn(
-              "px-4 py-2 rounded-lg text-sm font-semibold border-2 transition-all",
-              discipline === d
-                ? `${dm.active} border-transparent shadow-md`
-                : "bg-card text-muted-foreground border-muted/60 hover:border-muted hover:text-sidebar"
-            )}
-          >
-            {d}
-          </button>
-        ))}
+        {visibleDisciplines.map(d => {
+          const meta = DISCIPLINE_META[d] ?? DISCIPLINE_META["Building Surveyor"];
+          const label = d === "Custom" ? customDisciplineName : d;
+          const isActive = discipline === d;
+          return (
+            <div key={d} className="relative flex items-center gap-0.5">
+              <button
+                onClick={() => { setDiscipline(d); setSelectedId(null); setOpenFolders(new Set(d === "Building Surveyor" ? ["Class 1a"] : [])); }}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-semibold border-2 transition-all",
+                  isActive
+                    ? `${meta.active} border-transparent shadow-md`
+                    : "bg-card text-muted-foreground border-muted/60 hover:border-muted hover:text-sidebar"
+                )}
+              >
+                {label}
+              </button>
+              {d === "Custom" && isActive && (
+                <button
+                  title="Rename this discipline"
+                  onClick={() => { setCustomNameDraft(customDisciplineName); setRenamingCustom(true); }}
+                  className="ml-1 p-1 rounded text-muted-foreground hover:text-sidebar transition-colors"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          );
+        })}
         {reordering && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-2" />}
       </div>
+
+      {/* Custom discipline rename modal */}
+      {renamingCustom && (
+        <Dialog open={renamingCustom} onOpenChange={v => { if (!v) setRenamingCustom(false); }}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Rename Custom Discipline</DialogTitle></DialogHeader>
+            <div className="py-2 space-y-3">
+              <label className="text-sm font-medium">Name</label>
+              <input
+                autoFocus
+                value={customNameDraft}
+                onChange={e => setCustomNameDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") saveCustomName(); }}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                placeholder="e.g. Hydraulic Engineer"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRenamingCustom(false)}>Cancel</Button>
+              <Button onClick={saveCustomName}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <Card className="shadow-md border-muted/60 overflow-hidden">
         <div className="flex divide-x divide-muted/50" style={{ minHeight: 580 }}>

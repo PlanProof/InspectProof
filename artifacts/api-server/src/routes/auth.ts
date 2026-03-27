@@ -145,6 +145,8 @@ router.get("/me", async (req, res) => {
       phone: user.phone,
       avatar: user.avatar,
       signatureUrl: user.signatureUrl ?? null,
+      profession: user.profession ?? null,
+      licenceNumber: user.licenceNumber ?? null,
       isActive: user.isActive,
       isAdmin: user.isAdmin ?? false,
       plan: user.plan,
