@@ -30,7 +30,7 @@ const PEN_COLORS = [
 ];
 const PEN_WIDTHS = [2, 4, 7];
 
-const CACHE_DIR = FileSystem.cacheDirectory + "inspectproof-docs/";
+const CACHE_DIR = Platform.OS !== "web" ? (FileSystem.cacheDirectory ?? "") + "inspectproof-docs/" : "";
 
 function pointsToPath(points: { x: number; y: number }[]): string {
   if (points.length < 2) return "";
@@ -98,6 +98,29 @@ export default function DocumentViewerScreen() {
 
   useEffect(() => {
     if (!url) return;
+
+    // Web: fetch with auth headers and create a blob URL — no file system needed
+    if (Platform.OS === "web") {
+      (async () => {
+        try {
+          setDownloadState("downloading");
+          const res = await fetch(url, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          setLocalUri(blobUrl);
+          setDownloadState("done");
+        } catch (e: any) {
+          setDownloadState("error");
+          setDownloadError(e?.message || "Failed to load document.");
+        }
+      })();
+      return;
+    }
+
+    // Native: download to cache dir with progress tracking
     (async () => {
       try {
         await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
