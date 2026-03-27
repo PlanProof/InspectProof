@@ -672,7 +672,13 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
   doc.restore();
 }
 
-function buildPdf(report: any, _project: any, signatureBuffer?: Buffer): PDFKit.PDFDocument {
+function buildPdf(
+  report: any,
+  _project: any,
+  signatureBuffer?: Buffer,
+  photosByDesc?: Map<string, string[]>,   // description → [storagePath, ...]
+  photoBuffers?: Map<string, Buffer>,     // storagePath → image buffer
+): PDFKit.PDFDocument {
   const doc = new PDFDocument({
     size: "A4",
     margins: { top: 88, bottom: FOOTER_H + 20, left: MARGIN, right: MARGIN },
@@ -792,20 +798,73 @@ function buildPdf(report: any, _project: any, signatureBuffer?: Buffer): PDFKit.
       const desc = checkMatch[3].trim();
       const isPass = resultStr.includes("PASS");
       const isFail = resultStr.includes("FAIL");
-      const badgeColor = isPass ? "#16A34A" : isFail ? "#DC2626" : "#9CA3AF";
-      const badgeBg = isPass ? "#F0FDF4" : isFail ? "#FEF2F2" : "#F9FAFB";
-      const badgeBorder = isPass ? "#BBF7D0" : isFail ? "#FECACA" : "#E5E7EB";
-      const badgeText = isPass ? "PASS" : isFail ? "FAIL" : "N/A";
+      const isMonitor = resultStr.includes("MONITOR");
+      const badgeColor = isPass ? "#16A34A" : isFail ? "#DC2626" : isMonitor ? "#D97706" : "#9CA3AF";
+      const badgeBg = isPass ? "#F0FDF4" : isFail ? "#FEF2F2" : isMonitor ? "#FFFBEB" : "#F9FAFB";
+      const badgeBorder = isPass ? "#BBF7D0" : isFail ? "#FECACA" : isMonitor ? "#FDE68A" : "#E5E7EB";
+      const badgeText = isPass ? "PASS" : isFail ? "FAIL" : isMonitor ? "MON" : "N/A";
+      const badgeW = isMonitor ? 36 : 36;
+
+      // Subtle row bg for fail items
+      if (isFail) {
+        doc.rect(MARGIN - 4, doc.y - 2, contentW + 8, 18).fill("#FFF5F5");
+      }
 
       const rowY = doc.y;
-      // Badge box — slightly larger for readability
-      doc.roundedRect(MARGIN, rowY + 1, 36, 13, 2).fillAndStroke(badgeBg, badgeBorder);
+      doc.roundedRect(MARGIN, rowY + 1, badgeW, 13, 2).fillAndStroke(badgeBg, badgeBorder);
       doc.fillColor(badgeColor).fontSize(7).font(FB)
-        .text(badgeText, MARGIN, rowY + 4, { width: 36, align: "center", lineBreak: false });
-      // Description
+        .text(badgeText, MARGIN, rowY + 4, { width: badgeW, align: "center", lineBreak: false });
       doc.fillColor("#1F2937").fontSize(9).font(F)
         .text(desc, MARGIN + 43, rowY, { width: contentW - 43 });
       doc.moveDown(0.45);
+
+      // Render photos for this item (if any)
+      if (photosByDesc && photoBuffers) {
+        const descKey = desc.toLowerCase().trim();
+        const photoPaths = photosByDesc.get(descKey) || [];
+        if (photoPaths.length > 0) {
+          const photoSize = 72;
+          const photoCols = Math.floor((contentW - 43) / (photoSize + 4));
+          let photoX = MARGIN + 43;
+          let photoY = doc.y;
+          let colIdx = 0;
+
+          for (const photoPath of photoPaths) {
+            const buf = photoBuffers.get(photoPath);
+            if (!buf) continue;
+
+            checkPageBreak(photoSize + 8);
+            if (colIdx === 0) photoY = doc.y;
+
+            try {
+              doc.roundedRect(photoX, photoY, photoSize, photoSize, 3)
+                .strokeColor("#E5E7EB").lineWidth(0.5).stroke();
+              doc.image(buf, photoX + 1, photoY + 1, {
+                width: photoSize - 2,
+                height: photoSize - 2,
+                fit: [photoSize - 2, photoSize - 2],
+                align: "center",
+                valign: "center",
+              });
+            } catch {
+              // skip broken image silently
+            }
+
+            photoX += photoSize + 4;
+            colIdx++;
+            if (colIdx >= photoCols) {
+              colIdx = 0;
+              photoX = MARGIN + 43;
+              doc.y = photoY + photoSize + 4;
+              photoY = doc.y;
+            }
+          }
+          if (colIdx > 0) {
+            doc.y = photoY + photoSize + 6;
+          }
+          doc.moveDown(0.3);
+        }
+      }
       continue;
     }
 
@@ -931,8 +990,61 @@ router.get("/:id/pdf", async (req, res) => {
       }
     }
 
+    // Fetch checklist results (with photoUrls) for this report's inspection
+    let photosByDesc: Map<string, string[]> | undefined;
+    let photoBuffers: Map<string, Buffer> | undefined;
+    if (report.inspectionId) {
+      try {
+        const checklistRows = await db.select({
+          result: checklistResultsTable,
+          item: checklistItemsTable,
+        }).from(checklistResultsTable)
+          .innerJoin(checklistItemsTable, eq(checklistResultsTable.checklistItemId, checklistItemsTable.id))
+          .where(eq(checklistResultsTable.inspectionId, report.inspectionId));
+
+        photosByDesc = new Map<string, string[]>();
+        photoBuffers = new Map<string, Buffer>();
+
+        const storageService = new ObjectStorageService();
+
+        await Promise.allSettled(checklistRows.map(async (row) => {
+          const rawUrls = row.result.photoUrls;
+          if (!rawUrls) return;
+          const paths: string[] = JSON.parse(rawUrls);
+          if (!paths.length) return;
+
+          const descKey = (row.item.description || "").toLowerCase().trim();
+          if (!photosByDesc!.has(descKey)) photosByDesc!.set(descKey, []);
+          photosByDesc!.get(descKey)!.push(...paths);
+
+          await Promise.allSettled(paths.map(async (photoPath) => {
+            if (photoBuffers!.has(photoPath)) return;
+            try {
+              const file = await storageService.getObjectEntityFile(photoPath);
+              const response = await storageService.downloadObject(file);
+              if (response.body) {
+                const chunks: Buffer[] = [];
+                const reader = response.body.getReader();
+                let done = false;
+                while (!done) {
+                  const chunk = await reader.read();
+                  done = chunk.done;
+                  if (chunk.value) chunks.push(Buffer.from(chunk.value));
+                }
+                photoBuffers!.set(photoPath, Buffer.concat(chunks));
+              }
+            } catch {
+              // skip — photo unavailable
+            }
+          }));
+        }));
+      } catch (photoErr) {
+        req.log.warn({ photoErr }, "Could not load checklist photos — omitting from PDF");
+      }
+    }
+
     const formatted = await formatReport(report);
-    const doc = buildPdf(formatted, project, signatureBuffer);
+    const doc = buildPdf(formatted, project, signatureBuffer, photosByDesc, photoBuffers);
 
     const safeName = (report.title || "report")
       .replace(/[^a-z0-9\s\-_]/gi, "")

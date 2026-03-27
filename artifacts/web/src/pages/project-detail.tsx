@@ -264,7 +264,7 @@ export default function ProjectDetail() {
       {tab === "Documents" && <DocumentsTab projectId={projectId} />}
       {tab === "Inspections" && <InspectionsTab project={project} onRefresh={loadProject} />}
       {tab === "Inspection Types" && <InspectionTypesTab projectId={projectId} />}
-      {tab === "Reports" && <ReportsTab projectId={projectId} />}
+      {tab === "Reports" && <ReportsTab projectId={projectId} project={project} />}
 
       {/* Archive Confirmation Dialog */}
       <Dialog open={archiveOpen} onOpenChange={open => { if (!archiving) setArchiveOpen(open); }}>
@@ -1994,7 +1994,280 @@ const REPORT_TYPE_LABELS: Record<string, string> = {
   defect_notice: "Defect Notice",
   non_compliance_notice: "Non-Compliance Notice",
   summary: "Inspection Summary",
+  quality_control_report: "Quality Control Report",
+  non_conformance_report: "Non-Conformance Report",
+  safety_inspection_report: "Safety Inspection Report",
+  hazard_assessment_report: "Hazard Assessment Report",
+  corrective_action_report: "Corrective Action Report",
+  pre_purchase_report: "Pre-Purchase Building Report",
+  annual_fire_safety: "Annual Fire Safety Statement",
+  fire_inspection_report: "Fire Safety Inspection Report",
 };
+
+function ReportResultBadge({ result }: { result: string }) {
+  if (result === "pass") return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 shrink-0">PASS</span>;
+  if (result === "fail") return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-700 border border-red-200 shrink-0">FAIL</span>;
+  if (result === "monitor") return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">MONITOR</span>;
+  if (result === "pending") return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500 border border-gray-200 shrink-0">PENDING</span>;
+  return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gray-50 text-gray-400 border border-gray-200 shrink-0">N/A</span>;
+}
+
+function ReportHTMLViewer({ report, inspection, project }: { report: any; inspection: any | null; project: any | null }) {
+  const items: any[] = inspection?.checklistResults ?? [];
+  const passItems   = items.filter(i => i.result === "pass");
+  const failItems   = items.filter(i => i.result === "fail");
+  const naItems     = items.filter(i => i.result === "na");
+  const monitorItems = items.filter(i => i.result === "monitor");
+  const total = items.length;
+  const passRate = total > 0 ? Math.round((passItems.length / Math.max(total - naItems.length, 1)) * 100) : null;
+  const overallResult = failItems.length > 0 ? "FAIL" : passItems.length > 0 ? "PASS" : total > 0 ? "PENDING" : "—";
+
+  // Group non-N/A items by category
+  const grouped: Record<string, any[]> = {};
+  items.filter(i => i.result !== "na").forEach(item => {
+    const cat = item.category || "General";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(item);
+  });
+
+  const fmtDate = (d: string | null | undefined) =>
+    d ? new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }) : "—";
+
+  const inspType = (inspection?.inspectionType || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+  return (
+    <div className="text-sm rounded-xl overflow-hidden border border-border">
+      {/* Branded header */}
+      <div className="bg-[#0B1933] px-6 py-4 flex items-center gap-3">
+        <div className="bg-[#C5D92D] rounded-lg w-9 h-9 flex items-center justify-center shrink-0">
+          <ClipboardList className="h-5 w-5 text-[#0B1933]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-bold text-base leading-tight">InspectProof</p>
+          <p className="text-white/50 text-[10px] uppercase tracking-widest mt-0.5">{report.reportTypeLabel || REPORT_TYPE_LABELS[report.reportType] || report.reportType}</p>
+        </div>
+        <span className={cn(
+          "shrink-0 text-xs px-2.5 py-1 rounded-full font-semibold",
+          report.status === "approved" ? "bg-[#466DB5] text-white" :
+          report.status === "sent" ? "bg-green-500 text-white" :
+          report.status === "pending_review" ? "bg-amber-500 text-white" :
+          "bg-white/20 text-white/80"
+        )}>
+          {report.status === "pending_review" ? "Pending Review" : report.status === "approved" ? "Approved" : report.status === "sent" ? "Sent to Client" : "Draft"}
+        </span>
+      </div>
+      <div className="h-1 bg-[#C5D92D]" />
+
+      {/* Body */}
+      <div className="px-5 py-5 space-y-5 bg-gray-50">
+        {/* Report title + meta */}
+        <div className="bg-white rounded-xl border border-border p-4">
+          <h2 className="text-sm font-bold text-[#0B1933] mb-2 leading-snug">{report.title}</h2>
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+            <span>Prepared by <strong className="text-sidebar">{inspection?.inspectorName || report.generatedByName}</strong></span>
+            <span>Issued <strong className="text-sidebar">{fmtDate(report.createdAt)}</strong></span>
+            <span>Ref <strong className="text-sidebar font-mono">IP-{String(report.id).padStart(6, "0")}</strong></span>
+          </div>
+        </div>
+
+        {/* Project + Inspection Details side by side */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl border border-border overflow-hidden">
+            <div className="bg-[#E8ECF2] border-b border-border px-4 py-2 flex items-center gap-2">
+              <div className="w-0.5 h-4 bg-[#466DB5] rounded-full" />
+              <span className="text-[10px] font-bold text-[#0B1933] uppercase tracking-wider">Project Details</span>
+            </div>
+            <div className="p-4 space-y-2">
+              {([
+                ["Project", project?.name],
+                ["Address", project ? `${project.siteAddress}, ${project.suburb} ${project.state} ${project.postcode}` : null],
+                ["DA / Approval No", project?.daNumber],
+                ["Cert No", project?.certificationNumber],
+                ["Building Class", project?.buildingClassification],
+                ["Client", project?.clientName],
+                ["Builder", project?.builderName],
+                ["Designer", project?.designerName],
+              ] as [string, string | null | undefined][]).filter(([, v]) => v).map(([k, v]) => (
+                <div key={k} className="grid gap-1 text-xs" style={{ gridTemplateColumns: "110px 1fr" }}>
+                  <span className="text-muted-foreground">{k}</span>
+                  <span className="text-sidebar font-medium">{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-border overflow-hidden">
+            <div className="bg-[#E8ECF2] border-b border-border px-4 py-2 flex items-center gap-2">
+              <div className="w-0.5 h-4 bg-[#466DB5] rounded-full" />
+              <span className="text-[10px] font-bold text-[#0B1933] uppercase tracking-wider">Inspection Details</span>
+            </div>
+            <div className="p-4 space-y-2">
+              {([
+                ["Type", inspType || null],
+                ["Inspector", inspection?.inspectorName || null],
+                ["Scheduled", fmtDate(inspection?.scheduledDate)],
+                ["Completed", fmtDate(inspection?.completedDate)],
+                ["Weather", inspection?.weatherConditions || null],
+                ["Duration", inspection?.duration ? `${inspection.duration} min` : null],
+                ["Site Notes", inspection?.siteNotes || null],
+              ] as [string, string | null][]).filter(([, v]) => v).map(([k, v]) => (
+                <div key={k} className="grid gap-1 text-xs" style={{ gridTemplateColumns: "110px 1fr" }}>
+                  <span className="text-muted-foreground">{k}</span>
+                  <span className="text-sidebar font-medium capitalize">{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Summary stats */}
+        {total > 0 && (
+          <div className="bg-white rounded-xl border border-border overflow-hidden">
+            <div className="bg-[#E8ECF2] border-b border-border px-4 py-2 flex items-center gap-2">
+              <div className="w-0.5 h-4 bg-[#466DB5] rounded-full" />
+              <span className="text-[10px] font-bold text-[#0B1933] uppercase tracking-wider">Results Summary</span>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-5 gap-2 mb-4">
+                {([
+                  { label: "Total", value: total, cls: "bg-[#0B1933] text-white" },
+                  { label: "Pass",    value: passItems.length,    cls: "bg-green-50 text-green-700 border border-green-200" },
+                  { label: "Fail",    value: failItems.length,    cls: failItems.length > 0 ? "bg-red-100 text-red-700 border border-red-300" : "bg-gray-50 text-gray-400 border border-gray-200" },
+                  { label: "Monitor", value: monitorItems.length, cls: "bg-amber-50 text-amber-700 border border-amber-200" },
+                  { label: "N/A",     value: naItems.length,      cls: "bg-gray-50 text-gray-500 border border-gray-200" },
+                ] as { label: string; value: number; cls: string }[]).map(s => (
+                  <div key={s.label} className={cn("rounded-xl p-3 text-center", s.cls)}>
+                    <div className="text-xl font-bold">{s.value}</div>
+                    <div className="text-[10px] mt-0.5 opacity-70 uppercase tracking-wide">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground shrink-0">Pass Rate</span>
+                <div className="flex-1 bg-gray-100 rounded-full h-2">
+                  <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${passRate ?? 0}%` }} />
+                </div>
+                <span className="text-xs font-bold text-sidebar shrink-0">{passRate !== null ? `${passRate}%` : "—"}</span>
+                <span className={cn(
+                  "text-xs font-bold px-3 py-1 rounded-full shrink-0",
+                  overallResult === "PASS" ? "bg-green-100 text-green-700" :
+                  overallResult === "FAIL" ? "bg-red-100 text-red-700" :
+                  "bg-gray-100 text-gray-600"
+                )}>
+                  {overallResult}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Checklist items grouped by category */}
+        {Object.entries(grouped).map(([cat, catItems]) => (
+          <div key={cat} className="bg-white rounded-xl border border-border overflow-hidden">
+            <div className="bg-[#E8ECF2] border-b border-border px-4 py-2.5 flex items-center gap-2">
+              <div className="w-0.5 h-4 bg-[#466DB5] rounded-full" />
+              <span className="text-[10px] font-bold text-[#0B1933] uppercase tracking-wider">{cat}</span>
+              <span className="ml-auto text-[10px] text-muted-foreground">{catItems.length} item{catItems.length !== 1 ? "s" : ""}</span>
+            </div>
+            <div className="divide-y divide-border">
+              {catItems.map((item, idx) => (
+                <div key={item.id ?? idx} className={cn(
+                  "p-4",
+                  item.result === "fail" ? "bg-red-50/50" :
+                  item.result === "monitor" ? "bg-amber-50/50" : ""
+                )}>
+                  <div className="flex items-start gap-3">
+                    <ReportResultBadge result={item.result} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-sidebar leading-snug">{item.description}</p>
+                      {/* Badges row */}
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {item.codeReference && (
+                          <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-medium">§ {item.codeReference}</span>
+                        )}
+                        {item.riskLevel && (
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium capitalize",
+                            item.riskLevel === "high" || item.riskLevel === "critical" ? "bg-red-50 text-red-600 border-red-200" :
+                            item.riskLevel === "medium" ? "bg-amber-50 text-amber-600 border-amber-200" :
+                            "bg-gray-50 text-gray-500 border-gray-200"
+                          )}>{item.riskLevel} risk</span>
+                        )}
+                        {item.severity && (
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium capitalize",
+                            item.severity === "critical" ? "bg-red-50 text-red-700 border-red-200" :
+                            item.severity === "major" ? "bg-orange-50 text-orange-700 border-orange-200" :
+                            item.severity === "minor" ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
+                            "bg-gray-50 text-gray-500 border-gray-200"
+                          )}>{item.severity}</span>
+                        )}
+                        {item.location && (
+                          <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded font-medium">📍 {item.location}</span>
+                        )}
+                        {item.tradeAllocated && (
+                          <span className="text-[10px] bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded font-medium">🔧 {item.tradeAllocated}</span>
+                        )}
+                      </div>
+                      {item.notes && (
+                        <p className="text-[10px] text-muted-foreground mt-1.5 italic">"{item.notes}"</p>
+                      )}
+                      {item.recommendedAction && (
+                        <p className="text-[10px] text-amber-700 mt-1 font-medium">→ {item.recommendedAction}</p>
+                      )}
+                      {/* Photos grid — aligned to item */}
+                      {item.photoUrls?.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2.5">
+                          {item.photoUrls.map((photoPath: string, pi: number) => (
+                            <a
+                              key={pi}
+                              href={`${apiBase()}/api/storage${photoPath}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="relative block rounded-lg overflow-hidden border-2 border-border hover:border-[#466DB5] transition-colors shrink-0"
+                              style={{ width: 88, height: 88 }}
+                            >
+                              <img
+                                src={`${apiBase()}/api/storage${photoPath}`}
+                                alt={`Photo ${pi + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute bottom-0 inset-x-0 bg-black/40 text-white text-[9px] text-center py-0.5 font-medium">
+                                Photo {pi + 1}
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* Footer / Certification */}
+        <div className="bg-[#0B1933] rounded-xl p-5">
+          <p className="text-[10px] text-white/50 leading-relaxed">
+            This document was prepared and issued by InspectProof — a product of PlanProof Technologies Pty Ltd. The findings contained herein are based on conditions observed at the time of inspection only. This report is prepared for the exclusive use of the parties named above.
+          </p>
+          <div className="mt-4 border-t border-white/10 pt-4 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[10px] text-white/40 mb-1 uppercase tracking-wide">Inspector</p>
+              <p className="text-xs font-semibold text-white">{inspection?.inspectorName || report.generatedByName}</p>
+              <p className="text-[10px] text-white/40 mt-0.5">{fmtDate(inspection?.completedDate || report.createdAt)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-white/40 mb-1 uppercase tracking-wide">Reference</p>
+              <p className="text-xs font-mono text-white/60">IP-{String(report.id).padStart(6, "0")}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const REPORT_STATUS_STYLES: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600 border-gray-200",
@@ -2011,10 +2284,12 @@ const REPORT_TYPE_ICONS: Record<string, React.ElementType> = {
   summary: FileText,
 };
 
-function ReportsTab({ projectId }: { projectId: number }) {
+function ReportsTab({ projectId, project }: { projectId: number; project: any }) {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
+  const [reportInspection, setReportInspection] = useState<any | null>(null);
+  const [reportViewLoading, setReportViewLoading] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
 
@@ -2031,9 +2306,21 @@ function ReportsTab({ projectId }: { projectId: number }) {
 
   useState(() => { load(); });
 
-  const openReport = (report: any) => {
+  const openReport = async (report: any) => {
     setSelectedReport(report);
+    setReportInspection(null);
     setViewOpen(true);
+    if (report.inspectionId) {
+      setReportViewLoading(true);
+      try {
+        const insp = await apiFetch(`/api/inspections/${report.inspectionId}`);
+        setReportInspection(insp);
+      } catch {
+        // will render with null inspection — project+title still visible
+      } finally {
+        setReportViewLoading(false);
+      }
+    }
   };
 
   const approveReport = async (report: any) => {
@@ -2205,62 +2492,59 @@ function ReportsTab({ projectId }: { projectId: number }) {
 
       {/* Report viewer dialog */}
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-sidebar" />
-              {selectedReport?.title}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center gap-3 pb-3 border-b border-border">
-            <span className={cn(
-              "text-xs px-2 py-0.5 rounded-full border font-medium",
-              REPORT_STATUS_STYLES[selectedReport?.status] || "bg-gray-50 text-gray-600 border-gray-200",
-            )}>
-              {selectedReport?.status === "pending_review" ? "Pending Review"
-                : selectedReport?.status === "approved" ? "Approved"
-                : selectedReport?.status === "sent" ? "Sent to Client"
-                : "Draft"}
-            </span>
-            <span className="text-xs text-muted-foreground">By {selectedReport?.generatedByName}</span>
-            <span className="text-xs text-muted-foreground">{formatDate(selectedReport?.createdAt)}</span>
-            {selectedReport?.sentTo && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Send className="h-3 w-3" /> {selectedReport.sentTo}
-              </span>
-            )}
-          </div>
-          <div className="flex-1 overflow-auto">
-            {selectedReport?.content ? (
-              <pre className="text-xs font-mono leading-relaxed p-4 bg-muted/30 rounded-lg whitespace-pre-wrap text-sidebar">
-                {selectedReport.content}
-              </pre>
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">No report content available</div>
-            )}
-          </div>
-          <div className="flex items-center justify-between gap-2 pt-3 border-t border-border">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => selectedReport && downloadPdf(selectedReport)}
-              className="gap-1.5"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Download PDF
-            </Button>
-            {selectedReport?.status === "pending_review" && (
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+          {/* Sticky toolbar */}
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border bg-white shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText className="h-4 w-4 text-sidebar shrink-0" />
+              <span className="text-sm font-semibold text-sidebar truncate">{selectedReport?.title}</span>
+              {selectedReport?.sentTo && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
+                  <Send className="h-3 w-3" /> {selectedReport.sentTo}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
               <Button
-                onClick={async () => {
-                  await approveReport(selectedReport);
-                  setViewOpen(false);
-                }}
-                disabled={actionBusy}
+                variant="outline"
                 size="sm"
+                onClick={() => selectedReport && downloadPdf(selectedReport)}
+                className="gap-1.5 text-xs"
               >
-                <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
-                {actionBusy ? "Approving…" : "Approve & Mark as Final"}
+                <Download className="h-3.5 w-3.5" />
+                Download PDF
               </Button>
+              {selectedReport?.status === "pending_review" && (
+                <Button
+                  onClick={async () => {
+                    await approveReport(selectedReport);
+                    setViewOpen(false);
+                  }}
+                  disabled={actionBusy}
+                  size="sm"
+                  className="text-xs"
+                >
+                  <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                  {actionBusy ? "Approving…" : "Approve & Mark as Final"}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Scrollable report body */}
+          <div className="flex-1 overflow-auto bg-gray-100 p-4">
+            {reportViewLoading ? (
+              <div className="flex items-center justify-center py-20 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading report…
+              </div>
+            ) : selectedReport ? (
+              <ReportHTMLViewer
+                report={selectedReport}
+                inspection={reportInspection}
+                project={project}
+              />
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">No report selected</div>
             )}
           </div>
         </DialogContent>
