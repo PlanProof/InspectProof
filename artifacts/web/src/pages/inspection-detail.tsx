@@ -700,7 +700,7 @@ export default function InspectionDetail() {
           onReload={load}
         />
       )}
-      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} inspection={inspection} />}
+      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults ?? []} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} inspection={inspection} />}
       {tab === "Issues" && <IssuesTab issues={inspection.issues} />}
       {tab === "Documents" && (
         <DocumentsTab

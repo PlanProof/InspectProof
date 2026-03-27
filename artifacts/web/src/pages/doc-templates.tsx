@@ -438,6 +438,89 @@ function GenerateReportDialog({ template, onClose }: { template: DocTemplate; on
   );
 }
 
+// ── Checklists Panel (right-panel sub-component) ──────────────────────────────
+function ChecklistsPanel({
+  checklistTemplates,
+  linkedIds,
+  onToggleAll,
+  onToggleOne,
+}: {
+  checklistTemplates: any[];
+  linkedIds: number[];
+  onToggleAll: (ids: number[], allLinked: boolean) => void;
+  onToggleOne: (id: number) => void;
+}) {
+  const allIds = checklistTemplates.map((ct: any) => ct.id as number);
+  const allLinked = allIds.length > 0 && allIds.every(id => linkedIds.includes(id));
+  const someLinked = !allLinked && allIds.some(id => linkedIds.includes(id));
+  const folders = Array.from(new Set(checklistTemplates.map((ct: any) => ct.folder ?? "Other")));
+
+  return (
+    <div className="space-y-3">
+      {/* Master select-all row */}
+      <button
+        onClick={() => onToggleAll(allIds, allLinked)}
+        className="w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-2 bg-muted/40 hover:bg-muted border border-muted/60"
+      >
+        <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center ${allLinked ? "bg-secondary border-secondary" : someLinked ? "bg-secondary/40 border-secondary/60" : "border-muted-foreground/40 bg-white"}`}>
+          {allLinked && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+          {someLinked && <div className="w-1.5 h-1.5 rounded-sm bg-secondary" />}
+        </div>
+        <span className={`font-semibold ${allLinked ? "text-secondary" : "text-muted-foreground"}`}>
+          {allLinked ? "Deselect all" : "Select all"}
+        </span>
+        <span className="ml-auto text-[10px] text-muted-foreground">
+          {linkedIds.filter(id => allIds.includes(id)).length}/{allIds.length}
+        </span>
+      </button>
+
+      {folders.map(folder => {
+        const items = checklistTemplates.filter((ct: any) => (ct.folder ?? "Other") === folder);
+        const folderIds = items.map((ct: any) => ct.id as number);
+        const folderAllLinked = folderIds.length > 0 && folderIds.every(id => linkedIds.includes(id));
+        const folderSomeLinked = !folderAllLinked && folderIds.some(id => linkedIds.includes(id));
+        return (
+          <div key={folder}>
+            <button
+              onClick={() => onToggleAll(folderIds, folderAllLinked)}
+              className="flex items-center gap-1.5 px-1 mb-1 w-full group"
+            >
+              <Folder className="h-3 w-3 text-amber-500 shrink-0" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate flex-1 text-left">{folder}</span>
+              <div className={`w-3 h-3 rounded border shrink-0 flex items-center justify-center ${folderAllLinked ? "bg-secondary border-secondary" : folderSomeLinked ? "bg-secondary/40 border-secondary/60" : "border-muted-foreground/30 group-hover:border-secondary/50"}`}>
+                {folderAllLinked && <Check className="h-2 w-2 text-white" strokeWidth={3} />}
+                {folderSomeLinked && <div className="w-1 h-1 rounded-sm bg-secondary" />}
+              </div>
+            </button>
+            <div className="space-y-0.5">
+              {items.map((ct: any) => {
+                const isLinked = linkedIds.includes(ct.id);
+                return (
+                  <button
+                    key={ct.id}
+                    onClick={() => onToggleOne(ct.id)}
+                    className={`w-full text-left pl-5 pr-2 py-1.5 rounded-lg text-xs transition-colors flex items-start gap-2 ${
+                      isLinked ? "bg-secondary/10 text-secondary" : "hover:bg-muted text-sidebar"
+                    }`}
+                  >
+                    <div className={`mt-0.5 w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center ${isLinked ? "bg-secondary border-secondary" : "border-muted-foreground/40"}`}>
+                      {isLinked && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-medium truncate leading-tight">{ct.name}</div>
+                      <div className="text-muted-foreground text-[10px] capitalize">{(ct.inspectionType ?? "").replace(/_/g, " ")}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function DocTemplates() {
   const [templates, setTemplates] = useState<DocTemplate[]>(loadTemplates);
@@ -896,76 +979,14 @@ export default function DocTemplates() {
                     <ClipboardList className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
                     <p className="text-xs text-muted-foreground">No checklists found</p>
                   </div>
-                ) : (() => {
-                    const folders = Array.from(new Set(checklistTemplates.map((ct: any) => ct.folder ?? "Other")));
-                    const allIds = checklistTemplates.map((ct: any) => ct.id as number);
-                    const allLinked = allIds.every(id => selected.linkedChecklistIds.includes(id));
-                    const someLinked = !allLinked && allIds.some(id => selected.linkedChecklistIds.includes(id));
-                    return (
-                      <div className="space-y-3">
-                        {/* Master select-all row */}
-                        <button
-                          onClick={() => toggleAllChecklists(allIds, allLinked)}
-                          className="w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-2 bg-muted/40 hover:bg-muted border border-muted/60"
-                        >
-                          <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center ${allLinked ? "bg-secondary border-secondary" : someLinked ? "bg-secondary/40 border-secondary/60" : "border-muted-foreground/40 bg-white"}`}>
-                            {allLinked && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
-                            {someLinked && <div className="w-1.5 h-1.5 rounded-sm bg-secondary" />}
-                          </div>
-                          <span className={`font-semibold ${allLinked ? "text-secondary" : "text-muted-foreground"}`}>
-                            {allLinked ? "Deselect all" : "Select all"}
-                          </span>
-                          <span className="ml-auto text-[10px] text-muted-foreground">
-                            {selected.linkedChecklistIds.filter(id => allIds.includes(id)).length}/{allIds.length}
-                          </span>
-                        </button>
-
-                        {folders.map(folder => {
-                          const items = checklistTemplates.filter((ct: any) => (ct.folder ?? "Other") === folder);
-                          const folderIds = items.map((ct: any) => ct.id as number);
-                          const folderAllLinked = folderIds.every(id => selected.linkedChecklistIds.includes(id));
-                          const folderSomeLinked = !folderAllLinked && folderIds.some(id => selected.linkedChecklistIds.includes(id));
-                          return (
-                            <div key={folder}>
-                              <button
-                                onClick={() => toggleAllChecklists(folderIds, folderAllLinked)}
-                                className="flex items-center gap-1.5 px-1 mb-1 w-full group"
-                              >
-                                <Folder className="h-3 w-3 text-amber-500 shrink-0" />
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate flex-1 text-left">{folder}</span>
-                                <div className={`w-3 h-3 rounded border shrink-0 flex items-center justify-center ${folderAllLinked ? "bg-secondary border-secondary" : folderSomeLinked ? "bg-secondary/40 border-secondary/60" : "border-muted-foreground/30 group-hover:border-secondary/50"}`}>
-                                  {folderAllLinked && <Check className="h-2 w-2 text-white" strokeWidth={3} />}
-                                  {folderSomeLinked && <div className="w-1 h-1 rounded-sm bg-secondary" />}
-                                </div>
-                              </button>
-                              <div className="space-y-0.5">
-                                {items.map((ct: any) => {
-                                  const isLinked = selected.linkedChecklistIds.includes(ct.id);
-                                  return (
-                                    <button
-                                      key={ct.id}
-                                      onClick={() => toggleChecklistLink(ct.id)}
-                                      className={`w-full text-left pl-5 pr-2 py-1.5 rounded-lg text-xs transition-colors flex items-start gap-2 ${
-                                        isLinked ? "bg-secondary/10 text-secondary" : "hover:bg-muted text-sidebar"
-                                      }`}
-                                    >
-                                      <div className={`mt-0.5 w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center ${isLinked ? "bg-secondary border-secondary" : "border-muted-foreground/40"}`}>
-                                        {isLinked && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
-                                      </div>
-                                      <div className="min-w-0">
-                                        <div className="font-medium truncate leading-tight">{ct.name}</div>
-                                        <div className="text-muted-foreground text-[10px] capitalize">{(ct.inspectionType ?? "").replace(/_/g, " ")}</div>
-                                      </div>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
+                ) : (
+                  <ChecklistsPanel
+                    checklistTemplates={checklistTemplates}
+                    linkedIds={selected?.linkedChecklistIds ?? []}
+                    onToggleAll={toggleAllChecklists}
+                    onToggleOne={toggleChecklistLink}
+                  />
+                )}
               </div>
             )}
           </div>
