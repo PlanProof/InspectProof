@@ -591,7 +591,7 @@ export default function GenerateReportScreen() {
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   const [step, setStep] = useState<"select" | "preview">("select");
-  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [selectedReportType, setSelectedReportType] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [report, setReport] = useState<any>(null);
@@ -625,13 +625,37 @@ export default function GenerateReportScreen() {
     enabled: !!token && !!id,
   });
 
-  const { data: templates = [], isLoading: loadingTemplates } = useQuery({
-    queryKey: ["doc-templates", token],
-    queryFn: () => fetchWithAuth("/api/doc-templates"),
-    enabled: !!token,
-  });
+  const ALL_REPORT_TYPES: Array<{ key: string; label: string; icon: string; desc: string }> = [
+    { key: "inspection_certificate",   label: "Inspection Certificate",        icon: "award",          desc: "Formal certificate confirming compliance with NCC requirements" },
+    { key: "compliance_report",        label: "Compliance Report",             icon: "bar-chart-2",    desc: "Detailed checklist results and overall compliance status" },
+    { key: "defect_notice",            label: "Defect Notice",                 icon: "alert-triangle", desc: "Notice of defects requiring rectification before the next stage" },
+    { key: "non_compliance_notice",    label: "Non-Compliance Notice",         icon: "x-circle",       desc: "Formal notice of non-compliant work under the Building Act" },
+    { key: "summary",                  label: "Inspection Summary",            icon: "file-text",      desc: "Brief narrative summary of overall inspection outcomes" },
+    { key: "quality_control_report",   label: "Quality Control Report",        icon: "clipboard",      desc: "QC results against approved plans and project specifications" },
+    { key: "non_conformance_report",   label: "Non-Conformance Report",        icon: "alert-triangle", desc: "Formal record of non-conformances against design standards" },
+    { key: "safety_inspection_report", label: "Safety Inspection Report",      icon: "shield",         desc: "WHS site inspection findings and safety compliance status" },
+    { key: "hazard_assessment_report", label: "Hazard Assessment Report",      icon: "shield",         desc: "Site hazard identification and risk control requirements" },
+    { key: "corrective_action_report", label: "Corrective Action Report",      icon: "refresh-cw",     desc: "Status of open corrective actions from prior inspections" },
+    { key: "pre_purchase_report",      label: "Pre-Purchase Building Report",  icon: "home",           desc: "Property condition assessment for prospective buyers (AS 4349.1)" },
+    { key: "annual_fire_safety",       label: "Annual Fire Safety Statement",  icon: "thermometer",    desc: "Annual certification of essential fire safety measures" },
+    { key: "fire_inspection_report",   label: "Fire Safety Inspection Report", icon: "alert-circle",   desc: "Fire safety compliance inspection findings and actions" },
+  ];
 
-  const selectedTemplate = (templates as any[]).find((t: any) => String(t.id) === String(selectedTemplateId));
+  const DISCIPLINE_REPORT_TYPES: Record<string, string[]> = {
+    "Building Surveyor":      ["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice", "summary"],
+    "Structural Engineer":    ["compliance_report", "non_conformance_report", "defect_notice", "summary"],
+    "Plumbing Officer":       ["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice"],
+    "Builder / QC":           ["quality_control_report", "defect_notice", "non_conformance_report", "corrective_action_report", "summary"],
+    "WHS Officer":            ["safety_inspection_report", "hazard_assessment_report", "corrective_action_report", "non_compliance_notice"],
+    "Pre-Purchase Inspector": ["pre_purchase_report", "defect_notice", "summary", "compliance_report"],
+    "Fire Safety Engineer":   ["annual_fire_safety", "fire_inspection_report", "compliance_report", "defect_notice"],
+  };
+
+  const DEFAULT_TYPES = ["inspection_certificate", "compliance_report", "defect_notice", "summary"];
+
+  const discipline = (inspection as any)?.checklistTemplateDiscipline ?? null;
+  const allowedKeys = (discipline && DISCIPLINE_REPORT_TYPES[discipline]) ? DISCIPLINE_REPORT_TYPES[discipline] : DEFAULT_TYPES;
+  const reportTypes = ALL_REPORT_TYPES.filter(rt => allowedKeys.includes(rt.key));
 
   const openExistingReport = async (reportId: number) => {
     setLoadingExisting(true);
@@ -647,7 +671,7 @@ export default function GenerateReportScreen() {
   };
 
   const generateReport = async () => {
-    if (!selectedTemplate) return;
+    if (!selectedReportType) return;
     setGenerating(true);
     try {
       const data = await fetchWithAuth("/api/reports/generate", {
@@ -655,7 +679,7 @@ export default function GenerateReportScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           inspectionId: parseInt(id),
-          reportType: selectedTemplate.name,
+          reportType: selectedReportType,
           userId: (user as any)?.id || 1,
         }),
       });
@@ -736,7 +760,8 @@ export default function GenerateReportScreen() {
     }
   };
 
-  const templateName = selectedTemplate?.name || report?.reportTypeLabel || report?.reportType || "Inspection Report";
+  const selectedTypeMeta = ALL_REPORT_TYPES.find(rt => rt.key === selectedReportType);
+  const templateName = selectedTypeMeta?.label || report?.reportTypeLabel || report?.reportType || "Inspection Report";
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -757,9 +782,9 @@ export default function GenerateReportScreen() {
         </View>
         {step === "select" && (
           <Pressable
-            style={[styles.nextBtn, !selectedTemplateId && styles.nextBtnDisabled]}
+            style={[styles.nextBtn, !selectedReportType && styles.nextBtnDisabled]}
             onPress={generateReport}
-            disabled={!selectedTemplateId || generating}
+            disabled={!selectedReportType || generating}
           >
             {generating
               ? <ActivityIndicator size="small" color={Colors.primary} />
@@ -776,7 +801,7 @@ export default function GenerateReportScreen() {
               <Text style={styles.stepDotText}>{idx + 1}</Text>
             </View>
             <Text style={[styles.stepLabel, step === s && styles.stepLabelActive]}>
-              {idx === 0 ? "Select Template" : "Preview & Send"}
+              {idx === 0 ? "Select Type" : "Preview & Send"}
             </Text>
             {idx < 1 && <View style={styles.stepLine} />}
           </View>
@@ -838,46 +863,32 @@ export default function GenerateReportScreen() {
             </View>
           )}
 
-          <Text style={styles.sectionTitle}>Choose a template</Text>
+          <Text style={styles.sectionTitle}>Choose report type</Text>
           <Text style={styles.sectionSub}>
-            Select a template to generate a structured report with your checklist results and photos.
+            {discipline ? `Report types for ${discipline}` : "Select the type of report to generate for this inspection."}
           </Text>
 
-          {loadingTemplates ? (
+          {!inspection ? (
             <View style={styles.emptyWrap}>
               <ActivityIndicator size="large" color={Colors.secondary} />
-              <Text style={styles.emptyText}>Loading templates…</Text>
-            </View>
-          ) : (templates as any[]).length === 0 ? (
-            <View style={styles.emptyWrap}>
-              <Feather name="book-open" size={40} color={Colors.textTertiary} />
-              <Text style={styles.emptyTitle}>No templates yet</Text>
-              <Text style={styles.emptyText}>
-                Create a template from the Templates section and it will appear here.
-              </Text>
+              <Text style={styles.emptyText}>Loading inspection…</Text>
             </View>
           ) : (
             <View style={styles.typeList}>
-              {(templates as any[]).map((tmpl: any) => {
-                const isSelected = String(selectedTemplateId) === String(tmpl.id);
-                const linkedCount = Array.isArray(tmpl.linkedChecklistIds) ? tmpl.linkedChecklistIds.length : 0;
-                const updatedAt = tmpl.updatedAt ? new Date(tmpl.updatedAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : null;
+              {reportTypes.map((rt) => {
+                const isSelected = selectedReportType === rt.key;
                 return (
                   <Pressable
-                    key={tmpl.id}
+                    key={rt.key}
                     style={[styles.typeCard, isSelected && styles.typeCardSelected]}
-                    onPress={() => setSelectedTemplateId(tmpl.id)}
+                    onPress={() => setSelectedReportType(rt.key)}
                   >
                     <View style={[styles.typeIcon, isSelected && styles.typeIconSelected]}>
-                      <Feather name="file-text" size={22} color={isSelected ? Colors.secondary : Colors.textSecondary} />
+                      <Feather name={rt.icon as any} size={22} color={isSelected ? Colors.secondary : Colors.textSecondary} />
                     </View>
                     <View style={styles.typeInfo}>
-                      <Text style={[styles.typeLabel, isSelected && styles.typeLabelSelected]}>{tmpl.name}</Text>
-                      {linkedCount > 0 ? (
-                        <Text style={styles.typeDesc}>{linkedCount} linked checklist{linkedCount !== 1 ? "s" : ""}</Text>
-                      ) : updatedAt ? (
-                        <Text style={styles.typeDesc}>Updated {updatedAt}</Text>
-                      ) : null}
+                      <Text style={[styles.typeLabel, isSelected && styles.typeLabelSelected]}>{rt.label}</Text>
+                      <Text style={styles.typeDesc} numberOfLines={2}>{rt.desc}</Text>
                     </View>
                     <View style={[styles.typeRadio, isSelected && styles.typeRadioSelected]}>
                       {isSelected && <View style={styles.typeRadioInner} />}
