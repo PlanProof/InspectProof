@@ -43,6 +43,10 @@ export interface User {
   avatar?: string | null;
   isActive: boolean;
   createdAt: string;
+  isAdmin?: boolean | null;
+  profession?: string | null;
+  companyName?: string | null;
+  licenceNumber?: string | null;
 }
 
 export interface LoginResponse {

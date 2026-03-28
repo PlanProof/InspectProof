@@ -1720,7 +1720,7 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
                       <div key={t.templateId} className="px-5 py-3 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 min-w-0">
                           {booked
-                            ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" title="Inspection booked" />
+                            ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
                             : (
                               <button
                                 onClick={() => openBookForTemplate(t)}
