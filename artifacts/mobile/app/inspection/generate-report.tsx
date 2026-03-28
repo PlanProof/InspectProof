@@ -634,26 +634,16 @@ export default function GenerateReportScreen() {
   });
 
   // Build the "choose type" list from admin-configured doc templates.
-  // Each doc template becomes a selectable report type on mobile.
   const reportTypes: Array<{ key: string; label: string; icon: string; desc: string; docTemplateId?: number }> =
-    docTemplates.length > 0
-      ? docTemplates.map((dt: any) => ({
-          key: `doc_template_${dt.id}`,
-          label: dt.name,
-          icon: "file-text",
-          desc: dt.linkedChecklistIds?.length > 0
-            ? `Links ${dt.linkedChecklistIds.length} checklist template${dt.linkedChecklistIds.length > 1 ? "s" : ""}`
-            : "Custom report template",
-          docTemplateId: dt.id,
-        }))
-      : [
-          // Fallback if no templates configured on desktop yet
-          { key: "inspection_certificate",   label: "Inspection Certificate",       icon: "award",          desc: "Formal certificate confirming NCC compliance" },
-          { key: "compliance_report",        label: "Compliance Report",            icon: "bar-chart-2",    desc: "Checklist results and overall compliance status" },
-          { key: "defect_notice",            label: "Defect Notice",                icon: "alert-triangle", desc: "Defects requiring rectification before next stage" },
-          { key: "non_compliance_notice",    label: "Non-Compliance Notice",        icon: "x-circle",       desc: "Formal notice of non-compliant work" },
-          { key: "summary",                  label: "Inspection Summary",           icon: "file-text",      desc: "Narrative summary of inspection outcomes" },
-        ];
+    docTemplates.map((dt: any) => ({
+      key: `doc_template_${dt.id}`,
+      label: dt.name,
+      icon: "file-text",
+      desc: dt.linkedChecklistIds?.length > 0
+        ? `Links ${dt.linkedChecklistIds.length} checklist template${dt.linkedChecklistIds.length > 1 ? "s" : ""}`
+        : "Custom report template",
+      docTemplateId: dt.id,
+    }));
 
   const openExistingReport = async (reportId: number) => {
     setLoadingExisting(true);
@@ -926,11 +916,7 @@ export default function GenerateReportScreen() {
           )}
 
           <Text style={styles.sectionTitle}>Choose report type</Text>
-          <Text style={styles.sectionSub}>
-            {docTemplates.length > 0
-              ? "Templates configured in your desktop Document Templates"
-              : "Select the type of report to generate for this inspection."}
-          </Text>
+          <Text style={styles.sectionSub}>Templates configured in your desktop Document Templates</Text>
 
           {(!inspection || loadingDocTemplates) ? (
             <View style={styles.emptyWrap}>
