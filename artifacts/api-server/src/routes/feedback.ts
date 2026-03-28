@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, feedbacksTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { optionalAuth } from "../middleware/auth";
+import { sendFeedbackEmail } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -36,6 +37,11 @@ router.post("/", optionalAuth, async (req, res) => {
     }).returning();
 
     req.log.info({ feedbackId: feedback.id, userId: authUser?.id }, "Feedback submitted");
+
+    sendFeedbackEmail(
+      { senderName, senderEmail, message: message.trim() },
+      req.log
+    ).catch(() => {});
 
     res.status(201).json({
       success: true,

@@ -49,6 +49,16 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
   next();
 }
 
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  await optionalAuth(req, res, async () => {
+    if (!req.authUser) {
+      res.status(401).json({ error: "unauthorized", message: "Authentication required." });
+      return;
+    }
+    next();
+  });
+}
+
 export const INSPECTOR_ROLES = new Set(["inspector", "building_inspector"]);
 
 export function isInspectorOnly(user: AuthUser): boolean {
