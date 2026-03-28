@@ -360,12 +360,19 @@ function ScheduleTimeline({
   const dateScrollRef = useRef<ScrollView>(null);
 
   const handleEditTime = useCallback((inspId: number, currentTime: string, currentDate: string) => {
-    const [h, m] = currentTime.split(":").map(Number);
-    const isPM = h >= 12;
-    const hour12 = h % 12 || 12;
-    setEditHour(String(hour12));
-    setEditMinute(String(m).padStart(2, "0"));
-    setEditAmPm(isPM ? "PM" : "AM");
+    const hasTime = currentTime && currentTime !== "TBD" && currentTime.includes(":");
+    if (hasTime) {
+      const [h, m] = currentTime.split(":").map(Number);
+      const isPM = h >= 12;
+      const hour12 = h % 12 || 12;
+      setEditHour(String(hour12));
+      setEditMinute(String(m).padStart(2, "0"));
+      setEditAmPm(isPM ? "PM" : "AM");
+    } else {
+      setEditHour("");
+      setEditMinute("");
+      setEditAmPm("AM");
+    }
     setEditDate(currentDate);
     setTimeEditTarget({ inspId });
     // scroll date strip so selected date is visible
@@ -379,8 +386,10 @@ function ScheduleTimeline({
 
   const confirmTimeEdit = useCallback(() => {
     if (!timeEditTarget) return;
-    const h = Math.max(1, Math.min(12, parseInt(editHour) || 12));
-    const m = Math.max(0, Math.min(59, parseInt(editMinute) || 0));
+    const parsedH = parseInt(editHour);
+    const parsedM = parseInt(editMinute);
+    const h = isNaN(parsedH) ? 9 : Math.max(1, Math.min(12, parsedH));
+    const m = isNaN(parsedM) ? 0 : Math.max(0, Math.min(59, parsedM));
     let h24 = h % 12;
     if (editAmPm === "PM") h24 += 12;
     const newTime = `${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
@@ -469,6 +478,8 @@ function ScheduleTimeline({
                   onChangeText={setEditHour}
                   keyboardType="number-pad"
                   maxLength={2}
+                  placeholder="--"
+                  placeholderTextColor="#C0C8D8"
                   selectTextOnFocus
                 />
               </View>
@@ -481,6 +492,8 @@ function ScheduleTimeline({
                   onChangeText={setEditMinute}
                   keyboardType="number-pad"
                   maxLength={2}
+                  placeholder="--"
+                  placeholderTextColor="#C0C8D8"
                   selectTextOnFocus
                 />
               </View>
