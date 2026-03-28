@@ -2315,6 +2315,8 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
   const [pdfViewUrl, setPdfViewUrl] = useState<string | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -2385,6 +2387,18 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
     } catch {}
   };
 
+  const deleteReport = async (id: number) => {
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/reports/${id}`, { method: "DELETE" });
+      setConfirmDeleteId(null);
+      await load();
+    } catch {
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground">
@@ -2433,91 +2447,142 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
           return (
             <div
               key={report.id}
-              className="flex items-start gap-4 p-4 bg-card border border-border rounded-xl hover:border-sidebar/30 transition-colors"
+              className={cn(
+                "p-4 bg-card border rounded-xl transition-colors",
+                confirmDeleteId === report.id
+                  ? "border-red-300 bg-red-50/30"
+                  : "border-border hover:border-sidebar/30",
+              )}
             >
-              <div className={cn(
-                "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-                report.reportType === "inspection_certificate" && "bg-green-100",
-                report.reportType === "compliance_report" && "bg-blue-100",
-                report.reportType === "defect_notice" && "bg-amber-100",
-                report.reportType === "non_compliance_notice" && "bg-red-100",
-                !["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice"].includes(report.reportType) && "bg-muted",
-              )}>
-                <Icon className={cn(
-                  "h-5 w-5",
-                  report.reportType === "inspection_certificate" && "text-green-700",
-                  report.reportType === "compliance_report" && "text-blue-700",
-                  report.reportType === "defect_notice" && "text-amber-700",
-                  report.reportType === "non_compliance_notice" && "text-red-700",
-                  !["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice"].includes(report.reportType) && "text-muted-foreground",
-                )} />
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium text-sidebar text-sm leading-snug">{report.title}</p>
-                  <span className={cn(
-                    "shrink-0 text-xs px-2 py-0.5 rounded-full border font-medium capitalize",
-                    REPORT_STATUS_STYLES[report.status] || "bg-gray-50 text-gray-600 border-gray-200",
-                  )}>
-                    {statusLabel}
-                  </span>
+              <div className="flex items-start gap-4">
+                <div className={cn(
+                  "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+                  report.reportType === "inspection_certificate" && "bg-green-100",
+                  report.reportType === "compliance_report" && "bg-blue-100",
+                  report.reportType === "defect_notice" && "bg-amber-100",
+                  report.reportType === "non_compliance_notice" && "bg-red-100",
+                  !["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice"].includes(report.reportType) && "bg-muted",
+                )}>
+                  <Icon className={cn(
+                    "h-5 w-5",
+                    report.reportType === "inspection_certificate" && "text-green-700",
+                    report.reportType === "compliance_report" && "text-blue-700",
+                    report.reportType === "defect_notice" && "text-amber-700",
+                    report.reportType === "non_compliance_notice" && "text-red-700",
+                    !["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice"].includes(report.reportType) && "text-muted-foreground",
+                  )} />
                 </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Award className="h-3 w-3" />
-                    {REPORT_TYPE_LABELS[report.reportType] || report.reportType}
-                  </span>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Calendar className="h-3 w-3" />
-                    {formatDate(report.createdAt)}
-                  </span>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <CheckCircle className="h-3 w-3" />
-                    {report.generatedByName}
-                  </span>
-                  {report.sentTo && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Send className="h-3 w-3" />
-                      {report.sentTo}
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-sidebar text-sm leading-snug">{report.title}</p>
+                    <span className={cn(
+                      "shrink-0 text-xs px-2 py-0.5 rounded-full border font-medium capitalize",
+                      REPORT_STATUS_STYLES[report.status] || "bg-gray-50 text-gray-600 border-gray-200",
+                    )}>
+                      {statusLabel}
                     </span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Award className="h-3 w-3" />
+                      {REPORT_TYPE_LABELS[report.reportType] || report.reportType}
+                    </span>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {formatDate(report.createdAt)}
+                    </span>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" />
+                      {report.generatedByName}
+                    </span>
+                    {report.sentTo && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Send className="h-3 w-3" />
+                        {report.sentTo}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {report.status === "pending_review" && confirmDeleteId !== report.id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => approveReport(report)}
+                      disabled={actionBusy}
+                      className="text-xs"
+                    >
+                      <CheckCircle className="h-3.5 w-3.5 mr-1.5 text-green-600" />
+                      Approve
+                    </Button>
+                  )}
+                  {confirmDeleteId !== report.id && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openReport(report)}
+                        className="text-xs"
+                      >
+                        <Eye className="h-3.5 w-3.5 mr-1.5" />
+                        View
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => downloadPdf(report)}
+                        className="text-xs gap-1.5"
+                        title="Download PDF"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        PDF
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConfirmDeleteId(report.id)}
+                        className="text-xs text-red-500 border-red-200 hover:bg-red-50 hover:border-red-400"
+                        title="Delete report"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                {report.status === "pending_review" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => approveReport(report)}
-                    disabled={actionBusy}
-                    className="text-xs"
-                  >
-                    <CheckCircle className="h-3.5 w-3.5 mr-1.5 text-green-600" />
-                    Approve
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openReport(report)}
-                  className="text-xs"
-                >
-                  <Eye className="h-3.5 w-3.5 mr-1.5" />
-                  View
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => downloadPdf(report)}
-                  className="text-xs gap-1.5"
-                  title="Download PDF"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  PDF
-                </Button>
-              </div>
+              {/* Inline delete confirmation */}
+              {confirmDeleteId === report.id && (
+                <div className="mt-3 pt-3 border-t border-red-200 flex items-center justify-between gap-3">
+                  <p className="text-sm text-red-700">
+                    <span className="font-semibold">Delete this report?</span>
+                    <span className="text-red-500 ml-1.5">This cannot be undone.</span>
+                  </p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setConfirmDeleteId(null)}
+                      disabled={deleting}
+                      className="text-xs"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => deleteReport(report.id)}
+                      disabled={deleting}
+                      className="text-xs bg-red-600 hover:bg-red-700 text-white border-0"
+                    >
+                      {deleting
+                        ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Deleting…</>
+                        : <><Trash2 className="h-3.5 w-3.5 mr-1.5" />Delete Report</>}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
