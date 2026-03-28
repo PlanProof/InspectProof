@@ -37,12 +37,9 @@ window.fetch = async (input, init) => {
     }
   }
   const response = await originalFetch(input, init);
-  if (url !== '/api/auth/login') {
-    const isAuthMe = url.includes('/api/auth/me');
-    if (response.status === 401 || (isAuthMe && response.status === 404)) {
-      localStorage.removeItem('inspectproof_token');
-      window.location.href = '/login';
-    }
+  if (url !== '/api/auth/login' && response.status === 401) {
+    localStorage.removeItem('inspectproof_token');
+    window.location.href = '/login';
   }
   return response;
 };

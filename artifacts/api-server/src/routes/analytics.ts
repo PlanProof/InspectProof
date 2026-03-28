@@ -243,4 +243,33 @@ router.get("/trends", async (req, res) => {
   }
 });
 
+router.get("/insights", async (req, res) => {
+  try {
+    const [totalInspRow] = await db.select({ count: sql<number>`count(*)::int` }).from(inspectionsTable);
+    const [completedRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(inspectionsTable).where(sql`${inspectionsTable.status} = 'completed'`);
+    const [openIssuesRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(issuesTable).where(sql`${issuesTable.status} NOT IN ('closed', 'resolved')`);
+    const [totalResults] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(checklistResultsTable).where(sql`${checklistResultsTable.result} != 'pending'`);
+    const [passResults] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(checklistResultsTable).where(sql`${checklistResultsTable.result} = 'pass'`);
+    const complianceRate = totalResults.count > 0
+      ? Math.round((passResults.count / totalResults.count) * 100)
+      : null;
+    const completionRate = totalInspRow.count > 0
+      ? Math.round((completedRow.count / totalInspRow.count) * 100)
+      : null;
+    res.json({
+      complianceRate,
+      completionRate,
+      openIssues: openIssuesRow.count,
+      totalInspections: totalInspRow.count,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Insights analytics error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 export default router;

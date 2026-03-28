@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -445,7 +445,7 @@ export default function InspectionDetail() {
     }
   }, [inspId]);
 
-  useState(() => { load(); });
+  useEffect(() => { load(); }, [load]);
 
   const disciplineReportTypes = inspection
     ? getAllowedReportTypes(inspection.checklistTemplateDiscipline)

@@ -21,11 +21,14 @@ function notifyListeners() {
   listeners.forEach(fn => fn());
 }
 
-export async function fetchCurrentUser(token: string): Promise<CurrentUser | null> {
+type FetchUserResult = CurrentUser | null | "deleted";
+
+export async function fetchCurrentUser(token: string): Promise<FetchUserResult> {
   try {
     const r = await fetch("/api/auth/me", {
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (r.status === 404) return "deleted";
     if (!r.ok) return null;
     return r.json();
   } catch {
@@ -47,6 +50,15 @@ export function useAuth() {
   useEffect(() => {
     if (token && !cachedUser) {
       fetchCurrentUser(token).then(u => {
+        if (u === "deleted") {
+          localStorage.removeItem("inspectproof_token");
+          cachedUser = null;
+          setToken(null);
+          setUser(null);
+          notifyListeners();
+          setLocation("/login");
+          return;
+        }
         cachedUser = u;
         setUser(u);
         notifyListeners();
@@ -63,11 +75,11 @@ export function useAuth() {
     setToken(newToken);
     cachedUser = null;
     fetchCurrentUser(newToken).then(u => {
-      cachedUser = u;
-      setUser(u);
+      if (u === "deleted") return;
+      cachedUser = u as CurrentUser | null;
+      setUser(u as CurrentUser | null);
       notifyListeners();
-      // New users (no profession set) go to onboarding in Settings
-      if (!u?.profession) {
+      if (!(u as CurrentUser)?.profession) {
         setLocation("/settings?onboarding=1");
       } else {
         setLocation("/dashboard");
