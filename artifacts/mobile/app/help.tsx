@@ -1,13 +1,21 @@
 import React, { useState } from "react";
 import {
-  View, Text, ScrollView, StyleSheet, Pressable, Platform,
+  View, Text, ScrollView, StyleSheet, Pressable,
+  TextInput, ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
+import { useAuth } from "@/hooks/use-auth";
 
 const WEB_TOP = 0;
+
+function getBaseUrl() {
+  const { EXPO_PUBLIC_API_URL } = process.env as any;
+  if (EXPO_PUBLIC_API_URL) return EXPO_PUBLIC_API_URL.replace(/\/$/, "");
+  return "http://localhost:8080";
+}
 
 const FAQS = [
   {
@@ -44,13 +52,6 @@ const FAQS = [
   },
 ];
 
-const GUIDES = [
-  { icon: "clipboard", title: "Getting Started", desc: "Set up your first project and run an inspection" },
-  { icon: "file-text", title: "Checklist Templates", desc: "Build NCC-compliant checklists for your discipline" },
-  { icon: "alert-triangle", title: "Managing Issues", desc: "Raise, track, and resolve defects efficiently" },
-  { icon: "bar-chart-2", title: "Reports & Analytics", desc: "Generate PDF reports and review compliance trends" },
-];
-
 const CONTACTS = [
   { icon: "mail", label: "Email Support", value: "support@inspectproof.com.au" },
   { icon: "phone", label: "Phone", value: "1300 477 368" },
@@ -72,6 +73,37 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 
 export default function HelpScreen() {
   const insets = useSafeAreaInsets();
+  const { token } = useAuth();
+
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+
+  async function handleSend() {
+    if (!message.trim() || sending) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${getBaseUrl()}/api/feedback`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ message: message.trim() }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to send message.");
+      }
+      setSent(true);
+      setMessage("");
+    } catch (err: any) {
+      setSendError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -95,26 +127,72 @@ export default function HelpScreen() {
           </View>
           <Text style={styles.heroTitle}>How can we help?</Text>
           <Text style={styles.heroDesc}>
-            Find answers to common questions, browse guides, or reach our support team.
+            Find answers to common questions or send us a message directly.
           </Text>
         </View>
 
-        {/* Quick guides */}
+        {/* Support message form */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Guides</Text>
-          <View style={styles.guideGrid}>
-            {GUIDES.map(g => (
-              <Pressable
-                key={g.title}
-                style={({ pressed }) => [styles.guideCard, pressed && { opacity: 0.8 }]}
-              >
-                <View style={styles.guideIcon}>
-                  <Feather name={g.icon as any} size={20} color={Colors.secondary} />
+          <Text style={styles.sectionTitle}>Send Us a Message</Text>
+          <View style={styles.messageCard}>
+            {sent ? (
+              <View style={styles.sentState}>
+                <View style={styles.sentIcon}>
+                  <Feather name="check-circle" size={28} color={Colors.success} />
                 </View>
-                <Text style={styles.guideTitle}>{g.title}</Text>
-                <Text style={styles.guideDesc}>{g.desc}</Text>
-              </Pressable>
-            ))}
+                <Text style={styles.sentTitle}>Message sent!</Text>
+                <Text style={styles.sentDesc}>
+                  We'll get back to you at your account email as soon as possible.
+                </Text>
+                <Pressable
+                  onPress={() => setSent(false)}
+                  style={({ pressed }) => [styles.sendAnotherBtn, pressed && { opacity: 0.7 }]}
+                >
+                  <Text style={styles.sendAnotherText}>Send another message</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.messageLabel}>
+                  What can we help you with?
+                </Text>
+                <TextInput
+                  style={styles.messageInput}
+                  placeholder="Describe your question or issue..."
+                  placeholderTextColor={Colors.textTertiary}
+                  value={message}
+                  onChangeText={t => { setMessage(t); setSendError(null); }}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  editable={!sending}
+                />
+                {sendError && (
+                  <View style={styles.errorRow}>
+                    <Feather name="alert-circle" size={13} color={Colors.danger} />
+                    <Text style={styles.errorText}>{sendError}</Text>
+                  </View>
+                )}
+                <Pressable
+                  onPress={handleSend}
+                  disabled={!message.trim() || sending}
+                  style={({ pressed }) => [
+                    styles.sendBtn,
+                    (!message.trim() || sending) && styles.sendBtnDisabled,
+                    pressed && message.trim() && !sending && { opacity: 0.85 },
+                  ]}
+                >
+                  {sending ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Feather name="send" size={15} color="#fff" />
+                      <Text style={styles.sendBtnText}>Send Message</Text>
+                    </>
+                  )}
+                </Pressable>
+              </>
+            )}
           </View>
         </View>
 
@@ -192,20 +270,45 @@ const styles = StyleSheet.create({
     letterSpacing: 1, paddingHorizontal: 4,
   },
 
-  guideGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  guideCard: {
-    flex: 1, minWidth: "44%",
-    backgroundColor: Colors.surface, borderRadius: 12,
+  messageCard: {
+    backgroundColor: Colors.surface, borderRadius: 14,
     borderWidth: 1, borderColor: Colors.border,
-    padding: 16, gap: 8,
+    padding: 16, gap: 12,
   },
-  guideIcon: {
-    width: 40, height: 40, borderRadius: 10,
-    backgroundColor: Colors.infoLight,
+  messageLabel: {
+    fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text,
+  },
+  messageInput: {
+    backgroundColor: Colors.background,
+    borderWidth: 1, borderColor: Colors.border,
+    borderRadius: 10, padding: 12,
+    fontSize: 14, fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.text, minHeight: 100,
+    lineHeight: 20,
+  },
+  errorRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  errorText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.danger, flex: 1 },
+  sendBtn: {
+    backgroundColor: Colors.secondary, borderRadius: 10,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, paddingVertical: 13,
+  },
+  sendBtnDisabled: { opacity: 0.4 },
+  sendBtnText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+
+  sentState: { alignItems: "center", gap: 10, paddingVertical: 12 },
+  sentIcon: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: Colors.successLight ?? "#e8f5e9",
     alignItems: "center", justifyContent: "center",
   },
-  guideTitle: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
-  guideDesc: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, lineHeight: 15 },
+  sentTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  sentDesc: {
+    fontSize: 13, fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.textSecondary, textAlign: "center", lineHeight: 19,
+  },
+  sendAnotherBtn: { marginTop: 4 },
+  sendAnotherText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
 
   faqGroup: {
     backgroundColor: Colors.surface, borderRadius: 12,
