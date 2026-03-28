@@ -191,6 +191,54 @@ function Hero() {
   );
 }
 
+function TrustBand() {
+  return (
+    <section className="bg-gray-50 border-y border-gray-100 py-14">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
+        <div className="text-[#C5D92D] text-7xl leading-none mb-2 font-serif select-none">"</div>
+        <p
+          className="text-2xl sm:text-3xl font-normal text-[#0B1933] leading-snug mb-12"
+          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+        >
+          Built by inspectors and certifiers,
+          <br className="hidden sm:block" />
+          for inspectors and certifiers.
+        </p>
+
+        <div className="grid sm:grid-cols-3 gap-8 text-left">
+          {[
+            {
+              icon: HardHat,
+              label: "Real field experience",
+              desc: "Developed alongside active building surveyors, structural engineers and plumbing inspectors who live this work every day.",
+            },
+            {
+              icon: ClipboardCheck,
+              label: "Tested on live job sites",
+              desc: "Every workflow has been validated in the field — from footing inspections to occupation certificates — before it ever shipped.",
+            },
+            {
+              icon: ShieldAlert,
+              label: "Compliance is the core",
+              desc: "We didn't adapt a generic forms tool. InspectProof was purpose-built around statutory compliance documentation from day one.",
+            },
+          ].map((pt) => (
+            <div key={pt.label}>
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#0B1933]">
+                  <pt.icon className="h-3.5 w-3.5 text-[#C5D92D]" />
+                </div>
+                <span className="text-sm font-semibold text-[#0B1933]">{pt.label}</span>
+              </div>
+              <p className="text-sm text-gray-500 leading-relaxed">{pt.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Features() {
   const features = [
     {
@@ -662,6 +710,7 @@ export default function Landing() {
     <div className="min-h-screen">
       <Header />
       <Hero />
+      <TrustBand />
       <Features />
       <Professionals />
       <HowItWorks />
