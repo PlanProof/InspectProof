@@ -749,7 +749,7 @@ function buildPdf(
 ): PDFKit.PDFDocument {
   const doc = new PDFDocument({
     size: "A4",
-    margins: { top: 88, bottom: FOOTER_H + 20, left: MARGIN, right: MARGIN },
+    margins: { top: 88, bottom: 0, left: MARGIN, right: MARGIN },
     bufferPages: true,
     info: { Title: report.title || "Report", Author: "InspectProof" },
   });
