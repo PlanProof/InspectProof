@@ -4,11 +4,15 @@ import { eq, sql } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 import { ObjectStorageService } from "../lib/objectStorage";
 
-const FONT_DIR        = path.join(__dirname, "..", "fonts");
-const FONT_REGULAR    = path.join(FONT_DIR, "PlusJakartaSans-Regular.ttf");
-const FONT_BOLD       = path.join(FONT_DIR, "PlusJakartaSans-Bold.ttf");
-const FONT_ODDLINI_UX = path.join(FONT_DIR, "Oddlini-MediumUltraExpanded.otf");
+const FONT_DIR         = path.join(__dirname, "..", "fonts");
+const FONT_REGULAR     = path.join(FONT_DIR, "PlusJakartaSans-Regular.ttf");
+const FONT_MEDIUM      = path.join(FONT_DIR, "PlusJakartaSans-Medium.ttf");
+const FONT_SEMIBOLD    = path.join(FONT_DIR, "PlusJakartaSans-SemiBold.ttf");
+const FONT_BOLD        = path.join(FONT_DIR, "PlusJakartaSans-Bold.ttf");
+const FONT_ODDLINI_UX  = path.join(FONT_DIR, "Oddlini-MediumUltraExpanded.otf");
 const F        = "PJS";
+const FM       = "PJS-Medium";
+const FSB      = "PJS-SemiBold";
 const FB       = "PJS-Bold";
 const FODDLINI = "OddliniUX";
 import {
@@ -751,6 +755,8 @@ function buildPdf(
   });
 
   doc.registerFont(F,        FONT_REGULAR);
+  doc.registerFont(FM,       FONT_MEDIUM);
+  doc.registerFont(FSB,      FONT_SEMIBOLD);
   doc.registerFont(FB,       FONT_BOLD);
   doc.registerFont(FODDLINI, FONT_ODDLINI_UX);
 
