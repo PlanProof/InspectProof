@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Pressable,
   Switch,
-  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,18 +27,16 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { prefs, updatePrefs, permissionGranted, requestPermission, cancelAllReminders } = useNotifications();
   const [requesting, setRequesting] = useState(false);
+  const [permDenied, setPermDenied] = useState(false);
 
   const handleToggleReminders = async (value: boolean) => {
+    setPermDenied(false);
     if (value && !permissionGranted) {
       setRequesting(true);
       const granted = await requestPermission();
       setRequesting(false);
       if (!granted) {
-        Alert.alert(
-          "Permission Required",
-          "Please enable notifications for InspectProof in your device settings to receive inspection reminders.",
-          [{ text: "OK" }]
-        );
+        setPermDenied(true);
         return;
       }
     }
@@ -89,7 +86,18 @@ export default function NotificationsScreen() {
           />
         </View>
 
-        {!permissionGranted && (
+        {permDenied && (
+          <View style={styles.permBanner}>
+            <Feather name="alert-triangle" size={14} color="#D69E2E" />
+            <Text style={styles.permText}>
+              Permission denied. Please enable notifications for InspectProof in your device Settings app.
+            </Text>
+            <Pressable onPress={() => setPermDenied(false)} style={{ padding: 4 }}>
+              <Feather name="x" size={14} color="#D69E2E" />
+            </Pressable>
+          </View>
+        )}
+        {!permissionGranted && !permDenied && (
           <View style={styles.permBanner}>
             <Feather name="alert-triangle" size={14} color="#D69E2E" />
             <Text style={styles.permText}>

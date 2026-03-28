@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, Pressable,
-  Platform, Switch, Alert, Image,
+  Platform, Switch, Image,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -73,30 +73,10 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const { prefs, updatePrefs } = useNotifications();
-  const [compactCards, setCompactCards] = useState(false);
-  const [show24h, setShow24h] = useState(false);
 
-  const handleClearCache = () => {
-    Alert.alert(
-      "Clear Cache",
-      "This will clear locally cached data and reload from the server.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Clear", onPress: () => Alert.alert("Done", "Cache cleared.") },
-      ]
-    );
-  };
-
-  const handleSignOut = () => {
-    Alert.alert(
-      "Sign Out",
-      "Are you sure you want to sign out?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Sign Out", style: "destructive", onPress: logout },
-      ]
-    );
-  };
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const [confirmClearCache, setConfirmClearCache] = useState(false);
+  const [cacheCleared, setCacheCleared] = useState(false);
 
   const initials = `${(user?.firstName ?? "?")[0]}${(user?.lastName ?? "?")[0]}`.toUpperCase();
 
@@ -145,12 +125,6 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Account</Text>
           <View style={styles.group}>
             <SettingRow
-              icon="user"
-              label="Edit Profile"
-              sublabel="Update your name, phone and photo"
-              onPress={() => router.push("/profile" as any)}
-            />
-            <SettingRow
               icon="lock"
               label="Change Password"
               sublabel="Update your account password"
@@ -171,35 +145,17 @@ export default function SettingsScreen() {
             />
             <SettingRow
               icon="settings"
-              label="Notification Preferences"
-              sublabel="Manage all notification settings"
+              label="Reminder Timing"
+              sublabel="Set how far in advance you're reminded"
               onPress={() => router.push("/notifications" as any)}
             />
           </View>
         </View>
 
-        {/* Display */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Display</Text>
-          <View style={styles.group}>
-            <SettingRow
-              icon="layout"
-              label="Compact Inspection Cards"
-              sublabel="Show smaller cards on the home timeline"
-              toggle={{ value: compactCards, onChange: setCompactCards }}
-            />
-            <SettingRow
-              icon="clock"
-              label="24-Hour Time Format"
-              sublabel="Display times in 24h format"
-              toggle={{ value: show24h, onChange: setShow24h }}
-            />
-          </View>
-        </View>
-
-        {/* General */}
+        {/* General — Open addresses in */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>General</Text>
+          <Text style={styles.sectionHint}>Open addresses in</Text>
           <View style={styles.group}>
             {MAP_OPTIONS.map((opt) => {
               if (opt.value === "apple" && Platform.OS === "android") return null;
@@ -222,9 +178,6 @@ export default function SettingsScreen() {
               );
             })}
           </View>
-          <Text style={styles.sectionHint}>
-            Tap the navigation icon on any inspection card to open that address on a map.
-          </Text>
         </View>
 
         {/* App */}
@@ -235,29 +188,82 @@ export default function SettingsScreen() {
               icon="refresh-cw"
               label="Clear Local Cache"
               sublabel="Force-refresh data from server"
-              onPress={handleClearCache}
+              onPress={() => { setConfirmClearCache(true); setCacheCleared(false); }}
             />
+            {confirmClearCache && (
+              <View style={styles.confirmRow}>
+                {cacheCleared ? (
+                  <View style={styles.confirmSuccess}>
+                    <Feather name="check-circle" size={15} color={Colors.success} />
+                    <Text style={styles.confirmSuccessText}>Cache cleared</Text>
+                  </View>
+                ) : (
+                  <>
+                    <Text style={styles.confirmText}>This will reload all data from the server.</Text>
+                    <View style={styles.confirmActions}>
+                      <Pressable
+                        onPress={() => setConfirmClearCache(false)}
+                        style={({ pressed }) => [styles.confirmBtn, styles.confirmBtnGhost, pressed && { opacity: 0.7 }]}
+                      >
+                        <Text style={styles.confirmBtnGhostText}>Cancel</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => setCacheCleared(true)}
+                        style={({ pressed }) => [styles.confirmBtn, styles.confirmBtnPrimary, pressed && { opacity: 0.8 }]}
+                      >
+                        <Text style={styles.confirmBtnPrimaryText}>Clear</Text>
+                      </Pressable>
+                    </View>
+                  </>
+                )}
+              </View>
+            )}
             <SettingRow icon="info" label="App Version" value="1.0.0" />
             <SettingRow icon="globe" label="Region" value="Australia" />
           </View>
         </View>
 
-        {/* Support & Sign Out */}
+        {/* Support */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support</Text>
           <View style={styles.group}>
             <SettingRow
               icon="help-circle"
               label="Help & Support"
-              sublabel="FAQs, contact and feedback"
+              sublabel="FAQs and contact"
               onPress={() => router.push("/help" as any)}
             />
+          </View>
+        </View>
+
+        {/* Sign Out */}
+        <View style={styles.section}>
+          <View style={styles.group}>
             <SettingRow
               icon="log-out"
               label="Sign Out"
-              onPress={handleSignOut}
+              onPress={() => setConfirmSignOut(true)}
               danger
             />
+            {confirmSignOut && (
+              <View style={styles.confirmRow}>
+                <Text style={styles.confirmText}>Are you sure you want to sign out?</Text>
+                <View style={styles.confirmActions}>
+                  <Pressable
+                    onPress={() => setConfirmSignOut(false)}
+                    style={({ pressed }) => [styles.confirmBtn, styles.confirmBtnGhost, pressed && { opacity: 0.7 }]}
+                  >
+                    <Text style={styles.confirmBtnGhostText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={logout}
+                    style={({ pressed }) => [styles.confirmBtn, styles.confirmBtnDanger, pressed && { opacity: 0.8 }]}
+                  >
+                    <Text style={styles.confirmBtnDangerText}>Sign Out</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -304,6 +310,10 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary, textTransform: "uppercase",
     letterSpacing: 1, paddingHorizontal: 4,
   },
+  sectionHint: {
+    fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textSecondary, paddingHorizontal: 4,
+  },
   group: {
     backgroundColor: Colors.surface, borderRadius: 12,
     borderWidth: 1, borderColor: Colors.border, overflow: "hidden",
@@ -324,8 +334,21 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   rowSublabel: { fontSize: 11, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textTertiary, marginTop: 2 },
   rowValue: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
-  sectionHint: {
-    fontSize: 12, fontFamily: "PlusJakartaSans_400Regular",
-    color: Colors.textTertiary, paddingHorizontal: 4, lineHeight: 18,
+
+  confirmRow: {
+    backgroundColor: Colors.background,
+    borderTopWidth: 1, borderTopColor: Colors.borderLight,
+    padding: 14, gap: 10,
   },
+  confirmText: { fontSize: 13, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textSecondary, lineHeight: 18 },
+  confirmActions: { flexDirection: "row", gap: 8 },
+  confirmBtn: { flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: "center" },
+  confirmBtnGhost: { borderWidth: 1, borderColor: Colors.border },
+  confirmBtnGhostText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  confirmBtnPrimary: { backgroundColor: Colors.secondary },
+  confirmBtnPrimaryText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+  confirmBtnDanger: { backgroundColor: Colors.danger },
+  confirmBtnDangerText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+  confirmSuccess: { flexDirection: "row", alignItems: "center", gap: 8 },
+  confirmSuccessText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.success },
 });

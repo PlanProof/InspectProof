@@ -132,7 +132,7 @@ export default function MoreScreen() {
           <MenuItem
             icon="bell"
             label="Notifications"
-            sublabel="Reminders, alerts, and map preferences"
+            sublabel="Inspection reminders and timing"
             onPress={() => router.push("/notifications" as any)}
           />
         </View>
