@@ -8,8 +8,9 @@ import {
   FolderOpen, Folder, FileText, ChevronRight, ChevronDown,
   ClipboardList, CheckSquare, Plus, Search, X,
   ChevronUp, Copy, ArrowUpDown, Loader2, Pencil, Trash2,
-  Save, AlertCircle, GripVertical, Heading, Info,
+  Save, AlertCircle, GripVertical, Heading, Info, FileCheck,
 } from "lucide-react";
+import { DocTemplatesPanel } from "@/pages/doc-templates";
 import { cn } from "@/lib/utils";
 
 // ── NCC Classifications ───────────────────────────────────────────────────────
@@ -761,6 +762,7 @@ function AddItemForm({
 
 // ── Main Templates Page ───────────────────────────────────────────────────────
 export default function Templates() {
+  const [mainTab, setMainTab] = useState<"checklists" | "reports">("checklists");
   const { data: me } = useGetMe({});
   const isAdmin = (me as any)?.isAdmin ?? false;
   const userProfession: string = (me as any)?.profession ?? "";
@@ -997,15 +999,56 @@ export default function Templates() {
 
   return (
     <AppLayout>
+      {/* ── Page header with tab switcher ── */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-3xl font-bold text-sidebar tracking-tight">Checklists</h1>
-          <p className="text-muted-foreground mt-1">Manage inspection checklists organised by NCC building classification.</p>
+          <h1 className="text-3xl font-bold text-sidebar tracking-tight">Templates</h1>
+          <p className="text-muted-foreground mt-1">
+            {mainTab === "checklists"
+              ? "Manage inspection checklists organised by NCC building classification."
+              : "Create reusable document templates with your letterhead and data fields."}
+          </p>
         </div>
-        <Button className="shadow-lg shadow-primary/20 gap-2" onClick={openNewChecklist}>
-          <Plus className="h-4 w-4" /> New Checklist
-        </Button>
+        {mainTab === "checklists" && (
+          <Button className="shadow-lg shadow-primary/20 gap-2" onClick={openNewChecklist}>
+            <Plus className="h-4 w-4" /> New Checklist
+          </Button>
+        )}
       </div>
+
+      {/* ── Main tab bar ── */}
+      <div className="flex items-center gap-1 mb-5 border-b border-muted/60 pb-0">
+        <button
+          onClick={() => setMainTab("checklists")}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all -mb-px",
+            mainTab === "checklists"
+              ? "border-secondary text-secondary"
+              : "border-transparent text-muted-foreground hover:text-sidebar hover:border-muted"
+          )}
+        >
+          <ClipboardList className="h-4 w-4" />
+          Inspection Checklists
+        </button>
+        <button
+          onClick={() => setMainTab("reports")}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all -mb-px",
+            mainTab === "reports"
+              ? "border-secondary text-secondary"
+              : "border-transparent text-muted-foreground hover:text-sidebar hover:border-muted"
+          )}
+        >
+          <FileCheck className="h-4 w-4" />
+          Report Templates
+        </button>
+      </div>
+
+      {/* ── Report Templates tab ── */}
+      {mainTab === "reports" && <DocTemplatesPanel />}
+
+      {/* ── Inspection Checklists tab ── */}
+      {mainTab === "checklists" && <>
 
       {/* Discipline selector */}
       <div className="flex flex-wrap items-center gap-2 mb-5">
@@ -1396,6 +1439,7 @@ export default function Templates() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </>}
     </AppLayout>
   );
 }

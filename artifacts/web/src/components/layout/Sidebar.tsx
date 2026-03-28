@@ -5,7 +5,6 @@ import {
   FolderOpen,
   CheckSquare,
   BarChart3,
-  ClipboardList,
   UsersRound,
   Settings,
   LogOut,
@@ -16,13 +15,12 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 
 const navigation = [
-  { name: "Home",        href: "/dashboard",      icon: Home },
-  { name: "Inspections", href: "/inspections",    icon: CheckSquare },
-  { name: "Projects",    href: "/projects",       icon: FolderOpen },
-  { name: "Checklists",  href: "/templates",      icon: ClipboardList },
-  { name: "Templates",   href: "/doc-templates",  icon: FileText },
-  { name: "Analytics",   href: "/analytics",      icon: BarChart3 },
-  { name: "Inspectors",  href: "/inspectors",     icon: UsersRound },
+  { name: "Home",        href: "/dashboard",   icon: Home },
+  { name: "Inspections", href: "/inspections", icon: CheckSquare },
+  { name: "Projects",    href: "/projects",    icon: FolderOpen },
+  { name: "Templates",   href: "/templates",   icon: FileText },
+  { name: "Analytics",   href: "/analytics",   icon: BarChart3 },
+  { name: "Inspectors",  href: "/inspectors",  icon: UsersRound },
 ];
 
 export function Sidebar() {
@@ -46,7 +44,8 @@ export function Sidebar() {
       <div className="flex flex-1 flex-col overflow-y-auto pt-6 px-4 pb-4">
         <nav className="flex-1 space-y-1">
           {navigation.map((item) => {
-            const isActive = location === item.href || location.startsWith(`${item.href}/`);
+            const isActive = location === item.href || location.startsWith(`${item.href}/`)
+            || (item.href === "/templates" && location === "/doc-templates");
             return (
               <Link
                 key={item.name}

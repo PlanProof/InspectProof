@@ -523,8 +523,8 @@ function ChecklistsPanel({
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
-export default function DocTemplates() {
+// ── Main Panel (embeddable, no AppLayout) ─────────────────────────────────────
+export function DocTemplatesPanel() {
   const [templates, setTemplates] = useState<DocTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -743,19 +743,7 @@ export default function DocTemplates() {
   }
 
   return (
-    <AppLayout>
-      {/* Page header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-sidebar tracking-tight">Templates</h1>
-          <p className="text-muted-foreground mt-1">Create reusable document templates with your letterhead and data fields.</p>
-        </div>
-        <Button onClick={createTemplate} className="gap-2 bg-secondary hover:bg-secondary/90 text-white shadow-sm font-semibold">
-          <Plus className="h-4 w-4" />
-          New Template
-        </Button>
-      </div>
-
+    <>
       {/* Migration banner — shown when localStorage has templates not yet imported */}
       {localCount > 0 && !templatesLoading && (
         <div className="flex items-center gap-3 mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
@@ -773,12 +761,18 @@ export default function DocTemplates() {
         </div>
       )}
 
-      <div className="flex gap-4 h-[calc(100vh-200px)] min-h-[560px]">
+      <div className="flex gap-4 h-[calc(100vh-260px)] min-h-[520px]">
 
         {/* ── Left: Template list ───────────────────────────────────────────── */}
         <div className="w-56 shrink-0 flex flex-col bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-          <div className="px-3 py-2.5 border-b border-border bg-muted/30">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Templates</p>
+          <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Report Templates</p>
+            <button
+              onClick={createTemplate}
+              className="flex items-center gap-1 px-2 py-1 rounded-md bg-secondary text-white text-[10px] font-semibold hover:bg-secondary/90 transition-colors shrink-0"
+            >
+              <Plus className="h-3 w-3" />New
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
             {templatesLoading ? (
@@ -1086,6 +1080,21 @@ export default function DocTemplates() {
       {generateOpen && selected && (
         <GenerateReportDialog template={selected} onClose={() => setGenerateOpen(false)} />
       )}
+    </>
+  );
+}
+
+// ── Standalone page (keeps existing /doc-templates route working) ──────────────
+export default function DocTemplatesPage() {
+  return (
+    <AppLayout>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-sidebar tracking-tight">Report Templates</h1>
+          <p className="text-muted-foreground mt-1">Create reusable document templates with your letterhead and data fields.</p>
+        </div>
+      </div>
+      <DocTemplatesPanel />
     </AppLayout>
   );
 }
