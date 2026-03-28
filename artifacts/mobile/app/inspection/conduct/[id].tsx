@@ -457,6 +457,13 @@ export default function ConductInspectionScreen() {
           >
             <Text style={styles.doneEditingText}>Done</Text>
           </Pressable>
+        ) : isCompleted ? (
+          <Pressable
+            style={styles.doneCompleteBtn}
+            onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/inspections" as any)}
+          >
+            <Text style={styles.doneCompleteText}>Done</Text>
+          </Pressable>
         ) : (
           <View style={{ width: 56 }} />
         )}
@@ -1325,6 +1332,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   doneEditingText: { fontSize: 13, fontFamily: "PlusJakartaSans_700Bold", color: Colors.surface },
+  doneCompleteBtn: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    backgroundColor: Colors.accent,
+    borderRadius: 8,
+  },
+  doneCompleteText: { fontSize: 13, fontFamily: "PlusJakartaSans_700Bold", color: Colors.primary },
   editModeBanner: {
     flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: Colors.infoLight,
