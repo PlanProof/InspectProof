@@ -38,17 +38,24 @@ function getBaseUrl() {
     : "";
 }
 
-async function fetchCurrentUser(token: string): Promise<User | null> {
+type FetchUserResult =
+  | { status: "ok"; user: User }
+  | { status: "invalid_token" }
+  | { status: "network_error" };
+
+async function fetchCurrentUser(token: string): Promise<FetchUserResult> {
   try {
     const res = await fetch(`${getBaseUrl()}/api/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return null;
+    if (res.status === 401 || res.status === 404) return { status: "invalid_token" };
+    if (!res.ok) return { status: "network_error" };
     const data = await res.json();
-    // /api/auth/me returns the user object directly (not wrapped)
-    return data.id ? (data as User) : (data.user ?? null);
+    const user = data.id ? (data as User) : (data.user ?? null);
+    if (!user) return { status: "invalid_token" };
+    return { status: "ok", user };
   } catch {
-    return null;
+    return { status: "network_error" };
   }
 }
 
@@ -71,14 +78,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(JSON.parse(storedUser));
           }
 
-          const freshUser = await fetchCurrentUser(storedToken);
-          if (freshUser) {
-            setUser(freshUser);
-            await AsyncStorage.setItem("auth_user", JSON.stringify(freshUser));
-          } else if (!storedUser) {
+          const result = await fetchCurrentUser(storedToken);
+          if (result.status === "ok") {
+            setUser(result.user);
+            await AsyncStorage.setItem("auth_user", JSON.stringify(result.user));
+          } else if (result.status === "invalid_token") {
             await AsyncStorage.removeItem("auth_token");
+            await AsyncStorage.removeItem("auth_user");
             setToken(null);
+            setUser(null);
           }
+          // network_error: keep stored data so offline use still works
         }
       } catch {
         // ignore storage errors
@@ -120,10 +130,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = async () => {
     if (!token) return;
-    const freshUser = await fetchCurrentUser(token);
-    if (freshUser) {
-      setUser(freshUser);
-      await AsyncStorage.setItem("auth_user", JSON.stringify(freshUser));
+    const result = await fetchCurrentUser(token);
+    if (result.status === "ok") {
+      setUser(result.user);
+      await AsyncStorage.setItem("auth_user", JSON.stringify(result.user));
     }
   };
 

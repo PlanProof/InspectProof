@@ -192,6 +192,11 @@ router.patch("/profile", async (req, res) => {
       .where(eq(usersTable.id, userId))
       .returning();
 
+    if (!updated) {
+      res.status(404).json({ error: "not_found", message: "User not found" });
+      return;
+    }
+
     res.json({
       id: updated.id,
       email: updated.email,
