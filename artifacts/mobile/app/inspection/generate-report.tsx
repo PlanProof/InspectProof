@@ -595,7 +595,9 @@ export default function GenerateReportScreen() {
   const [step, setStep] = useState<"select" | "preview">("select");
   const [selectedReportType, setSelectedReportType] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [loadingExisting, setLoadingExisting] = useState(false);
+  const [loadingExistingId, setLoadingExistingId] = useState<number | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [report, setReport] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sending, setSending] = useState(false);
@@ -646,7 +648,7 @@ export default function GenerateReportScreen() {
     }));
 
   const openExistingReport = async (reportId: number) => {
-    setLoadingExisting(true);
+    setLoadingExistingId(reportId);
     try {
       const data = await fetchWithAuth(`/api/reports/${reportId}`);
       setReport(data);
@@ -654,30 +656,21 @@ export default function GenerateReportScreen() {
     } catch {
       Alert.alert("Error", "Could not load this report. Please try again.");
     } finally {
-      setLoadingExisting(false);
+      setLoadingExistingId(null);
     }
   };
 
-  const deleteReport = (reportId: number, title: string) => {
-    Alert.alert(
-      "Delete Report",
-      `Delete "${title}"? This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await fetchWithAuth(`/api/reports/${reportId}`, { method: "DELETE" });
-              queryClient.invalidateQueries({ queryKey: ["reports", "inspection", id, token] });
-            } catch {
-              Alert.alert("Error", "Could not delete this report. Please try again.");
-            }
-          },
-        },
-      ]
-    );
+  const confirmDeleteReport = async (reportId: number) => {
+    setDeletingId(reportId);
+    try {
+      await fetchWithAuth(`/api/reports/${reportId}`, { method: "DELETE" });
+      queryClient.invalidateQueries({ queryKey: ["reports", "inspection", id, token] });
+      setDeleteConfirmId(null);
+    } catch {
+      Alert.alert("Error", "Could not delete this report. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const generateReport = async () => {
@@ -856,8 +849,11 @@ export default function GenerateReportScreen() {
                     {/* Tappable content area */}
                     <Pressable
                       style={({ pressed }) => [styles.existingCardContent, pressed && { opacity: 0.75 }]}
-                      onPress={() => openExistingReport(r.id)}
-                      disabled={loadingExisting}
+                      onPress={() => {
+                        setDeleteConfirmId(null);
+                        openExistingReport(r.id);
+                      }}
+                      disabled={loadingExistingId !== null || deletingId !== null}
                     >
                       <View style={[styles.existingIconWrap, isSent && styles.existingIconSent]}>
                         <Feather
@@ -878,31 +874,58 @@ export default function GenerateReportScreen() {
                           <Text style={styles.existingSentNote}>Sent — view only</Text>
                         )}
                       </View>
-                      {loadingExisting
+                      {loadingExistingId === r.id
                         ? <ActivityIndicator size="small" color={Colors.secondary} />
                         : <Feather name="chevron-right" size={16} color={Colors.textTertiary} />}
                     </Pressable>
 
                     {/* Action buttons — only for non-sent reports */}
                     {!isSent && (
-                      <View style={styles.existingActions}>
-                        <Pressable
-                          style={({ pressed }) => [styles.existingActionBtn, styles.existingEditBtn, pressed && { opacity: 0.7 }]}
-                          onPress={() => openExistingReport(r.id)}
-                          disabled={loadingExisting}
-                        >
-                          <Feather name="edit-2" size={13} color={Colors.secondary} />
-                          <Text style={styles.existingEditText}>Edit</Text>
-                        </Pressable>
-                        <Pressable
-                          style={({ pressed }) => [styles.existingActionBtn, styles.existingDeleteBtn, pressed && { opacity: 0.7 }]}
-                          onPress={() => deleteReport(r.id, r.title)}
-                          disabled={loadingExisting}
-                        >
-                          <Feather name="trash-2" size={13} color={Colors.danger} />
-                          <Text style={styles.existingDeleteText}>Delete</Text>
-                        </Pressable>
-                      </View>
+                      <>
+                        {/* Inline delete confirmation strip */}
+                        {deleteConfirmId === r.id ? (
+                          <View style={styles.deleteConfirmStrip}>
+                            <Feather name="alert-triangle" size={13} color="#b45309" />
+                            <Text style={styles.deleteConfirmText}>Delete this report? This cannot be undone.</Text>
+                            <Pressable
+                              onPress={() => setDeleteConfirmId(null)}
+                              style={styles.deleteConfirmCancel}
+                            >
+                              <Text style={styles.deleteConfirmCancelText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => confirmDeleteReport(r.id)}
+                              disabled={deletingId === r.id}
+                              style={styles.deleteConfirmConfirm}
+                            >
+                              {deletingId === r.id
+                                ? <ActivityIndicator size="small" color="#fff" />
+                                : <Text style={styles.deleteConfirmConfirmText}>Delete</Text>}
+                            </Pressable>
+                          </View>
+                        ) : (
+                          <View style={styles.existingActions}>
+                            <Pressable
+                              style={({ pressed }) => [styles.existingActionBtn, styles.existingEditBtn, pressed && { opacity: 0.7 }]}
+                              onPress={() => openExistingReport(r.id)}
+                              disabled={loadingExistingId !== null || deletingId !== null}
+                            >
+                              {loadingExistingId === r.id
+                                ? <ActivityIndicator size="small" color={Colors.secondary} />
+                                : <Feather name="edit-2" size={13} color={Colors.secondary} />}
+                              <Text style={styles.existingEditText}>Edit</Text>
+                            </Pressable>
+                            <Pressable
+                              style={({ pressed }) => [styles.existingActionBtn, styles.existingDeleteBtn, pressed && { opacity: 0.7 }]}
+                              onPress={() => setDeleteConfirmId(r.id)}
+                              disabled={loadingExistingId !== null || deletingId !== null}
+                            >
+                              <Feather name="trash-2" size={13} color={Colors.danger} />
+                              <Text style={styles.existingDeleteText}>Delete</Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </>
                     )}
                   </View>
                 );
@@ -1172,6 +1195,22 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingVertical: 9,
   },
+  deleteConfirmStrip: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#fff8f0", borderTopWidth: 1, borderTopColor: "#fde8c8",
+    paddingHorizontal: 14, paddingVertical: 10, flexWrap: "wrap",
+  },
+  deleteConfirmText: { flex: 1, fontSize: 12, color: "#92400e", lineHeight: 16 },
+  deleteConfirmCancel: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+    borderWidth: 1, borderColor: "#d1d5db",
+  },
+  deleteConfirmCancelText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  deleteConfirmConfirm: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+    backgroundColor: Colors.danger, minWidth: 60, alignItems: "center",
+  },
+  deleteConfirmConfirmText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
   existingEditBtn: {
     borderRightWidth: 1,
     borderRightColor: Colors.border,
