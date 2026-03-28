@@ -44,16 +44,6 @@ function RootLayoutNav() {
       <Stack.Screen name="register" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen
-        name="project/[id]"
-        options={{
-          title: "Project",
-          headerStyle: { backgroundColor: Colors.surface },
-          headerTintColor: Colors.text,
-          headerTitleStyle: { fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
-        }}
-      />
-      <Stack.Screen name="inspection/[id]" options={{ headerShown: false }} />
-      <Stack.Screen
         name="issue/[id]"
         options={{
           title: "Issue",
@@ -62,42 +52,14 @@ function RootLayoutNav() {
           headerTitleStyle: { fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
         }}
       />
-      <Stack.Screen
-        name="analytics"
-        options={{
-          title: "Analytics",
-          headerStyle: { backgroundColor: Colors.surface },
-          headerTintColor: Colors.text,
-          headerTitleStyle: { fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
-        }}
-      />
-      <Stack.Screen
-        name="inspection/create"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="inspection/conduct/[id]"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="inspection/generate-report"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="inspection/photo-markup"
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="notifications"
-        options={{ headerShown: false }}
-      />
+      <Stack.Screen name="analytics"     options={{ headerShown: false }} />
+      <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="templates/index" options={{ headerShown: false }} />
       <Stack.Screen name="templates/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="settings" options={{ headerShown: false }} />
-      <Stack.Screen name="documents" options={{ headerShown: false }} />
-      <Stack.Screen name="team" options={{ headerShown: false }} />
-      <Stack.Screen name="help" options={{ headerShown: false }} />
-      <Stack.Screen name="inspection/document-viewer" options={{ headerShown: false }} />
+      <Stack.Screen name="settings"      options={{ headerShown: false }} />
+      <Stack.Screen name="documents"     options={{ headerShown: false }} />
+      <Stack.Screen name="team"          options={{ headerShown: false }} />
+      <Stack.Screen name="help"          options={{ headerShown: false }} />
     </Stack>
   );
 }

@@ -27,6 +27,12 @@ function NativeTabLayout() {
         <Icon sf={{ default: "ellipsis.circle", selected: "ellipsis.circle.fill" }} />
         <Label>More</Label>
       </NativeTabs.Trigger>
+      {/* Hidden nested screens — no trigger, keeps tab bar visible */}
+      <NativeTabs.Trigger name="project/[id]" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="inspection/[id]" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="inspection/create" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="inspection/conduct/[id]" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="inspection/generate-report" style={{ display: "none" }} />
     </NativeTabs>
   );
 }
@@ -108,6 +114,14 @@ function ClassicTabLayout() {
         name="issues"
         options={{ href: null }}
       />
+      {/* Nested screens — kept in tabs group so the tab bar stays visible */}
+      <Tabs.Screen name="project/[id]"                  options={{ href: null }} />
+      <Tabs.Screen name="inspection/[id]"               options={{ href: null }} />
+      <Tabs.Screen name="inspection/create"             options={{ href: null }} />
+      <Tabs.Screen name="inspection/conduct/[id]"       options={{ href: null }} />
+      <Tabs.Screen name="inspection/generate-report"    options={{ href: null }} />
+      <Tabs.Screen name="inspection/photo-markup"       options={{ href: null }} />
+      <Tabs.Screen name="inspection/document-viewer"    options={{ href: null }} />
       <Tabs.Screen
         name="more"
         options={{
