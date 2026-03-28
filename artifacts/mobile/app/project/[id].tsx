@@ -356,7 +356,12 @@ export default function ProjectDetailScreen() {
               <Feather name={showTemplatePicker ? "chevron-up" : "chevron-down"} size={16} color={Colors.textSecondary} />
             </Pressable>
             {showTemplatePicker && (
-              <View style={styles.pickerDropdown}>
+              <ScrollView
+                style={styles.pickerDropdown}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
                 {inspectionTypes.length === 0 ? (
                   <Text style={styles.pickerEmpty}>No inspection types selected on desktop yet</Text>
                 ) : (
@@ -378,7 +383,7 @@ export default function ProjectDetailScreen() {
                     </Pressable>
                   ))
                 )}
-              </View>
+              </ScrollView>
             )}
           </View>
 
@@ -747,7 +752,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     borderRadius: 10,
     backgroundColor: Colors.background,
-    overflow: "hidden",
     maxHeight: 220,
   },
   pickerOption: {
