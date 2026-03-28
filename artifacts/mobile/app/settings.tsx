@@ -8,9 +8,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
-import { useNotifications } from "@/context/NotificationsContext";
+import { useNotifications, MapApp } from "@/context/NotificationsContext";
 
 const WEB_TOP = 0;
+
+const MAP_OPTIONS: { value: MapApp; label: string; desc: string; icon: string }[] = [
+  { value: "apple", label: "Apple Maps", desc: "Opens in Apple Maps app", icon: "map" },
+  { value: "google", label: "Google Maps", desc: "Opens in Google Maps app or browser", icon: "navigation" },
+  { value: "ask", label: "Ask each time", desc: "Choose the app whenever you tap an address", icon: "help-circle" },
+];
 
 const ROLE_LABELS: Record<string, string> = {
   certifier: "Building Certifier",
@@ -191,6 +197,36 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* General */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>General</Text>
+          <View style={styles.group}>
+            {MAP_OPTIONS.map((opt) => {
+              if (opt.value === "apple" && Platform.OS === "android") return null;
+              const selected = prefs.mapApp === opt.value;
+              return (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => updatePrefs({ mapApp: opt.value })}
+                  style={({ pressed }) => [styles.row, styles.rowTall, selected && styles.rowSelected, pressed && { opacity: 0.75 }]}
+                >
+                  <View style={[styles.rowIcon, selected && styles.rowIconSelected]}>
+                    <Feather name={opt.icon as any} size={17} color={selected ? Colors.secondary : Colors.textTertiary} />
+                  </View>
+                  <View style={styles.rowBody}>
+                    <Text style={[styles.rowLabel, selected && { color: Colors.secondary }]}>{opt.label}</Text>
+                    <Text style={styles.rowSublabel}>{opt.desc}</Text>
+                  </View>
+                  {selected && <Feather name="check" size={15} color={Colors.secondary} />}
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.sectionHint}>
+            Tap the navigation icon on any inspection card to open that address on a map.
+          </Text>
+        </View>
+
         {/* App */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>App</Text>
@@ -276,13 +312,20 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 12,
     padding: 14, borderBottomWidth: 1, borderBottomColor: Colors.borderLight,
   },
+  rowTall: { paddingVertical: 13 },
+  rowSelected: { backgroundColor: Colors.infoLight },
   rowIcon: {
     width: 34, height: 34, borderRadius: 8,
     backgroundColor: Colors.infoLight,
     alignItems: "center", justifyContent: "center",
   },
+  rowIconSelected: { backgroundColor: Colors.secondary + "20" },
   rowBody: { flex: 1 },
   rowLabel: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   rowSublabel: { fontSize: 11, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textTertiary, marginTop: 2 },
   rowValue: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  sectionHint: {
+    fontSize: 12, fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.textTertiary, paddingHorizontal: 4, lineHeight: 18,
+  },
 });

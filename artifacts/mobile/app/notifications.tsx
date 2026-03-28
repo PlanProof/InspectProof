@@ -6,14 +6,13 @@ import {
   StyleSheet,
   Pressable,
   Switch,
-  Platform,
   Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
-import { useNotifications, ReminderMinutes, MapApp } from "@/context/NotificationsContext";
+import { useNotifications, ReminderMinutes } from "@/context/NotificationsContext";
 
 const WEB_TOP = 0;
 
@@ -24,11 +23,6 @@ const REMINDER_OPTIONS: { value: ReminderMinutes; label: string }[] = [
   { value: 120, label: "2 hours before" },
 ];
 
-const MAP_OPTIONS: { value: MapApp; label: string; desc: string; icon: string }[] = [
-  { value: "apple", label: "Apple Maps", desc: "Opens in Apple Maps app", icon: "map" },
-  { value: "google", label: "Google Maps", desc: "Opens in Google Maps app or browser", icon: "navigation" },
-  { value: "ask", label: "Ask each time", desc: "Choose the app whenever you tap an address", icon: "help-circle" },
-];
 
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
@@ -137,43 +131,6 @@ export default function NotificationsScreen() {
         </Text>
       </View>
 
-      {/* Map App Preference */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Open addresses in</Text>
-        <View style={styles.optionGroup}>
-          {MAP_OPTIONS.map((opt) => {
-            if (opt.value === "apple" && Platform.OS === "android") return null;
-            const selected = prefs.mapApp === opt.value;
-            return (
-              <Pressable
-                key={opt.value}
-                onPress={() => updatePrefs({ mapApp: opt.value })}
-                style={({ pressed }) => [
-                  styles.optionRow,
-                  styles.optionRowTall,
-                  selected && styles.optionRowSelected,
-                  pressed && { opacity: 0.75 },
-                ]}
-              >
-                <View style={[styles.mapIcon, selected && styles.mapIconSelected]}>
-                  <Feather name={opt.icon as any} size={16} color={selected ? Colors.secondary : Colors.textTertiary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
-                    {opt.label}
-                  </Text>
-                  <Text style={styles.optionDesc}>{opt.desc}</Text>
-                </View>
-                {selected && <Feather name="check" size={15} color={Colors.secondary} />}
-              </Pressable>
-            );
-          })}
-        </View>
-        <Text style={styles.hint}>
-          Tap the navigation icon on any inspection card to open that address on a map.
-        </Text>
-      </View>
-
       {/* About */}
       <View style={styles.aboutCard}>
         <Feather name="info" size={14} color={Colors.textTertiary} />
@@ -276,7 +233,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderLight,
   },
-  optionRowTall: { paddingVertical: 13 },
   optionRowSelected: { backgroundColor: Colors.infoLight },
   radio: {
     width: 20, height: 20, borderRadius: 10,
@@ -300,12 +256,6 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     marginTop: 1,
   },
-  mapIcon: {
-    width: 34, height: 34, borderRadius: 8,
-    backgroundColor: Colors.borderLight,
-    alignItems: "center", justifyContent: "center",
-  },
-  mapIconSelected: { backgroundColor: Colors.secondary + "20" },
   hint: {
     fontSize: 12,
     fontFamily: "PlusJakartaSans_600SemiBold",
