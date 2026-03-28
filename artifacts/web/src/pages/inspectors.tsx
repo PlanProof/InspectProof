@@ -31,11 +31,19 @@ const AVATAR_COLORS = [
 ];
 
 const ROLE_MAP: Record<string, string> = {
-  inspector: "Inspector",
-  building_inspector: "Inspector",
-  certifier: "Certifier",
-  admin: "Admin",
-  staff: "Staff",
+  admin:             "Administrator",
+  certifier:         "Building Certifier",
+  inspector:         "Site Inspector",
+  building_inspector:"Building Inspector",
+  engineer:          "Structural Engineer",
+  plumber:           "Plumbing Inspector",
+  project_manager:   "Project Manager",
+  builder:           "Builder",
+  supervisor:        "Site Supervisor",
+  whs:               "WHS Officer",
+  pre_purchase:      "Pre-Purchase Inspector",
+  fire_engineer:     "Fire Safety Engineer",
+  staff:             "Staff",
 };
 
 function apiUserToInspector(u: any): Inspector {

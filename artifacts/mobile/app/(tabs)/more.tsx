@@ -58,16 +58,19 @@ export default function MoreScreen() {
 
   const roleLabel: Record<string, string> = {
     admin: "Administrator",
-    certifier: "Building Certifier / Surveyor",
-    inspector: "Inspector",
-    staff: "Staff",
+    certifier: "Building Certifier",
+    inspector: "Site Inspector",
+    building_inspector: "Building Inspector",
     engineer: "Structural Engineer",
     plumber: "Plumbing Inspector",
+    project_manager: "Project Manager",
     builder: "Builder",
     supervisor: "Site Supervisor",
     whs: "WHS Officer",
     pre_purchase: "Pre-Purchase Inspector",
     fire_engineer: "Fire Safety Engineer",
+    staff: "Staff",
+    other: "Other",
   };
 
   return (
@@ -100,7 +103,7 @@ export default function MoreScreen() {
           )}
           {(user?.role) ? (
             <Text style={styles.profileRole} numberOfLines={1}>
-              {roleLabel[user.role] || user.role}
+              {roleLabel[user.role] || user.role.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
             </Text>
           ) : null}
           {(user?.email && (user?.firstName || user?.lastName)) ? (

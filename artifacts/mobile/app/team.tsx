@@ -13,17 +13,20 @@ import { useAuth } from "@/context/AuthContext";
 const WEB_TOP = 0;
 
 const ROLE_LABELS: Record<string, string> = {
-  admin:        "Administrator",
-  certifier:    "Building Certifier",
-  inspector:    "Inspector",
-  staff:        "Staff",
-  engineer:     "Structural Engineer",
-  plumber:      "Plumbing Inspector",
-  builder:      "Builder",
-  supervisor:   "Site Supervisor",
-  whs:          "WHS Officer",
-  pre_purchase: "Pre-Purchase Inspector",
-  fire_engineer:"Fire Safety Engineer",
+  admin:             "Administrator",
+  certifier:         "Building Certifier",
+  inspector:         "Site Inspector",
+  building_inspector:"Building Inspector",
+  engineer:          "Structural Engineer",
+  plumber:           "Plumbing Inspector",
+  project_manager:   "Project Manager",
+  builder:           "Builder",
+  supervisor:        "Site Supervisor",
+  whs:               "WHS Officer",
+  pre_purchase:      "Pre-Purchase Inspector",
+  fire_engineer:     "Fire Safety Engineer",
+  staff:             "Staff",
+  other:             "Other",
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -124,7 +127,7 @@ export default function TeamScreen() {
                 style={[styles.chip, active && { backgroundColor: color, borderColor: color }]}
               >
                 <Text style={[styles.chipText, active && { color: "#fff" }]}>
-                  {r === "all" ? "All Roles" : ROLE_LABELS[r] || r}
+                  {r === "all" ? "All Roles" : ROLE_LABELS[r] || r.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
                 </Text>
               </Pressable>
             );
@@ -163,7 +166,7 @@ export default function TeamScreen() {
                       </View>
                     )}
                   </View>
-                  <Text style={[styles.role, { color: roleColor }]}>{ROLE_LABELS[u.role] || u.role}</Text>
+                  <Text style={[styles.role, { color: roleColor }]}>{ROLE_LABELS[u.role] || u.role.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}</Text>
                   <Text style={styles.email} numberOfLines={1}>{u.email}</Text>
                   {u.phone && (
                     <View style={styles.phoneRow}>

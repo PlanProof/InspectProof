@@ -14,17 +14,19 @@ import { getApiUrl } from "@/constants/api";
 const WEB_TOP = 0;
 
 const ROLE_LABELS: Record<string, string> = {
+  admin: "Administrator",
   certifier: "Building Certifier",
   inspector: "Site Inspector",
-  engineer: "Engineer",
+  building_inspector: "Building Inspector",
+  engineer: "Structural Engineer",
   plumber: "Plumbing Inspector",
   project_manager: "Project Manager",
-  supervisor: "Supervisor",
+  builder: "Builder",
+  supervisor: "Site Supervisor",
   whs: "WHS Officer",
   pre_purchase: "Pre-Purchase Inspector",
-  fire_engineer: "Fire Engineer",
-  builder: "Builder / Contractor",
-  staff: "Office Staff",
+  fire_engineer: "Fire Safety Engineer",
+  staff: "Staff",
   other: "Other",
 };
 
@@ -258,7 +260,7 @@ export default function ProfileScreen() {
             <Field label="Email address" value={user?.email ?? ""} editable={false} />
             <Field
               label="Professional role"
-              value={ROLE_LABELS[user?.role ?? ""] ?? (user?.role ?? "")}
+              value={user?.role ? (ROLE_LABELS[user.role] ?? user.role.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")) : ""}
               editable={false}
             />
           </View>

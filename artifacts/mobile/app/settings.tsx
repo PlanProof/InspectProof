@@ -19,17 +19,20 @@ const MAP_OPTIONS: { value: MapApp; label: string; desc: string; icon: string }[
 ];
 
 const ROLE_LABELS: Record<string, string> = {
+  admin: "Administrator",
   certifier: "Building Certifier",
   inspector: "Site Inspector",
-  engineer: "Engineer",
+  building_inspector: "Building Inspector",
+  engineer: "Structural Engineer",
   plumber: "Plumbing Inspector",
   project_manager: "Project Manager",
-  supervisor: "Supervisor",
+  builder: "Builder",
+  supervisor: "Site Supervisor",
   whs: "WHS Officer",
   pre_purchase: "Pre-Purchase Inspector",
-  fire_engineer: "Fire Engineer",
-  builder: "Builder / Contractor",
-  staff: "Office Staff",
+  fire_engineer: "Fire Safety Engineer",
+  staff: "Staff",
+  other: "Other",
 };
 
 function SettingRow({
@@ -109,7 +112,7 @@ export default function SettingsScreen() {
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>{user?.firstName} {user?.lastName}</Text>
               <Text style={styles.profileRole}>
-                {ROLE_LABELS[user?.role ?? ""] ?? (user?.role ?? "Professional")}
+                {user?.role ? (ROLE_LABELS[user.role] ?? user.role.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")) : "Professional"}
               </Text>
               <Text style={styles.profileEmail}>{user?.email}</Text>
             </View>

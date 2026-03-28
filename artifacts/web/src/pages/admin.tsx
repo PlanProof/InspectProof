@@ -33,6 +33,27 @@ const PLAN_COLORS: Record<string, string> = {
   enterprise: "bg-[#0B1933]/10 text-[#0B1933]",
 };
 
+const ROLE_LABELS: Record<string, string> = {
+  admin:             "Administrator",
+  certifier:         "Building Certifier",
+  inspector:         "Site Inspector",
+  building_inspector:"Building Inspector",
+  engineer:          "Structural Engineer",
+  plumber:           "Plumbing Inspector",
+  project_manager:   "Project Manager",
+  builder:           "Builder",
+  supervisor:        "Site Supervisor",
+  whs:               "WHS Officer",
+  pre_purchase:      "Pre-Purchase Inspector",
+  fire_engineer:     "Fire Safety Engineer",
+  staff:             "Staff",
+  other:             "Other",
+};
+
+function formatRole(role: string): string {
+  return ROLE_LABELS[role] ?? role.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
 const ROLES = [
   "inspector", "certifier", "engineer", "plumber",
   "project_manager", "supervisor", "whs", "pre_purchase",
@@ -205,7 +226,7 @@ function UserModal({ user, onClose, onSave, saving }: {
             <div>
               <FieldLabel>Role</FieldLabel>
               <FormSelect value={form.role} onChange={set("role")}>
-                {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g, " ")}</option>)}
+                {ROLES.map(r => <option key={r} value={r}>{formatRole(r)}</option>)}
               </FormSelect>
             </div>
             <div>
@@ -280,7 +301,7 @@ function UserRow({ user, onEdit, onDelete }: { user: AdminUser; onEdit: () => vo
             <p className="text-xs text-gray-400">{user.email}</p>
           </div>
         </td>
-        <td className="px-4 py-3 text-xs text-gray-500 capitalize">{user.role.replace(/_/g, " ")}</td>
+        <td className="px-4 py-3 text-xs text-gray-500">{formatRole(user.role)}</td>
         <td className="px-4 py-3">
           <Badge className={`${PLAN_COLORS[user.plan] ?? PLAN_COLORS.free_trial} text-xs font-medium border-0`}>
             {PLAN_LABELS[user.plan] ?? user.plan}
@@ -343,7 +364,7 @@ function UserRow({ user, onEdit, onDelete }: { user: AdminUser; onEdit: () => vo
               </div>
               <div>
                 <p className="text-xs text-gray-500 mb-1">Roles & flags</p>
-                <p className="text-xs">{user.role}{user.isAdmin ? " · Admin" : ""}</p>
+                <p className="text-xs">{formatRole(user.role)}{user.isAdmin ? " · Admin" : ""}</p>
               </div>
             </div>
           </td>
