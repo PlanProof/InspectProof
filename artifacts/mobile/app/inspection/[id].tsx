@@ -95,6 +95,7 @@ export default function InspectionDetailScreen() {
   const [rescheduleTime, setRescheduleTime] = useState("");
   const [rescheduleSaving, setRescheduleSaving] = useState(false);
   const [redoing, setRedoing] = useState(false);
+  const [confirmRedo, setConfirmRedo] = useState(false);
 
   const RESCHEDULE_TIMES = [
     "07:00","07:30","08:00","08:30","09:00","09:30",
@@ -344,53 +345,60 @@ export default function InspectionDetailScreen() {
               <Text style={styles.editInspBtnText}>Edit Inspection</Text>
             </Pressable>
 
-            {/* Re-Do Inspection — clears all results, fresh start */}
-            <Pressable
-              style={[styles.redoBtn, redoing && { opacity: 0.6 }]}
-              disabled={redoing}
-              onPress={() => {
-                const executeRedo = async () => {
-                  setRedoing(true);
-                  try {
-                    await fetchWithAuth(`/api/inspections/${inspection.id}/reset-checklist`, { method: "POST" });
-                    await fetchWithAuth(`/api/inspections/${inspection.id}`, {
-                      method: "PUT",
-                      body: JSON.stringify({ status: "in_progress", completedDate: null }),
-                    });
-                    queryClient.invalidateQueries({ queryKey: ["inspection", id] });
-                    queryClient.invalidateQueries({ queryKey: ["inspection-checklist", id] });
-                    queryClient.invalidateQueries({ queryKey: ["/api/inspections"] });
-                    router.replace(`/inspection/conduct/${inspection.id}` as any);
-                  } catch {
-                    Alert.alert("Error", "Failed to restart inspection. Please try again.");
-                  } finally {
-                    setRedoing(false);
-                  }
-                };
-
-                if (Platform.OS === "web") {
-                  if ((window as any).confirm("Re-Do Inspection\n\nThis will clear ALL checklist results and restart from scratch. This cannot be undone.\n\nContinue?")) {
-                    executeRedo();
-                  }
-                } else {
-                  Alert.alert(
-                    "Re-Do Inspection",
-                    "This will clear ALL checklist results and restart from scratch. This cannot be undone.",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      { text: "Re-Do", style: "destructive", onPress: executeRedo },
-                    ]
-                  );
-                }
-              }}
-            >
-              {redoing ? (
-                <ActivityIndicator size="small" color={Colors.textSecondary} />
-              ) : (
+            {/* Re-Do Inspection — inline confirmation, no dialog */}
+            {confirmRedo ? (
+              <View style={styles.redoConfirmBox}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Feather name="alert-triangle" size={14} color="#b45309" />
+                  <Text style={styles.redoConfirmText}>Clear all results and restart?</Text>
+                </View>
+                <View style={styles.redoConfirmBtns}>
+                  <Pressable
+                    style={styles.redoCancelBtn}
+                    onPress={() => setConfirmRedo(false)}
+                    disabled={redoing}
+                  >
+                    <Text style={styles.redoCancelBtnText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.redoConfirmBtn, redoing && { opacity: 0.6 }]}
+                    disabled={redoing}
+                    onPress={async () => {
+                      setRedoing(true);
+                      try {
+                        await fetchWithAuth(`/api/inspections/${inspection.id}/reset-checklist`, { method: "POST" });
+                        await fetchWithAuth(`/api/inspections/${inspection.id}`, {
+                          method: "PUT",
+                          body: JSON.stringify({ status: "in_progress", completedDate: null }),
+                        });
+                        queryClient.invalidateQueries({ queryKey: ["inspection", id] });
+                        queryClient.invalidateQueries({ queryKey: ["inspection-checklist", id] });
+                        queryClient.invalidateQueries({ queryKey: ["/api/inspections"] });
+                        setConfirmRedo(false);
+                        router.replace(`/inspection/conduct/${inspection.id}` as any);
+                      } catch {
+                        setRedoing(false);
+                        setConfirmRedo(false);
+                        Alert.alert("Error", "Failed to restart. Please try again.");
+                      }
+                    }}
+                  >
+                    {redoing
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={styles.redoConfirmBtnText}>Yes, Re-Do</Text>
+                    }
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable
+                style={styles.redoBtn}
+                onPress={() => setConfirmRedo(true)}
+              >
                 <Feather name="refresh-cw" size={16} color={Colors.textSecondary} />
-              )}
-              <Text style={styles.redoBtnText}>{redoing ? "Resetting…" : "Re-Do Inspection"}</Text>
-            </Pressable>
+                <Text style={styles.redoBtnText}>Re-Do Inspection</Text>
+              </Pressable>
+            )}
           </>
         )}
 
@@ -836,6 +844,22 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.border, borderRadius: 10, paddingVertical: 10, marginTop: 6,
   },
   redoBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  redoConfirmBox: {
+    marginTop: 6, borderRadius: 10, borderWidth: 1.5, borderColor: "#fcd34d",
+    backgroundColor: "#fffbeb", padding: 12, gap: 8,
+  },
+  redoConfirmText: { fontSize: 13, fontFamily: "PlusJakartaSans_500Medium", color: "#92400e", flex: 1 },
+  redoConfirmBtns: { flexDirection: "row", gap: 8, marginTop: 2 },
+  redoCancelBtn: {
+    flex: 1, alignItems: "center", justifyContent: "center",
+    borderWidth: 1.5, borderColor: Colors.border, borderRadius: 8, paddingVertical: 8,
+  },
+  redoCancelBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  redoConfirmBtn: {
+    flex: 1, alignItems: "center", justifyContent: "center",
+    backgroundColor: "#dc2626", borderRadius: 8, paddingVertical: 8,
+  },
+  redoConfirmBtnText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
   rescheduleBtn: {
     flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
     borderWidth: 1.5, borderColor: Colors.secondary, borderRadius: 10, paddingVertical: 11,
