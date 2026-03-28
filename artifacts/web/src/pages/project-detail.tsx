@@ -2312,6 +2312,7 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [reportInspection, setReportInspection] = useState<any | null>(null);
   const [reportViewLoading, setReportViewLoading] = useState(false);
+  const [pdfViewUrl, setPdfViewUrl] = useState<string | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
 
@@ -2331,18 +2332,28 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
   const openReport = async (report: any) => {
     setSelectedReport(report);
     setReportInspection(null);
+    setPdfViewUrl(null);
     setViewOpen(true);
-    if (report.inspectionId) {
-      setReportViewLoading(true);
-      try {
-        const insp = await apiFetch(`/api/inspections/${report.inspectionId}`);
-        setReportInspection(insp);
-      } catch {
-        // will render with null inspection — project+title still visible
-      } finally {
-        setReportViewLoading(false);
+    setReportViewLoading(true);
+    try {
+      const token = localStorage.getItem("inspectproof_token") || "";
+      const res = await fetch(`/api/reports/${report.id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        setPdfViewUrl(URL.createObjectURL(blob));
       }
+    } catch {
+    } finally {
+      setReportViewLoading(false);
     }
+  };
+
+  const closeReport = () => {
+    if (pdfViewUrl) URL.revokeObjectURL(pdfViewUrl);
+    setPdfViewUrl(null);
+    setViewOpen(false);
   };
 
   const approveReport = async (report: any) => {
@@ -2350,7 +2361,7 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
     try {
       await apiFetch(`/api/reports/${report.id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" } });
       await load();
-      setViewOpen(false);
+      closeReport();
     } catch {
     } finally {
       setActionBusy(false);
@@ -2513,8 +2524,8 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
       </div>
 
       {/* Report viewer dialog */}
-      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <Dialog open={viewOpen} onOpenChange={o => { if (!o) closeReport(); }}>
+        <DialogContent className="max-w-4xl w-full flex flex-col p-0 gap-0 overflow-hidden" style={{ maxHeight: "92vh" }}>
           {/* Sticky toolbar */}
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border bg-white shrink-0">
             <div className="flex items-center gap-2 min-w-0">
@@ -2540,7 +2551,7 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
                 <Button
                   onClick={async () => {
                     await approveReport(selectedReport);
-                    setViewOpen(false);
+                    closeReport();
                   }}
                   disabled={actionBusy}
                   size="sm"
@@ -2550,23 +2561,29 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
                   {actionBusy ? "Approving…" : "Approve & Mark as Final"}
                 </Button>
               )}
+              <Button variant="ghost" size="sm" onClick={closeReport} className="text-xs px-2">✕</Button>
             </div>
           </div>
 
-          {/* Scrollable report body */}
-          <div className="flex-1 overflow-auto bg-gray-100 p-4">
+          {/* PDF iframe viewer */}
+          <div className="flex-1 bg-muted/20" style={{ height: "75vh" }}>
             {reportViewLoading ? (
-              <div className="flex items-center justify-center py-20 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading report…
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span className="text-sm">Loading PDF…</span>
               </div>
-            ) : selectedReport ? (
-              <ReportHTMLViewer
-                report={selectedReport}
-                inspection={reportInspection}
-                project={project}
+            ) : pdfViewUrl ? (
+              <iframe
+                src={pdfViewUrl}
+                className="w-full h-full"
+                title={selectedReport?.title ?? "Report PDF"}
+                style={{ border: "none" }}
               />
             ) : (
-              <div className="text-center py-12 text-muted-foreground">No report selected</div>
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
+                <FileText className="h-8 w-8 opacity-30" />
+                <span className="text-sm">Could not load PDF preview</span>
+              </div>
             )}
           </div>
         </DialogContent>

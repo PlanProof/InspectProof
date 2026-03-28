@@ -388,6 +388,8 @@ export default function InspectionDetail() {
   const [markCompleteNotes, setMarkCompleteNotes] = useState("");
   const [markingComplete, setMarkingComplete] = useState(false);
   const [viewingReport, setViewingReport] = useState<any | null>(null);
+  const [pdfViewUrl, setPdfViewUrl] = useState<string | null>(null);
+  const [pdfViewLoading, setPdfViewLoading] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState("inspection_certificate");
   const [generatingReport, setGeneratingReport] = useState(false);
@@ -546,6 +548,30 @@ export default function InspectionDetail() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {}
+  };
+
+  const viewReport = async (report: any) => {
+    setViewingReport(report);
+    setPdfViewUrl(null);
+    setPdfViewLoading(true);
+    try {
+      const token = localStorage.getItem("inspectproof_token") || "";
+      const res = await fetch(`/api/reports/${report.id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      setPdfViewUrl(URL.createObjectURL(blob));
+    } catch {
+    } finally {
+      setPdfViewLoading(false);
+    }
+  };
+
+  const closeViewDialog = () => {
+    if (pdfViewUrl) URL.revokeObjectURL(pdfViewUrl);
+    setPdfViewUrl(null);
+    setViewingReport(null);
   };
 
   if (loading) {
@@ -773,7 +799,7 @@ export default function InspectionDetail() {
           inspection={inspection}
           onGenerate={() => openReportDialog(inspection)}
           onDownload={downloadReportPdf}
-          onView={setViewingReport}
+          onView={viewReport}
           onFinalise={async (report) => {
             try {
               await apiFetch(`/api/reports/${report.id}/approve`, { method: "POST" });
@@ -866,12 +892,12 @@ export default function InspectionDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* ── View Report Content Modal ── */}
-      <Dialog open={!!viewingReport} onOpenChange={o => { if (!o) setViewingReport(null); }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
+      {/* ── View Report PDF Modal ── */}
+      <Dialog open={!!viewingReport} onOpenChange={o => { if (!o) closeViewDialog(); }}>
+        <DialogContent className="max-w-4xl w-full flex flex-col" style={{ maxHeight: "92vh" }}>
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-4.5 w-4.5 text-secondary" />
+              <FileText className="h-4 w-4 text-secondary" />
               {viewingReport?.title}
             </DialogTitle>
             <DialogDescription>
@@ -880,11 +906,28 @@ export default function InspectionDetail() {
               {viewingReport?.createdAt ? ` · ${new Date(viewingReport.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}` : ""}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            {viewingReport?.content && renderReportContent(viewingReport.content)}
+          <div className="flex-1 min-h-0 rounded-lg overflow-hidden border border-border bg-muted/20" style={{ height: "70vh" }}>
+            {pdfViewLoading ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span className="text-sm">Loading PDF…</span>
+              </div>
+            ) : pdfViewUrl ? (
+              <iframe
+                src={pdfViewUrl}
+                className="w-full h-full"
+                title={viewingReport?.title ?? "Report PDF"}
+                style={{ border: "none" }}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
+                <FileText className="h-8 w-8 opacity-30" />
+                <span className="text-sm">Could not load PDF preview</span>
+              </div>
+            )}
           </div>
-          <DialogFooter className="mt-4 gap-2 flex-row justify-end">
-            <Button variant="outline" onClick={() => setViewingReport(null)}>Close</Button>
+          <DialogFooter className="mt-2 shrink-0 gap-2 flex-row justify-end">
+            <Button variant="outline" onClick={closeViewDialog}>Close</Button>
             <Button
               onClick={() => downloadReportPdf(viewingReport)}
               className="gap-1.5 bg-sidebar hover:bg-sidebar/90 text-white"
