@@ -49,15 +49,7 @@ function RootLayoutNav() {
           headerTitleStyle: { fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
         }}
       />
-      <Stack.Screen
-        name="inspection/[id]"
-        options={{
-          title: "Inspection",
-          headerStyle: { backgroundColor: Colors.surface },
-          headerTintColor: Colors.text,
-          headerTitleStyle: { fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
-        }}
-      />
+      <Stack.Screen name="inspection/[id]" options={{ headerShown: false }} />
       <Stack.Screen
         name="issue/[id]"
         options={{

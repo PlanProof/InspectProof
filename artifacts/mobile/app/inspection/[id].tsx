@@ -272,8 +272,22 @@ export default function InspectionDetailScreen() {
   const currentStatus = STATUS_OPTIONS.find(s => s.value === detailForm.status);
 
   return (
+    <View style={styles.container}>
+      {/* Custom header with guaranteed back button */}
+      <View style={[styles.customHeader, { paddingTop: insets.top }]}>
+        <Pressable
+          onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/inspections" as any)}
+          style={styles.customHeaderBack}
+          hitSlop={12}
+        >
+          <Feather name="arrow-left" size={20} color={Colors.text} />
+        </Pressable>
+        <Text style={styles.customHeaderTitle} numberOfLines={1}>Inspection</Text>
+        <View style={{ width: 44 }} />
+      </View>
+
     <ScrollView
-      style={styles.container}
+      style={{ flex: 1 }}
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Colors.secondary} />}
       showsVerticalScrollIndicator={false}
@@ -687,6 +701,8 @@ export default function InspectionDetailScreen() {
         </View>
       )}
 
+    </ScrollView>
+
       {/* Status Picker Modal */}
       <Modal
         visible={statusPickerOpen}
@@ -779,7 +795,7 @@ export default function InspectionDetailScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -787,6 +803,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { gap: 16 },
   loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
+  customHeader: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 8, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  customHeaderBack: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  customHeaderTitle: { flex: 1, textAlign: "center", fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
 
   // Hero
   hero: {
