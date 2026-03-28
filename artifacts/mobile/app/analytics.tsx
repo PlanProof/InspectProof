@@ -159,39 +159,6 @@ export default function AnalyticsScreen() {
         </View>
       )}
 
-      {/* Compliance Insights */}
-      <View style={styles.complianceCard}>
-        <View style={styles.complianceHeader}>
-          <Feather name="shield" size={18} color={Colors.secondary} />
-          <Text style={styles.cardTitle}>NCC Compliance Summary</Text>
-        </View>
-        <View style={styles.complianceItems}>
-          {[
-            { code: "NCC 2022 Part A", label: "Administration", status: "active" },
-            { code: "NCC 2022 Part B", label: "Structure", status: "active" },
-            { code: "NCC 2022 Part C", label: "Fire Resistance", status: "follow_up_required" },
-            { code: "NCC 2022 Part D", label: "Access & Egress", status: "active" },
-            { code: "NCC 2022 Part F", label: "Health & Amenity", status: "active" },
-            { code: "NCC 2022 Part H", label: "Energy Efficiency", status: "scheduled" },
-          ].map((item, i) => (
-            <View key={item.code} style={[styles.complianceItem, i > 0 && styles.complianceBorder]}>
-              <View style={styles.complianceLeft}>
-                <Text style={styles.complianceCode}>{item.code}</Text>
-                <Text style={styles.complianceDesc}>{item.label}</Text>
-              </View>
-              <View style={[styles.complianceStatus, {
-                backgroundColor: item.status === "active" ? Colors.successLight : item.status === "follow_up_required" ? Colors.dangerLight : Colors.infoLight
-              }]}>
-                <Feather
-                  name={item.status === "active" ? "check" : item.status === "follow_up_required" ? "alert-circle" : "clock"}
-                  size={12}
-                  color={item.status === "active" ? Colors.success : item.status === "follow_up_required" ? Colors.danger : Colors.secondary}
-                />
-              </View>
-            </View>
-          ))}
-        </View>
-      </View>
     </ScrollView>
   );
 }
@@ -252,20 +219,4 @@ const styles = StyleSheet.create({
   },
   stageCount: { fontSize: 20, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   stageLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, textAlign: "center", textTransform: "capitalize" },
-  complianceCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
-    gap: 14,
-  },
-  complianceHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  complianceItems: {},
-  complianceItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10 },
-  complianceBorder: { borderTopWidth: 1, borderTopColor: Colors.borderLight },
-  complianceLeft: { gap: 2 },
-  complianceCode: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
-  complianceDesc: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
-  complianceStatus: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
 });
