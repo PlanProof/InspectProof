@@ -542,6 +542,11 @@ router.post("/generate", async (req, res) => {
       checklistResults = templateItems.map(item => ({
         result: "pending" as any,
         notes: null,
+        severity: null,
+        location: null,
+        tradeAllocated: null,
+        recommendedAction: null,
+        photoCount: 0,
         category: item.category,
         description: item.description,
         codeReference: item.codeReference,
@@ -563,7 +568,7 @@ router.post("/generate", async (req, res) => {
       .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
     const typeLabel = REPORT_TYPE_LABELS[reportType] || reportType;
-    const projectLabel = project?.name ?? inspection.siteAddress ?? "Standalone Inspection";
+    const projectLabel = project?.name ?? "Standalone Inspection";
     const title = `${typeLabel} — ${inspType} — ${projectLabel}`;
     const content = await generateReportContent(reportType, project, inspection, checklistResults, issues, inspector);
 

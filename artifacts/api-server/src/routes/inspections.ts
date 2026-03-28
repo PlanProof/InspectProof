@@ -145,7 +145,7 @@ router.post("/", checkInspectionQuota, async (req, res) => {
     // Send assignment email (non-blocking, after response sent)
     if (inspection.inspectorId) {
       const [inspector] = await db.select().from(usersTable).where(eq(usersTable.id, inspection.inspectorId));
-      const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId));
+      const [project] = inspection.projectId ? await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId)) : [];
       if (inspector?.email && project) {
         sendInspectionAssignedEmail({
           inspectorName: `${inspector.firstName} ${inspector.lastName}`.trim(),
@@ -380,7 +380,7 @@ router.put("/:id", async (req, res) => {
     const newInspectorId = inspection.inspectorId;
     if (newInspectorId && newInspectorId !== prevInspectorId) {
       const [inspector] = await db.select().from(usersTable).where(eq(usersTable.id, newInspectorId));
-      const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId));
+      const [project] = inspection.projectId ? await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId)) : [];
       if (inspector?.email && project) {
         sendInspectionAssignedEmail({
           inspectorName: `${inspector.firstName} ${inspector.lastName}`.trim(),

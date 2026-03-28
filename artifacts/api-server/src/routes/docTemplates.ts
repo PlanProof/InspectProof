@@ -31,7 +31,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const [row] = await db.select().from(docTemplatesTable).where(eq(docTemplatesTable.id, parseInt(req.params.id)));
-    if (!row) return res.status(404).json({ error: "not_found" });
+    if (!row) { res.status(404).json({ error: "not_found" }); return; }
     res.json(fmt(row));
   } catch {
     res.status(500).json({ error: "internal_error" });
@@ -63,7 +63,7 @@ router.put("/:id", async (req, res) => {
     if (linkedChecklistIds !== undefined) update.linkedChecklistIds = JSON.stringify(linkedChecklistIds);
     if (backgroundImage !== undefined) update.backgroundImage = backgroundImage;
     const [row] = await db.update(docTemplatesTable).set(update).where(eq(docTemplatesTable.id, parseInt(req.params.id))).returning();
-    if (!row) return res.status(404).json({ error: "not_found" });
+    if (!row) { res.status(404).json({ error: "not_found" }); return; }
     res.json(fmt(row));
   } catch {
     res.status(500).json({ error: "internal_error" });
