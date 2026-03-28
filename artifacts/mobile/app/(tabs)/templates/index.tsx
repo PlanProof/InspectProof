@@ -9,6 +9,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -57,6 +58,7 @@ const INSPECTION_TYPES: Record<string, string> = {
 
 export default function TemplatesScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
   const qc = useQueryClient();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
@@ -150,7 +152,7 @@ export default function TemplatesScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 8 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
       >

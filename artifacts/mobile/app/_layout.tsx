@@ -52,14 +52,6 @@ function RootLayoutNav() {
           headerTitleStyle: { fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
         }}
       />
-      <Stack.Screen name="analytics"     options={{ headerShown: false }} />
-      <Stack.Screen name="notifications" options={{ headerShown: false }} />
-      <Stack.Screen name="templates/index" options={{ headerShown: false }} />
-      <Stack.Screen name="templates/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="settings"      options={{ headerShown: false }} />
-      <Stack.Screen name="documents"     options={{ headerShown: false }} />
-      <Stack.Screen name="team"          options={{ headerShown: false }} />
-      <Stack.Screen name="help"          options={{ headerShown: false }} />
     </Stack>
   );
 }

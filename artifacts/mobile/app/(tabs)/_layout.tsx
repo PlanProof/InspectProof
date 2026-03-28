@@ -34,6 +34,16 @@ function NativeTabLayout() {
       <NativeTabs.Trigger name="inspection/conduct/[id]" style={{ display: "none" }} />
       <NativeTabs.Trigger name="inspection/generate-report" style={{ display: "none" }} />
       <NativeTabs.Trigger name="feedback" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="profile" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="settings" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="team" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="help" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="change-password" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="analytics" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="notifications" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="documents" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="templates/index" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="templates/[id]" style={{ display: "none" }} />
     </NativeTabs>
   );
 }
@@ -124,6 +134,16 @@ function ClassicTabLayout() {
       <Tabs.Screen name="inspection/photo-markup"       options={{ href: null }} />
       <Tabs.Screen name="inspection/document-viewer"    options={{ href: null }} />
       <Tabs.Screen name="feedback"                      options={{ href: null }} />
+      <Tabs.Screen name="profile"                       options={{ href: null }} />
+      <Tabs.Screen name="settings"                      options={{ href: null }} />
+      <Tabs.Screen name="team"                          options={{ href: null }} />
+      <Tabs.Screen name="help"                          options={{ href: null }} />
+      <Tabs.Screen name="change-password"               options={{ href: null }} />
+      <Tabs.Screen name="analytics"                     options={{ href: null }} />
+      <Tabs.Screen name="notifications"                 options={{ href: null }} />
+      <Tabs.Screen name="documents"                     options={{ href: null }} />
+      <Tabs.Screen name="templates/index"               options={{ href: null }} />
+      <Tabs.Screen name="templates/[id]"                options={{ href: null }} />
       <Tabs.Screen
         name="more"
         options={{

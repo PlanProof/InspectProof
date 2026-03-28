@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useNotifications, ReminderMinutes } from "@/context/NotificationsContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -25,6 +26,7 @@ const REMINDER_OPTIONS: { value: ReminderMinutes; label: string }[] = [
 
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { prefs, updatePrefs, permissionGranted, requestPermission, cancelAllReminders } = useNotifications();
   const [requesting, setRequesting] = useState(false);
   const [permDenied, setPermDenied] = useState(false);
@@ -49,7 +51,7 @@ export default function NotificationsScreen() {
       style={styles.container}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: insets.top + WEB_TOP + 16, paddingBottom: insets.bottom + 40 },
+        { paddingTop: insets.top + WEB_TOP + 16, paddingBottom: tabBarHeight + 16 },
       ]}
       showsVerticalScrollIndicator={false}
     >

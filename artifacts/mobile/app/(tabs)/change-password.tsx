@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -42,6 +43,7 @@ function PasswordField({
 
 export default function ChangePasswordScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
   const [current, setCurrent] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -108,7 +110,7 @@ export default function ChangePasswordScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 8 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

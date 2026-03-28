@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -72,6 +73,7 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 
 export default function HelpScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
 
   const [message, setMessage] = useState("");
@@ -116,7 +118,7 @@ export default function HelpScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 8 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Hero */}

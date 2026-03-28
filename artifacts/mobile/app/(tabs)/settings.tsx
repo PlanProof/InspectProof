@@ -9,6 +9,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { useNotifications, MapApp } from "@/context/NotificationsContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -74,6 +75,7 @@ function SettingRow({
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { user, logout } = useAuth();
   const { prefs, updatePrefs } = useNotifications();
 
@@ -93,7 +95,7 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 8 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Card */}

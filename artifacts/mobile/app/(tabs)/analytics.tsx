@@ -15,9 +15,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { StatCard } from "@/components/ui/StatCard";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 export default function AnalyticsScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
@@ -69,7 +71,7 @@ export default function AnalyticsScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: 16, paddingBottom: insets.bottom + 20 }]}
+        contentContainerStyle={[styles.content, { paddingTop: 16, paddingBottom: tabBarHeight + 8 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
       >

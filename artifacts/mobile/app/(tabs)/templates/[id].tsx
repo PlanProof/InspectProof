@@ -9,6 +9,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -24,6 +25,7 @@ const RISK_LEVELS = ["low", "medium", "high", "critical"];
 
 export default function TemplateDetailScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { token } = useAuth();
   const qc = useQueryClient();
@@ -129,7 +131,7 @@ export default function TemplateDetailScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 8 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
       >

@@ -9,6 +9,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -51,6 +52,7 @@ function getInitials(first: string, last: string) {
 
 export default function TeamScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
   const [search, setSearch] = useState("");
@@ -136,7 +138,7 @@ export default function TeamScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 8 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
       >

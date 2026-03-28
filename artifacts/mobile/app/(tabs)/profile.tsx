@@ -10,6 +10,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { getApiUrl } from "@/constants/api";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -57,6 +58,7 @@ function Field({
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { user, token, refreshUser } = useAuth();
 
   const [firstName, setFirstName] = useState(user?.firstName ?? "");
@@ -192,7 +194,7 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 8 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
