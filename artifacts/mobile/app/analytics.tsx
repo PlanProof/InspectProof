@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -6,10 +6,11 @@ import {
   StyleSheet,
   RefreshControl,
   ActivityIndicator,
-  Platform,
+  Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
@@ -59,12 +60,19 @@ export default function AnalyticsScreen() {
   const totalIssues = issuesBySeverity.reduce((sum: number, s: any) => sum + s.count, 0);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: 16, paddingBottom: insets.bottom + 20 }]}
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Colors.secondary} />}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Feather name="chevron-left" size={22} color={Colors.text} />
+        </Pressable>
+        <Text style={styles.title}>Analytics & Insights</Text>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: 16, paddingBottom: insets.bottom + 20 }]}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Colors.secondary} />}
+        showsVerticalScrollIndicator={false}
+      >
       {/* Header */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Overview</Text>
@@ -159,12 +167,21 @@ export default function AnalyticsScreen() {
         </View>
       )}
 
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  header: {
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 16, paddingBottom: 14,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    flexDirection: "row", alignItems: "center", gap: 10,
+  },
+  backBtn: { padding: 4 },
+  title: { fontSize: 22, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   content: { paddingHorizontal: 16, gap: 16 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
   sectionHeader: { gap: 2 },
