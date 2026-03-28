@@ -222,14 +222,7 @@ export default function HelpScreen() {
           </View>
         </View>
 
-        {/* Compliance note */}
-        <View style={styles.complianceNote}>
-          <Feather name="info" size={14} color={Colors.secondary} />
-          <Text style={styles.complianceText}>
-            InspectProof is built for Australian building professionals and aligns with NCC 2022, BCA, and AS Standards.
-            Always verify compliance requirements with your local authority.
-          </Text>
-        </View>
+
       </ScrollView>
     </View>
   );
@@ -336,12 +329,4 @@ const styles = StyleSheet.create({
   contactLabel: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
   contactValue: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, marginTop: 1 },
 
-  complianceNote: {
-    flexDirection: "row", gap: 10, alignItems: "flex-start",
-    backgroundColor: Colors.infoLight, borderRadius: 12, padding: 14,
-  },
-  complianceText: {
-    flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.secondary, lineHeight: 18,
-  },
 });
