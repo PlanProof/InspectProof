@@ -174,7 +174,7 @@ export default function MoreScreen() {
       {/* Footer */}
       <View style={styles.footer}>
         <Image source={logoImage} style={styles.footerLogo} resizeMode="contain" />
-        <Text style={styles.footerVersion}>Version 1.0.0 · Australian Building Inspection Platform</Text>
+        <Text style={styles.footerVersion}>Version 1.0.0 · PlanProof Technologies Pty Ltd</Text>
         <Text style={styles.footerCompliance}>NCC 2022 · BCA · AS Standards Compatible</Text>
       </View>
     </ScrollView>

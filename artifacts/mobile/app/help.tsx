@@ -53,8 +53,7 @@ const FAQS = [
 ];
 
 const CONTACTS = [
-  { icon: "mail", label: "Email Support", value: "support@inspectproof.com.au" },
-  { icon: "phone", label: "Phone", value: "1300 477 368" },
+  { icon: "mail", label: "Email Support", value: "contact@inspectproof.com.au" },
   { icon: "globe", label: "Website", value: "inspectproof.com.au" },
 ];
 
