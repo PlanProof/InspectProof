@@ -4,6 +4,7 @@ import {
   RefreshControl, Platform, TextInput,
 } from "react-native";
 import { router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -137,7 +138,10 @@ export default function ReportsScreen() {
             return (
               <Pressable
                 key={r.id}
-                onPress={() => router.push({ pathname: "/inspection/[id]", params: { id: r.inspectionId } })}
+                onPress={() => {
+                  const pdfUrl = `${baseUrl}/api/reports/${r.id}/pdf?_token=${encodeURIComponent(token ?? "")}`;
+                  WebBrowser.openBrowserAsync(pdfUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN });
+                }}
                 style={({ pressed }) => [styles.card, pressed && { opacity: 0.88 }]}
               >
                 <View style={styles.cardHeader}>
@@ -155,8 +159,8 @@ export default function ReportsScreen() {
                 )}
                 <View style={styles.cardFooter}>
                   <View style={styles.inspectionRef}>
-                    <Feather name="clipboard" size={12} color={Colors.secondary} />
-                    <Text style={styles.inspectionRefText}>Inspection #{r.inspectionId}</Text>
+                    <Feather name="file-text" size={12} color={Colors.secondary} />
+                    <Text style={styles.inspectionRefText}>Tap to view PDF</Text>
                   </View>
                   <Feather name="chevron-right" size={15} color={Colors.textTertiary} />
                 </View>

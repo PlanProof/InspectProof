@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -283,7 +284,10 @@ export default function ProjectDetailScreen() {
               <Pressable
                 key={r.id}
                 style={({ pressed }) => [styles.reportCard, pressed && { opacity: 0.85 }]}
-                onPress={() => router.push({ pathname: "/inspection/[id]", params: { id: r.inspectionId } })}
+                onPress={() => {
+                  const pdfUrl = `${baseUrl}/api/reports/${r.id}/pdf?_token=${encodeURIComponent(token ?? "")}`;
+                  WebBrowser.openBrowserAsync(pdfUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN });
+                }}
               >
                 <View style={styles.reportCardHeader}>
                   <View style={[styles.reportStatusTag, { backgroundColor: sm.bg }]}>
@@ -295,8 +299,8 @@ export default function ProjectDetailScreen() {
                 </View>
                 <Text style={styles.reportType}>{REPORT_TYPES[r.reportType] || r.reportType}</Text>
                 <View style={styles.reportFooter}>
-                  <Feather name="clipboard" size={12} color={Colors.secondary} />
-                  <Text style={styles.reportRef}>Inspection #{r.inspectionId}</Text>
+                  <Feather name="file-text" size={12} color={Colors.secondary} />
+                  <Text style={styles.reportRef}>Tap to view PDF</Text>
                   <Feather name="chevron-right" size={15} color={Colors.textTertiary} style={{ marginLeft: "auto" }} />
                 </View>
               </Pressable>
