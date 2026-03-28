@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable, reportsTable } from "@workspace/db";
 import { checkInspectionQuota } from "../lib/quota";
 import { optionalAuth, isInspectorOnly } from "../middleware/auth";
+import { sendInspectionAssignedEmail } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -140,6 +141,25 @@ router.post("/", checkInspectionQuota, async (req, res) => {
 
     const formatted = await formatInspection(inspection);
     res.status(201).json(formatted);
+
+    // Send assignment email (non-blocking, after response sent)
+    if (inspection.inspectorId) {
+      const [inspector] = await db.select().from(usersTable).where(eq(usersTable.id, inspection.inspectorId));
+      const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId));
+      if (inspector?.email && project) {
+        sendInspectionAssignedEmail({
+          inspectorName: `${inspector.firstName} ${inspector.lastName}`.trim(),
+          inspectorEmail: inspector.email,
+          inspectionType: inspection.inspectionType,
+          projectName: project.name,
+          projectAddress: [project.siteAddress, project.suburb, project.state].filter(Boolean).join(", "),
+          scheduledDate: inspection.scheduledDate,
+          scheduledTime: inspection.scheduledTime ?? null,
+          inspectionId: inspection.id,
+          isReassignment: false,
+        }, req.log).catch(() => {});
+      }
+    }
   } catch (err) {
     req.log.error({ err }, "Create inspection error");
     res.status(500).json({ error: "internal_error" });
@@ -321,6 +341,15 @@ router.put("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const data = req.body;
+
+    // Capture previous inspectorId before update to detect reassignment
+    const [before] = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, id));
+    if (!before) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const prevInspectorId = before.inspectorId;
+
     const [inspection] = await db.update(inspectionsTable)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(inspectionsTable.id, id))
@@ -341,6 +370,26 @@ router.put("/:id", async (req, res) => {
 
     const formatted = await formatInspection(inspection);
     res.json(formatted);
+
+    // Send reassignment email if inspector changed to a new (non-null) person
+    const newInspectorId = inspection.inspectorId;
+    if (newInspectorId && newInspectorId !== prevInspectorId) {
+      const [inspector] = await db.select().from(usersTable).where(eq(usersTable.id, newInspectorId));
+      const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId));
+      if (inspector?.email && project) {
+        sendInspectionAssignedEmail({
+          inspectorName: `${inspector.firstName} ${inspector.lastName}`.trim(),
+          inspectorEmail: inspector.email,
+          inspectionType: inspection.inspectionType,
+          projectName: project.name,
+          projectAddress: [project.siteAddress, project.suburb, project.state].filter(Boolean).join(", "),
+          scheduledDate: inspection.scheduledDate,
+          scheduledTime: inspection.scheduledTime ?? null,
+          inspectionId: inspection.id,
+          isReassignment: prevInspectorId !== null,
+        }, req.log).catch(() => {});
+      }
+    }
   } catch (err) {
     req.log.error({ err }, "Update inspection error");
     res.status(500).json({ error: "internal_error" });
