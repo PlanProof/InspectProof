@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const logoImage = require("@/assets/images/logo.png");
 
@@ -52,6 +53,7 @@ function MenuItem({ icon, label, sublabel, onPress, danger = false, badge }: Men
 
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { user, logout } = useAuth();
 
   const roleLabel: Record<string, string> = {
@@ -73,7 +75,7 @@ export default function MoreScreen() {
       style={styles.container}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: insets.top + WEB_TOP + 16, paddingBottom: insets.bottom + 90 },
+        { paddingTop: insets.top + WEB_TOP + 16, paddingBottom: tabBarHeight + 20 },
       ]}
       showsVerticalScrollIndicator={false}
     >

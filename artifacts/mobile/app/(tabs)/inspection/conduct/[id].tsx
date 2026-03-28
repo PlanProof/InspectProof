@@ -24,6 +24,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { getSuggestionsForItem } from "@/constants/noteSuggestions";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const RESULT_OPTS = [
   { key: "pass", label: "Pass", icon: "check-circle", color: "#22c55e", bg: "#f0fdf4" },
@@ -88,6 +89,7 @@ export default function ConductInspectionScreen() {
   const { id, editMode } = useLocalSearchParams<{ id: string; editMode?: string }>();
   const isEditMode = editMode === "1";
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
@@ -542,7 +544,7 @@ export default function ConductInspectionScreen() {
           {/* Checklist items */}
           <ScrollView
             style={styles.scroll}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + (progress === 1 ? 160 : 80) }]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + (progress === 1 ? 160 : 20) }]}
             showsVerticalScrollIndicator={false}
             nestedScrollEnabled
           >
@@ -602,7 +604,7 @@ export default function ConductInspectionScreen() {
 
           {/* Bottom action bar — shown when 100% complete */}
           {progress === 1 && total > 0 && (
-            <View style={[styles.generateBar, { paddingBottom: insets.bottom + 12 }]}>
+            <View style={[styles.generateBar, { paddingBottom: 12, bottom: tabBarHeight }]}>
               {/* Row 1: Mark Complete toggle */}
               <Pressable
                 style={({ pressed }) => [

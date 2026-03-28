@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { useNotifications } from "@/context/NotificationsContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -769,6 +770,7 @@ const tlStyles = StyleSheet.create({
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { user, token } = useAuth();
   const { scheduleInspectionReminders, prefs } = useNotifications();
   const [selectedDate, setSelectedDate] = useState(toLocalDateStr(new Date()));
@@ -858,7 +860,7 @@ export default function HomeScreen() {
       style={styles.container}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: insets.top + WEB_TOP + 16, paddingBottom: insets.bottom + 100 },
+        { paddingTop: insets.top + WEB_TOP + 16, paddingBottom: tabBarHeight + 20 },
       ]}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
       showsVerticalScrollIndicator={false}

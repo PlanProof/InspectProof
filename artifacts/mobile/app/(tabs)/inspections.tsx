@@ -16,6 +16,7 @@ import { Colors } from "@/constants/colors";
 import { InspectionCard } from "@/components/InspectionCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/context/AuthContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -47,6 +48,7 @@ const INSPECTION_TYPE_LABELS: Record<string, string> = {
 
 export default function InspectionsScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
   const [activeFilter, setActiveFilter] = useState("All");
   const [search, setSearch] = useState("");
@@ -151,7 +153,7 @@ export default function InspectionsScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 90 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 20 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"

@@ -14,6 +14,7 @@ import { Colors } from "@/constants/colors";
 import { IssueCard } from "@/components/IssueCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/context/AuthContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -37,6 +38,7 @@ const STATUS_VALUES: Record<string, string | null> = {
 
 export default function IssuesScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
   const [severityFilter, setSeverityFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("Open");
@@ -106,7 +108,7 @@ export default function IssuesScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 90 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 20 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
       >

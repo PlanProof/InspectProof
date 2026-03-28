@@ -17,6 +17,7 @@ import { PROJECT_STAGES } from "@/constants/api";
 import { ProjectCard } from "@/components/ProjectCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/context/AuthContext";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
 
@@ -35,6 +36,7 @@ const STAGE_FILTERS: { key: string; label: string }[] = [
 
 export default function ProjectsScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
@@ -163,7 +165,7 @@ export default function ProjectsScreen() {
 
       {/* List */}
       <ScrollView
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 90 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 20 }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
       >
