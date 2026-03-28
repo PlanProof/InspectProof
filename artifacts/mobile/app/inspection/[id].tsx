@@ -94,6 +94,7 @@ export default function InspectionDetailScreen() {
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [rescheduleTime, setRescheduleTime] = useState("");
   const [rescheduleSaving, setRescheduleSaving] = useState(false);
+  const [redoing, setRedoing] = useState(false);
 
   const RESCHEDULE_TIMES = [
     "07:00","07:30","08:00","08:30","09:00","09:30",
@@ -345,37 +346,50 @@ export default function InspectionDetailScreen() {
 
             {/* Re-Do Inspection — clears all results, fresh start */}
             <Pressable
-              style={styles.redoBtn}
+              style={[styles.redoBtn, redoing && { opacity: 0.6 }]}
+              disabled={redoing}
               onPress={() => {
-                Alert.alert(
-                  "Re-Do Inspection",
-                  "This will clear all checklist results and restart the inspection from scratch. Continue?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Re-Do",
-                      style: "destructive",
-                      onPress: async () => {
-                        try {
-                          await fetchWithAuth(`/api/inspections/${inspection.id}/reset-checklist`, { method: "POST" });
-                          await fetchWithAuth(`/api/inspections/${inspection.id}`, {
-                            method: "PUT",
-                            body: JSON.stringify({ status: "in_progress", completedDate: null }),
-                          });
-                          queryClient.invalidateQueries({ queryKey: ["inspection", id] });
-                          queryClient.invalidateQueries({ queryKey: ["inspection-checklist", id] });
-                          router.push(`/inspection/conduct/${inspection.id}` as any);
-                        } catch {
-                          Alert.alert("Error", "Failed to restart inspection.");
-                        }
-                      },
-                    },
-                  ]
-                );
+                const executeRedo = async () => {
+                  setRedoing(true);
+                  try {
+                    await fetchWithAuth(`/api/inspections/${inspection.id}/reset-checklist`, { method: "POST" });
+                    await fetchWithAuth(`/api/inspections/${inspection.id}`, {
+                      method: "PUT",
+                      body: JSON.stringify({ status: "in_progress", completedDate: null }),
+                    });
+                    queryClient.invalidateQueries({ queryKey: ["inspection", id] });
+                    queryClient.invalidateQueries({ queryKey: ["inspection-checklist", id] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/inspections"] });
+                    router.replace(`/inspection/conduct/${inspection.id}` as any);
+                  } catch {
+                    Alert.alert("Error", "Failed to restart inspection. Please try again.");
+                  } finally {
+                    setRedoing(false);
+                  }
+                };
+
+                if (Platform.OS === "web") {
+                  if ((window as any).confirm("Re-Do Inspection\n\nThis will clear ALL checklist results and restart from scratch. This cannot be undone.\n\nContinue?")) {
+                    executeRedo();
+                  }
+                } else {
+                  Alert.alert(
+                    "Re-Do Inspection",
+                    "This will clear ALL checklist results and restart from scratch. This cannot be undone.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Re-Do", style: "destructive", onPress: executeRedo },
+                    ]
+                  );
+                }
               }}
             >
-              <Feather name="refresh-cw" size={16} color={Colors.textSecondary} />
-              <Text style={styles.redoBtnText}>Re-Do Inspection</Text>
+              {redoing ? (
+                <ActivityIndicator size="small" color={Colors.textSecondary} />
+              ) : (
+                <Feather name="refresh-cw" size={16} color={Colors.textSecondary} />
+              )}
+              <Text style={styles.redoBtnText}>{redoing ? "Resetting…" : "Re-Do Inspection"}</Text>
             </Pressable>
           </>
         )}
