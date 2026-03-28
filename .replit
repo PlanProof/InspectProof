@@ -57,6 +57,6 @@ SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 SMTP_HOST = "smtp.resend.com"
 SMTP_PORT = "587"
 SMTP_USER = "resend"
-SMTP_FROM = "InspectProof <noreply@inspectproof.com.au>"
+SMTP_FROM = "InspectProof <contact@inspectproof.com.au>"
 APP_BASE_URL = "https://7c467f6e-a89a-4afd-887e-f4f25c918943-00-3p4ddnj78lplg.janeway.replit.dev"
 FEEDBACK_EMAIL = "contact@inspectproof.com.au"
