@@ -277,11 +277,15 @@ router.get("/:id", optionalAuth, async (req, res) => {
 
     const counts = await getInspectionCounts(id);
 
-    // Resolve inspector name
+    // Resolve inspector name + signature URL
     let inspectorNameResolved: string | null = null;
+    let inspectorSignatureUrl: string | null = null;
     if (inspection.inspectorId) {
       const inspUsers = await db.select().from(usersTable).where(eq(usersTable.id, inspection.inspectorId));
-      if (inspUsers[0]) inspectorNameResolved = `${inspUsers[0].firstName} ${inspUsers[0].lastName}`;
+      if (inspUsers[0]) {
+        inspectorNameResolved = `${inspUsers[0].firstName} ${inspUsers[0].lastName}`;
+        inspectorSignatureUrl = inspUsers[0].signatureUrl ?? null;
+      }
     }
 
     // Resolve checklist template name + discipline
@@ -304,6 +308,7 @@ router.get("/:id", optionalAuth, async (req, res) => {
       completedDate: inspection.completedDate,
       inspectorId: inspection.inspectorId,
       inspectorName: inspectorNameResolved,
+      inspectorSignatureUrl,
       duration: inspection.duration,
       weatherConditions: inspection.weatherConditions,
       siteNotes: inspection.notes ?? null,

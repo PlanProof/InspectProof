@@ -409,7 +409,18 @@ function ReportDocument({
 
       {/* ── Signature block ── */}
       <View style={docStyles.sigBlock}>
-        <View style={docStyles.sigLine} />
+        {inspection?.inspectorSignatureUrl ? (
+          <Image
+            source={{
+              uri: `${baseUrl}/api/storage${inspection.inspectorSignatureUrl}`,
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            }}
+            style={docStyles.sigImage}
+            resizeMode="contain"
+          />
+        ) : (
+          <View style={docStyles.sigLine} />
+        )}
         <Text style={docStyles.sigLabel}>Inspector Signature</Text>
         <Text style={docStyles.sigName}>{inspection?.inspectorName || "—"}</Text>
         <Text style={docStyles.sigDate}>Date: {fmtDate(report.createdAt || new Date().toISOString())}</Text>
@@ -568,6 +579,11 @@ const docStyles = StyleSheet.create({
     width: 200,
     height: 1,
     backgroundColor: BRAND_NAVY,
+    marginBottom: 4,
+  },
+  sigImage: {
+    width: 200,
+    height: 64,
     marginBottom: 4,
   },
   sigLabel: { fontSize: 10, color: "#94a3b8", fontFamily: "PlusJakartaSans_500Medium", letterSpacing: 0.5 },
