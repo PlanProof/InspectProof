@@ -101,60 +101,90 @@ function Header() {
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden bg-[#0B1933] pt-32 pb-24">
-      {/* Radial glow */}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="h-[600px] w-[600px] rounded-full bg-[#466DB5]/10 blur-3xl" />
-      </div>
+    <section className="relative overflow-hidden bg-[#0B1933]">
+      {/* ── Two-column layout ─────────────────────────────────── */}
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid lg:grid-cols-[55%_45%] min-h-[88vh] items-center gap-0">
 
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-        <h1
-          className="text-4xl sm:text-5xl lg:text-6xl font-normal text-white leading-tight mb-6"
-          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-        >
-          Inspection records that
-          <br />
-          <span className="text-[#C5D92D]">prove compliance.</span>
-        </h1>
-
-        <p className="mx-auto max-w-2xl text-lg text-white/60 mb-10 leading-relaxed">
-          InspectProof is the field inspection platform for every professional
-          working within Australia's built environment. Capture, document and
-          report on every inspection — fast, accurate and audit-ready.
-        </p>
-
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link
-            to="/login"
-            className="inline-flex items-center gap-2 rounded-md bg-[#C5D92D] px-7 py-3 text-base font-semibold text-[#0B1933] hover:bg-[#d4e83a] transition-colors shadow-lg shadow-[#C5D92D]/20"
-          >
-            Get Started <ArrowRight className="h-4 w-4" />
-          </Link>
-          <a
-            href="#how-it-works"
-            className="inline-flex items-center gap-2 rounded-md border border-white/20 bg-white/5 px-7 py-3 text-base font-medium text-white hover:bg-white/10 transition-colors"
-          >
-            See How It Works
-          </a>
-        </div>
-
-        {/* Stats strip */}
-        <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-6">
-          {[
-            { value: "100%", label: "NCC class coverage" },
-            { value: "< 2 min", label: "Average report time" },
-            { value: "Zero", label: "Paper checklists needed" },
-          ].map((stat) => (
-            <div key={stat.label} className="rounded-xl border border-white/10 bg-white/5 px-4 py-5">
-              <div
-                className="text-2xl font-normal text-[#C5D92D] mb-1"
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              >
-                {stat.value}
-              </div>
-              <div className="text-xs text-white/50">{stat.label}</div>
+          {/* Left: text content */}
+          <div className="py-36 lg:py-24 lg:pr-16 z-10 relative">
+            {/* Pre-headline pill */}
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#C5D92D]/30 bg-[#C5D92D]/10 px-3.5 py-1.5 mb-8">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#C5D92D]" />
+              <span className="text-xs font-semibold text-[#C5D92D] tracking-wide uppercase">
+                Australia's Built Environment Platform
+              </span>
             </div>
-          ))}
+
+            <h1
+              className="text-4xl sm:text-5xl font-normal leading-[1.1] mb-6"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              <span className="text-white block">Inspection records</span>
+              <span className="text-[#C5D92D] block">that prove compliance.</span>
+            </h1>
+
+            <p className="text-lg text-white/55 mb-10 leading-relaxed max-w-xl">
+              The field inspection platform for every professional working
+              within Australia's built environment. Capture, document and
+              report on every inspection — fast, accurate and audit-ready.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-start gap-4">
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#C5D92D] px-7 py-3.5 text-base font-semibold text-[#0B1933] hover:bg-[#d4e83a] transition-colors shadow-xl shadow-[#C5D92D]/20"
+              >
+                Get Started <ArrowRight className="h-4 w-4" />
+              </Link>
+              <a
+                href="#how-it-works"
+                className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-7 py-3.5 text-base font-medium text-white hover:bg-white/10 transition-colors"
+              >
+                See How It Works
+              </a>
+            </div>
+
+            {/* Stats — inline under CTAs */}
+            <div className="mt-16 pt-8 border-t border-white/10 grid grid-cols-3 gap-0">
+              {[
+                { value: "100%", label: "NCC class\ncoverage" },
+                { value: "< 2 min", label: "Average\nreport time" },
+                { value: "Zero", label: "Paper checklists\nneeded" },
+              ].map((stat, i) => (
+                <div
+                  key={stat.label}
+                  className={`${i > 0 ? "border-l border-white/10 pl-6" : ""} ${i < 2 ? "pr-6" : ""}`}
+                >
+                  <div
+                    className="text-3xl font-bold text-[#C5D92D] leading-none"
+                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                  >
+                    {stat.value}
+                  </div>
+                  <div className="text-xs text-white/45 mt-2 whitespace-pre-line leading-relaxed">
+                    {stat.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: hero image */}
+          <div className="hidden lg:block relative self-stretch">
+            {/* Left gradient fade from navy into the image */}
+            <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#0B1933] to-transparent z-10" />
+            {/* Top gradient */}
+            <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[#0B1933] to-transparent z-10" />
+            {/* Bottom gradient */}
+            <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#0B1933] to-transparent z-10" />
+            <img
+              src="/hero-construction.jpg"
+              alt="Construction professional on site"
+              className="absolute inset-0 w-full h-full object-cover object-center"
+              style={{ filter: "brightness(0.75) contrast(1.05)" }}
+            />
+          </div>
         </div>
       </div>
     </section>
