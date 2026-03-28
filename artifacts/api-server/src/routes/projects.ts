@@ -467,16 +467,23 @@ router.patch("/:id/documents/folders/:folderName", async (req, res) => {
 router.get("/:id/inspection-types", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const all = await db.select({
+    const disciplineFilter = req.query.discipline as string | undefined;
+
+    const baseQuery = db.select({
       id: checklistTemplatesTable.id,
       name: checklistTemplatesTable.name,
       inspectionType: checklistTemplatesTable.inspectionType,
       folder: checklistTemplatesTable.folder,
+      discipline: checklistTemplatesTable.discipline,
       itemCount: sql<number>`cast(count(${checklistItemsTable.id}) as int)`,
     }).from(checklistTemplatesTable)
       .leftJoin(checklistItemsTable, eq(checklistItemsTable.templateId, checklistTemplatesTable.id))
       .groupBy(checklistTemplatesTable.id)
       .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.name} ASC`);
+
+    const all = disciplineFilter
+      ? await baseQuery.where(eq(checklistTemplatesTable.discipline, disciplineFilter))
+      : await baseQuery;
 
     const selected = await db.select().from(projectInspectionTypesTable)
       .where(eq(projectInspectionTypesTable.projectId, id));
@@ -488,6 +495,7 @@ router.get("/:id/inspection-types", async (req, res) => {
       name: t.name,
       inspectionType: t.inspectionType,
       folder: t.folder,
+      discipline: t.discipline ?? "Building Surveyor",
       itemCount: t.itemCount,
       isSelected: selectedIds.has(t.id),
     })));

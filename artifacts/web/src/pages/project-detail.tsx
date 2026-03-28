@@ -13,7 +13,7 @@ import {
   Smartphone, X, Info, ZoomIn, User
 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
-import { useListUsers, useCreateInspection } from "@workspace/api-client-react";
+import { useListUsers, useCreateInspection, useGetMe } from "@workspace/api-client-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +48,7 @@ interface InspectionTypeRow {
   name: string;
   inspectionType: string;
   folder: string;
+  discipline: string;
   itemCount: number;
   isSelected: boolean;
 }
@@ -1694,7 +1695,13 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
       {/* ── Selected Inspection Types ── */}
       {!loadingTypes && selectedTypes.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Required Inspections</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Required Inspections</h3>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> Booked</span>
+              <span className="flex items-center gap-1"><span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-muted-foreground/30" /> Not yet booked — click to schedule</span>
+            </div>
+          </div>
           {folders.map(folder => {
             const folderTypes = selectedTypes.filter(t => t.folder === folder);
             return (
@@ -1713,8 +1720,14 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
                       <div key={t.templateId} className="px-5 py-3 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 min-w-0">
                           {booked
-                            ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                            : <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 shrink-0" />
+                            ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" title="Inspection booked" />
+                            : (
+                              <button
+                                onClick={() => openBookForTemplate(t)}
+                                className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 hover:border-secondary hover:bg-secondary/10 shrink-0 transition-colors"
+                                title="Click to book this inspection"
+                              />
+                            )
                           }
                           <div className="min-w-0">
                             <div className="font-medium text-sm text-sidebar truncate">{t.name}</div>
@@ -1838,6 +1851,10 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
 // ── Inspection Types Tab ──────────────────────────────────────────────────────
 
 function InspectionTypesTab({ projectId }: { projectId: number }) {
+  const { data: me } = useGetMe();
+  const isAdmin = me?.isAdmin ?? false;
+  const discipline = !isAdmin ? (me?.profession ?? null) : null;
+
   const [types, setTypes] = useState<InspectionTypeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1847,13 +1864,16 @@ function InspectionTypesTab({ projectId }: { projectId: number }) {
   const loadTypes = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await apiFetch(`/api/projects/${projectId}/inspection-types`);
+      const url = discipline
+        ? `/api/projects/${projectId}/inspection-types?discipline=${encodeURIComponent(discipline)}`
+        : `/api/projects/${projectId}/inspection-types`;
+      const data = await apiFetch(url);
       setTypes(data);
     } catch {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, discipline]);
 
   useState(() => { loadTypes(); });
 
@@ -1902,6 +1922,12 @@ function InspectionTypesTab({ projectId }: { projectId: number }) {
           <p className="text-sm text-muted-foreground mt-0.5">Select which inspection types apply to this project</p>
         </div>
         <div className="flex items-center gap-3">
+          {discipline && (
+            <span className="flex items-center gap-1.5 text-xs bg-secondary/10 text-secondary px-3 py-1.5 rounded-lg font-medium">
+              <Info className="h-3.5 w-3.5" />
+              Showing: {discipline}
+            </span>
+          )}
           {saved && <span className="text-sm text-green-600 font-medium">Saved</span>}
           <Button onClick={save} disabled={saving} size="sm">
             {saving ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Saving…</> : "Save Selection"}
