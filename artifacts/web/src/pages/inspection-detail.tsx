@@ -535,7 +535,7 @@ export default function InspectionDetail() {
     try {
       const token = localStorage.getItem("inspectproof_token") || "";
       const res = await fetch(`/api/reports/${report.id}/pdf`, {
-        headers: { Authorization: `Basic ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
       const blob = await res.blob();

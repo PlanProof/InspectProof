@@ -31,15 +31,18 @@ window.fetch = async (input, init) => {
       // Merge headers safely — handle Headers instance, plain object, or array
       const merged = new Headers(init.headers);
       if (!merged.has('Authorization')) {
-        merged.set('Authorization', `Basic ${token}`);
+        merged.set('Authorization', `Bearer ${token}`);
       }
       init = { ...init, headers: merged, credentials: "include" };
     }
   }
   const response = await originalFetch(input, init);
-  if (response.status === 401 && url !== '/api/auth/login') {
-    localStorage.removeItem('inspectproof_token');
-    window.location.href = '/login';
+  if (url !== '/api/auth/login') {
+    const isAuthMe = url.includes('/api/auth/me');
+    if (response.status === 401 || (isAuthMe && response.status === 404)) {
+      localStorage.removeItem('inspectproof_token');
+      window.location.href = '/login';
+    }
   }
   return response;
 };

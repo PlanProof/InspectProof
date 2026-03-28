@@ -119,7 +119,7 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
     if (!form.projectId || isCustom) { setAllocatedTypes([]); return; }
     const token = localStorage.getItem("inspectproof_token");
     fetch(`/api/projects/${form.projectId}/inspection-types`, {
-      headers: token ? { Authorization: `Basic ${token}` } : {},
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(r => r.json())
       .then((data: any[]) => setAllocatedTypes(data.filter(t => t.isSelected)))

@@ -107,7 +107,7 @@ async function apiFetch(path: string, opts?: RequestInit) {
     ...opts,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Basic ${token}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(opts?.headers as Record<string, string> ?? {}),
     },
   });
