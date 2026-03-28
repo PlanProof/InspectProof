@@ -4,8 +4,8 @@ import {
   RefreshControl, Platform, TextInput,
 } from "react-native";
 import { router } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import PdfViewerModal from "@/components/PdfViewerModal";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
@@ -37,6 +37,7 @@ export default function ReportsScreen() {
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
+  const [pdfModal, setPdfModal] = useState<{ url: string; title: string } | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -140,7 +141,8 @@ export default function ReportsScreen() {
                 key={r.id}
                 onPress={() => {
                   const pdfUrl = `${baseUrl}/api/reports/${r.id}/pdf?_token=${encodeURIComponent(token ?? "")}`;
-                  WebBrowser.openBrowserAsync(pdfUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN });
+                  const label = REPORT_TYPES[r.reportType] || r.reportType || "Report";
+                  setPdfModal({ url: pdfUrl, title: label });
                 }}
                 style={({ pressed }) => [styles.card, pressed && { opacity: 0.88 }]}
               >
@@ -169,6 +171,15 @@ export default function ReportsScreen() {
           })
         )}
       </ScrollView>
+
+      {pdfModal && (
+        <PdfViewerModal
+          visible
+          url={pdfModal.url}
+          title={pdfModal.title}
+          onClose={() => setPdfModal(null)}
+        />
+      )}
     </View>
   );
 }

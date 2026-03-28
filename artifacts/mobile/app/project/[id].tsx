@@ -17,8 +17,8 @@ import {
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, router } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import PdfViewerModal from "@/components/PdfViewerModal";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
@@ -56,6 +56,7 @@ export default function ProjectDetailScreen() {
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   // Book inspection modal state
+  const [pdfModal, setPdfModal] = useState<{ url: string; title: string } | null>(null);
   const [bookOpen, setBookOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [bookDate, setBookDate] = useState<Date>(new Date());
@@ -286,7 +287,8 @@ export default function ProjectDetailScreen() {
                 style={({ pressed }) => [styles.reportCard, pressed && { opacity: 0.85 }]}
                 onPress={() => {
                   const pdfUrl = `${baseUrl}/api/reports/${r.id}/pdf?_token=${encodeURIComponent(token ?? "")}`;
-                  WebBrowser.openBrowserAsync(pdfUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN });
+                  const label = REPORT_TYPES[r.reportType] || r.reportType || "Report";
+                  setPdfModal({ url: pdfUrl, title: label });
                 }}
               >
                 <View style={styles.reportCardHeader}>
@@ -471,6 +473,15 @@ export default function ProjectDetailScreen() {
         </View>
       </View>
     </Modal>
+
+    {pdfModal && (
+      <PdfViewerModal
+        visible
+        url={pdfModal.url}
+        title={pdfModal.title}
+        onClose={() => setPdfModal(null)}
+      />
+    )}
     </View>
   );
 }

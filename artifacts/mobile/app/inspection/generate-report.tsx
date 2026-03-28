@@ -16,7 +16,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import * as WebBrowser from "expo-web-browser";
+import PdfViewerModal from "@/components/PdfViewerModal";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
@@ -601,7 +601,7 @@ export default function GenerateReportScreen() {
   const [report, setReport] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sending, setSending] = useState(false);
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [pdfModal, setPdfModal] = useState<{ url: string; title: string } | null>(null);
   const [clientEmail, setClientEmail] = useState("");
   const [showEmailModal, setShowEmailModal] = useState(false);
 
@@ -755,21 +755,11 @@ export default function GenerateReportScreen() {
     }
   };
 
-  const viewPDF = async () => {
+  const viewPDF = () => {
     if (!report || !token) return;
-    setDownloadingPdf(true);
-    try {
-      const pdfUrl = `${baseUrl}/api/reports/${report.id}/pdf?_token=${encodeURIComponent(token)}`;
-      await WebBrowser.openBrowserAsync(pdfUrl, {
-        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-        toolbarColor: "#0B1933",
-        controlsColor: "#C5D92D",
-      });
-    } catch {
-      Alert.alert("Error", "Could not open the PDF viewer. Please check your connection and try again.");
-    } finally {
-      setDownloadingPdf(false);
-    }
+    const pdfUrl = `${baseUrl}/api/reports/${report.id}/pdf?_token=${encodeURIComponent(token)}`;
+    const label = templateName || report.reportType || "Report";
+    setPdfModal({ url: pdfUrl, title: label });
   };
 
   const selectedTypeMeta = reportTypes.find(rt => rt.key === selectedReportType);
@@ -1003,14 +993,12 @@ export default function GenerateReportScreen() {
           <View style={[styles.actionBar, { paddingBottom: insets.bottom + 16 }]}>
             {/* View PDF — full width primary button */}
             <Pressable
-              style={[styles.actionBtnFull, styles.actionBtnPDF, downloadingPdf && { opacity: 0.6 }]}
+              style={[styles.actionBtnFull, styles.actionBtnPDF]}
               onPress={viewPDF}
-              disabled={downloadingPdf || submitting || sending}
+              disabled={submitting || sending}
             >
-              {downloadingPdf
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Feather name="file-text" size={18} color="#fff" />}
-              <Text style={styles.actionBtnPDFText}>{downloadingPdf ? "Preparing PDF…" : "View PDF"}</Text>
+              <Feather name="file-text" size={18} color="#fff" />
+              <Text style={styles.actionBtnPDFText}>View PDF</Text>
             </Pressable>
 
             {/* Secondary row */}
@@ -1018,7 +1006,7 @@ export default function GenerateReportScreen() {
               <Pressable
                 style={[styles.actionBtnSm, styles.actionBtnOutline, submitting && { opacity: 0.6 }]}
                 onPress={submitForReview}
-                disabled={submitting || sending || downloadingPdf}
+                disabled={submitting || sending}
               >
                 {submitting
                   ? <ActivityIndicator size="small" color={Colors.secondary} />
@@ -1028,7 +1016,7 @@ export default function GenerateReportScreen() {
               <Pressable
                 style={[styles.actionBtnSm, styles.actionBtnPrimary, sending && { opacity: 0.6 }]}
                 onPress={() => setShowEmailModal(true)}
-                disabled={submitting || sending || downloadingPdf}
+                disabled={submitting || sending}
               >
                 {sending
                   ? <ActivityIndicator size="small" color={Colors.primary} />
@@ -1093,6 +1081,15 @@ export default function GenerateReportScreen() {
           </View>
         </View>
       </Modal>
+
+      {pdfModal && (
+        <PdfViewerModal
+          visible
+          url={pdfModal.url}
+          title={pdfModal.title}
+          onClose={() => setPdfModal(null)}
+        />
+      )}
     </View>
   );
 }
