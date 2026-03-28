@@ -191,7 +191,7 @@ export default function PhotoMarkupScreen() {
         </Pressable>
         <Text style={styles.headerTitle}>Add Markup</Text>
         <Pressable
-          onPress={save}
+          onPress={() => { void save(); }}
           disabled={uploading}
           style={[styles.saveBtn, uploading && { opacity: 0.6 }]}
         >

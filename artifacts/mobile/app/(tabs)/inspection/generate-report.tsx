@@ -524,6 +524,17 @@ const docStyles = StyleSheet.create({
   summaryStatNum: { fontSize: 22, fontFamily: "PlusJakartaSans_700Bold" },
   summaryStatLabel: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold" },
   summaryDivider: { width: 1, height: 36, backgroundColor: "#e2e8f0" },
+  summaryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  summaryChipCount: { fontSize: 13, fontFamily: "PlusJakartaSans_700Bold" },
+  summaryChipLabel: { fontSize: 11, fontFamily: "PlusJakartaSans_500Medium" },
   summaryAlert: {
     flexDirection: "row",
     gap: 8,

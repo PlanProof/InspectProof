@@ -8,6 +8,9 @@ import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 import { Colors } from "@/constants/colors";
 
+// NativeTabs.Trigger types don't expose `style` but the underlying component accepts it
+const HiddenTrigger = NativeTabs.Trigger as React.ComponentType<{ name: string; style?: object }>;
+
 function NativeTabLayout() {
   return (
     <NativeTabs>
@@ -28,22 +31,22 @@ function NativeTabLayout() {
         <Label>More</Label>
       </NativeTabs.Trigger>
       {/* Hidden nested screens — no trigger, keeps tab bar visible */}
-      <NativeTabs.Trigger name="project/[id]" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="inspection/[id]" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="inspection/create" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="inspection/conduct/[id]" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="inspection/generate-report" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="feedback" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="profile" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="settings" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="team" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="help" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="change-password" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="analytics" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="notifications" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="documents" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="templates/index" style={{ display: "none" }} />
-      <NativeTabs.Trigger name="templates/[id]" style={{ display: "none" }} />
+      <HiddenTrigger name="project/[id]" style={{ display: "none" }} />
+      <HiddenTrigger name="inspection/[id]" style={{ display: "none" }} />
+      <HiddenTrigger name="inspection/create" style={{ display: "none" }} />
+      <HiddenTrigger name="inspection/conduct/[id]" style={{ display: "none" }} />
+      <HiddenTrigger name="inspection/generate-report" style={{ display: "none" }} />
+      <HiddenTrigger name="feedback" style={{ display: "none" }} />
+      <HiddenTrigger name="profile" style={{ display: "none" }} />
+      <HiddenTrigger name="settings" style={{ display: "none" }} />
+      <HiddenTrigger name="team" style={{ display: "none" }} />
+      <HiddenTrigger name="help" style={{ display: "none" }} />
+      <HiddenTrigger name="change-password" style={{ display: "none" }} />
+      <HiddenTrigger name="analytics" style={{ display: "none" }} />
+      <HiddenTrigger name="notifications" style={{ display: "none" }} />
+      <HiddenTrigger name="documents" style={{ display: "none" }} />
+      <HiddenTrigger name="templates/index" style={{ display: "none" }} />
+      <HiddenTrigger name="templates/[id]" style={{ display: "none" }} />
     </NativeTabs>
   );
 }
