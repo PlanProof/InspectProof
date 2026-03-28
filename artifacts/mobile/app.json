@@ -14,7 +14,9 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.planproof.inspectproof",
+      "buildNumber": "1"
     },
     "android": {},
     "web": {
