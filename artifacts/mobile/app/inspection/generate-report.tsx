@@ -627,37 +627,33 @@ export default function GenerateReportScreen() {
     enabled: !!token && !!id,
   });
 
-  const ALL_REPORT_TYPES: Array<{ key: string; label: string; icon: string; desc: string }> = [
-    { key: "inspection_certificate",   label: "Inspection Certificate",        icon: "award",          desc: "Formal certificate confirming compliance with NCC requirements" },
-    { key: "compliance_report",        label: "Compliance Report",             icon: "bar-chart-2",    desc: "Detailed checklist results and overall compliance status" },
-    { key: "defect_notice",            label: "Defect Notice",                 icon: "alert-triangle", desc: "Notice of defects requiring rectification before the next stage" },
-    { key: "non_compliance_notice",    label: "Non-Compliance Notice",         icon: "x-circle",       desc: "Formal notice of non-compliant work under the Building Act" },
-    { key: "summary",                  label: "Inspection Summary",            icon: "file-text",      desc: "Brief narrative summary of overall inspection outcomes" },
-    { key: "quality_control_report",   label: "Quality Control Report",        icon: "clipboard",      desc: "QC results against approved plans and project specifications" },
-    { key: "non_conformance_report",   label: "Non-Conformance Report",        icon: "alert-triangle", desc: "Formal record of non-conformances against design standards" },
-    { key: "safety_inspection_report", label: "Safety Inspection Report",      icon: "shield",         desc: "WHS site inspection findings and safety compliance status" },
-    { key: "hazard_assessment_report", label: "Hazard Assessment Report",      icon: "shield",         desc: "Site hazard identification and risk control requirements" },
-    { key: "corrective_action_report", label: "Corrective Action Report",      icon: "refresh-cw",     desc: "Status of open corrective actions from prior inspections" },
-    { key: "pre_purchase_report",      label: "Pre-Purchase Building Report",  icon: "home",           desc: "Property condition assessment for prospective buyers (AS 4349.1)" },
-    { key: "annual_fire_safety",       label: "Annual Fire Safety Statement",  icon: "thermometer",    desc: "Annual certification of essential fire safety measures" },
-    { key: "fire_inspection_report",   label: "Fire Safety Inspection Report", icon: "alert-circle",   desc: "Fire safety compliance inspection findings and actions" },
-  ];
+  const { data: docTemplates = [], isLoading: loadingDocTemplates } = useQuery<any[]>({
+    queryKey: ["doc-templates", token],
+    queryFn: () => fetchWithAuth("/api/doc-templates"),
+    enabled: !!token,
+  });
 
-  const DISCIPLINE_REPORT_TYPES: Record<string, string[]> = {
-    "Building Surveyor":      ["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice", "summary"],
-    "Structural Engineer":    ["compliance_report", "non_conformance_report", "defect_notice", "summary"],
-    "Plumbing Officer":       ["inspection_certificate", "compliance_report", "defect_notice", "non_compliance_notice"],
-    "Builder / QC":           ["quality_control_report", "defect_notice", "non_conformance_report", "corrective_action_report", "summary"],
-    "WHS Officer":            ["safety_inspection_report", "hazard_assessment_report", "corrective_action_report", "non_compliance_notice"],
-    "Pre-Purchase Inspector": ["pre_purchase_report", "defect_notice", "summary", "compliance_report"],
-    "Fire Safety Engineer":   ["annual_fire_safety", "fire_inspection_report", "compliance_report", "defect_notice"],
-  };
-
-  const DEFAULT_TYPES = ["inspection_certificate", "compliance_report", "defect_notice", "summary"];
-
-  const discipline = (inspection as any)?.checklistTemplateDiscipline ?? null;
-  const allowedKeys = (discipline && DISCIPLINE_REPORT_TYPES[discipline]) ? DISCIPLINE_REPORT_TYPES[discipline] : DEFAULT_TYPES;
-  const reportTypes = ALL_REPORT_TYPES.filter(rt => allowedKeys.includes(rt.key));
+  // Build the "choose type" list from admin-configured doc templates.
+  // Each doc template becomes a selectable report type on mobile.
+  const reportTypes: Array<{ key: string; label: string; icon: string; desc: string; docTemplateId?: number }> =
+    docTemplates.length > 0
+      ? docTemplates.map((dt: any) => ({
+          key: `doc_template_${dt.id}`,
+          label: dt.name,
+          icon: "file-text",
+          desc: dt.linkedChecklistIds?.length > 0
+            ? `Links ${dt.linkedChecklistIds.length} checklist template${dt.linkedChecklistIds.length > 1 ? "s" : ""}`
+            : "Custom report template",
+          docTemplateId: dt.id,
+        }))
+      : [
+          // Fallback if no templates configured on desktop yet
+          { key: "inspection_certificate",   label: "Inspection Certificate",       icon: "award",          desc: "Formal certificate confirming NCC compliance" },
+          { key: "compliance_report",        label: "Compliance Report",            icon: "bar-chart-2",    desc: "Checklist results and overall compliance status" },
+          { key: "defect_notice",            label: "Defect Notice",                icon: "alert-triangle", desc: "Defects requiring rectification before next stage" },
+          { key: "non_compliance_notice",    label: "Non-Compliance Notice",        icon: "x-circle",       desc: "Formal notice of non-compliant work" },
+          { key: "summary",                  label: "Inspection Summary",           icon: "file-text",      desc: "Narrative summary of inspection outcomes" },
+        ];
 
   const openExistingReport = async (reportId: number) => {
     setLoadingExisting(true);
@@ -698,13 +694,22 @@ export default function GenerateReportScreen() {
     if (!selectedReportType) return;
     setGenerating(true);
     try {
+      const selectedTemplate = reportTypes.find(rt => rt.key === selectedReportType);
+      const docTemplateId = selectedTemplate?.docTemplateId ?? null;
+      // For doc templates, use the template name as the reportType label.
+      // The API's generic fallback handles any non-standard reportType key.
+      const reportTypeKey = docTemplateId
+        ? (selectedTemplate?.label ?? selectedReportType)
+        : selectedReportType;
+
       const data = await fetchWithAuth("/api/reports/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           inspectionId: parseInt(id),
-          reportType: selectedReportType,
+          reportType: reportTypeKey,
           userId: (user as any)?.id || 1,
+          ...(docTemplateId ? { docTemplateId } : {}),
         }),
       });
       setReport(data);
@@ -784,7 +789,7 @@ export default function GenerateReportScreen() {
     }
   };
 
-  const selectedTypeMeta = ALL_REPORT_TYPES.find(rt => rt.key === selectedReportType);
+  const selectedTypeMeta = reportTypes.find(rt => rt.key === selectedReportType);
   const templateName = selectedTypeMeta?.label || report?.reportTypeLabel || report?.reportType || "Inspection Report";
 
   return (
@@ -922,13 +927,15 @@ export default function GenerateReportScreen() {
 
           <Text style={styles.sectionTitle}>Choose report type</Text>
           <Text style={styles.sectionSub}>
-            {discipline ? `Report types for ${discipline}` : "Select the type of report to generate for this inspection."}
+            {docTemplates.length > 0
+              ? "Templates configured in your desktop Document Templates"
+              : "Select the type of report to generate for this inspection."}
           </Text>
 
-          {!inspection ? (
+          {(!inspection || loadingDocTemplates) ? (
             <View style={styles.emptyWrap}>
               <ActivityIndicator size="large" color={Colors.secondary} />
-              <Text style={styles.emptyText}>Loading inspection…</Text>
+              <Text style={styles.emptyText}>{!inspection ? "Loading inspection…" : "Loading templates…"}</Text>
             </View>
           ) : (
             <View style={styles.typeList}>
@@ -953,6 +960,14 @@ export default function GenerateReportScreen() {
                   </Pressable>
                 );
               })}
+              {docTemplates.length === 0 && (
+                <View style={styles.noTemplatesHint}>
+                  <Feather name="info" size={13} color={Colors.textTertiary} />
+                  <Text style={styles.noTemplatesText}>
+                    Add custom templates in the desktop app under Document Templates
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </ScrollView>
@@ -1190,6 +1205,12 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 13, color: Colors.textSecondary, textAlign: "center", lineHeight: 19, maxWidth: 260 },
 
   typeList: { gap: 10 },
+  noTemplatesHint: {
+    flexDirection: "row", alignItems: "flex-start", gap: 6,
+    backgroundColor: Colors.background, borderRadius: 10,
+    padding: 12, marginTop: 4,
+  },
+  noTemplatesText: { flex: 1, fontSize: 12, color: Colors.textTertiary, lineHeight: 17 },
   typeCard: {
     flexDirection: "row",
     alignItems: "center",
