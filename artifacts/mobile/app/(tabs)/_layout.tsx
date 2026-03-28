@@ -33,6 +33,7 @@ function NativeTabLayout() {
       <NativeTabs.Trigger name="inspection/create" style={{ display: "none" }} />
       <NativeTabs.Trigger name="inspection/conduct/[id]" style={{ display: "none" }} />
       <NativeTabs.Trigger name="inspection/generate-report" style={{ display: "none" }} />
+      <NativeTabs.Trigger name="feedback" style={{ display: "none" }} />
     </NativeTabs>
   );
 }
@@ -122,6 +123,7 @@ function ClassicTabLayout() {
       <Tabs.Screen name="inspection/generate-report"    options={{ href: null }} />
       <Tabs.Screen name="inspection/photo-markup"       options={{ href: null }} />
       <Tabs.Screen name="inspection/document-viewer"    options={{ href: null }} />
+      <Tabs.Screen name="feedback"                      options={{ href: null }} />
       <Tabs.Screen
         name="more"
         options={{

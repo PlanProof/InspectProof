@@ -9,3 +9,4 @@ export * from "./reports";
 export * from "./activity";
 export * from "./plan_configs";
 export * from "./docTemplates";
+export * from "./feedbacks";

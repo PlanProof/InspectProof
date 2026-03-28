@@ -149,6 +149,12 @@ export default function MoreScreen() {
             onPress={() => router.push("/settings" as any)}
           />
           <MenuItem
+            icon="message-circle"
+            label="Send Feedback"
+            sublabel="Suggestions, bugs, or ideas for the team"
+            onPress={() => router.push("/(tabs)/feedback" as any)}
+          />
+          <MenuItem
             icon="help-circle"
             label="Help & Support"
             sublabel="Documentation and contact"
