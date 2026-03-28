@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
@@ -40,6 +41,7 @@ const WEATHER_PICKS = ["Fine", "Partly Cloudy", "Overcast", "Light Rain", "Heavy
 export default function InspectionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
@@ -288,7 +290,7 @@ export default function InspectionDetailScreen() {
 
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
+      contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 16 }]}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Colors.secondary} />}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"

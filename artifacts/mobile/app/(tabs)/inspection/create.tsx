@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
@@ -70,6 +71,7 @@ function formatDisplayTime(t: string) {
 
 export default function CreateInspectionScreen() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
@@ -265,7 +267,7 @@ export default function CreateInspectionScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 100 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -628,7 +630,7 @@ export default function CreateInspectionScreen() {
       </ScrollView>
 
       {/* Footer nav */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.footer, { paddingBottom: tabBarHeight + 16 }]}>
         {step > 0 && (
           <Pressable style={styles.backButton} onPress={handleBack}>
             <Feather name="arrow-left" size={15} color={Colors.text} />

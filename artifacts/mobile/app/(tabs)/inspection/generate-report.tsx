@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PdfViewerModal from "@/components/PdfViewerModal";
@@ -588,6 +589,7 @@ const docStyles = StyleSheet.create({
 export default function GenerateReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token, user } = useAuth();
   const queryClient = useQueryClient();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
@@ -814,7 +816,7 @@ export default function GenerateReportScreen() {
       {step === "select" && (
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 16 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Existing reports */}
@@ -977,7 +979,7 @@ export default function GenerateReportScreen() {
         <>
           <ScrollView
             style={styles.scroll}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+            contentContainerStyle={{ paddingBottom: tabBarHeight + 100 }}
             showsVerticalScrollIndicator={false}
           >
             <ReportDocument

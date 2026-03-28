@@ -18,6 +18,7 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 import PdfViewerModal from "@/components/PdfViewerModal";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -52,6 +53,7 @@ const REPORT_STATUS: Record<string, { label: string; color: string; bg: string }
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
@@ -178,7 +180,7 @@ export default function ProjectDetailScreen() {
     <View style={styles.container}>
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
+      contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 16 }]}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Colors.secondary} />}
       showsVerticalScrollIndicator={false}
     >
