@@ -108,14 +108,6 @@ function Hero() {
 
           {/* Left: text content */}
           <div className="py-36 lg:py-24 lg:pr-16 z-10 relative">
-            {/* Pre-headline pill */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#C5D92D]/30 bg-[#C5D92D]/10 px-3.5 py-1.5 mb-8">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#C5D92D]" />
-              <span className="text-xs font-semibold text-[#C5D92D] tracking-wide uppercase">
-                Australia's Built Environment Platform
-              </span>
-            </div>
-
             <h1
               className="text-4xl sm:text-5xl font-normal leading-[1.1] mb-6"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
@@ -157,7 +149,7 @@ function Hero() {
                   className={`${i > 0 ? "border-l border-white/10 pl-6" : ""} ${i < 2 ? "pr-6" : ""}`}
                 >
                   <div
-                    className="text-3xl font-bold text-[#C5D92D] leading-none"
+                    className="text-3xl font-normal text-[#C5D92D] leading-none"
                     style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
                   >
                     {stat.value}
