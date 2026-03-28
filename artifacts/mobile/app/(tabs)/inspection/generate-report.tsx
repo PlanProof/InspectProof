@@ -992,7 +992,7 @@ export default function GenerateReportScreen() {
           </ScrollView>
 
           {/* Action bar */}
-          <View style={[styles.actionBar, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={[styles.actionBar, { paddingBottom: tabBarHeight + 16 }]}>
             {/* View PDF — full width primary button */}
             <Pressable
               style={[styles.actionBtnFull, styles.actionBtnPDF]}
