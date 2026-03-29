@@ -805,7 +805,7 @@ function OrganisationTab() {
   });
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm(f => ({ ...f, [k]: e.target.value }));
+    setForm((f: typeof ORG_DEFAULTS) => ({ ...f, [k]: e.target.value }));
 
   const save = () => {
     localStorage.setItem("inspectproof_org_details", JSON.stringify(form));

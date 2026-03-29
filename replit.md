@@ -29,13 +29,23 @@ InspectProof is a full-stack platform for Australian building certifiers and sur
 
 ## Production Integrations
 
-| Integration | Replit Dev | Vercel Production |
-|---|---|---|
-| **Database** | Replit PostgreSQL (`DATABASE_URL`) | Supabase PostgreSQL (`POSTGRES_URL_NON_POOLING`) |
-| **File Storage** | Replit Object Storage (sidecar) | Supabase Storage (`inspectproof-files` bucket, auto-created on startup) |
-| **Stripe** | Replit Stripe connector | `STRIPE_SECRET_KEY` + `STRIPE_PUBLISHABLE_KEY` env vars |
+| Integration | Config |
+|---|---|
+| **Database** | Supabase PostgreSQL (`SUPABASE_DATABASE_URL`) — Session Pooler, ap-southeast-2 |
+| **File Storage** | Replit Object Storage (fallback); Supabase Storage (`inspectproof-files`) when `SUPABASE_SERVICE_ROLE_KEY` + `SUPABASE_URL` set |
+| **Email** | Office365 SMTP via nodemailer (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) |
+| **Stripe** | Replit Stripe connector (dev) / `STRIPE_SECRET_KEY` env var (prod) |
 
-Storage auto-detection: paths starting with `/objects/supabase/` route to Supabase Storage; all others use Replit Object Storage. Detection based on presence of `SUPABASE_SERVICE_ROLE_KEY` env var.
+Storage auto-detection: presence of `SUPABASE_SERVICE_ROLE_KEY` env var enables Supabase Storage; otherwise uses Replit Object Storage.
+
+## Users (Supabase)
+
+| Email | Name | Plan | Admin |
+|---|---|---|---|
+| contact@inspectproof.com.au | Contact Admin | Enterprise | Yes |
+| jake@jtcertifications.com.au | Jake Turner | Enterprise | Yes |
+| brock@projectcomply.com.au | Brock Gregg | Enterprise | Yes |
+| jakely_turner12345@hotmail.com | Nia Turner | Free Trial | No |
 
 ## Seed Data
 

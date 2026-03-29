@@ -60,7 +60,7 @@ app.post(
         logger.error("Stripe secret key unavailable — rejecting webhook");
         return res.status(400).json({ error: "Stripe not configured" });
       }
-      const stripeInstance = new Stripe(secretKey, { apiVersion: "2025-05-28.basil" });
+      const stripeInstance = new Stripe(secretKey, { apiVersion: "2025-11-17.clover" });
       event = stripeInstance.webhooks.constructEvent(
         req.body as Buffer,
         sig,
@@ -82,7 +82,7 @@ app.post(
       }
 
       if (PLAN_UPDATE_EVENTS.has(event.type)) {
-        const obj = (event.data.object as Record<string, unknown>);
+        const obj = (event.data.object as unknown as Record<string, unknown>);
         const customerId =
           (typeof obj.customer === "string" ? obj.customer : null) ??
           (typeof (obj.subscription as Record<string, unknown> | undefined)?.customer === "string"
