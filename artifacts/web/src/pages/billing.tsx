@@ -139,6 +139,18 @@ export default function Billing() {
     },
   });
 
+  const syncPlanMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(API("/billing/sync-plan"), { method: "POST", headers: authHeader() });
+      return r.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["billing-subscription"] });
+      toast({ title: "Plan synced", description: `Your plan is now: ${data.plan ?? "updated"}.` });
+    },
+    onError: () => toast({ title: "Sync failed", description: "Could not sync plan from Stripe.", variant: "destructive" }),
+  });
+
   const currentPlan = subData?.plan ?? "free_trial";
   const usage = subData?.usage ?? { projects: 0, inspections: 0 };
   const limits = subData?.limits ?? {};
@@ -244,15 +256,36 @@ export default function Billing() {
                 </div>
               </div>
               {subData.stripeCustomerId && (
-                <Button
-                  variant="outline"
-                  className="border-[#0B1933] text-[#0B1933]"
-                  onClick={() => portalMutation.mutate()}
-                  disabled={portalMutation.isPending}
-                >
-                  <CreditCard className="w-4 h-4 mr-2" />
-                  Manage billing
-                </Button>
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    className="border-[#0B1933] text-[#0B1933]"
+                    onClick={() => syncPlanMutation.mutate()}
+                    disabled={syncPlanMutation.isPending}
+                    title="Sync your plan from Stripe if it looks out of date"
+                  >
+                    {syncPlanMutation.isPending ? (
+                      <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    )}
+                    Sync plan
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-[#0B1933] text-[#0B1933]"
+                    onClick={() => portalMutation.mutate()}
+                    disabled={portalMutation.isPending}
+                  >
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    Manage billing
+                  </Button>
+                </div>
               )}
             </div>
           </div>
