@@ -4,6 +4,8 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const SMTP_FROM = process.env.SMTP_FROM || "InspectProof <noreply@inspectproof.com.au>";
 const APP_BASE_URL = process.env.APP_BASE_URL || "https://inspectproof.com.au";
 const FEEDBACK_TO = process.env.FEEDBACK_EMAIL || "contact@inspectproof.com.au";
+const IOS_APP_URL = process.env.IOS_APP_URL || "https://apps.apple.com/au/app/inspectproof";
+const ANDROID_APP_URL = process.env.ANDROID_APP_URL || "https://play.google.com/store/apps/details?id=com.inspectproof";
 
 function isConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
@@ -201,8 +203,8 @@ export async function sendFeedbackEmail(
 
 /* ── App Invite Email ──────────────────────────────────────── */
 
-function appInviteHtml(opts: { inviteeName: string | null; inviterName: string; companyName: string | null; registerUrl: string }): string {
-  const { inviteeName, inviterName, companyName, registerUrl } = opts;
+function appInviteHtml(opts: { inviteeName: string | null; inviterName: string; companyName: string | null; registerUrl: string; iosUrl: string; androidUrl: string }): string {
+  const { inviteeName, inviterName, companyName, registerUrl, iosUrl, androidUrl } = opts;
   const greeting = inviteeName ? `Hi ${inviteeName.split(" ")[0]},` : "Hi there,";
   const displayOrg = companyName || inviterName;
   return `<!DOCTYPE html>
@@ -227,15 +229,46 @@ function appInviteHtml(opts: { inviteeName: string | null; inviterName: string; 
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;margin-bottom:28px;">
             <tr><td>
               <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#0B1933;">To get started:</p>
-              <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;"><strong>1.</strong> Download the <strong>Expo Go</strong> app on your iPhone or Android device</p>
-              <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;"><strong>2.</strong> Create your account using the button below</p>
-              <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;"><strong>3.</strong> Sign in on the app using the same email and password</p>
+              <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;"><strong>1.</strong> Create your account using the button below</p>
+              <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;"><strong>2.</strong> Download the <strong>InspectProof</strong> app on your device</p>
+              <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;"><strong>3.</strong> Sign in using the same email and password</p>
             </td></tr>
           </table>
-          <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+          <table cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
             <tr><td style="background:#C5D92D;border-radius:8px;">
               <a href="${registerUrl}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#0B1933;text-decoration:none;border-radius:8px;">Create Your Account →</a>
             </td></tr>
+          </table>
+          <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#374151;">Then download the app:</p>
+          <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+            <tr>
+              <td style="padding-right:12px;">
+                <a href="${iosUrl}" style="display:inline-block;background:#0B1933;border-radius:8px;padding:10px 20px;text-decoration:none;">
+                  <table cellpadding="0" cellspacing="0"><tr>
+                    <td style="padding-right:10px;vertical-align:middle;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18.71 19.5C17.88 20.74 17 21.95 15.66 21.97C14.32 22 13.89 21.18 12.37 21.18C10.84 21.18 10.37 21.95 9.1 22C7.78 22.05 6.8 20.68 5.96 19.47C4.25 17 2.94 12.45 4.7 9.39C5.57 7.87 7.13 6.91 8.82 6.88C10.1 6.86 11.32 7.75 12.11 7.75C12.89 7.75 14.37 6.68 15.92 6.84C16.57 6.87 18.39 7.1 19.56 8.82C19.47 8.88 17.39 10.1 17.41 12.63C17.44 15.65 20.06 16.66 20.09 16.67C20.06 16.74 19.67 18.11 18.71 19.5ZM13 3.5C13.73 2.67 14.94 2.04 15.94 2C16.07 3.17 15.6 4.35 14.9 5.19C14.21 6.04 13.07 6.7 11.95 6.61C11.8 5.46 12.36 4.26 13 3.5Z" fill="white"/></svg>
+                    </td>
+                    <td style="vertical-align:middle;">
+                      <span style="display:block;font-size:10px;color:#9ca3af;line-height:1;">Download on the</span>
+                      <span style="display:block;font-size:15px;font-weight:700;color:#ffffff;line-height:1.3;">App Store</span>
+                    </td>
+                  </tr></table>
+                </a>
+              </td>
+              <td>
+                <a href="${androidUrl}" style="display:inline-block;background:#0B1933;border-radius:8px;padding:10px 20px;text-decoration:none;">
+                  <table cellpadding="0" cellspacing="0"><tr>
+                    <td style="padding-right:10px;vertical-align:middle;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.18 23.76C3.06 23.69 3 23.54 3 23.34V0.66C3 0.46 3.06 0.31 3.18 0.24L3.24 0.18L15.33 12L3.24 23.82L3.18 23.76ZM19.44 15.93L16.89 14.46L14.13 12L16.89 9.54L19.44 8.07C20.16 7.65 20.67 7.89 20.67 8.73V15.27C20.67 16.11 20.16 16.35 19.44 15.93ZM4.02 24L15.66 12.66L13.29 10.29L4.02 24ZM4.02 0L13.29 13.71L15.66 11.34L4.02 0Z" fill="white"/></svg>
+                    </td>
+                    <td style="vertical-align:middle;">
+                      <span style="display:block;font-size:10px;color:#9ca3af;line-height:1;">Get it on</span>
+                      <span style="display:block;font-size:15px;font-weight:700;color:#ffffff;line-height:1.3;">Google Play</span>
+                    </td>
+                  </tr></table>
+                </a>
+              </td>
+            </tr>
           </table>
           <p style="margin:0 0 4px;font-size:13px;color:#9ca3af;">Or copy this link into your browser:</p>
           <p style="margin:0;font-size:12px;color:#466DB5;word-break:break-all;">${registerUrl}</p>
@@ -278,7 +311,7 @@ export async function sendAppInviteEmail(
       from: SMTP_FROM,
       to: opts.toEmail,
       subject,
-      html: appInviteHtml({ inviteeName: opts.inviteeName, inviterName: opts.inviterName, companyName: opts.companyName ?? null, registerUrl }),
+      html: appInviteHtml({ inviteeName: opts.inviteeName, inviterName: opts.inviterName, companyName: opts.companyName ?? null, registerUrl, iosUrl: IOS_APP_URL, androidUrl: ANDROID_APP_URL }),
     });
     if (error) throw new Error(error.message);
     log?.info({ to: opts.toEmail }, "App invite email sent");
