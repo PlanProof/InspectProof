@@ -16,6 +16,13 @@ function formatAUD(cents: number) {
   return `$${(cents / 100).toFixed(0)}`;
 }
 
+const PLAN_LABELS: Record<string, string> = {
+  free_trial: "Free Trial",
+  starter: "Starter",
+  professional: "Professional",
+  enterprise: "Enterprise",
+};
+
 const PLAN_ICONS: Record<string, any> = {
   free_trial: Shield,
   starter: Zap,
@@ -152,7 +159,7 @@ export default function Billing() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["billing-subscription"] });
-      toast({ title: "Plan synced", description: `Your plan is now: ${data.plan ?? "updated"}.` });
+      toast({ title: "Plan synced", description: `Your plan is now: ${PLAN_LABELS[data.plan] ?? data.plan ?? "updated"}.` });
     },
     onError: () => toast({ title: "Sync failed", description: "Could not sync plan from Stripe.", variant: "destructive" }),
   });
@@ -178,7 +185,7 @@ export default function Billing() {
     );
 
   const getPlanConfig = (planKey: string) => planConfigs[planKey] ?? {
-    label: planKey,
+    label: PLAN_LABELS[planKey] ?? planKey,
     description: "",
     features: [],
     isPopular: false,
@@ -233,7 +240,7 @@ export default function Billing() {
               <div>
                 <p className="text-sm text-gray-500 mb-1">Current plan</p>
                 <h2 className="text-xl font-bold text-[#0B1933]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {limits.label ?? currentPlan}
+                  {limits.label ?? PLAN_LABELS[currentPlan] ?? currentPlan}
                 </h2>
                 {subData.subscription && (
                   <p className="text-xs text-gray-400 mt-0.5">
