@@ -189,7 +189,7 @@ function buildPreviewData(project: any, inspection: any): Record<string, string>
   return {
     "{{project_name}}":    project?.name ?? "",
     "{{project_address}}": [project?.siteAddress, project?.suburb, project?.state].filter(Boolean).join(", "),
-    "{{council_number}}":  project?.daNumber ?? "",
+    "{{council_number}}":  project?.certificationNumber ?? project?.daNumber ?? "",
     "{{ncc_class}}":       project?.buildingClassification ?? "",
     "{{lot_number}}":      "",
     "{{da_number}}":       project?.daNumber ?? "",
@@ -247,18 +247,21 @@ function buildChecklistTable(results: any[]): string {
 function fillTokens(content: string, inspection: any, project: any): string {
   const today = new Date();
   const au = (d: string) => new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+  const results: any[] = inspection.checklistResults ?? [];
+  const passCount = results.filter((r: any) => r.result === "pass").length;
+  const failCount = results.filter((r: any) => r.result === "fail").length;
   const vals: Record<string, string> = {
-    "{{project_name}}":     inspection.projectName ?? "",
-    "{{project_address}}":  project?.siteAddress ?? "",
-    "{{council_number}}":   project?.councilRef ?? "",
-    "{{ncc_class}}":        project?.nccClass ?? "",
-    "{{lot_number}}":       project?.lotNumber ?? "",
+    "{{project_name}}":     project?.name ?? inspection.projectName ?? "",
+    "{{project_address}}":  [project?.siteAddress, project?.suburb, project?.state].filter(Boolean).join(", "),
+    "{{council_number}}":   project?.certificationNumber ?? project?.daNumber ?? "",
+    "{{ncc_class}}":        project?.buildingClassification ?? "",
+    "{{lot_number}}":       "",
     "{{da_number}}":        project?.daNumber ?? "",
     "{{inspection_type}}":  (inspection.inspectionType ?? "").replace(/_/g, " "),
     "{{inspection_date}}":  inspection.scheduledDate ? au(inspection.scheduledDate) : "",
     "{{inspection_time}}":  inspection.scheduledTime ?? "",
-    "{{result}}":           `${inspection.passCount ?? 0} Pass / ${inspection.failCount ?? 0} Fail`,
-    "{{notes}}":            inspection.notes ?? "",
+    "{{result}}":           `${passCount} Pass / ${failCount} Fail`,
+    "{{notes}}":            inspection.siteNotes ?? inspection.notes ?? "",
     "{{inspector_name}}":   inspection.inspectorName ?? "",
     "{{certifier_name}}":   inspection.inspectorName ?? "",
     "{{license_number}}":   "",
@@ -299,7 +302,7 @@ function GenerateReportDialog({ template, onClose }: { template: DocTemplate; on
     try {
       const token = localStorage.getItem("inspectproof_token");
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Basic ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
 
       const [inspRes, ] = await Promise.all([
@@ -578,7 +581,19 @@ export function DocTemplatesPanel() {
   const previewProject = (allProjects as any[] ?? []).find((p: any) => String(p.id) === previewProjectId) ?? null;
   const previewProjectInspections = (allInspections as any[] ?? []).filter((i: any) => String(i.projectId) === previewProjectId);
   const previewInspection = previewProjectInspections.find((i: any) => String(i.id) === previewInspectionId) ?? previewProjectInspections[0] ?? null;
-  const previewData = previewProject ? buildPreviewData(previewProject, previewInspection) : TEST_PREVIEW_DATA;
+
+  const [previewChecklistResults, setPreviewChecklistResults] = useState<any[]>([]);
+  useEffect(() => {
+    if (!previewInspection) { setPreviewChecklistResults([]); return; }
+    const id = previewInspection.id;
+    apiFetch(`/api/inspections/${id}`)
+      .then((insp: any) => setPreviewChecklistResults(insp.checklistResults ?? []))
+      .catch(() => setPreviewChecklistResults([]));
+  }, [previewInspection?.id]);
+
+  const previewData = previewProject
+    ? { ...buildPreviewData(previewProject, previewInspection), "{{checklist_items}}": buildChecklistTable(previewChecklistResults) }
+    : TEST_PREVIEW_DATA;
 
   async function createTemplate() {
     try {
