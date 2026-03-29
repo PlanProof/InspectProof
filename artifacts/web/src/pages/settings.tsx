@@ -862,10 +862,25 @@ function OrganisationTab() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField label="Accreditation Body">
             <Select value={form.accredBody} onChange={set("accredBody") as any}>
-              <option value="BPB">NSW Building Professionals Board (BPB)</option>
-              <option value="QBCC">Queensland Building and Construction Commission (QBCC)</option>
-              <option value="VBA">Victorian Building Authority (VBA)</option>
-              <option value="CBOS">Consumer and Business Services SA (CBS)</option>
+              <optgroup label="State &amp; Territory Regulatory Bodies">
+                <option value="BPB">NSW Building Professionals Board (BPB)</option>
+                <option value="QBCC">Queensland Building and Construction Commission (QBCC)</option>
+                <option value="VBA">Victorian Building Authority (VBA)</option>
+                <option value="CBS">Consumer and Business Services SA (CBS)</option>
+                <option value="SAAA">South Australian Accreditation Authority</option>
+                <option value="BC_WA">Building Commission (WA)</option>
+                <option value="BSB_WA">Building Services Board (WA)</option>
+                <option value="CBOS_TAS">Consumer Building and Occupations Services (Tas)</option>
+                <option value="NTBPB">NT Building Practitioners Board (NT)</option>
+                <option value="ACTPLA">ACT Planning and Land Authority (ACT)</option>
+              </optgroup>
+              <optgroup label="Professional Associations">
+                <option value="AIBS">Australian Institute of Building Surveyors (AIBS)</option>
+                <option value="AIB">Australian Institute of Building</option>
+                <option value="EA">Engineers Australia</option>
+                <option value="RICS">Royal Institute of Chartered Surveyors</option>
+                <option value="APE">The Association of Professional Engineers</option>
+              </optgroup>
               <option value="Other">Other</option>
             </Select>
           </FormField>
