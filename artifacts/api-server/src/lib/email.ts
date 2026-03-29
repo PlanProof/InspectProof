@@ -1,15 +1,23 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const SMTP_FROM = process.env.SMTP_FROM || "InspectProof <noreply@inspectproof.com.au>";
+const SMTP_HOST = process.env.SMTP_HOST;
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || "587", 10);
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+const SMTP_FROM = process.env.SMTP_FROM || "InspectProof <contact@inspectproof.com.au>";
 const APP_BASE_URL = process.env.APP_BASE_URL || "https://inspectproof.com.au";
 
 function isConfigured(): boolean {
-  return !!RESEND_API_KEY;
+  return !!(SMTP_HOST && SMTP_USER && SMTP_PASS);
 }
 
-function getClient(): Resend {
-  return new Resend(RESEND_API_KEY);
+function createTransporter() {
+  return nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
 }
 
 function formatDateAU(dateStr: string): string {
@@ -50,64 +58,60 @@ function inspectionAssignedHtml(opts: {
 </head>
 <body style="margin:0;padding:0;background:#f4f6fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa;padding:32px 0;">
-    <tr>
-      <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-          <tr>
-            <td style="background:#0B1933;padding:28px 32px;">
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td><span style="font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">InspectProof</span></td>
-                  <td align="right"><span style="font-size:12px;color:#C5D92D;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Inspection Notice</span></td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:36px 32px 24px;">
-              <p style="margin:0 0 6px;font-size:14px;color:#6b7280;">Hi ${inspectorName},</p>
-              <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#0B1933;">${heading}</h1>
-              <p style="margin:0 0 28px;font-size:15px;color:#4b5563;line-height:1.6;">${intro}</p>
-              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:28px;">
-                <tr><td style="padding:0;">
-                  <table width="100%" cellpadding="0" cellspacing="0">
-                    <tr style="border-bottom:1px solid #e5e7eb;">
-                      <td style="padding:14px 20px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;width:38%;background:#f1f5f9;">Inspection Type</td>
-                      <td style="padding:14px 20px;font-size:15px;font-weight:600;color:#0B1933;">${typeLabel}</td>
-                    </tr>
-                    <tr style="border-bottom:1px solid #e5e7eb;">
-                      <td style="padding:14px 20px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;background:#f1f5f9;">Project</td>
-                      <td style="padding:14px 20px;font-size:15px;color:#374151;">${projectName}</td>
-                    </tr>
-                    <tr style="border-bottom:1px solid #e5e7eb;">
-                      <td style="padding:14px 20px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;background:#f1f5f9;">Site Address</td>
-                      <td style="padding:14px 20px;font-size:15px;color:#374151;">${projectAddress}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:14px 20px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;background:#f1f5f9;">Scheduled</td>
-                      <td style="padding:14px 20px;font-size:15px;font-weight:600;color:#466DB5;">${dateLabel}${timeLabel}</td>
-                    </tr>
-                  </table>
-                </td></tr>
-              </table>
-              <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-                <tr>
-                  <td style="background:#C5D92D;border-radius:8px;">
-                    <a href="${link}" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#0B1933;text-decoration:none;border-radius:8px;">View Inspection Details →</a>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.6;">If you have any questions, please contact your team leader or reply to this email.</p>
-            </td>
-          </tr>
-          <tr>
-            <td style="background:#f8fafc;border-top:1px solid #e5e7eb;padding:20px 32px;">
-              <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">InspectProof — a product of PlanProof Technologies Pty Ltd<br/>This is an automated notification. Do not reply directly.</p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#0B1933;padding:28px 32px;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td><span style="font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">InspectProof</span></td>
+              <td align="right"><span style="font-size:12px;color:#C5D92D;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Inspection Notice</span></td>
+            </tr></table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 32px 24px;">
+            <p style="margin:0 0 6px;font-size:14px;color:#6b7280;">Hi ${inspectorName},</p>
+            <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#0B1933;">${heading}</h1>
+            <p style="margin:0 0 28px;font-size:15px;color:#4b5563;line-height:1.6;">${intro}</p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:28px;">
+              <tr><td style="padding:0;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr style="border-bottom:1px solid #e5e7eb;">
+                    <td style="padding:14px 20px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;width:38%;background:#f1f5f9;">Inspection Type</td>
+                    <td style="padding:14px 20px;font-size:15px;font-weight:600;color:#0B1933;">${typeLabel}</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid #e5e7eb;">
+                    <td style="padding:14px 20px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;background:#f1f5f9;">Project</td>
+                    <td style="padding:14px 20px;font-size:15px;color:#374151;">${projectName}</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid #e5e7eb;">
+                    <td style="padding:14px 20px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;background:#f1f5f9;">Site Address</td>
+                    <td style="padding:14px 20px;font-size:15px;color:#374151;">${projectAddress}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 20px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;background:#f1f5f9;">Scheduled</td>
+                    <td style="padding:14px 20px;font-size:15px;font-weight:600;color:#466DB5;">${dateLabel}${timeLabel}</td>
+                  </tr>
+                </table>
+              </td></tr>
+            </table>
+            <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background:#C5D92D;border-radius:8px;">
+                  <a href="${link}" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#0B1933;text-decoration:none;border-radius:8px;">View Inspection Details →</a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.6;">If you have any questions, please contact your team leader or reply to this email.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc;border-top:1px solid #e5e7eb;padding:20px 32px;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">InspectProof — a product of PlanProof Technologies Pty Ltd<br/>This is an automated notification. Do not reply directly.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
   </table>
 </body>
 </html>`;
@@ -124,8 +128,6 @@ export interface InspectionEmailOpts {
   inspectionId: number;
   isReassignment?: boolean;
 }
-
-// ── Feedback notification ────────────────────────────────────────────────────
 
 const FEEDBACK_TO = process.env.FEEDBACK_EMAIL || "contact@inspectproof.com.au";
 
@@ -186,27 +188,25 @@ export async function sendFeedbackEmail(
   log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
 ): Promise<void> {
   if (!isConfigured()) {
-    log?.warn({}, "Resend not configured — skipping feedback email");
+    log?.warn({ smtpHost: SMTP_HOST }, "SMTP not configured — skipping feedback email");
     return;
   }
   const submittedAt = new Date().toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" });
   const displayName = opts.senderName || "Anonymous user";
   try {
-    const { error } = await getClient().emails.send({
+    const transporter = createTransporter();
+    await transporter.sendMail({
       from: SMTP_FROM,
       to: FEEDBACK_TO,
       replyTo: opts.senderEmail || undefined,
       subject: `New feedback from ${displayName} — InspectProof`,
       html: feedbackNotificationHtml({ ...opts, submittedAt }),
     });
-    if (error) throw new Error(error.message);
     log?.info({ to: FEEDBACK_TO }, "Feedback notification email sent");
   } catch (err) {
     log?.error({ err }, "Failed to send feedback notification email");
   }
 }
-
-// ── App invite ───────────────────────────────────────────────────────────────
 
 function appInviteHtml(opts: { inviteeName: string | null; inviterName: string; registerUrl: string }): string {
   const { inviteeName, inviterName, registerUrl } = opts;
@@ -278,25 +278,30 @@ export async function sendAppInviteEmail(
   log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
 ): Promise<void> {
   if (!isConfigured()) {
-    log?.warn({}, "Resend not configured — skipping app invite email");
+    log?.warn({ smtpHost: SMTP_HOST }, "SMTP not configured — skipping app invite email");
     return;
   }
   const registerUrl = `${APP_BASE_URL}/register`;
   try {
-    const { error } = await getClient().emails.send({
+    const transporter = createTransporter();
+    await transporter.sendMail({
       from: SMTP_FROM,
       to: opts.toEmail,
       subject: `${opts.inviterName} has invited you to InspectProof`,
       html: appInviteHtml({ inviteeName: opts.inviteeName, inviterName: opts.inviterName, registerUrl }),
     });
-    if (error) throw new Error(error.message);
     log?.info({ to: opts.toEmail }, "App invite email sent");
   } catch (err) {
     log?.error({ err, to: opts.toEmail }, "Failed to send app invite email");
   }
 }
 
-// ── Welcome with credentials (admin-created accounts) ───────────────────────
+export interface WelcomeWithCredentialsOpts {
+  toEmail: string;
+  firstName: string;
+  temporaryPassword: string;
+  inviterName: string;
+}
 
 function welcomeWithCredentialsHtml(opts: {
   firstName: string;
@@ -336,14 +341,6 @@ function welcomeWithCredentialsHtml(opts: {
                 <p style="margin:0;font-size:13px;color:#6b7280;">Please change your password after your first login.</p>
               </td></tr>
             </table>
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;margin-bottom:28px;">
-              <tr><td>
-                <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#0B1933;">Getting started on mobile:</p>
-                <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;"><strong>1.</strong> Download the <strong>Expo Go</strong> app from the App Store or Google Play</p>
-                <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;"><strong>2.</strong> Open the InspectProof mobile app link below</p>
-                <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;"><strong>3.</strong> Sign in using your email and the temporary password above</p>
-              </td></tr>
-            </table>
             <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
                 <td style="background:#C5D92D;border-radius:8px;">
@@ -351,8 +348,6 @@ function welcomeWithCredentialsHtml(opts: {
                 </td>
               </tr>
             </table>
-            <p style="margin:0 0 4px;font-size:13px;color:#9ca3af;">Or copy this link:</p>
-            <p style="margin:0;font-size:12px;color:#466DB5;word-break:break-all;">${loginUrl}</p>
           </td>
         </tr>
         <tr>
@@ -367,56 +362,47 @@ function welcomeWithCredentialsHtml(opts: {
 </html>`;
 }
 
-export interface WelcomeWithCredentialsOpts {
-  toEmail: string;
-  firstName: string;
-  temporaryPassword: string;
-  inviterName: string;
-}
-
 export async function sendWelcomeWithCredentialsEmail(
   opts: WelcomeWithCredentialsOpts,
   log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
 ): Promise<void> {
   if (!isConfigured()) {
-    log?.warn({}, "Resend not configured — skipping welcome email");
+    log?.warn({ smtpHost: SMTP_HOST }, "SMTP not configured — skipping welcome email");
     return;
   }
   const loginUrl = `${APP_BASE_URL}/login`;
   try {
-    const { error } = await getClient().emails.send({
+    const transporter = createTransporter();
+    await transporter.sendMail({
       from: SMTP_FROM,
       to: opts.toEmail,
       subject: `Welcome to InspectProof — Your account is ready`,
       html: welcomeWithCredentialsHtml({ ...opts, loginUrl }),
     });
-    if (error) throw new Error(error.message);
     log?.info({ to: opts.toEmail }, "Welcome with credentials email sent");
   } catch (err) {
     log?.error({ err, to: opts.toEmail }, "Failed to send welcome with credentials email");
   }
 }
 
-// ── Inspection assignment ────────────────────────────────────────────────────
-
 export async function sendInspectionAssignedEmail(
   opts: InspectionEmailOpts,
   log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
 ): Promise<void> {
   if (!isConfigured()) {
-    log?.warn({}, "Resend not configured — skipping inspection assignment email");
+    log?.warn({ smtpHost: SMTP_HOST }, "SMTP not configured — skipping inspection assignment email");
     return;
   }
   const typeLabel = opts.inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   const heading = opts.isReassignment ? "Inspection Reassigned to You" : "You've Been Assigned an Inspection";
   try {
-    const { error } = await getClient().emails.send({
+    const transporter = createTransporter();
+    await transporter.sendMail({
       from: SMTP_FROM,
       to: opts.inspectorEmail,
       subject: `${heading} — ${typeLabel} at ${opts.projectName}`,
       html: inspectionAssignedHtml(opts),
     });
-    if (error) throw new Error(error.message);
     log?.info({ to: opts.inspectorEmail, inspectionId: opts.inspectionId }, "Inspection assignment email sent");
   } catch (err) {
     log?.error({ err, to: opts.inspectorEmail }, "Failed to send inspection assignment email");
