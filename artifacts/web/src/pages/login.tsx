@@ -41,7 +41,7 @@ export default function Login() {
       <div className="hidden lg:flex w-1/2 bg-sidebar flex-col justify-between p-12 relative overflow-hidden">
         <div className="z-10">
           <a href="/" className="flex items-center gap-3 text-white mb-12 w-fit hover:opacity-80 transition-opacity">
-            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="InspectProof" className="h-10 w-auto" />
+            <img src={`${import.meta.env.BASE_URL}logo-dark.png`} alt="InspectProof" className="h-10 w-auto" />
             <span className="text-white leading-none text-xl" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
           </a>
           <h1 className="text-4xl font-bold text-white max-w-md leading-tight mt-24">
@@ -73,7 +73,7 @@ export default function Login() {
           </a>
 
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="InspectProof" className="h-8 w-auto" />
+            <img src={`${import.meta.env.BASE_URL}logo-light.png`} alt="InspectProof" className="h-8 w-auto" />
             <span className="leading-none text-lg text-[#0B1933]" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
           </div>
 

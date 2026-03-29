@@ -30,7 +30,7 @@ export function Sidebar() {
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl">
       <div className="flex h-16 shrink-0 items-center px-5 gap-3 border-b border-white/10">
-        <img src={`${import.meta.env.BASE_URL}logo-icon.png`} alt="InspectProof" className="h-8 w-8 shrink-0 object-contain" />
+        <img src={`${import.meta.env.BASE_URL}logo-dark.png`} alt="InspectProof" className="h-8 w-8 shrink-0 object-contain" />
         <span className="text-[#F2F3F4] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
       </div>
 

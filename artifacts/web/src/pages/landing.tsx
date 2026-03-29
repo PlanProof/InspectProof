@@ -40,9 +40,7 @@ function Header() {
         <div className="relative flex h-14 items-center rounded-2xl bg-white px-5 shadow-lg shadow-black/8">
           {/* Logo */}
           <div className="flex flex-1 items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#466DB5]">
-              <ClipboardList className="h-5 w-5 text-[#F2F3F4]" />
-            </div>
+            <img src={`${import.meta.env.BASE_URL}logo-light.png`} alt="InspectProof" className="h-9 w-9 object-contain" />
             <span className="text-[22px] text-[#0B1933] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>
               InspectProof
             </span>
@@ -573,9 +571,7 @@ function Footer() {
           {/* Brand + pitch */}
           <div className="max-w-sm">
             <div className="flex items-center gap-2 mb-4">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#F2F3F4]">
-                <ClipboardList className="h-4 w-4 text-[#466DB5]" />
-              </div>
+              <img src={`${import.meta.env.BASE_URL}logo-dark.png`} alt="InspectProof" className="h-8 w-8 object-contain" />
               <span className="text-base text-[#F2F3F4]" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em" }}>
                 InspectProof
               </span>
