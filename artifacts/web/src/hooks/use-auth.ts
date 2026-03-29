@@ -80,11 +80,7 @@ export function useAuth() {
       cachedUser = u as CurrentUser | null;
       setUser(u as CurrentUser | null);
       notifyListeners();
-      if (!(u as CurrentUser)?.profession) {
-        setLocation("/settings?onboarding=1");
-      } else {
-        setLocation("/dashboard");
-      }
+      setLocation("/dashboard");
     });
   };
 
