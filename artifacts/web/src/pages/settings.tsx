@@ -779,26 +779,36 @@ function NotificationsTab() {
 
 // ── Organisation Tab ──────────────────────────────────────────────────────────
 
+const ORG_DEFAULTS = {
+  name:       "",
+  abn:        "",
+  phone:      "",
+  email:      "",
+  address:    "",
+  suburb:     "",
+  state:      "NSW",
+  postcode:   "",
+  website:    "",
+  accredBody: "BPB",
+  accredNum:  "",
+};
+
 function OrganisationTab() {
   const [saved, setSaved] = useState(false);
-  const [form, setForm] = useState({
-    name:       "InspectProof Certification Services",
-    abn:        "12 345 678 901",
-    phone:      "+61 2 9000 0000",
-    email:      "admin@inspectproof.com.au",
-    address:    "Level 5, 123 Pacific Highway",
-    suburb:     "North Sydney",
-    state:      "NSW",
-    postcode:   "2060",
-    website:    "www.inspectproof.com.au",
-    accredBody: "BPB",
-    accredNum:  "BPB0001234",
+  const [form, setForm] = useState(() => {
+    try {
+      const stored = localStorage.getItem("inspectproof_org_details");
+      return stored ? { ...ORG_DEFAULTS, ...JSON.parse(stored) } : ORG_DEFAULTS;
+    } catch {
+      return ORG_DEFAULTS;
+    }
   });
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
   const save = () => {
+    localStorage.setItem("inspectproof_org_details", JSON.stringify(form));
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
