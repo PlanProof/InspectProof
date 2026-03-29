@@ -29,7 +29,11 @@ function fmt(cents: number) {
 }
 
 export default function Login() {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const params = new URLSearchParams(window.location.search);
+  const urlMode = params.get("mode");
+  const urlCompany = params.get("company") || undefined;
+  const urlInvitedBy = params.get("invitedBy") || undefined;
+  const [mode, setMode] = useState<"signin" | "signup">(urlMode === "signup" ? "signup" : "signin");
 
   return (
     <div className="min-h-screen w-full flex">
@@ -99,7 +103,7 @@ export default function Login() {
             </button>
           </div>
 
-          {mode === "signin" ? <SignInForm /> : <SignUpFlow />}
+          {mode === "signin" ? <SignInForm /> : <SignUpFlow prefillCompany={urlCompany} prefillInvitedBy={urlInvitedBy} />}
         </div>
         <p className="mt-8 text-xs text-muted-foreground/60 text-center">
           InspectProof &mdash; a product of PlanProof Technologies Pty Ltd
@@ -197,9 +201,10 @@ type AccountDetails = {
   email: string;
   password: string;
   confirmPassword: string;
+  organization: string;
 };
 
-function SignUpFlow() {
+function SignUpFlow({ prefillCompany, prefillInvitedBy }: { prefillCompany?: string; prefillInvitedBy?: string }) {
   const [step, setStep] = useState<1 | 2>(1);
   const [account, setAccount] = useState<AccountDetails>({
     firstName: "",
@@ -207,10 +212,11 @@ function SignUpFlow() {
     email: "",
     password: "",
     confirmPassword: "",
+    organization: prefillCompany || "",
   });
 
   return step === 1 ? (
-    <AccountStep account={account} setAccount={setAccount} onNext={() => setStep(2)} />
+    <AccountStep account={account} setAccount={setAccount} onNext={() => setStep(2)} prefillInvitedBy={prefillInvitedBy} />
   ) : (
     <PlanStep account={account} onBack={() => setStep(1)} />
   );
@@ -221,10 +227,12 @@ function AccountStep({
   account,
   setAccount,
   onNext,
+  prefillInvitedBy,
 }: {
   account: AccountDetails;
   setAccount: React.Dispatch<React.SetStateAction<AccountDetails>>;
   onNext: () => void;
+  prefillInvitedBy?: string;
 }) {
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -236,6 +244,7 @@ function AccountStep({
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!account.organization.trim()) { setError("Company or organisation name is required."); return; }
     if (account.password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (account.password !== account.confirmPassword) { setError("Passwords do not match."); return; }
     onNext();
@@ -256,12 +265,29 @@ function AccountStep({
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="space-y-4">
+          {prefillInvitedBy && (
+            <div className="p-3 rounded-lg bg-[#0B1933]/8 border border-[#466DB5]/30 text-sm text-[#0B1933] flex items-start gap-2">
+              <Check className="h-4 w-4 shrink-0 text-[#466DB5] mt-0.5" />
+              <span>You've been invited by <strong>{prefillInvitedBy}</strong>. Your company has been pre-filled below.</span>
+            </div>
+          )}
           {error && (
             <div className="p-3 rounded bg-destructive/10 text-destructive text-sm flex items-center gap-2 border border-destructive/20">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               {error}
             </div>
           )}
+          <div className="space-y-2">
+            <Label htmlFor="su-org">Company / Organisation <span className="text-destructive">*</span></Label>
+            <Input
+              id="su-org"
+              placeholder="e.g. SA Building Certifications Pty Ltd"
+              value={account.organization}
+              onChange={handle("organization")}
+              required
+              className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="firstName">First name</Label>
@@ -448,6 +474,7 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
           lastName: account.lastName,
           email: account.email,
           password: account.password,
+          organization: account.organization,
           plan: selected,
         }),
       });

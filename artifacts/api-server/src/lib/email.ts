@@ -208,9 +208,10 @@ export async function sendFeedbackEmail(
   }
 }
 
-function appInviteHtml(opts: { inviteeName: string | null; inviterName: string; registerUrl: string }): string {
-  const { inviteeName, inviterName, registerUrl } = opts;
+function appInviteHtml(opts: { inviteeName: string | null; inviterName: string; companyName: string | null; registerUrl: string }): string {
+  const { inviteeName, inviterName, companyName, registerUrl } = opts;
   const greeting = inviteeName ? `Hi ${inviteeName.split(" ")[0]},` : "Hi there,";
+  const displayOrg = companyName || inviterName;
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>You've been invited to InspectProof</title></head>
@@ -231,7 +232,7 @@ function appInviteHtml(opts: { inviteeName: string | null; inviterName: string; 
             <p style="margin:0 0 6px;font-size:14px;color:#6b7280;">${greeting}</p>
             <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#0B1933;">You've been invited to InspectProof</h1>
             <p style="margin:0 0 28px;font-size:15px;color:#4b5563;line-height:1.6;">
-              <strong>${inviterName}</strong> has added you to their team on InspectProof — Australia's built environment inspection and compliance platform.
+              You have been invited by <strong>${displayOrg}</strong> for access to their inspection platform with InspectProof — Australia's built environment inspection and compliance platform.
             </p>
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;margin-bottom:28px;">
               <tr><td>
@@ -271,6 +272,7 @@ export interface AppInviteEmailOpts {
   toEmail: string;
   inviteeName: string | null;
   inviterName: string;
+  companyName?: string | null;
 }
 
 export async function sendAppInviteEmail(
@@ -281,14 +283,21 @@ export async function sendAppInviteEmail(
     log?.warn({ smtpHost: SMTP_HOST }, "SMTP not configured — skipping app invite email");
     return;
   }
-  const registerUrl = `${APP_BASE_URL}/register`;
+  const params = new URLSearchParams({ mode: "signup" });
+  if (opts.companyName) params.set("company", opts.companyName);
+  if (opts.inviterName) params.set("invitedBy", opts.inviterName);
+  if (opts.inviteeName) params.set("name", opts.inviteeName);
+  const registerUrl = `${APP_BASE_URL}/login?${params.toString()}`;
+  const subject = opts.companyName
+    ? `${opts.companyName} has invited you to InspectProof`
+    : `${opts.inviterName} has invited you to InspectProof`;
   try {
     const transporter = createTransporter();
     await transporter.sendMail({
       from: SMTP_FROM,
       to: opts.toEmail,
-      subject: `${opts.inviterName} has invited you to InspectProof`,
-      html: appInviteHtml({ inviteeName: opts.inviteeName, inviterName: opts.inviterName, registerUrl }),
+      subject,
+      html: appInviteHtml({ inviteeName: opts.inviteeName, inviterName: opts.inviterName, companyName: opts.companyName ?? null, registerUrl }),
     });
     log?.info({ to: opts.toEmail }, "App invite email sent");
   } catch (err) {

@@ -7,7 +7,7 @@ import { requireAuth } from "../middleware/auth";
 const router: IRouter = Router();
 
 router.post("/app-invite", requireAuth, async (req, res) => {
-  const { email, name } = req.body as { email?: string; name?: string };
+  const { email, name, company } = req.body as { email?: string; name?: string; company?: string };
 
   if (!email) {
     res.status(400).json({ error: "bad_request", message: "email is required" });
@@ -21,8 +21,11 @@ router.post("/app-invite", requireAuth, async (req, res) => {
       ? `${inviter.firstName} ${inviter.lastName}`.trim()
       : "Your team";
 
+    // Use provided company, or fall back to the inviter's own company
+    const companyName = company?.trim() || inviter?.companyName || null;
+
     await sendAppInviteEmail(
-      { toEmail: email, inviteeName: name?.trim() || null, inviterName },
+      { toEmail: email, inviteeName: name?.trim() || null, inviterName, companyName },
       req.log
     );
 

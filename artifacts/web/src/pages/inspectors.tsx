@@ -409,6 +409,7 @@ export default function Inspectors() {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [newEmail, setNewEmail] = useState("");
+  const [newCompany, setNewCompany] = useState("");
   const [formSending, setFormSending] = useState(false);
   const [formResult, setFormResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [editingInspector, setEditingInspector] = useState<Inspector | null>(null);
@@ -475,7 +476,7 @@ export default function Inspectors() {
       const res = await fetch(`${apiBase()}/api/invites/app-invite`, {
         method: "POST",
         headers: authHeader(),
-        body: JSON.stringify({ email: newEmail.trim() }),
+        body: JSON.stringify({ email: newEmail.trim(), company: newCompany.trim() || undefined }),
       });
       const body = await res.json().catch(() => ({})) as any;
       if (!res.ok) {
@@ -483,6 +484,7 @@ export default function Inspectors() {
       } else {
         setFormResult({ ok: true, msg: `Invite sent to ${newEmail.trim()}` });
         setNewEmail("");
+        setNewCompany("");
         setTimeout(() => { setShowInviteForm(false); setFormResult(null); }, 3000);
       }
     } catch {
@@ -713,23 +715,41 @@ export default function Inspectors() {
       {/* Invite form */}
       {showInviteForm && (
         <Card className="mb-6 border-secondary/30 bg-secondary/5 shadow-sm">
-          <div className="p-5 flex items-center gap-3 flex-wrap">
-            <Send className="h-4 w-4 text-secondary shrink-0" />
-            <p className="text-sm font-semibold text-sidebar">Send APP Invitation</p>
-            <input
-              type="email"
-              placeholder="inspector@email.com.au"
-              value={newEmail}
-              onChange={e => setNewEmail(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") sendFormInvite(); }}
-              disabled={formSending}
-              className="flex-1 min-w-48 text-sm border border-input rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-60"
-            />
-            <Button size="sm" onClick={sendFormInvite} disabled={formSending || !newEmail.trim()} className="gap-1.5">
-              {formSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              {formSending ? "Sending…" : "Send Invite"}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => { setShowInviteForm(false); setFormResult(null); setNewEmail(""); }}>Cancel</Button>
+          <div className="p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Send className="h-4 w-4 text-secondary shrink-0" />
+              <p className="text-sm font-semibold text-sidebar">Send APP Invitation</p>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <input
+                type="email"
+                placeholder="inspector@email.com.au"
+                value={newEmail}
+                onChange={e => setNewEmail(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") sendFormInvite(); }}
+                disabled={formSending}
+                className="flex-1 min-w-48 text-sm border border-input rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-60"
+              />
+              <input
+                type="text"
+                placeholder="Company name (e.g. SA Building Certifications)"
+                value={newCompany}
+                onChange={e => setNewCompany(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") sendFormInvite(); }}
+                disabled={formSending}
+                className="flex-1 min-w-56 text-sm border border-input rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-60"
+              />
+              <Button size="sm" onClick={sendFormInvite} disabled={formSending || !newEmail.trim()} className="gap-1.5">
+                {formSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                {formSending ? "Sending…" : "Send Invite"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => { setShowInviteForm(false); setFormResult(null); setNewEmail(""); setNewCompany(""); }}>Cancel</Button>
+            </div>
+            {newCompany.trim() && (
+              <p className="text-xs text-muted-foreground pl-1">
+                The invite email will say: <em>"You have been invited by <strong>{newCompany.trim()}</strong> for access to their inspection platform with InspectProof."</em>
+              </p>
+            )}
           </div>
           {formResult && (
             <div className={`px-5 pb-4 text-sm font-medium flex items-center gap-2 ${formResult.ok ? "text-green-700" : "text-red-600"}`}>
