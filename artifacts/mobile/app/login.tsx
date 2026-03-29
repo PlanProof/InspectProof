@@ -147,8 +147,14 @@ export default function LoginScreen() {
             onPress={() => router.replace("/register" as any)}
             style={({ pressed }) => [styles.registerBtn, pressed && { opacity: 0.7 }]}
           >
+            <Feather name="user-plus" size={15} color={Colors.textSecondary} />
             <Text style={styles.registerBtnText}>Create a new account</Text>
           </Pressable>
+
+          <View style={styles.inviteHint}>
+            <Feather name="mail" size={12} color="rgba(255,255,255,0.35)" />
+            <Text style={styles.inviteHintText}>Received an invitation? Tap above to set up your account.</Text>
+          </View>
         </View>
 
         {/* Demo hint */}
@@ -209,10 +215,15 @@ const styles = StyleSheet.create({
   dividerLine: { flex: 1, height: 1, backgroundColor: Colors.borderLight },
   dividerText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
   registerBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12, paddingVertical: 13,
-    alignItems: "center", justifyContent: "center",
   },
   registerBtnText: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
+  inviteHint: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingTop: 4,
+  },
+  inviteHintText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.35)", textAlign: "center", flex: 1 },
   demoNote: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   demoText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.25)" },
 });

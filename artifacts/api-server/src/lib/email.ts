@@ -226,12 +226,14 @@ function appInviteHtml(opts: { inviteeName: string | null; inviterName: string; 
           <p style="margin:0 0 28px;font-size:15px;color:#4b5563;line-height:1.6;">
             You have been invited by <strong>${displayOrg}</strong> for access to their inspection platform with InspectProof — Australia's built environment inspection and compliance platform.
           </p>
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;margin-bottom:28px;">
-            <tr><td>
-              <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#0B1933;">To get started:</p>
-              <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;"><strong>1.</strong> Create your account using the button below</p>
-              <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;"><strong>2.</strong> Download the <strong>InspectProof</strong> app on your device</p>
-              <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;"><strong>3.</strong> Sign in using the same email and password</p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+            <tr><td style="background:#f1f5f9;padding:14px 20px;border-bottom:1px solid #e5e7eb;">
+              <p style="margin:0;font-size:13px;font-weight:700;color:#0B1933;text-transform:uppercase;letter-spacing:0.5px;">Option 1 — Web (quickest)</p>
+            </td></tr>
+            <tr><td style="background:#f8fafc;padding:16px 20px;">
+              <p style="margin:0 0 6px;font-size:14px;color:#374151;line-height:1.6;"><strong>1.</strong> Click <strong>Create Your Account</strong> below</p>
+              <p style="margin:0 0 6px;font-size:14px;color:#374151;line-height:1.6;"><strong>2.</strong> Download the InspectProof app</p>
+              <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;"><strong>3.</strong> Sign in with the same email &amp; password</p>
             </td></tr>
           </table>
           <table cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
@@ -239,7 +241,18 @@ function appInviteHtml(opts: { inviteeName: string | null; inviterName: string; 
               <a href="${registerUrl}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#0B1933;text-decoration:none;border-radius:8px;">Create Your Account →</a>
             </td></tr>
           </table>
-          <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#374151;">Then download the app:</p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+            <tr><td style="background:#f1f5f9;padding:14px 20px;border-bottom:1px solid #e5e7eb;">
+              <p style="margin:0;font-size:13px;font-weight:700;color:#0B1933;text-transform:uppercase;letter-spacing:0.5px;">Option 2 — App only</p>
+            </td></tr>
+            <tr><td style="background:#f8fafc;padding:16px 20px;">
+              <p style="margin:0 0 6px;font-size:14px;color:#374151;line-height:1.6;"><strong>1.</strong> Download the InspectProof app below</p>
+              <p style="margin:0 0 6px;font-size:14px;color:#374151;line-height:1.6;"><strong>2.</strong> Tap <strong>Create a new account</strong> on the login screen</p>
+              <p style="margin:0 0 6px;font-size:14px;color:#374151;line-height:1.6;"><strong>3.</strong> Fill in your details and tap <strong>"I was invited by my company"</strong></p>
+              <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;"><strong>4.</strong> You're in — no plan selection needed</p>
+            </td></tr>
+          </table>
+          <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#374151;">Download the app:</p>
           <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
             <tr>
               <td style="padding-right:12px;">

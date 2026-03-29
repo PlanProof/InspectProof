@@ -78,7 +78,7 @@ const FALLBACK_PLANS = [
   },
 ];
 
-type Step = "profile" | "plan";
+type Step = "profile" | "plan" | "invited";
 
 type PlanOption = {
   key: string;
@@ -145,6 +145,31 @@ export default function RegisterScreen() {
     if (err) { setError(err); return; }
     setError("");
     setStep("plan");
+  };
+
+  const handleSubmitInvited = async () => {
+    const err = validateProfile();
+    if (err) { setError(err); return; }
+    setSubmitting(true);
+    setError("");
+    const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
+    try {
+      const res = await fetch(`${baseUrl}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstName, lastName, email, password, organization, profession, plan: "free_trial" }),
+      });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.message || "Registration failed.");
+      }
+      await login(email.trim(), password);
+      router.replace("/(tabs)");
+    } catch (e: any) {
+      setError(e.message || "Registration failed. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -354,8 +379,29 @@ export default function RegisterScreen() {
               onPress={handleNext}
               style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.85 }]}
             >
-              <Text style={styles.actionBtnText}>Continue</Text>
+              <Text style={styles.actionBtnText}>Continue to Plan Selection</Text>
               <Feather name="arrow-right" size={16} color={Colors.primary} />
+            </Pressable>
+
+            <View style={styles.invitedDivider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <Pressable
+              onPress={handleSubmitInvited}
+              disabled={submitting}
+              style={({ pressed }) => [styles.invitedBtn, pressed && { opacity: 0.85 }, submitting && { opacity: 0.7 }]}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color={Colors.accent} />
+              ) : (
+                <View style={{ gap: 2 }}>
+                  <Text style={styles.invitedBtnTitle}>I was invited by my company</Text>
+                  <Text style={styles.invitedBtnSub}>Create account without plan selection</Text>
+                </View>
+              )}
             </Pressable>
 
             <Pressable onPress={() => router.replace("/login" as any)} style={{ alignItems: "center" }}>
@@ -564,4 +610,15 @@ const styles = StyleSheet.create({
   paymentNoteText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.4)", flex: 1, lineHeight: 17 },
   termsText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.3)", textAlign: "center", lineHeight: 16 },
   termsLink: { color: Colors.accent },
+
+  invitedDivider: { flexDirection: "row", alignItems: "center", gap: 10 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: Colors.borderLight },
+  dividerText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  invitedBtn: {
+    borderWidth: 1.5, borderColor: Colors.accent + "50", borderRadius: 12, paddingVertical: 14,
+    paddingHorizontal: 16, alignItems: "center", justifyContent: "center",
+    backgroundColor: Colors.accent + "12",
+  },
+  invitedBtnTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.accent, textAlign: "center" },
+  invitedBtnSub: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, textAlign: "center" },
 });
