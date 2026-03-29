@@ -631,10 +631,10 @@ export function DocTemplatesPanel() {
   }
 
   useEffect(() => {
-    if (editorRef.current && selected) {
+    if (mode === "edit" && editorRef.current && selected) {
       editorRef.current.innerHTML = selected.content;
     }
-  }, [selectedId]);
+  }, [selectedId, mode]);
 
   async function saveContent() {
     if (!editorRef.current || !selected) return;
