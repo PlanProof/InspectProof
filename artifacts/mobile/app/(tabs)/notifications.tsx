@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useNotifications, ReminderMinutes } from "@/context/NotificationsContext";
+import { useAuth } from "@/context/AuthContext";
 import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 
 const WEB_TOP = 0;
@@ -27,7 +28,8 @@ const REMINDER_OPTIONS: { value: ReminderMinutes; label: string }[] = [
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useTabBarHeight();
-  const { prefs, updatePrefs, permissionGranted, requestPermission, cancelAllReminders } = useNotifications();
+  const { prefs, updatePrefs, permissionGranted, requestPermission, cancelAllReminders, updateAssignmentPref } = useNotifications();
+  const { token: authToken } = useAuth();
   const [requesting, setRequesting] = useState(false);
   const [permDenied, setPermDenied] = useState(false);
 
@@ -44,6 +46,10 @@ export default function NotificationsScreen() {
     }
     await updatePrefs({ remindersEnabled: value });
     if (!value) await cancelAllReminders();
+  };
+
+  const handleToggleAssignment = async (value: boolean) => {
+    await updateAssignmentPref(value, authToken ?? "");
   };
 
   return (
@@ -65,6 +71,27 @@ export default function NotificationsScreen() {
         </Pressable>
         <Text style={styles.title}>Notifications</Text>
         <View style={{ width: 38 }} />
+      </View>
+
+      {/* Inspection Assignment Notifications */}
+      <View style={styles.card}>
+        <View style={styles.cardRow}>
+          <View style={[styles.iconWrap, { backgroundColor: "#EBF5FF" }]}>
+            <Feather name="send" size={18} color={Colors.secondary} />
+          </View>
+          <View style={styles.rowLabel}>
+            <Text style={styles.rowTitle}>New Booking Alerts</Text>
+            <Text style={styles.rowSub}>
+              Get notified when you're assigned an inspection
+            </Text>
+          </View>
+          <Switch
+            value={prefs.notifyOnAssignment}
+            onValueChange={handleToggleAssignment}
+            trackColor={{ false: Colors.border, true: Colors.secondary }}
+            thumbColor={prefs.notifyOnAssignment ? Colors.accent : "#f4f3f4"}
+          />
+        </View>
       </View>
 
       {/* Reminders Toggle */}
@@ -145,7 +172,7 @@ export default function NotificationsScreen() {
       <View style={styles.aboutCard}>
         <Feather name="info" size={14} color={Colors.textTertiary} />
         <Text style={styles.aboutText}>
-          Reminders are scheduled locally on your device each time you open the app. No data is sent to any server for notifications.
+          New booking alerts are sent instantly when an admin assigns you an inspection. Reminders are scheduled locally on your device.
         </Text>
       </View>
     </ScrollView>
@@ -260,12 +287,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   optionTextSelected: { color: Colors.secondary },
-  optionDesc: {
-    fontSize: 11,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textTertiary,
-    marginTop: 1,
-  },
   hint: {
     fontSize: 12,
     fontFamily: "PlusJakartaSans_600SemiBold",

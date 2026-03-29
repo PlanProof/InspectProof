@@ -4,6 +4,7 @@ import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResu
 import { checkInspectionQuota } from "../lib/quota";
 import { optionalAuth, isInspectorOnly } from "../middleware/auth";
 import { sendInspectionAssignedEmail } from "../lib/email";
+import { sendExpoPush } from "../lib/expoPush";
 
 const router: IRouter = Router();
 
@@ -152,7 +153,7 @@ router.post("/", checkInspectionQuota, async (req, res) => {
     const formatted = await formatInspection(inspection);
     res.status(201).json(formatted);
 
-    // Send assignment email (non-blocking, after response sent)
+    // Send assignment email + push notification (non-blocking, after response sent)
     if (inspection.inspectorId) {
       const [inspector] = await db.select().from(usersTable).where(eq(usersTable.id, inspection.inspectorId));
       const [project] = inspection.projectId ? await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId)) : [];
@@ -168,6 +169,21 @@ router.post("/", checkInspectionQuota, async (req, res) => {
           inspectionId: inspection.id,
           isReassignment: false,
         }, req.log).catch(() => {});
+
+        // Push notification to inspector
+        if (inspector.expoPushToken && inspector.notifyOnAssignment) {
+          const typeLabel = (inspection.inspectionType || "Inspection").replace(/_/g, " ");
+          const dateStr = inspection.scheduledDate
+            ? new Date(inspection.scheduledDate).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })
+            : "";
+          sendExpoPush(
+            inspector.expoPushToken,
+            "New Inspection Booking",
+            `${typeLabel} — ${project.name}${dateStr ? ` · ${dateStr}` : ""}`,
+            { inspectionId: inspection.id, type: "assignment" },
+            req.log,
+          ).catch(() => {});
+        }
       }
     }
   } catch (err) {
@@ -386,7 +402,7 @@ router.put("/:id", async (req, res) => {
     const formatted = await formatInspection(inspection);
     res.json(formatted);
 
-    // Send reassignment email if inspector changed to a new (non-null) person
+    // Send reassignment email + push notification if inspector changed to a new (non-null) person
     const newInspectorId = inspection.inspectorId;
     if (newInspectorId && newInspectorId !== prevInspectorId) {
       const [inspector] = await db.select().from(usersTable).where(eq(usersTable.id, newInspectorId));
@@ -403,6 +419,22 @@ router.put("/:id", async (req, res) => {
           inspectionId: inspection.id,
           isReassignment: prevInspectorId !== null,
         }, req.log).catch(() => {});
+
+        // Push notification to newly assigned inspector
+        if (inspector.expoPushToken && inspector.notifyOnAssignment) {
+          const typeLabel = (inspection.inspectionType || "Inspection").replace(/_/g, " ");
+          const dateStr = inspection.scheduledDate
+            ? new Date(inspection.scheduledDate).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })
+            : "";
+          const isReassignment = prevInspectorId !== null;
+          sendExpoPush(
+            inspector.expoPushToken,
+            isReassignment ? "Inspection Reassigned to You" : "New Inspection Booking",
+            `${typeLabel} — ${project.name}${dateStr ? ` · ${dateStr}` : ""}`,
+            { inspectionId: inspection.id, type: isReassignment ? "reassignment" : "assignment" },
+            req.log,
+          ).catch(() => {});
+        }
       }
     }
   } catch (err) {

@@ -105,6 +105,38 @@ function generateTempPassword(): string {
   return result;
 }
 
+// Save or update the caller's Expo push token
+router.put("/me/push-token", requireAuth, async (req, res) => {
+  try {
+    const { token } = req.body;
+    const [updated] = await db.update(usersTable)
+      .set({ expoPushToken: token ?? null, updatedAt: new Date() })
+      .where(eq(usersTable.id, req.authUser!.id))
+      .returning();
+    res.json({ ok: true, expoPushToken: updated?.expoPushToken ?? null });
+  } catch (err) {
+    req.log.error({ err }, "Save push token error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// Update notification preferences for the caller
+router.patch("/me/notification-prefs", requireAuth, async (req, res) => {
+  try {
+    const { notifyOnAssignment } = req.body;
+    const updateData: Record<string, any> = { updatedAt: new Date() };
+    if (typeof notifyOnAssignment === "boolean") updateData.notifyOnAssignment = notifyOnAssignment;
+    const [updated] = await db.update(usersTable)
+      .set(updateData)
+      .where(eq(usersTable.id, req.authUser!.id))
+      .returning();
+    res.json({ ok: true, notifyOnAssignment: updated?.notifyOnAssignment ?? true });
+  } catch (err) {
+    req.log.error({ err }, "Update notification prefs error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 router.patch("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);

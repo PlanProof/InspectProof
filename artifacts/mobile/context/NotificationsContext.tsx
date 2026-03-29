@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform, Linking, Alert } from "react-native";
 import Constants from "expo-constants";
+import { getApiUrl } from "@/constants/api";
+import { useAuth } from "@/context/AuthContext";
 
 // expo-notifications crashes in Expo Go SDK 53 — skip all push/schedule features there
 const IS_EXPO_GO = Constants.appOwnership === "expo";
@@ -15,12 +17,14 @@ export interface NotificationPrefs {
   remindersEnabled: boolean;
   reminderMinutesBefore: ReminderMinutes;
   mapApp: MapApp;
+  notifyOnAssignment: boolean;
 }
 
 const DEFAULT_PREFS: NotificationPrefs = {
   remindersEnabled: true,
   reminderMinutesBefore: 30,
   mapApp: Platform.OS === "ios" ? "apple" : "google",
+  notifyOnAssignment: true,
 };
 
 interface NotificationsContextValue {
@@ -31,6 +35,8 @@ interface NotificationsContextValue {
   permissionGranted: boolean;
   requestPermission: () => Promise<boolean>;
   openAddressInMaps: (address: string, suburb: string | null) => void;
+  registerPushToken: (authToken: string) => Promise<void>;
+  updateAssignmentPref: (enabled: boolean, authToken: string) => Promise<void>;
 }
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(null);
@@ -91,6 +97,27 @@ async function tryGetNativePermission(): Promise<boolean> {
   }
 }
 
+async function getExpoPushToken(): Promise<string | null> {
+  if (IS_EXPO_GO || Platform.OS === "web") return null;
+  try {
+    const Notifications = await import("expo-notifications");
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== "granted") {
+      const { status: newStatus } = await Notifications.requestPermissionsAsync();
+      if (newStatus !== "granted") return null;
+    }
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId;
+    const tokenResult = projectId
+      ? await Notifications.getExpoPushTokenAsync({ projectId })
+      : await Notifications.getExpoPushTokenAsync();
+    return tokenResult.data;
+  } catch {
+    return null;
+  }
+}
+
 function buildMapsUrl(address: string, suburb: string | null, app: "apple" | "google"): string {
   const query = encodeURIComponent([address, suburb].filter(Boolean).join(", ") + ", Australia");
   if (app === "apple") return `maps://?q=${query}`;
@@ -98,6 +125,7 @@ function buildMapsUrl(address: string, suburb: string | null, app: "apple" | "go
 }
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
+  const { token: authToken, isLoading: authLoading } = useAuth();
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
   const [permissionGranted, setPermissionGranted] = useState(false);
 
@@ -155,6 +183,52 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     await tryScheduleNative(inspections, prefs);
   }, [prefs]);
 
+  // Register device for push notifications and save token to server
+  const registerPushToken = useCallback(async (token: string) => {
+    if (Platform.OS === "web" || IS_EXPO_GO || !token) return;
+    try {
+      const pushToken = await getExpoPushToken();
+      if (!pushToken) return;
+      await fetch(getApiUrl("/users/me/push-token"), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ token: pushToken }),
+      });
+    } catch {
+      // non-fatal
+    }
+  }, []);
+
+  // Auto-register push token whenever the user logs in or app starts with stored token
+  useEffect(() => {
+    if (!authLoading && authToken) {
+      registerPushToken(authToken);
+    }
+  }, [authToken, authLoading, registerPushToken]);
+
+  // Update the assignment notification preference locally + on server
+  const updateAssignmentPref = useCallback(async (enabled: boolean, token: string) => {
+    const next = { ...prefs, notifyOnAssignment: enabled };
+    setPrefs(next);
+    await AsyncStorage.setItem(PREFS_KEY, JSON.stringify(next));
+    if (!token) return;
+    try {
+      await fetch(getApiUrl("/users/me/notification-prefs"), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ notifyOnAssignment: enabled }),
+      });
+    } catch {
+      // non-fatal
+    }
+  }, [prefs]);
+
   const openAddressInMaps = useCallback((address: string, suburb: string | null) => {
     const open = async (app: "apple" | "google") => {
       const url = buildMapsUrl(address, suburb, app);
@@ -189,6 +263,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       permissionGranted,
       requestPermission,
       openAddressInMaps,
+      registerPushToken,
+      updateAssignmentPref,
     }}>
       {children}
     </NotificationsContext.Provider>

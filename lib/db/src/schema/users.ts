@@ -22,6 +22,8 @@ export const usersTable = pgTable("users", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   planOverrideProjects: text("plan_override_projects"),
   planOverrideInspections: text("plan_override_inspections"),
+  expoPushToken: text("expo_push_token"),
+  notifyOnAssignment: boolean("notify_on_assignment").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
