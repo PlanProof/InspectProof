@@ -1,11 +1,22 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
   Plus, Trash2, FileText, Image, Eye, Edit3, ChevronRight,
   Copy, Check, X, Link2, ClipboardList, Printer, ChevronDown, Folder,
+  Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter, AlignRight,
+  List, ListOrdered, Table, Minus, Upload,
 } from "lucide-react";
 import { useListChecklistTemplates, useListInspections, useListProjects } from "@workspace/api-client-react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import TipTapUnderline from "@tiptap/extension-underline";
+import TipTapImage from "@tiptap/extension-image";
+import { TextAlign } from "@tiptap/extension-text-align";
+import { Table as TipTapTable } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { TableHeader } from "@tiptap/extension-table-header";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface DocTemplate {
@@ -168,14 +179,6 @@ const TEST_PREVIEW_DATA: Record<string, string> = {
   "{{signature_block}}": `<div style="margin-top:16px;"><div style="border-top:1px solid #000;width:220px;margin-bottom:4px;"></div><div style="font-size:12px;color:#555;">John Doe — 15 March 2024</div></div>`,
   "{{checklist_items}}": `<table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px;"><thead><tr style="background:#f3f4f6;"><th style="text-align:left;padding:5px 8px;border:1px solid #e5e7eb;">#</th><th style="text-align:left;padding:5px 8px;border:1px solid #e5e7eb;">Description</th><th style="text-align:center;padding:5px 8px;border:1px solid #e5e7eb;">Result</th></tr></thead><tbody><tr style="background:#f0fdf4;"><td style="padding:5px 8px;border:1px solid #e5e7eb;">1</td><td style="padding:5px 8px;border:1px solid #e5e7eb;">Footing depth per engineer's plans</td><td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:center;font-weight:600;color:#15803d;">PASS</td></tr><tr><td style="padding:5px 8px;border:1px solid #e5e7eb;">2</td><td style="padding:5px 8px;border:1px solid #e5e7eb;">Reinforcement bar spacing</td><td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:center;font-weight:600;color:#15803d;">PASS</td></tr><tr style="background:#fef2f2;"><td style="padding:5px 8px;border:1px solid #e5e7eb;">3</td><td style="padding:5px 8px;border:1px solid #e5e7eb;">Setback from boundary</td><td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:center;font-weight:600;color:#b91c1c;">FAIL</td></tr></tbody></table>`,
 };
-
-// ── Token highlight (edit mode) ────────────────────────────────────────────────
-function highlightTokens(html: string): string {
-  return html.replace(
-    /(\{\{[a-z_]+\}\})/g,
-    `<span style="background:#dbeafe;color:#1d4ed8;border-radius:3px;padding:0 3px;font-family:monospace;font-size:12px;">$1</span>`
-  );
-}
 
 // ── Fill tokens with preview data (preview mode) ──────────────────────────────
 function fillWithData(html: string, data: Record<string, string>): string {
@@ -550,8 +553,28 @@ export function DocTemplatesPanel() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [checklistDiscipline, setChecklistDiscipline] = useState("Building Surveyor");
 
-  const editorRef = useRef<HTMLDivElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
+  const docxInputRef = useRef<HTMLInputElement>(null);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      TipTapUnderline,
+      TipTapImage,
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
+      TipTapTable.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
+    ],
+    content: "",
+    editorProps: {
+      attributes: {
+        style: "padding: 72px 80px; min-height: 1123px; outline: none; font-family: Georgia, serif; font-size: 14px; line-height: 1.6; color: #1a1a1a;",
+        class: "tiptap-doc-editor",
+      },
+    },
+  });
 
   const { data: checklistTemplates } = useListChecklistTemplates({ discipline: checklistDiscipline });
   const { data: allProjects } = useListProjects({});
@@ -645,37 +668,40 @@ export function DocTemplatesPanel() {
     } catch (err) { console.error(err); }
   }
 
+  // Load template content into TipTap when selection or mode changes
   useEffect(() => {
-    if (mode === "edit" && editorRef.current && selected) {
-      editorRef.current.innerHTML = selected.content;
+    if (mode === "edit" && editor && selected) {
+      editor.commands.setContent(selected.content || "");
     }
-  }, [selectedId, mode]);
+  }, [selectedId, mode, editor]);
 
-  async function saveContent() {
-    if (!editorRef.current || !selected) return;
-    const content = editorRef.current.innerHTML;
+  const saveContent = useCallback(async (silent = false) => {
+    if (!editor || !selected) return;
+    const content = editor.getHTML();
     setTemplates(prev => prev.map(t => t.id === selected.id ? { ...t, content, updatedAt: new Date().toISOString() } : t));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (!silent) { setSaved(true); setTimeout(() => setSaved(false), 2000); }
     try {
       await apiFetch(`${API_BASE}/${selected.id}`, { method: "PUT", body: JSON.stringify({ content }) });
     } catch (err) { console.error(err); }
-  }
+  }, [editor, selected]);
 
   function insertToken(token: string) {
-    if (!editorRef.current) return;
-    editorRef.current.focus();
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(document.createTextNode(token));
-      range.collapse(false);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } else {
-      editorRef.current.innerHTML += token;
+    if (!editor) return;
+    editor.chain().focus().insertContent(token).run();
+  }
+
+  async function handleDocxImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !editor) return;
+    try {
+      const mammoth = await import("mammoth");
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.convertToHtml({ arrayBuffer });
+      editor.commands.setContent(result.value || "");
+    } catch (err) {
+      console.error("DOCX import failed:", err);
     }
+    e.target.value = "";
   }
 
   async function toggleChecklistLink(checklistId: number) {
@@ -723,11 +749,6 @@ export function DocTemplatesPanel() {
     try {
       await apiFetch(`${API_BASE}/${selected.id}`, { method: "PUT", body: JSON.stringify({ backgroundImage: null }) });
     } catch (err) { console.error(err); }
-  }
-
-  function execCmd(cmd: string, value?: string) {
-    document.execCommand(cmd, false, value);
-    editorRef.current?.focus();
   }
 
   const formatDate = (iso: string) =>
@@ -851,51 +872,16 @@ export function DocTemplatesPanel() {
         <div className="flex-1 flex flex-col min-w-0">
           {selected ? (
             <>
-              {/* Toolbar */}
-              <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-                <div className="flex rounded-lg border border-border overflow-hidden bg-card shadow-sm mr-2">
+              {/* ── Row 1: Mode toggle + Generate Report ──────────── */}
+              <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                <div className="flex rounded-lg border border-border overflow-hidden bg-card shadow-sm">
                   <button onClick={() => setMode("edit")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${mode === "edit" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}>
                     <Edit3 className="h-3.5 w-3.5" />Edit
                   </button>
-                  <button onClick={() => { saveContent(); setMode("preview"); }} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${mode === "preview" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}>
+                  <button onClick={async () => { await saveContent(true); setMode("preview"); }} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${mode === "preview" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}>
                     <Eye className="h-3.5 w-3.5" />Preview
                   </button>
                 </div>
-
-                {mode === "edit" && (
-                  <>
-                    <div className="flex rounded-lg border border-border overflow-hidden bg-card shadow-sm">
-                      <button onClick={() => execCmd("bold")} title="Bold" className="px-2.5 py-1.5 text-xs font-bold hover:bg-muted border-r border-border">B</button>
-                      <button onClick={() => execCmd("italic")} title="Italic" className="px-2.5 py-1.5 text-xs italic hover:bg-muted border-r border-border">I</button>
-                      <button onClick={() => execCmd("underline")} title="Underline" className="px-2.5 py-1.5 text-xs underline hover:bg-muted">U</button>
-                    </div>
-                    <select
-                      onChange={e => { if (e.target.value) { execCmd("formatBlock", e.target.value); e.target.value = ""; } }}
-                      className="text-xs rounded-lg border border-border bg-card px-2 py-1.5 shadow-sm focus:outline-none"
-                      defaultValue=""
-                    >
-                      <option value="" disabled>Style…</option>
-                      <option value="h1">Heading 1</option>
-                      <option value="h2">Heading 2</option>
-                      <option value="h3">Heading 3</option>
-                      <option value="p">Paragraph</option>
-                    </select>
-                    <button onClick={() => bgInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium hover:bg-muted shadow-sm text-muted-foreground">
-                      <Image className="h-3.5 w-3.5" />Background
-                    </button>
-                    {selected.backgroundImage && (
-                      <button onClick={removeBgImage} className="p-1.5 rounded-lg border border-border bg-card hover:bg-red-50 hover:text-red-600 text-muted-foreground shadow-sm">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                    <input ref={bgInputRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
-                    <button onClick={saveContent} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all ${saved ? "bg-green-50 text-green-700 border border-green-200" : "bg-secondary text-white hover:bg-secondary/90"}`}>
-                      {saved ? <><Check className="h-3.5 w-3.5" />Saved</> : "Save"}
-                    </button>
-                  </>
-                )}
-
-                {/* Generate Report button */}
                 <button
                   onClick={() => setGenerateOpen(true)}
                   className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0B1933] text-white text-xs font-semibold hover:bg-[#0B1933]/90 transition-colors shadow-sm"
@@ -910,9 +896,119 @@ export function DocTemplatesPanel() {
                 </button>
               </div>
 
+              {/* ── Row 2: Rich formatting toolbar (edit mode only) ── */}
+              {mode === "edit" && (
+                <div className="flex items-center gap-1 mb-2 flex-wrap bg-card border border-border rounded-xl px-2 py-1.5 shadow-sm">
+                  {/* Text style */}
+                  <select
+                    onChange={e => {
+                      const v = e.target.value;
+                      if (v === "p") editor?.chain().focus().setParagraph().run();
+                      else if (v === "h1") editor?.chain().focus().toggleHeading({ level: 1 }).run();
+                      else if (v === "h2") editor?.chain().focus().toggleHeading({ level: 2 }).run();
+                      else if (v === "h3") editor?.chain().focus().toggleHeading({ level: 3 }).run();
+                      e.target.value = "";
+                    }}
+                    className="text-xs rounded-md border border-border bg-background px-1.5 py-1 focus:outline-none mr-1"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Style…</option>
+                    <option value="h1">Heading 1</option>
+                    <option value="h2">Heading 2</option>
+                    <option value="h3">Heading 3</option>
+                    <option value="p">Paragraph</option>
+                  </select>
+
+                  {/* Format */}
+                  <div className="flex rounded-md border border-border overflow-hidden">
+                    {[
+                      { title: "Bold", icon: <Bold className="h-3 w-3" />, action: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold") },
+                      { title: "Italic", icon: <Italic className="h-3 w-3" />, action: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic") },
+                      { title: "Underline", icon: <UnderlineIcon className="h-3 w-3" />, action: () => editor?.chain().focus().toggleUnderline().run(), active: editor?.isActive("underline") },
+                    ].map(btn => (
+                      <button key={btn.title} title={btn.title} onClick={btn.action}
+                        className={`px-2 py-1.5 border-r border-border last:border-r-0 transition-colors ${btn.active ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
+                      >{btn.icon}</button>
+                    ))}
+                  </div>
+
+                  <div className="w-px h-5 bg-border mx-1" />
+
+                  {/* Alignment */}
+                  <div className="flex rounded-md border border-border overflow-hidden">
+                    {[
+                      { title: "Align Left", icon: <AlignLeft className="h-3 w-3" />, align: "left" },
+                      { title: "Align Center", icon: <AlignCenter className="h-3 w-3" />, align: "center" },
+                      { title: "Align Right", icon: <AlignRight className="h-3 w-3" />, align: "right" },
+                    ].map(btn => (
+                      <button key={btn.align} title={btn.title} onClick={() => editor?.chain().focus().setTextAlign(btn.align).run()}
+                        className={`px-2 py-1.5 border-r border-border last:border-r-0 transition-colors ${editor?.isActive({ textAlign: btn.align }) ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
+                      >{btn.icon}</button>
+                    ))}
+                  </div>
+
+                  <div className="w-px h-5 bg-border mx-1" />
+
+                  {/* Lists */}
+                  <div className="flex rounded-md border border-border overflow-hidden">
+                    <button title="Bullet list" onClick={() => editor?.chain().focus().toggleBulletList().run()}
+                      className={`px-2 py-1.5 border-r border-border transition-colors ${editor?.isActive("bulletList") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
+                    ><List className="h-3 w-3" /></button>
+                    <button title="Numbered list" onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+                      className={`px-2 py-1.5 transition-colors ${editor?.isActive("orderedList") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
+                    ><ListOrdered className="h-3 w-3" /></button>
+                  </div>
+
+                  <div className="w-px h-5 bg-border mx-1" />
+
+                  {/* Table */}
+                  <div className="flex rounded-md border border-border overflow-hidden">
+                    <button title="Insert table" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+                      className="flex items-center gap-1 px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold"
+                    ><Table className="h-3 w-3" />Table</button>
+                    <button title="Add row below" onClick={() => editor?.chain().focus().addRowAfter().run()}
+                      className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px]">+R</button>
+                    <button title="Add column right" onClick={() => editor?.chain().focus().addColumnAfter().run()}
+                      className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px]">+C</button>
+                    <button title="Delete row" onClick={() => editor?.chain().focus().deleteRow().run()}
+                      className="px-2 py-1.5 border-r border-border hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px]">-R</button>
+                    <button title="Delete column" onClick={() => editor?.chain().focus().deleteColumn().run()}
+                      className="px-2 py-1.5 border-r border-border hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px]">-C</button>
+                    <button title="Delete table" onClick={() => editor?.chain().focus().deleteTable().run()}
+                      className="px-2 py-1.5 hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors">
+                      <Minus className="h-3 w-3" />
+                    </button>
+                  </div>
+
+                  <div className="w-px h-5 bg-border mx-1" />
+
+                  {/* Background + DOCX import */}
+                  <button onClick={() => bgInputRef.current?.click()} title="Page background image" className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-border bg-background hover:bg-muted text-muted-foreground text-xs transition-colors">
+                    <Image className="h-3 w-3" />BG
+                  </button>
+                  {selected.backgroundImage && (
+                    <button onClick={removeBgImage} title="Remove background" className="p-1.5 rounded-md border border-border bg-background hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors">
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                  <button onClick={() => docxInputRef.current?.click()} title="Import .docx file" className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-border bg-background hover:bg-muted text-muted-foreground text-xs transition-colors">
+                    <Upload className="h-3 w-3" />DOCX
+                  </button>
+
+                  <input ref={bgInputRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
+                  <input ref={docxInputRef} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleDocxImport} />
+
+                  <div className="ml-auto">
+                    <button onClick={() => saveContent()} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${saved ? "bg-green-50 text-green-700 border border-green-200" : "bg-secondary text-white hover:bg-secondary/90"}`}>
+                      {saved ? <><Check className="h-3.5 w-3.5" />Saved</> : "Save"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Preview mode banner */}
               {mode === "preview" && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs font-medium">
+                <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs font-medium">
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0 ${previewProject ? "bg-green-200 text-green-900" : "bg-amber-200 text-amber-900"}`}>
                     {previewProject ? "Live Data" : "Test Data"}
                   </span>
@@ -925,24 +1021,23 @@ export function DocTemplatesPanel() {
               )}
 
               {/* A4 document */}
-              <div className="flex-1 overflow-auto bg-muted/30 rounded-xl border border-border p-6 flex justify-center">
+              <div className="flex-1 overflow-auto bg-muted/30 rounded-xl border border-border p-4 flex justify-center">
                 <div
                   className="relative bg-white shadow-xl"
                   style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a" }}
                 >
                   {selected.backgroundImage && (
-                    <img src={selected.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={{ opacity: 1 }} />
+                    <img src={selected.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
                   )}
-                  <div
-                    ref={editorRef}
-                    contentEditable={mode === "edit"}
-                    suppressContentEditableWarning
-                    onBlur={saveContent}
-                    style={{ padding: "72px 80px", position: "relative", minHeight: "1123px", outline: "none" }}
-                    dangerouslySetInnerHTML={mode === "preview" ? { __html: fillWithData(selected.content, previewData) } : undefined}
-                  />
-                  {mode === "edit" && (
-                    <div className="absolute top-2 right-2 text-[10px] text-muted-foreground bg-white/80 rounded px-1.5 py-0.5 pointer-events-none">Click to edit</div>
+                  {mode === "edit" ? (
+                    <div style={{ position: "relative" }}>
+                      <EditorContent editor={editor} />
+                    </div>
+                  ) : (
+                    <div
+                      style={{ padding: "72px 80px", position: "relative", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a" }}
+                      dangerouslySetInnerHTML={{ __html: fillWithData(selected.content, previewData) }}
+                    />
                   )}
                 </div>
               </div>

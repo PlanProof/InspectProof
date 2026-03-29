@@ -130,3 +130,49 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.5);
 }
+
+/* ── TipTap Document Editor ─────────────────────────────────────────────────── */
+.tiptap-doc-editor {
+  font-family: Georgia, serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1a1a1a;
+}
+.tiptap-doc-editor:focus { outline: none; }
+.tiptap-doc-editor p { margin: 0 0 8px; }
+.tiptap-doc-editor h1 { font-size: 24px; font-weight: 700; margin: 0 0 16px; color: #0B1933; }
+.tiptap-doc-editor h2 { font-size: 20px; font-weight: 700; margin: 0 0 14px; color: #0B1933; }
+.tiptap-doc-editor h3 { font-size: 16px; font-weight: 600; margin: 0 0 12px; color: #0B1933; }
+.tiptap-doc-editor ul { padding-left: 20px; margin: 0 0 8px; list-style: disc; }
+.tiptap-doc-editor ol { padding-left: 20px; margin: 0 0 8px; list-style: decimal; }
+.tiptap-doc-editor li { margin-bottom: 4px; }
+
+/* Tables */
+.tiptap-doc-editor table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 16px;
+  font-size: 13px;
+}
+.tiptap-doc-editor th {
+  background: #f3f4f6;
+  font-weight: 600;
+  text-align: left;
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  color: #374151;
+}
+.tiptap-doc-editor td {
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  vertical-align: top;
+}
+.tiptap-doc-editor tr:nth-child(even) td { background: #f9fafb; }
+/* Selected cell highlight */
+.tiptap-doc-editor .selectedCell { background: #dbeafe !important; }
+
+/* Token highlight */
+.tiptap-doc-editor span[data-token],
+.tiptap-doc-editor p:not([class]) {
+  /* tokens render as plain text — let preview mode fill them */
+}
