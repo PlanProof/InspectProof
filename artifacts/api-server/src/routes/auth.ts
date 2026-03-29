@@ -108,9 +108,15 @@ router.post("/register", async (req, res) => {
       },
       plan: plan || "starter",
     });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "Register error");
-    res.status(500).json({ error: "internal_error", message: "Server error" });
+    const isDbError = err?.code === "ECONNREFUSED" || err?.code === "ENOTFOUND" || err?.message?.includes("connect");
+    res.status(500).json({
+      error: "internal_error",
+      message: isDbError
+        ? "Database connection failed. Please contact support."
+        : "Server error",
+    });
   }
 });
 
