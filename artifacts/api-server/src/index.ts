@@ -4,6 +4,7 @@ import { ensureSupabaseBucket, isSupabaseStorageAvailable } from "./lib/supabase
 import { db, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { ensureGlobalTemplatesSeed } from "../../../lib/db/src/seeds/global-templates";
 
 const rawPort = process.env["PORT"];
 
@@ -81,6 +82,7 @@ async function initStripe() {
 }
 
 await ensureAdminSeed();
+await ensureGlobalTemplatesSeed();
 await initStripe();
 
 if (isSupabaseStorageAvailable()) {

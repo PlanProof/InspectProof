@@ -46,6 +46,25 @@ Full admin → inspector → mobile → report flow verified:
 
 **Bug fixed this session:** Inspector-role users were blocked from seeing their assigned inspections on mobile because the `GET /api/inspections` route applied a project-owner access filter before the inspector filter. Fixed by reordering: inspector users now bypass the project filter and only see inspections where `inspectorId === req.authUser.id`.
 
+## Global Template Library (Seed)
+
+All checklist templates and report templates are seeded automatically on server startup if the database is empty. This covers:
+
+**Checklist Templates (80 total across 8 disciplines):**
+- Building Surveyor: Class 1a, 1b, 2, 3, 5, 6, 7a, 10a, 10b (41 templates, 347 items)
+- Structural Engineer: Footing, Slab, Frame, Steel Frame, Retaining Wall, Final (6 templates)
+- Plumbing Officer: Rough-In, Sanitary Drainage, Hot & Cold Water, Gas, Stormwater, Fire Services, Completion (7 templates)
+- Builder / QC: Pre-Slab, Frame Stage, Lock-Up, Defect, Practical Completion, Handover, Concrete Pour (7 templates)
+- Site Supervisor: Daily, Subcontractor Pre-Start, Concrete Pour Sign-Off, Defect Walkthrough, Pre-Handover Walk (5 templates)
+- WHS Officer: Site Safety Audit, Plant & Equipment, Hazardous Materials, Incident Investigation, Emergency Procedures (5 templates)
+- Pre-Purchase Inspector: Building, Pest & Termite, Strata/Unit, Commercial (4 templates)
+- Fire Safety Engineer: Fire Safety Systems, Emergency Lighting, Hydrant & Hose Reel, Smoke Alarms, AFSS (5 templates)
+
+**Report Templates (7 global):** Inspection Certificate, Defect Notice, Compliance Report, Non-Compliance Notice, Safety Inspection Report, Pre-Purchase Building Report, Quality Control Report
+
+**Seed files:** `lib/db/src/seeds/bs-templates.ts`, `lib/db/src/seeds/global-templates.ts`
+**Triggered by:** `ensureGlobalTemplatesSeed()` called from `artifacts/api-server/src/index.ts` at startup — only runs when DB is empty
+
 ## Production Integrations
 
 | Integration | Config |
