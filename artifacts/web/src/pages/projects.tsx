@@ -57,7 +57,7 @@ function BuildingClassSelect({
   };
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref}>
       {/* Trigger */}
       <button
         type="button"
@@ -88,10 +88,10 @@ function BuildingClassSelect({
         <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 ml-2 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown — inline (no absolute) so dialog overflow doesn't clip it */}
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-xl overflow-hidden">
-          <div className="max-h-72 overflow-y-auto py-1">
+        <div className="mt-1 w-full rounded-lg border border-border bg-popover shadow-md overflow-hidden">
+          <div className="max-h-56 overflow-y-auto py-1">
             {BUILDING_CLASSES.map(cls => {
               const selected = value.includes(cls.value);
               return (
@@ -118,18 +118,27 @@ function BuildingClassSelect({
               );
             })}
           </div>
-          {value.length > 0 && (
-            <div className="border-t border-border/50 px-3 py-2 flex items-center justify-between bg-muted/20">
-              <span className="text-xs text-muted-foreground">{value.length} selected</span>
+          <div className="border-t border-border/50 px-3 py-2 flex items-center justify-between bg-muted/20">
+            <span className="text-xs text-muted-foreground">{value.length > 0 ? `${value.length} selected` : "None selected"}</span>
+            <div className="flex items-center gap-3">
+              {value.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onChange([])}
+                  className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
+                >
+                  Clear all
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => onChange([])}
-                className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
+                onClick={() => setOpen(false)}
+                className="text-xs font-semibold text-secondary hover:text-secondary/80 transition-colors"
               >
-                Clear all
+                Done
               </button>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
