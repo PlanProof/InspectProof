@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CreditCard, CheckCircle2, ArrowRight, Shield, Zap, Building2,
@@ -54,6 +55,7 @@ interface Plan {
 export default function Billing() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -70,21 +72,25 @@ export default function Billing() {
 
   useEffect(() => {
     if (cancelled) {
+      window.history.replaceState({}, "", "/billing");
       toast({ title: "Checkout cancelled", description: "No charges were made.", variant: "destructive" });
     }
     if (success && !syncedRef.current) {
       syncedRef.current = true;
       setSyncing(true);
+      window.history.replaceState({}, "", "/billing");
       // Sync the plan from Stripe immediately — don't wait for a webhook
       fetch(API("/billing/sync-plan"), { method: "POST", headers: authHeader() })
         .then(() => queryClient.invalidateQueries({ queryKey: ["billing-subscription"] }))
         .then(() => {
           setSyncing(false);
-          toast({ title: "Subscription activated!", description: "Your plan has been updated." });
+          toast({ title: "Subscription activated!", description: "Taking you to your dashboard..." });
+          setTimeout(() => setLocation("/dashboard"), 1500);
         })
         .catch(() => {
           setSyncing(false);
-          toast({ title: "Subscription activated!", description: "Welcome to your new plan." });
+          toast({ title: "Subscription activated!", description: "Taking you to your dashboard..." });
+          setTimeout(() => setLocation("/dashboard"), 1500);
         });
     }
   }, []);
