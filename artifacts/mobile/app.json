@@ -18,7 +18,14 @@
       "bundleIdentifier": "com.planproof.inspectproof",
       "buildNumber": "1"
     },
-    "android": {},
+    "android": {
+      "package": "com.planproof.inspectproof",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0B1933"
+      }
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
