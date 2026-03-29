@@ -68,6 +68,10 @@ router.post("/register", async (req, res) => {
       res.status(400).json({ error: "bad_request", message: "First name, last name, email and password are required." });
       return;
     }
+    if (!organization || !organization.trim()) {
+      res.status(400).json({ error: "bad_request", message: "Company or organisation name is required." });
+      return;
+    }
     if (password.length < 8) {
       res.status(400).json({ error: "bad_request", message: "Password must be at least 8 characters." });
       return;
@@ -105,6 +109,9 @@ router.post("/register", async (req, res) => {
         phone: newUser.phone,
         avatar: newUser.avatar,
         signatureUrl: newUser.signatureUrl ?? null,
+        companyName: newUser.companyName ?? null,
+        profession: newUser.profession ?? null,
+        isAdmin: newUser.isAdmin ?? false,
         isActive: newUser.isActive,
         createdAt: newUser.createdAt.toISOString(),
       },

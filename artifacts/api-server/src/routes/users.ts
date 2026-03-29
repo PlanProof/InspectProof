@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
 import { sendWelcomeWithCredentialsEmail } from "../lib/email";
+import { requireAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -24,9 +25,21 @@ function formatUser(u: any) {
   };
 }
 
-router.get("/", async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
   try {
-    const users = await db.select().from(usersTable).orderBy(usersTable.firstName);
+    let users;
+    // Super-admins (isAdmin=true) see all users; company admins only see users from their own company
+    if (req.authUser!.isAdmin && !req.authUser!.companyName) {
+      users = await db.select().from(usersTable).orderBy(usersTable.firstName);
+    } else if (req.authUser!.companyName) {
+      users = await db.select().from(usersTable)
+        .where(eq(usersTable.companyName, req.authUser!.companyName))
+        .orderBy(usersTable.firstName);
+    } else {
+      // User has no company — only return themselves
+      users = await db.select().from(usersTable)
+        .where(eq(usersTable.id, req.authUser!.id));
+    }
     res.json(users.map(formatUser));
   } catch (err) {
     req.log.error({ err }, "List users error");
@@ -34,7 +47,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", requireAuth, async (req, res) => {
   try {
     const data = req.body;
     if (!data.email || !data.firstName || !data.lastName) {
@@ -53,6 +66,9 @@ router.post("/", async (req, res) => {
     const temporaryPassword = data.password || generateTempPassword();
     const passwordHash = await bcrypt.hash(temporaryPassword, 12);
 
+    // New users inherit the creating user's company
+    const inheritedCompany = req.authUser!.companyName ?? data.companyName ?? null;
+
     const [user] = await db.insert(usersTable).values({
       email: normalizedEmail,
       passwordHash,
@@ -60,6 +76,7 @@ router.post("/", async (req, res) => {
       lastName: data.lastName.trim(),
       role: data.role || "inspector",
       phone: data.phone || null,
+      companyName: inheritedCompany,
       isActive: true,
     }).returning();
 

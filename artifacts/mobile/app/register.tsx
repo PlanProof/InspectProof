@@ -136,6 +136,7 @@ export default function RegisterScreen() {
     if (!lastName.trim()) return "Please enter your last name.";
     if (!email.trim() || !email.includes("@")) return "Please enter a valid email address.";
     if (password.length < 8) return "Password must be at least 8 characters.";
+    if (!organization.trim()) return "Please enter your company or organisation name.";
     return null;
   };
 
@@ -296,14 +297,14 @@ export default function RegisterScreen() {
             </View>
 
             <View style={styles.field}>
-              <Text style={styles.label}>Organisation (optional)</Text>
+              <Text style={styles.label}>Company / Organisation</Text>
               <View style={styles.inputWrapper}>
                 <Feather name="briefcase" size={15} color={Colors.textTertiary} style={{ marginRight: 8 }} />
                 <TextInput
                   style={[styles.input, { flex: 1, borderWidth: 0, paddingHorizontal: 0 }]}
                   value={organization}
                   onChangeText={setOrganization}
-                  placeholder="Your firm name"
+                  placeholder="Your firm or company name"
                   placeholderTextColor={Colors.textTertiary}
                   autoCapitalize="words"
                 />

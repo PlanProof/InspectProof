@@ -12,6 +12,7 @@ interface CurrentUser {
   isActive: boolean;
   profession: string | null;
   licenceNumber: string | null;
+  companyName: string | null;
 }
 
 let cachedUser: CurrentUser | null = null;

@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback } from "react";
 import { useListUsers } from "@workspace/api-client-react";
+import { useAuth } from "@/hooks/use-auth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, Button } from "@/components/ui";
 import {
   Users, Smartphone, Monitor, Mail, Phone,
-  UserPlus, Send, Pencil, X, Check, Loader2, Shield,
+  UserPlus, Send, Pencil, X, Check, Loader2, Shield, Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -399,6 +400,9 @@ const ADD_MEMBER_ROLES = ["Inspector", "Certifier", "Staff", "Admin"];
 
 export default function Inspectors() {
   const { data: rawUsers, isLoading, refetch } = useListUsers({});
+  const { user: currentUser } = useAuth();
+  const currentUserCompany = currentUser?.companyName ?? null;
+
   const [overrides, setOverrides] = useState<Record<number, Partial<Inspector>>>({});
   const [inviteSentFor, setInviteSentFor] = useState<number | null>(null);
   const [invitingId, setInvitingId] = useState<number | null>(null);
@@ -497,8 +501,7 @@ export default function Inspectors() {
     setAddMemberSaving(true);
     setAddMemberResult(null);
     try {
-      const currentUser = JSON.parse(localStorage.getItem("inspectproof_user") ?? "{}");
-      const inviterName = currentUser.firstName && currentUser.lastName
+      const inviterName = currentUser?.firstName && currentUser?.lastName
         ? `${currentUser.firstName} ${currentUser.lastName}`
         : "Your administrator";
       const dbRole = ROLE_REVERSE[addMemberForm.role] ?? addMemberForm.role.toLowerCase();
@@ -550,7 +553,9 @@ export default function Inspectors() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <div>
                 <h2 className="font-bold text-sidebar text-base">Add Team Member</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Create an account and send login credentials</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Create an account — linked to <span className="font-semibold text-sidebar">{currentUserCompany ?? "your company"}</span>
+                </p>
               </div>
               <button
                 onClick={() => { if (!addMemberSaving) { setShowAddMember(false); setAddMemberResult(null); } }}
@@ -639,6 +644,15 @@ export default function Inspectors() {
                     {ADD_MEMBER_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
+                {currentUserCompany && (
+                  <div className="flex items-center gap-2.5 px-3 py-2.5 bg-secondary/8 border border-secondary/20 rounded-lg">
+                    <Building2 className="h-3.5 w-3.5 text-secondary shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-sidebar">Company: {currentUserCompany}</p>
+                      <p className="text-xs text-muted-foreground">This team member will be linked to your company.</p>
+                    </div>
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
                   A temporary password will be auto-generated and emailed to the team member along with instructions to download the app.
                 </p>
