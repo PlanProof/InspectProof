@@ -8,12 +8,15 @@ import {
   ScrollView,
   Animated,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+
+const logoImage = require("@/assets/images/logo.png");
 
 const WEB_TOP = 0;
 
@@ -319,8 +322,11 @@ export default function WelcomeScreen() {
         </View>
 
         {/* Footer */}
-        <Text style={styles.footerText}>InspectProof · contact@inspectproof.com.au</Text>
-        <Text style={styles.footerSub}>Standards-aligned for Australia's built environment</Text>
+        <View style={styles.footer}>
+          <Image source={logoImage} style={styles.footerLogo} resizeMode="contain" />
+          <Text style={styles.footerText}>Version 1.0.0 · PlanProof Technologies Pty Ltd</Text>
+          <Text style={styles.footerSub}>NCC 2022 · BCA · AS Standards Compatible</Text>
+        </View>
       </Animated.View>
     </ScrollView>
   );
@@ -465,6 +471,8 @@ const styles = StyleSheet.create({
   alreadyHave: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.45)" },
   signInLink: { color: Colors.accent },
 
-  footerText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.25)", textAlign: "center" },
-  footerSub: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.15)", textAlign: "center" },
+  footer: { alignItems: "center", gap: 6, paddingTop: 8 },
+  footerLogo: { width: 44, height: 44, marginBottom: 2 },
+  footerText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.25)", textAlign: "center" },
+  footerSub: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.15)", textAlign: "center" },
 });

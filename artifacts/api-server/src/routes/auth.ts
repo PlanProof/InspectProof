@@ -62,7 +62,7 @@ router.post("/login", async (req, res) => {
 
 router.post("/register", async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role, organization, plan } = req.body;
+    const { email, password, firstName, lastName, role, organization, plan, profession } = req.body;
 
     if (!email || !password || !firstName || !lastName) {
       res.status(400).json({ error: "bad_request", message: "First name, last name, email and password are required." });
@@ -87,6 +87,8 @@ router.post("/register", async (req, res) => {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       role: role || "inspector",
+      profession: profession ? profession.trim() : null,
+      companyName: organization ? organization.trim() : null,
       isActive: true,
     }).returning();
 

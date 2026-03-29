@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Modal,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,13 +20,16 @@ import { getApiUrl } from "@/constants/api";
 
 const WEB_TOP = 0;
 
-const ROLES = [
-  { key: "certifier", label: "Building Certifier" },
-  { key: "inspector", label: "Site Inspector" },
-  { key: "engineer", label: "Engineer" },
-  { key: "plumber", label: "Plumbing Inspector" },
-  { key: "project_manager", label: "Project Manager" },
-  { key: "other", label: "Other" },
+const PROFESSIONS = [
+  "Building Surveyor",
+  "Structural Engineer",
+  "Plumbing Inspector",
+  "Builder",
+  "Site Supervisor",
+  "WHS Officer",
+  "Pre-Purchase Inspector",
+  "Fire Safety Engineer",
+  "Other",
 ];
 
 const PLAN_PRICE_MAP: Record<string, { price: string; priceNote: string }> = {
@@ -98,7 +102,8 @@ export default function RegisterScreen() {
   const [organization, setOrganization] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState("certifier");
+  const [profession, setProfession] = useState("");
+  const [professionOpen, setProfessionOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState("free_trial");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -149,7 +154,7 @@ export default function RegisterScreen() {
       const res = await fetch(`${baseUrl}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, email, password, role, organization, plan: selectedPlan }),
+        body: JSON.stringify({ firstName, lastName, email, password, organization, profession, plan: selectedPlan }),
       });
       if (!res.ok) {
         const body = await res.json();
@@ -306,18 +311,42 @@ export default function RegisterScreen() {
             </View>
 
             <View style={styles.field}>
-              <Text style={styles.label}>Your Role</Text>
-              <View style={styles.roleGrid}>
-                {ROLES.map((r) => (
-                  <Pressable
-                    key={r.key}
-                    onPress={() => setRole(r.key)}
-                    style={[styles.roleChip, role === r.key && styles.roleChipSelected]}
-                  >
-                    <Text style={[styles.roleText, role === r.key && styles.roleTextSelected]}>{r.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
+              <Text style={styles.label}>Profession</Text>
+              <Pressable
+                onPress={() => setProfessionOpen(true)}
+                style={[styles.inputWrapper, styles.dropdownTrigger]}
+              >
+                <Feather name="briefcase" size={15} color={Colors.textTertiary} style={{ marginRight: 8 }} />
+                <Text style={[styles.dropdownValue, !profession && styles.dropdownPlaceholder]}>
+                  {profession || "Select your profession"}
+                </Text>
+                <Feather name="chevron-down" size={15} color={Colors.textTertiary} />
+              </Pressable>
+
+              <Modal
+                visible={professionOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setProfessionOpen(false)}
+              >
+                <Pressable style={styles.modalBackdrop} onPress={() => setProfessionOpen(false)}>
+                  <View style={styles.dropdownList}>
+                    <Text style={styles.dropdownListTitle}>Select Profession</Text>
+                    {PROFESSIONS.map((p) => (
+                      <Pressable
+                        key={p}
+                        onPress={() => { setProfession(p); setProfessionOpen(false); }}
+                        style={[styles.dropdownItem, profession === p && styles.dropdownItemSelected]}
+                      >
+                        <Text style={[styles.dropdownItemText, profession === p && styles.dropdownItemTextSelected]}>
+                          {p}
+                        </Text>
+                        {profession === p && <Feather name="check" size={14} color={Colors.accent} />}
+                      </Pressable>
+                    ))}
+                  </View>
+                </Pressable>
+              </Modal>
             </View>
 
             <Pressable
@@ -465,14 +494,30 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.border, borderRadius: 10,
     backgroundColor: Colors.background, paddingHorizontal: 12,
   },
-  roleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  roleChip: {
-    paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8,
-    borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.background,
+  dropdownTrigger: { paddingVertical: 11, paddingHorizontal: 12 },
+  dropdownValue: { flex: 1, fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  dropdownPlaceholder: { color: Colors.textTertiary },
+  modalBackdrop: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center", alignItems: "center", padding: 24,
   },
-  roleChipSelected: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  roleText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary },
-  roleTextSelected: { color: Colors.accent },
+  dropdownList: {
+    backgroundColor: Colors.surface, borderRadius: 16,
+    paddingVertical: 8, width: "100%",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10,
+  },
+  dropdownListTitle: {
+    fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary,
+    paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border,
+    marginBottom: 4,
+  },
+  dropdownItem: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingVertical: 12,
+  },
+  dropdownItemSelected: { backgroundColor: Colors.background + "80" },
+  dropdownItemText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  dropdownItemTextSelected: { color: Colors.secondary },
   actionBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     backgroundColor: Colors.accent, borderRadius: 12, paddingVertical: 15, marginTop: 4,
