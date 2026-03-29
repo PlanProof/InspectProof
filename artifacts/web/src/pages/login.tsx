@@ -36,10 +36,10 @@ export default function Login() {
       {/* Left side */}
       <div className="hidden lg:flex w-1/2 bg-sidebar flex-col justify-between p-12 relative overflow-hidden">
         <div className="z-10">
-          <div className="flex items-center gap-3 text-white mb-12">
+          <a href="/" className="flex items-center gap-3 text-white mb-12 w-fit hover:opacity-80 transition-opacity">
             <img src={`${import.meta.env.BASE_URL}logo.png`} alt="InspectProof" className="h-10 w-auto" />
             <span className="text-white leading-none text-xl" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
-          </div>
+          </a>
           <h1 className="text-4xl font-bold text-white max-w-md leading-tight mt-24">
             Faster inspections.<br />Clear compliance.<br /><span className="text-[#C5D92D]">Better</span> outcomes.
           </h1>
@@ -59,6 +59,15 @@ export default function Login() {
       {/* Right side */}
       <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-8 bg-background overflow-y-auto">
         <div className="w-full max-w-md">
+          {/* Back to home */}
+          <a
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Back to home
+          </a>
+
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
             <img src={`${import.meta.env.BASE_URL}logo.png`} alt="InspectProof" className="h-8 w-auto" />
             <span className="leading-none text-lg text-[#0B1933]" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
