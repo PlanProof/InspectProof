@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -35,9 +36,14 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const data = req.body;
+    if (!data.email || !data.password) {
+      res.status(400).json({ error: "bad_request", message: "Email and password are required" });
+      return;
+    }
+    const passwordHash = await bcrypt.hash(data.password, 12);
     const [user] = await db.insert(usersTable).values({
       email: data.email,
-      passwordHash: data.password,
+      passwordHash,
       firstName: data.firstName,
       lastName: data.lastName,
       role: data.role,
@@ -55,7 +61,7 @@ router.post("/", async (req, res) => {
 router.patch("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { phone, firstName, lastName, role, signatureUrl, profession, licenceNumber, companyName } = req.body;
+    const { phone, firstName, lastName, role, signatureUrl, profession, licenceNumber, companyName, isActive } = req.body;
 
     const updateData: Record<string, any> = { updatedAt: new Date() };
     if (phone !== undefined) updateData.phone = phone;
@@ -66,6 +72,7 @@ router.patch("/:id", async (req, res) => {
     if (profession !== undefined) updateData.profession = profession;
     if (licenceNumber !== undefined) updateData.licenceNumber = licenceNumber;
     if (companyName !== undefined) updateData.companyName = companyName;
+    if (isActive !== undefined) updateData.isActive = isActive;
 
     const [updated] = await db.update(usersTable)
       .set(updateData)

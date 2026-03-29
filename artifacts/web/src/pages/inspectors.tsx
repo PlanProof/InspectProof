@@ -3,10 +3,18 @@ import { useListUsers } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, Button } from "@/components/ui";
 import {
-  Users, Smartphone, Monitor, Mail, Phone, CheckSquare,
-  UserPlus, Send, Shield, Pencil, X, Check, Loader2,
+  Users, Smartphone, Monitor, Mail, Phone,
+  UserPlus, Send, Pencil, X, Check, Loader2, Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+function authHeader(): Record<string, string> {
+  const token = localStorage.getItem("inspectproof_token") ?? "";
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
 
 // ── Inspector type ─────────────────────────────────────────────────────────────
 type Inspector = {
@@ -58,7 +66,7 @@ function apiUserToInspector(u: any): Inspector {
     role: ROLE_MAP[u.role] ?? u.role,
     status: u.isActive ? "active" : "invited",
     appAccess: "app_only",
-    platformAccess: false,
+    platformAccess: u.isActive ?? true,
     lastActive: "—",
     inspectionsCompleted: 0,
     initials,
@@ -67,6 +75,12 @@ function apiUserToInspector(u: any): Inspector {
 }
 
 const ROLES = ["Inspector", "Certifier", "Staff"];
+
+const ROLE_REVERSE: Record<string, string> = {
+  Inspector: "inspector",
+  Certifier: "certifier",
+  Staff: "staff",
+};
 
 const ROLE_BADGE: Record<string, string> = {
   Inspector: "bg-blue-50 text-blue-700 border-blue-200",
@@ -98,14 +112,37 @@ function EditInspectorModal({
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const save = () => {
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
     setSaving(true);
-    setTimeout(() => {
+    setError(null);
+    try {
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const dbRole = ROLE_REVERSE[form.role] ?? form.role.toLowerCase();
+      const res = await fetch(`${base}/api/users/${inspector.id}`, {
+        method: "PATCH",
+        headers: authHeader(),
+        body: JSON.stringify({
+          firstName: form.firstName,
+          lastName: form.lastName,
+          phone: form.phone,
+          role: dbRole,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as any;
+        setError(body?.message ?? "Failed to save changes");
+        return;
+      }
       const initials = (form.firstName[0] ?? "") + (form.lastName[0] ?? "");
       onSave({ ...inspector, ...form, initials: initials.toUpperCase() });
-      setSaving(false);
       onClose();
-    }, 400);
+    } catch {
+      setError("Network error — please try again");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -189,21 +226,29 @@ function EditInspectorModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-muted/20 rounded-b-2xl">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:bg-muted/30 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="px-4 py-2 rounded-lg text-sm font-semibold bg-sidebar text-white hover:bg-sidebar/90 transition-colors flex items-center gap-2 disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-            {saving ? "Saving…" : "Save Changes"}
-          </button>
+        <div className="px-6 py-4 border-t border-border bg-muted/20 rounded-b-2xl space-y-3">
+          {error && (
+            <p className="text-sm text-red-600 flex items-center gap-1.5">
+              <X className="h-3.5 w-3.5 shrink-0" />
+              {error}
+            </p>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:bg-muted/30 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={saving}
+              className="px-4 py-2 rounded-lg text-sm font-semibold bg-sidebar text-white hover:bg-sidebar/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -367,10 +412,19 @@ export default function Inspectors() {
     return (rawUsers as any[]).map(u => ({ ...apiUserToInspector(u), ...(overrides[u.id] ?? {}) }));
   }, [rawUsers, overrides]);
 
-  const togglePlatform = (id: number) => {
+  const togglePlatform = useCallback(async (id: number) => {
     const current = inspectors.find(i => i.id === id)?.platformAccess ?? false;
     setOverrides(prev => ({ ...prev, [id]: { ...prev[id], platformAccess: !current } }));
-  };
+    try {
+      await fetch(`${apiBase()}/api/users/${id}`, {
+        method: "PATCH",
+        headers: authHeader(),
+        body: JSON.stringify({ isActive: !current }),
+      });
+    } catch {
+      setOverrides(prev => ({ ...prev, [id]: { ...prev[id], platformAccess: current } }));
+    }
+  }, [inspectors]);
 
   const sendInvite = useCallback(async (id: number) => {
     const inspector = inspectors.find(i => i.id === id);
@@ -380,7 +434,7 @@ export default function Inspectors() {
     try {
       const res = await fetch(`${apiBase()}/api/invites/app-invite`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeader(),
         body: JSON.stringify({ email: inspector.email, userId: id }),
       });
       if (!res.ok) {
@@ -408,7 +462,7 @@ export default function Inspectors() {
     try {
       const res = await fetch(`${apiBase()}/api/invites/app-invite`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeader(),
         body: JSON.stringify({ email: newEmail.trim() }),
       });
       const body = await res.json().catch(() => ({})) as any;

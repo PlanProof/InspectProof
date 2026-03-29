@@ -5,6 +5,18 @@ import { optionalAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
 
+function getUserIdFromRequest(req: any): number | null {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) return null;
+  try {
+    const decoded = Buffer.from(auth.slice(7), "base64").toString();
+    const [userId] = decoded.split(":");
+    return Number(userId) || null;
+  } catch {
+    return null;
+  }
+}
+
 async function formatIssue(i: any) {
   const projects = await db.select().from(projectsTable).where(eq(projectsTable.id, i.projectId));
   const pName = projects[0]?.name || "Unknown";
@@ -62,6 +74,11 @@ router.get("/", optionalAuth, async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const data = req.body;
+    if (!data.title || !data.severity) {
+      res.status(400).json({ error: "bad_request", message: "title and severity are required" });
+      return;
+    }
+    const requestingUserId = getUserIdFromRequest(req);
     const [issue] = await db.insert(issuesTable).values({
       projectId: data.projectId,
       inspectionId: data.inspectionId,
@@ -81,7 +98,7 @@ router.post("/", async (req, res) => {
       entityId: issue.id,
       action: "created",
       description: `Issue "${issue.title}" created (${issue.severity} severity)`,
-      userId: 1,
+      userId: requestingUserId ?? 1,
     });
 
     const formatted = await formatIssue(issue);

@@ -598,16 +598,31 @@ function SecurityTab() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
-  const save = () => {
+  const save = async () => {
     setError("");
     if (next.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (next !== confirm) { setError("Passwords do not match."); return; }
-    setSaved(true);
-    setCurrent(""); setNext(""); setConfirm("");
-    setTimeout(() => setSaved(false), 3000);
+    setSaving(true);
+    try {
+      await apiFetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: current, newPassword: next }),
+      });
+      setSaved(true);
+      setCurrent(""); setNext(""); setConfirm("");
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err: any) {
+      let msg = "Failed to update password.";
+      try { msg = JSON.parse(err.message)?.message ?? msg; } catch {}
+      setError(msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -628,28 +643,26 @@ function SecurityTab() {
 
           <div className="flex items-center gap-3 pt-1">
             <SaveBanner show={saved} />
-            <Button onClick={save}>Update Password</Button>
+            <Button onClick={save} disabled={saving} className="flex items-center gap-2">
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {saving ? "Updating…" : "Update Password"}
+            </Button>
           </div>
         </div>
       </SectionCard>
 
       <SectionCard title="Active Sessions" description="Devices currently signed in to your account">
         <div className="space-y-2">
-          {[
-            { device: "Chrome on macOS", location: "Sydney, NSW", time: "Active now", current: true },
-            { device: "InspectProof Mobile App", location: "Sydney, NSW", time: "2 hours ago", current: false },
-          ].map((s, i) => (
-            <div key={i} className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/10">
-              <div>
-                <p className="text-sm font-medium text-sidebar">{s.device}</p>
-                <p className="text-xs text-muted-foreground">{s.location} · {s.time}</p>
-              </div>
-              {s.current
-                ? <span className="text-xs font-semibold text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">Current</span>
-                : <Button variant="outline" className="text-xs py-1 px-2">Revoke</Button>
-              }
+          <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/10">
+            <div>
+              <p className="text-sm font-medium text-sidebar">Current browser session</p>
+              <p className="text-xs text-muted-foreground">Active now</p>
             </div>
-          ))}
+            <span className="text-xs font-semibold text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">Current</span>
+          </div>
+          <p className="text-xs text-muted-foreground pt-1 px-1">
+            Full session management — including viewing and revoking other devices — will be available in a future update.
+          </p>
         </div>
       </SectionCard>
 
@@ -658,7 +671,9 @@ function SecurityTab() {
           label="Authenticator App"
           description="Use an app like Google Authenticator or Authy to generate one-time codes."
         >
-          <Button variant="outline">Set up 2FA</Button>
+          <Button variant="outline" disabled className="opacity-60 cursor-not-allowed">
+            Coming soon
+          </Button>
         </SettingRow>
       </SectionCard>
     </>
@@ -667,25 +682,35 @@ function SecurityTab() {
 
 // ── Notifications Tab ─────────────────────────────────────────────────────────
 
+const NOTIF_DEFAULTS = {
+  emailSummary:      true,
+  emailDefects:      true,
+  emailAssignments:  false,
+  pushCritical:      true,
+  pushCompletions:   false,
+  pushReminders:     true,
+  reportReady:       true,
+  weeklyDigest:      false,
+};
+
 function NotificationsTab() {
-  const [prefs, setPrefs] = useState({
-    emailSummary:      true,
-    emailDefects:      true,
-    emailAssignments:  false,
-    pushCritical:      true,
-    pushCompletions:   false,
-    pushReminders:     true,
-    reportReady:       true,
-    weeklyDigest:      false,
+  const [prefs, setPrefs] = useState(() => {
+    try {
+      const stored = localStorage.getItem("inspectproof_notif_prefs");
+      return stored ? { ...NOTIF_DEFAULTS, ...JSON.parse(stored) } : NOTIF_DEFAULTS;
+    } catch {
+      return NOTIF_DEFAULTS;
+    }
   });
   const [saved, setSaved] = useState(false);
 
   const toggle = (key: keyof typeof prefs) => {
-    setPrefs(p => ({ ...p, [key]: !p[key] }));
+    setPrefs((p: typeof prefs) => ({ ...p, [key]: !p[key] }));
     setSaved(false);
   };
 
   const save = () => {
+    localStorage.setItem("inspectproof_notif_prefs", JSON.stringify(prefs));
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -852,24 +877,34 @@ function OrganisationTab() {
 
 // ── Platform Tab ──────────────────────────────────────────────────────────────
 
+const PLATFORM_DEFAULTS = {
+  defaultView:        "grid",
+  autoCompleteInspec: true,
+  requirePhotoFail:   false,
+  requireNotesFail:   true,
+  showNAItems:        true,
+  retentionYears:     "7",
+  timezone:           "Australia/Sydney",
+  dateFormat:         "DD/MM/YYYY",
+};
+
 function PlatformTab() {
   const [saved, setSaved] = useState(false);
-  const [prefs, setPrefs] = useState({
-    defaultView:        "grid",
-    autoCompleteInspec: true,
-    requirePhotoFail:   false,
-    requireNotesFail:   true,
-    showNAItems:        true,
-    retentionYears:     "7",
-    timezone:           "Australia/Sydney",
-    dateFormat:         "DD/MM/YYYY",
+  const [prefs, setPrefs] = useState(() => {
+    try {
+      const stored = localStorage.getItem("inspectproof_platform_prefs");
+      return stored ? { ...PLATFORM_DEFAULTS, ...JSON.parse(stored) } : PLATFORM_DEFAULTS;
+    } catch {
+      return PLATFORM_DEFAULTS;
+    }
   });
 
-  const toggle = (k: keyof typeof prefs) => setPrefs(p => ({ ...p, [k]: !p[k] }));
+  const toggle = (k: keyof typeof prefs) => setPrefs((p: typeof prefs) => ({ ...p, [k]: !p[k] }));
   const set = (k: keyof typeof prefs) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setPrefs(p => ({ ...p, [k]: e.target.value }));
+    setPrefs((p: typeof prefs) => ({ ...p, [k]: e.target.value }));
 
   const save = () => {
+    localStorage.setItem("inspectproof_platform_prefs", JSON.stringify(prefs));
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -945,7 +980,9 @@ function PlatformTab() {
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">Download a full archive of your inspection records, reports, and documents.</p>
             </div>
-            <Button variant="outline">Request Export</Button>
+            <Button variant="outline" disabled className="opacity-60 cursor-not-allowed">
+              Coming soon
+            </Button>
           </div>
         </div>
 

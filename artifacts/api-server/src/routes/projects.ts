@@ -144,7 +144,7 @@ router.post("/", checkProjectQuota, async (req, res) => {
       entityId: project.id,
       action: "created",
       description: `Project "${project.name}" created`,
-      userId: 1,
+      userId: createdById ?? 1,
     });
 
     res.status(201).json(formatProject(project, 0, 0));
@@ -232,6 +232,7 @@ router.put("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const data = req.body;
+    const requestingUserId = getUserIdFromRequest(req);
     const [project] = await db.update(projectsTable)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(projectsTable.id, id))
@@ -247,7 +248,7 @@ router.put("/:id", async (req, res) => {
       entityId: project.id,
       action: "updated",
       description: `Project "${project.name}" updated`,
-      userId: 1,
+      userId: requestingUserId ?? 1,
     });
 
     res.json(formatProject(project, 0, 0));

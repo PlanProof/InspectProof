@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useListIssues } from "@workspace/api-client-react";
+import { useListIssues, useListProjects, useCreateIssue } from "@workspace/api-client-react";
 import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, Label } from "@/components/ui";
-import { Search, Plus, ExternalLink, Camera, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Search, Plus, ExternalLink, Camera, ChevronUp, ChevronDown, ChevronsUpDown, Loader2, X } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
 
 function SortableHead({ col, label, sortCol, sortDir, onSort, className }: {
   col: string; label: string; sortCol: string; sortDir: "asc" | "desc";
@@ -25,13 +26,47 @@ function SortableHead({ col, label, sortCol, sortDir, onSort, className }: {
 }
 
 export default function Issues() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [severityFilter, setSeverityFilter] = useState<string>("All");
   const { data: issues, isLoading } = useListIssues({});
+  const { data: projects } = useListProjects({});
   const [selectedIssue, setSelectedIssue] = useState<any>(null);
   const [sortCol, setSortCol] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [newForm, setNewForm] = useState({
+    title: "",
+    description: "",
+    severity: "medium",
+    projectId: "",
+    location: "",
+  });
+  const [createError, setCreateError] = useState("");
+  const createIssue = useCreateIssue();
+
+  const handleCreate = async () => {
+    setCreateError("");
+    if (!newForm.title.trim()) { setCreateError("Title is required."); return; }
+    try {
+      await createIssue.mutateAsync({
+        data: {
+          title: newForm.title.trim(),
+          description: newForm.description.trim() || "",
+          severity: newForm.severity as any,
+          projectId: (newForm.projectId ? parseInt(newForm.projectId) : null) as any,
+          location: newForm.location.trim() || null,
+        } as any,
+      });
+      queryClient.invalidateQueries({ queryKey: ["listIssues"] });
+      setShowCreate(false);
+      setNewForm({ title: "", description: "", severity: "medium", projectId: "", location: "" });
+    } catch (err: any) {
+      setCreateError(err?.message ?? "Failed to create issue.");
+    }
+  };
 
   const toggleSort = (col: string) => {
     if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -67,7 +102,7 @@ export default function Issues() {
           <h1 className="text-3xl font-bold text-sidebar tracking-tight">Issues & Defects</h1>
           <p className="text-muted-foreground mt-1">Track and manage non-compliances and defects.</p>
         </div>
-        <Button className="shadow-lg shadow-primary/20">
+        <Button className="shadow-lg shadow-primary/20" onClick={() => setShowCreate(true)}>
           <Plus className="mr-2 h-4 w-4" /> New Issue
         </Button>
       </div>
@@ -155,6 +190,85 @@ export default function Issues() {
           </Table>
         )}
       </div>
+
+      {/* ── Create Issue Dialog ───────────────────────────────────────────── */}
+      <Dialog open={showCreate} onOpenChange={(open) => { if (!open) { setShowCreate(false); setCreateError(""); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Issue</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Title <span className="text-red-500">*</span></Label>
+              <Input
+                placeholder="Brief description of the issue"
+                value={newForm.title}
+                onChange={e => setNewForm(f => ({ ...f, title: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Severity <span className="text-red-500">*</span></Label>
+                <select
+                  value={newForm.severity}
+                  onChange={e => setNewForm(f => ({ ...f, severity: e.target.value }))}
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Project</Label>
+                <select
+                  value={newForm.projectId}
+                  onChange={e => setNewForm(f => ({ ...f, projectId: e.target.value }))}
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">No project</option>
+                  {(projects as any[] ?? []).map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Location / Element</Label>
+              <Input
+                placeholder="e.g. Level 2, South wall"
+                value={newForm.location}
+                onChange={e => setNewForm(f => ({ ...f, location: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <textarea
+                placeholder="Detailed description of the defect or non-compliance"
+                value={newForm.description}
+                onChange={e => setNewForm(f => ({ ...f, description: e.target.value }))}
+                rows={3}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+              />
+            </div>
+            {createError && (
+              <p className="text-sm text-red-600 flex items-center gap-1.5">
+                <X className="h-3.5 w-3.5 shrink-0" />{createError}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-border">
+            <Button variant="outline" onClick={() => { setShowCreate(false); setCreateError(""); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreate} disabled={createIssue.isPending} className="gap-2">
+              {createIssue.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {createIssue.isPending ? "Creating…" : "Create Issue"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!selectedIssue} onOpenChange={(open) => !open && setSelectedIssue(null)}>
         <DialogContent className="max-w-2xl">

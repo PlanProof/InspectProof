@@ -7,6 +7,18 @@ import { sendInspectionAssignedEmail } from "../lib/email";
 
 const router: IRouter = Router();
 
+function getUserIdFromRequest(req: any): number | null {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) return null;
+  try {
+    const decoded = Buffer.from(auth.slice(7), "base64").toString();
+    const [userId] = decoded.split(":");
+    return Number(userId) || null;
+  } catch {
+    return null;
+  }
+}
+
 async function getInspectionCounts(inspectionId: number) {
   const results = await db.select().from(checklistResultsTable)
     .where(eq(checklistResultsTable.inspectionId, inspectionId));
@@ -136,7 +148,7 @@ router.post("/", checkInspectionQuota, async (req, res) => {
       entityId: inspection.id,
       action: "scheduled",
       description: `${inspection.inspectionType} inspection scheduled for ${inspection.scheduledDate}`,
-      userId: 1,
+      userId: getUserIdFromRequest(req) ?? 1,
     });
 
     const formatted = await formatInspection(inspection);
@@ -178,7 +190,7 @@ router.post("/run-sheet/send", async (req, res) => {
       entityId: 0,
       action: "sent",
       description: `Run sheet for ${date} sent to: ${(inspectorNames as string[]).join(", ")}`,
-      userId: 1,
+      userId: getUserIdFromRequest(req) ?? 1,
     });
     res.json({ success: true, sentTo: inspectorNames });
   } catch (err) {
@@ -370,7 +382,7 @@ router.put("/:id", async (req, res) => {
       entityId: id,
       action: "updated",
       description: `Inspection status updated to ${data.status || inspection.status}`,
-      userId: 1,
+      userId: getUserIdFromRequest(req) ?? 1,
     });
 
     const formatted = await formatInspection(inspection);
@@ -591,7 +603,7 @@ router.post("/:id/apply-checklist", async (req, res) => {
       entityId: id,
       action: "checklist_applied",
       description: `Checklist template applied to inspection`,
-      userId: 1,
+      userId: getUserIdFromRequest(req) ?? 1,
     });
 
     const formatted = await formatInspection(updated);
