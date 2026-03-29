@@ -1,3 +1,14 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Background -->
+  <rect width="32" height="32" rx="7" fill="#0B1933"/>
+  <!-- Clipboard body -->
+  <rect x="8" y="10" width="16" height="18" rx="2" fill="#466DB5"/>
+  <!-- Clipboard clip -->
+  <rect x="12" y="8" width="8" height="4" rx="2" fill="#ffffff" opacity="0.9"/>
+  <!-- Lines on clipboard -->
+  <rect x="11" y="16" width="10" height="1.5" rx="0.75" fill="rgba(255,255,255,0.5)"/>
+  <rect x="11" y="19.5" width="7" height="1.5" rx="0.75" fill="rgba(255,255,255,0.5)"/>
+  <!-- Accent checkmark circle -->
+  <circle cx="23" cy="26" r="5" fill="#C5D92D"/>
+  <polyline points="20.5,26 22.2,27.8 25.5,24.2" fill="none" stroke="#0B1933" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
