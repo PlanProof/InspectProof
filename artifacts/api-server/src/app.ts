@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { WebhookHandlers } from "./webhookHandlers";
+import { syncPlanFromStripeByCustomerId } from "./routes/billing";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -34,7 +35,47 @@ app.post(
     if (!signature) return res.status(400).json({ error: 'Missing stripe-signature' });
     try {
       const sig = Array.isArray(signature) ? signature[0] : signature;
-      await WebhookHandlers.processWebhook(req.body as Buffer, sig);
+
+      // Let StripeSync handle its own sync tables
+      try {
+        await WebhookHandlers.processWebhook(req.body as Buffer, sig);
+      } catch (syncErr: any) {
+        // StripeSync may fail for events it doesn't recognise — that's fine,
+        // we still need to update our own users table below.
+        logger.warn({ err: syncErr }, 'StripeSync processWebhook warning (non-fatal)');
+      }
+
+      // Parse the event ourselves so we can update our users table
+      let event: any;
+      try {
+        // Without the webhook secret we can't verify — parse the raw payload
+        event = JSON.parse((req.body as Buffer).toString());
+      } catch {
+        return res.status(400).json({ error: 'Invalid JSON payload' });
+      }
+
+      const PLAN_UPDATE_EVENTS = new Set([
+        'checkout.session.completed',
+        'customer.subscription.created',
+        'customer.subscription.updated',
+        'customer.subscription.deleted',
+      ]);
+
+      if (PLAN_UPDATE_EVENTS.has(event.type)) {
+        const obj = event.data?.object;
+        const customerId: string | null =
+          obj?.customer ?? obj?.subscription?.customer ?? null;
+
+        if (customerId) {
+          try {
+            await syncPlanFromStripeByCustomerId(customerId);
+            logger.info({ event: event.type, customerId }, 'Plan synced from Stripe webhook');
+          } catch (planErr: any) {
+            logger.error({ err: planErr }, 'Failed to sync plan from webhook');
+          }
+        }
+      }
+
       return res.status(200).json({ received: true });
     } catch (err: any) {
       logger.error({ err }, 'Stripe webhook error');

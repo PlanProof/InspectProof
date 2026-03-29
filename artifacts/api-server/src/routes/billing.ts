@@ -187,4 +187,65 @@ router.get('/billing/enterprise-enquiry', async (req: any, res) => {
   });
 });
 
+// Sync the user's plan from Stripe after checkout or on demand.
+// Looks up all active subscriptions for the user's Stripe customer and
+// writes the plan + subscription ID back to our users table.
+export async function syncPlanFromStripe(userId: number): Promise<{ plan: string; subscriptionId: string | null }> {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user) throw new Error('User not found');
+
+  const customerId = user.stripeCustomerId;
+  if (!customerId) return { plan: user.plan ?? 'free_trial', subscriptionId: null };
+
+  const stripe = await getUncachableStripeClient();
+  const subscriptions = await stripe.subscriptions.list({
+    customer: customerId,
+    status: 'active',
+    limit: 5,
+    expand: ['data.items.data.price'],
+  });
+
+  if (!subscriptions.data.length) {
+    return { plan: user.plan ?? 'free_trial', subscriptionId: null };
+  }
+
+  const sub = subscriptions.data[0];
+  const item = sub.items.data[0];
+  const productId = typeof item?.price?.product === 'string'
+    ? item.price.product
+    : (item?.price?.product as any)?.id;
+
+  let planKey = 'free_trial';
+  if (productId) {
+    const product = await stripe.products.retrieve(productId);
+    planKey = product.metadata?.inspectproof_plan ?? 'free_trial';
+  }
+
+  await db.update(usersTable).set({
+    plan: planKey,
+    stripeSubscriptionId: sub.id,
+  }).where(eq(usersTable.id, userId));
+
+  return { plan: planKey, subscriptionId: sub.id };
+}
+
+// Sync via customer ID (used in webhook where we have customerId but not userId)
+export async function syncPlanFromStripeByCustomerId(customerId: string): Promise<void> {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.stripeCustomerId, customerId));
+  if (!user) return;
+  await syncPlanFromStripe(user.id);
+}
+
+router.post('/billing/sync-plan', async (req: any, res) => {
+  const userId = getUserId(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const result = await syncPlanFromStripe(userId);
+    return res.json(result);
+  } catch (err: any) {
+    console.error('sync-plan error:', err.message);
+    return res.status(500).json({ error: 'Failed to sync plan' });
+  }
+});
+
 export default router;

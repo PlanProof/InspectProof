@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CreditCard, CheckCircle2, ArrowRight, Shield, Zap, Building2,
   BarChart3, Users, FileText, Infinity, X
@@ -53,22 +53,41 @@ interface Plan {
 
 export default function Billing() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const syncedRef = useRef(false);
 
   const params = new URLSearchParams(window.location.search);
   const success = params.get("success") === "1";
   const cancelled = params.get("cancelled") === "1";
 
-  useEffect(() => {
-    if (success) toast({ title: "Subscription activated!", description: "Welcome to your new plan." });
-    if (cancelled) toast({ title: "Checkout cancelled", description: "No charges were made.", variant: "destructive" });
-  }, []);
-
   const authHeader = () => ({
     Authorization: `Bearer ${localStorage.getItem("inspectproof_token") ?? ""}`,
     "Content-Type": "application/json",
   });
+
+  useEffect(() => {
+    if (cancelled) {
+      toast({ title: "Checkout cancelled", description: "No charges were made.", variant: "destructive" });
+    }
+    if (success && !syncedRef.current) {
+      syncedRef.current = true;
+      setSyncing(true);
+      // Sync the plan from Stripe immediately — don't wait for a webhook
+      fetch(API("/billing/sync-plan"), { method: "POST", headers: authHeader() })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["billing-subscription"] }))
+        .then(() => {
+          setSyncing(false);
+          toast({ title: "Subscription activated!", description: "Your plan has been updated." });
+        })
+        .catch(() => {
+          setSyncing(false);
+          toast({ title: "Subscription activated!", description: "Welcome to your new plan." });
+        });
+    }
+  }, []);
 
   const { data: subData } = useQuery({
     queryKey: ["billing-subscription"],
@@ -179,6 +198,15 @@ export default function Billing() {
         <h1 className="text-3xl font-bold text-[#0B1933] tracking-tight">Plans & Billing</h1>
         <p className="text-muted-foreground mt-1">Manage your subscription and payment details.</p>
       </div>
+      {syncing && (
+        <div className="mb-6 flex items-center gap-3 bg-[#466DB5]/10 border border-[#466DB5]/30 rounded-xl px-5 py-3 text-[#0B1933]">
+          <svg className="animate-spin h-4 w-4 text-[#466DB5]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+          </svg>
+          <span className="text-sm font-medium">Confirming your subscription with Stripe…</span>
+        </div>
+      )}
       <div className="max-w-6xl">
         {/* Current usage */}
         {subData && (
