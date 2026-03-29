@@ -53,10 +53,9 @@ channel = "stable-25_05"
 
 [userenv.shared]
 SUPABASE_URL = "https://heckmhedgjsodypzfjqt.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlY2ttaGVkZ2pzb2R5cHpmanF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NDY4MjYsImV4cCI6MjA5MDEyMjgyNn0.95_ZIISNb-Phti1CcIqco9eYPx2fkB3G2zfAoyHBYjg"
 SMTP_HOST = "smtp.office365.com"
 SMTP_PORT = "587"
 SMTP_USER = "contact@inspectproof.com.au"
 SMTP_FROM = "InspectProof <contact@inspectproof.com.au>"
-APP_BASE_URL = "https://7c467f6e-a89a-4afd-887e-f4f25c918943-00-3p4ddnj78lplg.janeway.replit.dev"
+APP_BASE_URL = "https://www.inspectproof.com.au"
 FEEDBACK_EMAIL = "contact@inspectproof.com.au"
