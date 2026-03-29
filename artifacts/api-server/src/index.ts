@@ -1,7 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureSupabaseBucket, isSupabaseStorageAvailable } from "./lib/supabaseStorage";
-import { db, usersTable } from "@workspace/db";
+import { db, pool, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { ensureGlobalTemplatesSeed } from "../../../lib/db/src/seeds/global-templates";
@@ -15,6 +15,16 @@ if (!rawPort) {
 const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+async function runSchemaMigrations() {
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_on_assignment boolean NOT NULL DEFAULT true`);
+    logger.info("Schema migrations applied");
+  } catch (err) {
+    logger.error({ err }, "Schema migration failed — continuing");
+  }
 }
 
 async function ensureAdminSeed() {
@@ -81,6 +91,7 @@ async function initStripe() {
   }
 }
 
+await runSchemaMigrations();
 await ensureAdminSeed();
 await ensureGlobalTemplatesSeed();
 await initStripe();
