@@ -8,10 +8,12 @@ const { Pool } = pg;
 // 1. SUPABASE_DATABASE_URL  — custom/manual Supabase URL
 // 2. POSTGRES_URL_NON_POOLING — injected automatically by Vercel's Supabase integration (direct connection, required for Drizzle ORM)
 // 3. DATABASE_URL             — Replit managed PostgreSQL (local dev)
-const connectionString =
+const connectionString = (
   process.env.SUPABASE_DATABASE_URL ||
   process.env.POSTGRES_URL_NON_POOLING ||
-  process.env.DATABASE_URL;
+  process.env.DATABASE_URL ||
+  ""
+).trim();
 
 if (!connectionString) {
   throw new Error(
@@ -20,8 +22,8 @@ if (!connectionString) {
 }
 
 const isSupabase =
-  !!process.env.SUPABASE_DATABASE_URL ||
-  !!process.env.POSTGRES_URL_NON_POOLING;
+  !!(process.env.SUPABASE_DATABASE_URL || "").trim() ||
+  !!(process.env.POSTGRES_URL_NON_POOLING || "").trim();
 
 export const pool = new Pool({
   connectionString,
