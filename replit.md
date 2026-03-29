@@ -27,6 +27,25 @@ InspectProof is a full-stack platform for Australian building certifiers and sur
 - Secondary: `#466DB5` (BlueYonder)
 - Accent: `#C5D92D` (Pear)
 
+## E2E Test Results (2026-03-29)
+
+Full admin → inspector → mobile → report flow verified:
+
+| Step | Status |
+|---|---|
+| Admin creates project | ✅ |
+| Admin links templates to project | ✅ |
+| Admin books inspection + assigns inspector | ✅ |
+| Admin creates inspector account via "Add Team Member" (returns temp password in UI) | ✅ |
+| Mobile: Inspector logs in with credentials | ✅ |
+| Mobile: Inspector sees assigned inspection in Inspections tab | ✅ |
+| Mobile: Inspector views inspection detail (type, project, assigned inspector) | ✅ |
+| Mobile: Inspector marks inspection Complete | ✅ |
+| Desktop: Admin sees inspection as Completed | ✅ |
+| Desktop: Admin generates Inspection Certificate PDF | ✅ (`Inspection_Certificate_Frame_Stage_UI_Fix_Test_Project.pdf`) |
+
+**Bug fixed this session:** Inspector-role users were blocked from seeing their assigned inspections on mobile because the `GET /api/inspections` route applied a project-owner access filter before the inspector filter. Fixed by reordering: inspector users now bypass the project filter and only see inspections where `inspectorId === req.authUser.id`.
+
 ## Production Integrations
 
 | Integration | Config |

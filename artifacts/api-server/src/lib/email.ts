@@ -354,6 +354,123 @@ export async function sendAppInviteEmail(
   }
 }
 
+// ── Welcome with credentials (admin-created accounts) ───────────────────────
+
+function welcomeWithCredentialsHtml(opts: {
+  firstName: string;
+  email: string;
+  temporaryPassword: string;
+  inviterName: string;
+  loginUrl: string;
+}): string {
+  const { firstName, email, temporaryPassword, inviterName, loginUrl } = opts;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Welcome to InspectProof</title></head>
+<body style="margin:0;padding:0;background:#f4f6fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa;padding:32px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#0B1933;padding:28px 32px;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td><span style="font-size:20px;font-weight:700;color:#ffffff;">InspectProof</span></td>
+              <td align="right"><span style="font-size:12px;color:#C5D92D;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Welcome</span></td>
+            </tr></table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 32px 32px;">
+            <p style="margin:0 0 6px;font-size:14px;color:#6b7280;">Hi ${firstName},</p>
+            <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#0B1933;">Your InspectProof Account is Ready</h1>
+            <p style="margin:0 0 28px;font-size:15px;color:#4b5563;line-height:1.6;">
+              <strong>${inviterName}</strong> has created an account for you on InspectProof. Use the credentials below to sign in.
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;margin-bottom:28px;">
+              <tr><td>
+                <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#0B1933;">Your login credentials:</p>
+                <p style="margin:0 0 8px;font-size:14px;color:#374151;"><strong>Email:</strong> ${email}</p>
+                <p style="margin:0 0 16px;font-size:14px;color:#374151;"><strong>Temporary Password:</strong> <span style="font-family:monospace;background:#eef2ff;padding:2px 6px;border-radius:4px;">${temporaryPassword}</span></p>
+                <p style="margin:0;font-size:13px;color:#6b7280;">Please change your password after your first login.</p>
+              </td></tr>
+            </table>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;margin-bottom:28px;">
+              <tr><td>
+                <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#0B1933;">Getting started on mobile:</p>
+                <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;"><strong>1.</strong> Download the <strong>Expo Go</strong> app from the App Store or Google Play</p>
+                <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;"><strong>2.</strong> Open the InspectProof mobile app link below</p>
+                <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;"><strong>3.</strong> Sign in using your email and the temporary password above</p>
+              </td></tr>
+            </table>
+            <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background:#C5D92D;border-radius:8px;">
+                  <a href="${loginUrl}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#0B1933;text-decoration:none;border-radius:8px;">
+                    Sign In to InspectProof →
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 4px;font-size:13px;color:#9ca3af;">Or copy this link:</p>
+            <p style="margin:0;font-size:12px;color:#466DB5;word-break:break-all;">${loginUrl}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc;border-top:1px solid #e5e7eb;padding:20px 32px;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">InspectProof — PlanProof Technologies Pty Ltd<br/>If you weren't expecting this, please contact your team administrator.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export interface WelcomeWithCredentialsOpts {
+  toEmail: string;
+  firstName: string;
+  temporaryPassword: string;
+  inviterName: string;
+}
+
+export async function sendWelcomeWithCredentialsEmail(
+  opts: WelcomeWithCredentialsOpts,
+  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+): Promise<void> {
+  if (!isConfigured()) {
+    log?.warn({ smtpHost: SMTP_HOST }, "SMTP not configured — skipping welcome email");
+    return;
+  }
+  const loginUrl = `${APP_BASE_URL}/login`;
+  try {
+    const transporter = createTransporter();
+    await transporter.sendMail({
+      from: SMTP_FROM,
+      to: opts.toEmail,
+      subject: `Welcome to InspectProof — Your account is ready`,
+      html: welcomeWithCredentialsHtml({ ...opts, loginUrl }),
+      text: [
+        `Hi ${opts.firstName},`,
+        ``,
+        `${opts.inviterName} has created an InspectProof account for you.`,
+        ``,
+        `Email: ${opts.toEmail}`,
+        `Temporary Password: ${opts.temporaryPassword}`,
+        ``,
+        `Sign in at: ${loginUrl}`,
+        ``,
+        `For mobile: download Expo Go, then open the InspectProof app and sign in with the above credentials.`,
+        ``,
+        `— InspectProof`,
+      ].join("\n"),
+    });
+    log?.info({ to: opts.toEmail }, "Welcome with credentials email sent");
+  } catch (err) {
+    log?.error({ err, to: opts.toEmail }, "Failed to send welcome with credentials email");
+  }
+}
+
 // ── Inspection assignment ───────────────────────────────────────────────────
 
 export async function sendInspectionAssignedEmail(opts: InspectionEmailOpts, log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }): Promise<void> {

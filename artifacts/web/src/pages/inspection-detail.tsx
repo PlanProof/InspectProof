@@ -1517,6 +1517,11 @@ function OverviewTab({
   const [savingInspector, setSavingInspector] = useState(false);
   const [inspectorSaved, setInspectorSaved] = useState(false);
 
+  // Sync selectedInspectorId when the inspection prop changes (e.g. after onReload)
+  useEffect(() => {
+    setSelectedInspectorId(inspection.inspectorId ? String(inspection.inspectorId) : "");
+  }, [inspection.inspectorId]);
+
   // Checklist template state
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
     inspection.checklistTemplateId ? String(inspection.checklistTemplateId) : ""

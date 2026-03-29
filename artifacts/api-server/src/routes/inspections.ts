@@ -81,12 +81,15 @@ router.get("/", optionalAuth, async (req, res) => {
     let inspections = await db.select().from(inspectionsTable)
       .orderBy(sql`${inspectionsTable.scheduledDate} DESC`);
 
-    // Scope inspections to projects owned by the requesting user (unless admin)
-    if (req.authUser && !req.authUser.isAdmin) {
+    // Inspector-role users only see inspections assigned to them (bypass project access filter)
+    if (req.authUser && isInspectorOnly(req.authUser)) {
+      inspections = inspections.filter(i => i.inspectorId === req.authUser!.id);
+    } else if (req.authUser && !req.authUser.isAdmin) {
+      // Scope inspections to projects owned by the requesting user (managers/admins only)
       const allProjects = await db.select({ id: projectsTable.id, name: projectsTable.name, createdById: projectsTable.createdById })
         .from(projectsTable);
       const accessibleProjectIds = allProjects
-        .filter(p => p.name === "Test Project" || p.createdById === req.authUser!.id)
+        .filter(p => p.createdById === req.authUser!.id)
         .map(p => p.id);
       inspections = inspections.filter(i => i.projectId !== null && accessibleProjectIds.includes(i.projectId));
     } else if (!req.authUser) {
@@ -99,11 +102,6 @@ router.get("/", optionalAuth, async (req, res) => {
     if (projectId) inspections = inspections.filter(i => i.projectId === parseInt(projectId as string));
     if (status) inspections = inspections.filter(i => i.status === status);
     if (inspectorId) inspections = inspections.filter(i => i.inspectorId === parseInt(inspectorId as string));
-
-    // Inspector-role users only see inspections assigned to them
-    if (req.authUser && isInspectorOnly(req.authUser)) {
-      inspections = inspections.filter(i => i.inspectorId === req.authUser!.id);
-    }
 
     const result = await Promise.all(inspections.map(formatInspection));
     res.json(result);

@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
+import { sendWelcomeWithCredentialsEmail } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -36,28 +37,57 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const data = req.body;
-    if (!data.email || !data.password) {
-      res.status(400).json({ error: "bad_request", message: "Email and password are required" });
+    if (!data.email || !data.firstName || !data.lastName) {
+      res.status(400).json({ error: "bad_request", message: "First name, last name, and email are required" });
       return;
     }
-    const passwordHash = await bcrypt.hash(data.password, 12);
+
+    const normalizedEmail = data.email.toLowerCase().trim();
+
+    const existing = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+    if (existing.length > 0) {
+      res.status(409).json({ error: "conflict", message: "An account with this email already exists." });
+      return;
+    }
+
+    const temporaryPassword = data.password || generateTempPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+
     const [user] = await db.insert(usersTable).values({
-      email: data.email,
+      email: normalizedEmail,
       passwordHash,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      role: data.role,
-      phone: data.phone,
+      firstName: data.firstName.trim(),
+      lastName: data.lastName.trim(),
+      role: data.role || "inspector",
+      phone: data.phone || null,
       isActive: true,
     }).returning();
-    res.status(201).json(formatUser(user));
+
+    res.status(201).json({ ...formatUser(user), temporaryPassword });
+
+    // Send welcome email with credentials (non-blocking)
+    if (data.sendWelcomeEmail !== false) {
+      const inviterName = data.inviterName || "Your team administrator";
+      sendWelcomeWithCredentialsEmail(
+        { toEmail: normalizedEmail, firstName: data.firstName.trim(), temporaryPassword, inviterName },
+        req.log
+      ).catch(() => {});
+    }
   } catch (err) {
     req.log.error({ err }, "Create user error");
     res.status(500).json({ error: "internal_error" });
   }
 });
 
-// Update user profile (phone, signatureUrl, etc.)
+function generateTempPassword(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  let result = "";
+  for (let i = 0; i < 10; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 router.patch("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);

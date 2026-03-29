@@ -395,8 +395,10 @@ function apiBase() {
 
 // ── Inspectors Page ───────────────────────────────────────────────────────────
 
+const ADD_MEMBER_ROLES = ["Inspector", "Certifier", "Staff", "Admin"];
+
 export default function Inspectors() {
-  const { data: rawUsers, isLoading } = useListUsers({});
+  const { data: rawUsers, isLoading, refetch } = useListUsers({});
   const [overrides, setOverrides] = useState<Record<number, Partial<Inspector>>>({});
   const [inviteSentFor, setInviteSentFor] = useState<number | null>(null);
   const [invitingId, setInvitingId] = useState<number | null>(null);
@@ -406,6 +408,12 @@ export default function Inspectors() {
   const [formSending, setFormSending] = useState(false);
   const [formResult, setFormResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [editingInspector, setEditingInspector] = useState<Inspector | null>(null);
+
+  // Add Team Member modal state
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [addMemberForm, setAddMemberForm] = useState({ firstName: "", lastName: "", email: "", phone: "", role: "Inspector" });
+  const [addMemberSaving, setAddMemberSaving] = useState(false);
+  const [addMemberResult, setAddMemberResult] = useState<{ ok: boolean; msg: string; tempPassword?: string } | null>(null);
 
   const inspectors: Inspector[] = useMemo(() => {
     if (!rawUsers) return [];
@@ -484,11 +492,185 @@ export default function Inspectors() {
     setOverrides(prev => ({ ...prev, [updated.id]: updated }));
   };
 
+  const addMember = useCallback(async () => {
+    if (!addMemberForm.firstName || !addMemberForm.lastName || !addMemberForm.email) return;
+    setAddMemberSaving(true);
+    setAddMemberResult(null);
+    try {
+      const currentUser = JSON.parse(localStorage.getItem("inspectproof_user") ?? "{}");
+      const inviterName = currentUser.firstName && currentUser.lastName
+        ? `${currentUser.firstName} ${currentUser.lastName}`
+        : "Your administrator";
+      const dbRole = ROLE_REVERSE[addMemberForm.role] ?? addMemberForm.role.toLowerCase();
+      const res = await fetch(`${apiBase()}/api/users`, {
+        method: "POST",
+        headers: authHeader(),
+        body: JSON.stringify({
+          firstName: addMemberForm.firstName,
+          lastName: addMemberForm.lastName,
+          email: addMemberForm.email,
+          phone: addMemberForm.phone || undefined,
+          role: dbRole,
+          sendWelcomeEmail: true,
+          inviterName,
+        }),
+      });
+      const body = await res.json().catch(() => ({})) as any;
+      if (!res.ok) {
+        setAddMemberResult({ ok: false, msg: body?.message || "Failed to create account" });
+        return;
+      }
+      setAddMemberResult({
+        ok: true,
+        msg: `Account created for ${addMemberForm.firstName} ${addMemberForm.lastName}`,
+        tempPassword: body.temporaryPassword,
+      });
+      setAddMemberForm({ firstName: "", lastName: "", email: "", phone: "", role: "Inspector" });
+      refetch();
+    } catch {
+      setAddMemberResult({ ok: false, msg: "Network error — please try again" });
+    } finally {
+      setAddMemberSaving(false);
+    }
+  }, [addMemberForm, refetch]);
+
   const activeCount = inspectors.filter(i => i.status === "active").length;
   const appCount = inspectors.filter(i => i.appAccess === "app_only" || i.appAccess === "full").length;
 
   return (
     <AppLayout>
+      {/* Add Team Member Modal */}
+      {showAddMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { if (!addMemberSaving) { setShowAddMember(false); setAddMemberResult(null); } }}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative z-10 bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <div>
+                <h2 className="font-bold text-sidebar text-base">Add Team Member</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Create an account and send login credentials</p>
+              </div>
+              <button
+                onClick={() => { if (!addMemberSaving) { setShowAddMember(false); setAddMemberResult(null); } }}
+                className="p-1.5 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-sidebar transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {addMemberResult?.ok ? (
+              <div className="px-6 py-6 space-y-4">
+                <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                  <Check className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-green-800">{addMemberResult.msg}</p>
+                    <p className="text-xs text-green-700 mt-1">A welcome email with login instructions has been sent.</p>
+                  </div>
+                </div>
+                {addMemberResult.tempPassword && (
+                  <div className="p-4 bg-muted/40 border border-border rounded-xl space-y-2">
+                    <p className="text-xs font-semibold text-sidebar uppercase tracking-wide">Temporary Password</p>
+                    <p className="font-mono text-sm bg-white border border-border rounded-lg px-3 py-2 select-all text-sidebar">
+                      {addMemberResult.tempPassword}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Share this with the team member so they can log in and change their password.</p>
+                  </div>
+                )}
+                <div className="flex justify-end">
+                  <Button onClick={() => { setShowAddMember(false); setAddMemberResult(null); }}>Done</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="px-6 py-5 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">First Name <span className="text-red-500">*</span></label>
+                    <input
+                      value={addMemberForm.firstName}
+                      onChange={e => setAddMemberForm(f => ({ ...f, firstName: e.target.value }))}
+                      className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+                      placeholder="First name"
+                      disabled={addMemberSaving}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Last Name <span className="text-red-500">*</span></label>
+                    <input
+                      value={addMemberForm.lastName}
+                      onChange={e => setAddMemberForm(f => ({ ...f, lastName: e.target.value }))}
+                      className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+                      placeholder="Last name"
+                      disabled={addMemberSaving}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Email Address <span className="text-red-500">*</span></label>
+                  <input
+                    type="email"
+                    value={addMemberForm.email}
+                    onChange={e => setAddMemberForm(f => ({ ...f, email: e.target.value }))}
+                    className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+                    placeholder="inspector@example.com"
+                    disabled={addMemberSaving}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Phone <span className="text-xs font-normal text-muted-foreground">(optional)</span></label>
+                  <input
+                    type="tel"
+                    value={addMemberForm.phone}
+                    onChange={e => setAddMemberForm(f => ({ ...f, phone: e.target.value }))}
+                    className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+                    placeholder="04xx xxx xxx"
+                    disabled={addMemberSaving}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Role</label>
+                  <select
+                    value={addMemberForm.role}
+                    onChange={e => setAddMemberForm(f => ({ ...f, role: e.target.value }))}
+                    className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+                    disabled={addMemberSaving}
+                  >
+                    {ADD_MEMBER_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+                  A temporary password will be auto-generated and emailed to the team member along with instructions to download the app.
+                </p>
+                {addMemberResult && !addMemberResult.ok && (
+                  <p className="text-sm text-red-600 flex items-center gap-1.5">
+                    <X className="h-3.5 w-3.5 shrink-0" />
+                    {addMemberResult.msg}
+                  </p>
+                )}
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    onClick={() => { setShowAddMember(false); setAddMemberResult(null); }}
+                    disabled={addMemberSaving}
+                    className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:bg-muted/30 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={addMember}
+                    disabled={addMemberSaving || !addMemberForm.firstName || !addMemberForm.lastName || !addMemberForm.email}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-sidebar text-white hover:bg-sidebar/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {addMemberSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+                    {addMemberSaving ? "Creating…" : "Create Account & Send Email"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -497,12 +679,21 @@ export default function Inspectors() {
             Manage your inspection team, app access, and platform permissions.
           </p>
         </div>
-        <Button
-          onClick={() => setShowInviteForm(!showInviteForm)}
-          className="gap-2 shadow-lg shadow-primary/20"
-        >
-          <UserPlus className="h-4 w-4" /> Invite Inspector
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowInviteForm(!showInviteForm)}
+            className="gap-2"
+          >
+            <Send className="h-4 w-4" /> Send App Invite
+          </Button>
+          <Button
+            onClick={() => { setShowAddMember(true); setAddMemberResult(null); }}
+            className="gap-2 shadow-lg shadow-primary/20"
+          >
+            <UserPlus className="h-4 w-4" /> Add Team Member
+          </Button>
+        </div>
       </div>
 
       {/* Invite form */}
