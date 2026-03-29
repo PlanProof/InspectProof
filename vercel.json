@@ -1,8 +1,0 @@
-{
-  "outputDirectory": "artifacts/web/dist/public",
-  "buildCommand": "pnpm run build",
-  "installCommand": "pnpm install",
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/index" }
-  ]
-}
