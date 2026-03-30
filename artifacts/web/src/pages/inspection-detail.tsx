@@ -2218,9 +2218,26 @@ function ChecklistTab({
         });
         onReload();
       }
-    } catch {
+    } catch (err: any) {
+      alert(err?.message || "Upload failed. Please try again.");
     } finally {
       setUploadingItemId(null);
+    }
+  };
+
+  const handleRemovePhoto = async (itemId: number, photoPath: string) => {
+    const item = localResults.find(r => r.id === itemId);
+    if (!item) return;
+    const updated = (item.photoUrls ?? []).filter(p => p !== photoPath);
+    try {
+      await apiFetch(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrls: updated }),
+      });
+      setLocalResults(rs => rs.map(r => r.id !== itemId ? r : { ...r, photoUrls: updated }));
+    } catch {
+      alert("Failed to remove photo. Please try again.");
     }
   };
 
@@ -2429,6 +2446,14 @@ ${checklistRows}
         }}
       />
 
+      {/* Editable-after-completion notice */}
+      {(inspection.status === "completed" || inspection.status === "follow_up_required") && (
+        <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs font-medium">
+          <PencilLine className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+          Results and photos can be corrected at any time — changes are saved immediately.
+        </div>
+      )}
+
       {/* Photo Sheet button */}
       <div className="flex justify-end">
         <button
@@ -2509,26 +2534,34 @@ ${checklistRows}
                           {item.photoUrls.map((photoPath, pi) => {
                             const markup = item.photoMarkups?.[photoPath];
                             return (
-                              <a
-                                key={pi}
-                                href={`${apiBase()}/api/storage${photoPath}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="relative block rounded-md overflow-hidden border border-border hover:border-secondary/60 transition-colors flex-shrink-0"
-                                style={{ width: 72, height: 72 }}
-                              >
-                                <img src={`${apiBase()}/api/storage${photoPath}`} alt={`Photo ${pi + 1}`} className="w-full h-full object-cover" />
-                                {markup && markup.strokes.length > 0 && (
-                                  <>
-                                    <svg className="absolute inset-0 w-full h-full" viewBox={`0 0 ${markup.w} ${markup.h}`} preserveAspectRatio="xMidYMid meet">
-                                      {markup.strokes.map((stroke, si) => (
-                                        <path key={si} d={stroke.points.map((p, i2) => `${i2 === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ")} stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                                      ))}
-                                    </svg>
-                                    <span className="absolute bottom-1 left-1 bg-secondary text-white text-[8px] px-1 rounded leading-tight font-semibold">Markup</span>
-                                  </>
-                                )}
-                              </a>
+                              <div key={pi} className="relative group flex-shrink-0" style={{ width: 72, height: 72 }}>
+                                <a
+                                  href={`${apiBase()}/api/storage${photoPath}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="relative block w-full h-full rounded-md overflow-hidden border border-border hover:border-secondary/60 transition-colors"
+                                >
+                                  <img src={`${apiBase()}/api/storage${photoPath}`} alt={`Photo ${pi + 1}`} className="w-full h-full object-cover" />
+                                  {markup && markup.strokes.length > 0 && (
+                                    <>
+                                      <svg className="absolute inset-0 w-full h-full" viewBox={`0 0 ${markup.w} ${markup.h}`} preserveAspectRatio="xMidYMid meet">
+                                        {markup.strokes.map((stroke, si) => (
+                                          <path key={si} d={stroke.points.map((p, i2) => `${i2 === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ")} stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                                        ))}
+                                      </svg>
+                                      <span className="absolute bottom-1 left-1 bg-secondary text-white text-[8px] px-1 rounded leading-tight font-semibold">Markup</span>
+                                    </>
+                                  )}
+                                </a>
+                                <button
+                                  onClick={e => { e.preventDefault(); e.stopPropagation(); handleRemovePhoto(item.id, photoPath); }}
+                                  title="Remove photo"
+                                  className="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm z-10"
+                                  style={{ width: 18, height: 18 }}
+                                >
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              </div>
                             );
                           })}
                         </div>
