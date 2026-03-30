@@ -460,7 +460,11 @@ export default function InspectionDetail() {
   const disciplineReportTypes = inspection
     ? getAllowedReportTypes(inspection.checklistTemplateDiscipline)
     : DEFAULT_DISCIPLINE_TYPES;
-  const REPORT_TYPES_DESKTOP = ALL_REPORT_TYPES_META.filter(rt => disciplineReportTypes.includes(rt.key));
+  // Show all report types — discipline-relevant ones float to the top
+  const REPORT_TYPES_DESKTOP = [
+    ...ALL_REPORT_TYPES_META.filter(rt => disciplineReportTypes.includes(rt.key)),
+    ...ALL_REPORT_TYPES_META.filter(rt => !disciplineReportTypes.includes(rt.key)),
+  ];
 
   const generateReport = async () => {
     if (!inspection) return;
@@ -994,43 +998,54 @@ export default function InspectionDetail() {
                   );
                 })()}
                 <div className="space-y-2">
-                  {REPORT_TYPES_DESKTOP.map(rt => {
+                  {REPORT_TYPES_DESKTOP.map((rt, idx) => {
                     const Icon = rt.icon;
                     const isRecommended = inspection ? rt.key === getSuggestedReportType(inspection) : false;
+                    const isDisciplineType = disciplineReportTypes.includes(rt.key);
+                    const prevIsDiscipline = idx > 0 ? disciplineReportTypes.includes(REPORT_TYPES_DESKTOP[idx - 1].key) : true;
+                    const showSeparator = !isDisciplineType && prevIsDiscipline;
                     return (
-                      <label
-                        key={rt.key}
-                        className={cn(
-                          "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                          selectedReportType === rt.key
-                            ? "border-sidebar bg-sidebar/5"
-                            : "border-border hover:border-sidebar/30"
+                      <div key={rt.key}>
+                        {showSeparator && (
+                          <div className="flex items-center gap-2 pt-1 pb-2">
+                            <div className="flex-1 border-t border-border" />
+                            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">All report types</span>
+                            <div className="flex-1 border-t border-border" />
+                          </div>
                         )}
-                      >
-                        <input
-                          type="radio"
-                          name="reportType"
-                          value={rt.key}
-                          checked={selectedReportType === rt.key}
-                          onChange={() => setSelectedReportType(rt.key)}
-                          className="sr-only"
-                        />
-                        <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", selectedReportType === rt.key ? "text-sidebar" : "text-muted-foreground")} />
-                        <div className="flex-1 min-w-0">
-                          <span className={cn("text-sm font-medium block", selectedReportType === rt.key ? "text-sidebar" : "text-foreground")}>
-                            {rt.label}
-                          </span>
-                          <span className="text-[11px] text-muted-foreground leading-snug">{rt.desc}</span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0 mt-0.5">
-                          {isRecommended && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-pear text-sidebar">Recommended</span>
+                        <label
+                          className={cn(
+                            "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                            selectedReportType === rt.key
+                              ? "border-sidebar bg-sidebar/5"
+                              : "border-border hover:border-sidebar/30"
                           )}
-                          {selectedReportType === rt.key && (
-                            <span className="text-xs text-sidebar font-semibold">Selected</span>
-                          )}
-                        </div>
-                      </label>
+                        >
+                          <input
+                            type="radio"
+                            name="reportType"
+                            value={rt.key}
+                            checked={selectedReportType === rt.key}
+                            onChange={() => setSelectedReportType(rt.key)}
+                            className="sr-only"
+                          />
+                          <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", selectedReportType === rt.key ? "text-sidebar" : "text-muted-foreground")} />
+                          <div className="flex-1 min-w-0">
+                            <span className={cn("text-sm font-medium block", selectedReportType === rt.key ? "text-sidebar" : "text-foreground")}>
+                              {rt.label}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground leading-snug">{rt.desc}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                            {isRecommended && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-pear text-sidebar">Recommended</span>
+                            )}
+                            {selectedReportType === rt.key && (
+                              <span className="text-xs text-sidebar font-semibold">Selected</span>
+                            )}
+                          </div>
+                        </label>
+                      </div>
                     );
                   })}
                 </div>
