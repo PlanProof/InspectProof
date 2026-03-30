@@ -7,94 +7,9 @@ import {
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter, AlignRight,
   List, ListOrdered, Table, Minus, Upload,
   Undo2, Redo2, Strikethrough, Code, Quote, Subscript, Superscript,
-  Highlighter, Palette, Eraser, Minus as HrIcon,
+  Highlighter, Palette, Eraser,
 } from "lucide-react";
 import { useListChecklistTemplates, useListInspections, useListProjects } from "@workspace/api-client-react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import TipTapUnderline from "@tiptap/extension-underline";
-import TipTapImage from "@tiptap/extension-image";
-import { TextAlign } from "@tiptap/extension-text-align";
-import { Table as TipTapTable } from "@tiptap/extension-table";
-import { TableRow } from "@tiptap/extension-table-row";
-import { TableCell } from "@tiptap/extension-table-cell";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { Highlight } from "@tiptap/extension-highlight";
-import { Subscript as TipTapSubscript } from "@tiptap/extension-subscript";
-import { Superscript as TipTapSuperscript } from "@tiptap/extension-superscript";
-import { Link as TipTapLink } from "@tiptap/extension-link";
-import { Color } from "@tiptap/extension-color";
-import { TextStyle } from "@tiptap/extension-text-style";
-import { FontFamily } from "@tiptap/extension-font-family";
-import { Extension, Node, mergeAttributes } from "@tiptap/core";
-
-// ── Custom FontSize extension ──────────────────────────────────────────────────
-const FontSize = Extension.create({
-  name: "fontSize",
-  addOptions() { return { types: ["textStyle"] }; },
-  addGlobalAttributes() {
-    return [{
-      types: this.options.types,
-      attributes: {
-        fontSize: {
-          default: null,
-          parseHTML: el => el.style.fontSize?.replace(/['"]/g, "") || null,
-          renderHTML: attrs => attrs.fontSize ? { style: `font-size: ${attrs.fontSize}` } : {},
-        },
-      },
-    }];
-  },
-  addCommands() {
-    return {
-      setFontSize: (size: string) => ({ chain }: any) => chain().setMark("textStyle", { fontSize: size }).run(),
-      unsetFontSize: () => ({ chain }: any) => chain().setMark("textStyle", { fontSize: null }).removeEmptyTextStyle().run(),
-    } as any;
-  },
-});
-
-// ── StyleAttribute: preserves style= and class= on all block nodes ────────────
-const StyleAttribute = Extension.create({
-  name: "styleAttribute",
-  addGlobalAttributes() {
-    return [{
-      types: [
-        "heading", "paragraph", "bulletList", "orderedList", "listItem",
-        "blockquote", "codeBlock", "table", "tableRow", "tableCell", "tableHeader",
-      ],
-      attributes: {
-        style: {
-          default: null,
-          parseHTML: (el: HTMLElement) => el.getAttribute("style") || null,
-          renderHTML: (attrs: any) => attrs.style ? { style: attrs.style } : {},
-        },
-        class: {
-          default: null,
-          parseHTML: (el: HTMLElement) => el.getAttribute("class") || null,
-          renderHTML: (attrs: any) => attrs.class ? { class: attrs.class } : {},
-        },
-      },
-    }];
-  },
-});
-
-// ── DivNode: preserves <div style="..."> wrapper elements ─────────────────────
-const DivNode = Node.create({
-  name: "div",
-  group: "block",
-  content: "block+",
-  defining: true,
-  attrs: {
-    style: { default: null },
-    class: { default: null },
-    id: { default: null },
-  },
-  parseHTML() {
-    return [{ tag: "div" }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ["div", mergeAttributes(HTMLAttributes), 0];
-  },
-});
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface DocTemplate {
@@ -633,38 +548,18 @@ export function DocTemplatesPanel() {
 
   const bgInputRef = useRef<HTMLInputElement>(null);
   const docxInputRef = useRef<HTMLInputElement>(null);
-
   const colorInputRef = useRef<HTMLInputElement>(null);
+  const editableRef = useRef<HTMLDivElement>(null);
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ underline: false }),
-      TipTapUnderline,
-      TipTapImage,
-      TextAlign.configure({ types: ["heading", "paragraph"] }),
-      TipTapTable.configure({ resizable: true }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      Highlight.configure({ multicolor: true }),
-      TipTapSubscript,
-      TipTapSuperscript,
-      TipTapLink.configure({ openOnClick: false, HTMLAttributes: { class: "tiptap-link" } }),
-      TextStyle,
-      Color,
-      FontSize,
-      FontFamily,
-      StyleAttribute,
-      DivNode,
-    ],
-    content: "",
-    editorProps: {
-      attributes: {
-        style: "padding: 72px 80px; min-height: 1123px; outline: none; font-family: Georgia, serif; font-size: 14px; line-height: 1.6; color: #1a1a1a;",
-        class: "tiptap-doc-editor",
-      },
-    },
-  });
+  // ── execCommand helpers for the contenteditable toolbar ──────────────────────
+  const exec = useCallback((cmd: string, value?: string) => {
+    editableRef.current?.focus();
+    document.execCommand(cmd, false, value ?? undefined);
+  }, []);
+  const execInsertHTML = useCallback((html: string) => {
+    editableRef.current?.focus();
+    document.execCommand("insertHTML", false, html);
+  }, []);
 
   const { data: checklistTemplates } = useListChecklistTemplates({ discipline: checklistDiscipline });
   const { data: allProjects } = useListProjects({});
@@ -758,36 +653,35 @@ export function DocTemplatesPanel() {
     } catch (err) { console.error(err); }
   }
 
-  // Load template content into TipTap when selection or mode changes
+  // Load template content into the contenteditable div when selection or mode changes
   useEffect(() => {
-    if (mode === "edit" && editor && selected) {
-      editor.commands.setContent(selected.content || "");
+    if (mode === "edit" && editableRef.current && selected) {
+      editableRef.current.innerHTML = selected.content || "";
     }
-  }, [selectedId, mode, editor]);
+  }, [selectedId, mode]);
 
   const saveContent = useCallback(async (silent = false) => {
-    if (!editor || !selected) return;
-    const content = editor.getHTML();
+    if (!editableRef.current || !selected) return;
+    const content = editableRef.current.innerHTML;
     setTemplates(prev => prev.map(t => t.id === selected.id ? { ...t, content, updatedAt: new Date().toISOString() } : t));
     if (!silent) { setSaved(true); setTimeout(() => setSaved(false), 2000); }
     try {
       await apiFetch(`${API_BASE}/${selected.id}`, { method: "PUT", body: JSON.stringify({ content }) });
     } catch (err) { console.error(err); }
-  }, [editor, selected]);
+  }, [selected]);
 
   function insertToken(token: string) {
-    if (!editor) return;
-    editor.chain().focus().insertContent(token).run();
+    execInsertHTML(token);
   }
 
   async function handleDocxImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file || !editor) return;
+    if (!file || !editableRef.current) return;
     try {
       const mammoth = await import("mammoth");
       const arrayBuffer = await file.arrayBuffer();
       const result = await mammoth.convertToHtml({ arrayBuffer });
-      editor.commands.setContent(result.value || "");
+      editableRef.current.innerHTML = result.value || "";
     } catch (err) {
       console.error("DOCX import failed:", err);
     }
@@ -994,52 +888,40 @@ export function DocTemplatesPanel() {
                   <div className="flex items-center gap-0.5 flex-wrap bg-card border border-border rounded-xl px-2 py-1.5 shadow-sm">
 
                     {/* Undo / Redo */}
-                    <button title="Undo (Ctrl+Z)" onClick={() => editor?.chain().focus().undo().run()} disabled={!editor?.can().undo()}
-                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30"><Undo2 className="h-3.5 w-3.5" /></button>
-                    <button title="Redo (Ctrl+Y)" onClick={() => editor?.chain().focus().redo().run()} disabled={!editor?.can().redo()}
-                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30"><Redo2 className="h-3.5 w-3.5" /></button>
+                    <button title="Undo (Ctrl+Z)" onClick={() => exec("undo")}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors"><Undo2 className="h-3.5 w-3.5" /></button>
+                    <button title="Redo (Ctrl+Y)" onClick={() => exec("redo")}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors"><Redo2 className="h-3.5 w-3.5" /></button>
 
                     <div className="w-px h-5 bg-border mx-1.5" />
 
-                    {/* Style */}
-                    <select onChange={e => {
-                      const v = e.target.value;
-                      if (v === "p") editor?.chain().focus().setParagraph().run();
-                      else if (v === "h1") editor?.chain().focus().toggleHeading({ level: 1 }).run();
-                      else if (v === "h2") editor?.chain().focus().toggleHeading({ level: 2 }).run();
-                      else if (v === "h3") editor?.chain().focus().toggleHeading({ level: 3 }).run();
-                      e.target.value = "";
-                    }} className="text-xs rounded-md border border-border bg-background px-2 py-1 focus:outline-none cursor-pointer" defaultValue="">
+                    {/* Style / Heading */}
+                    <select onChange={e => { exec("formatBlock", e.target.value); e.target.value = ""; }}
+                      className="text-xs rounded-md border border-border bg-background px-2 py-1 focus:outline-none cursor-pointer" defaultValue="">
                       <option value="" disabled>Style</option>
-                      <option value="h1">Heading 1</option>
-                      <option value="h2">Heading 2</option>
-                      <option value="h3">Heading 3</option>
-                      <option value="p">Paragraph</option>
+                      <option value="H1">Heading 1</option>
+                      <option value="H2">Heading 2</option>
+                      <option value="H3">Heading 3</option>
+                      <option value="P">Paragraph</option>
                     </select>
 
                     {/* Font family */}
-                    <select onChange={e => {
-                      const v = e.target.value;
-                      if (v === "") editor?.chain().focus().unsetFontFamily().run();
-                      else editor?.chain().focus().setFontFamily(v).run();
-                    }} className="text-xs rounded-md border border-border bg-background px-2 py-1 focus:outline-none w-[110px] cursor-pointer" defaultValue="">
+                    <select onChange={e => { exec("fontName", e.target.value); }}
+                      className="text-xs rounded-md border border-border bg-background px-2 py-1 focus:outline-none w-[110px] cursor-pointer" defaultValue="">
                       <option value="">Font</option>
                       <option value="Georgia, serif">Georgia</option>
-                      <option value="'Times New Roman', serif">Times New Roman</option>
+                      <option value="Times New Roman, serif">Times New Roman</option>
                       <option value="Arial, sans-serif">Arial</option>
                       <option value="Helvetica, sans-serif">Helvetica</option>
-                      <option value="'Calibri', sans-serif">Calibri</option>
-                      <option value="'Trebuchet MS', sans-serif">Trebuchet</option>
+                      <option value="Trebuchet MS, sans-serif">Trebuchet</option>
                       <option value="Verdana, sans-serif">Verdana</option>
-                      <option value="'Courier New', monospace">Courier New</option>
-                      <option value="'Roboto', sans-serif">Roboto</option>
+                      <option value="Courier New, monospace">Courier New</option>
                     </select>
 
                     {/* Font size */}
                     <select onChange={e => {
                       const v = e.target.value;
-                      if (v === "") (editor?.chain().focus() as any).unsetFontSize().run();
-                      else (editor?.chain().focus() as any).setFontSize(v).run();
+                      if (v) execInsertHTML(`<span style="font-size:${v}">\uFEFF</span>`);
                     }} className="text-xs rounded-md border border-border bg-background px-2 py-1 focus:outline-none w-[64px] cursor-pointer" defaultValue="">
                       <option value="">Size</option>
                       {[8,9,10,11,12,13,14,15,16,18,20,22,24,28,32,36,42,48,56,64,72].map(s => (
@@ -1051,25 +933,25 @@ export function DocTemplatesPanel() {
 
                     {/* B I U S */}
                     {[
-                      { title: "Bold (Ctrl+B)", icon: <Bold className="h-3.5 w-3.5" />, action: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold") },
-                      { title: "Italic (Ctrl+I)", icon: <Italic className="h-3.5 w-3.5" />, action: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic") },
-                      { title: "Underline (Ctrl+U)", icon: <UnderlineIcon className="h-3.5 w-3.5" />, action: () => editor?.chain().focus().toggleUnderline().run(), active: editor?.isActive("underline") },
-                      { title: "Strikethrough", icon: <Strikethrough className="h-3.5 w-3.5" />, action: () => editor?.chain().focus().toggleStrike().run(), active: editor?.isActive("strike") },
+                      { title: "Bold (Ctrl+B)", icon: <Bold className="h-3.5 w-3.5" />, cmd: "bold" },
+                      { title: "Italic (Ctrl+I)", icon: <Italic className="h-3.5 w-3.5" />, cmd: "italic" },
+                      { title: "Underline (Ctrl+U)", icon: <UnderlineIcon className="h-3.5 w-3.5" />, cmd: "underline" },
+                      { title: "Strikethrough", icon: <Strikethrough className="h-3.5 w-3.5" />, cmd: "strikeThrough" },
                     ].map(btn => (
-                      <button key={btn.title} title={btn.title} onClick={btn.action}
-                        className={`p-1.5 rounded transition-colors ${btn.active ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
+                      <button key={btn.title} title={btn.title} onClick={() => exec(btn.cmd)}
+                        className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors"
                       >{btn.icon}</button>
                     ))}
 
                     <div className="w-px h-5 bg-border mx-1.5" />
 
                     {/* Superscript / Subscript */}
-                    <button title="Superscript" onClick={() => editor?.chain().focus().toggleSuperscript().run()}
-                      className={`p-1.5 rounded transition-colors ${editor?.isActive("superscript") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                    <button title="Superscript" onClick={() => exec("superscript")}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors">
                       <Superscript className="h-3.5 w-3.5" />
                     </button>
-                    <button title="Subscript" onClick={() => editor?.chain().focus().toggleSubscript().run()}
-                      className={`p-1.5 rounded transition-colors ${editor?.isActive("subscript") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                    <button title="Subscript" onClick={() => exec("subscript")}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors">
                       <Subscript className="h-3.5 w-3.5" />
                     </button>
 
@@ -1079,24 +961,22 @@ export function DocTemplatesPanel() {
                     <button title="Text colour" onClick={() => colorInputRef.current?.click()}
                       className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors flex items-center gap-1">
                       <Palette className="h-3.5 w-3.5" />
-                      <span className="w-3 h-1.5 rounded-sm border border-border"
-                        style={{ background: editor?.getAttributes("textStyle").color || "#000000" }} />
                     </button>
                     <input ref={colorInputRef} type="color" className="sr-only" defaultValue="#000000"
-                      onChange={e => editor?.chain().focus().setColor(e.target.value).run()} />
-                    <button title="Remove text colour" onClick={() => editor?.chain().focus().unsetColor().run()}
+                      onChange={e => exec("foreColor", e.target.value)} />
+                    <button title="Remove text colour" onClick={() => exec("removeFormat")}
                       className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px] font-bold leading-none">A×</button>
 
                     {/* Highlight */}
-                    <button title="Highlight text" onClick={() => editor?.chain().focus().toggleHighlight({ color: "#FDE68A" }).run()}
-                      className={`p-1.5 rounded transition-colors ${editor?.isActive("highlight") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                    <button title="Highlight text" onClick={() => exec("hiliteColor", "#FDE68A")}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors">
                       <Highlighter className="h-3.5 w-3.5" />
                     </button>
 
                     <div className="w-px h-5 bg-border mx-1.5" />
 
                     {/* Clear formatting */}
-                    <button title="Clear all formatting" onClick={() => editor?.chain().focus().clearNodes().unsetAllMarks().run()}
+                    <button title="Clear all formatting" onClick={() => exec("removeFormat")}
                       className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors">
                       <Eraser className="h-3.5 w-3.5" />
                     </button>
@@ -1107,90 +987,99 @@ export function DocTemplatesPanel() {
 
                     {/* Alignment */}
                     {[
-                      { title: "Align Left", icon: <AlignLeft className="h-3.5 w-3.5" />, align: "left" },
-                      { title: "Align Centre", icon: <AlignCenter className="h-3.5 w-3.5" />, align: "center" },
-                      { title: "Align Right", icon: <AlignRight className="h-3.5 w-3.5" />, align: "right" },
+                      { title: "Align Left", icon: <AlignLeft className="h-3.5 w-3.5" />, cmd: "justifyLeft" },
+                      { title: "Align Centre", icon: <AlignCenter className="h-3.5 w-3.5" />, cmd: "justifyCenter" },
+                      { title: "Align Right", icon: <AlignRight className="h-3.5 w-3.5" />, cmd: "justifyRight" },
                     ].map(btn => (
-                      <button key={btn.align} title={btn.title} onClick={() => editor?.chain().focus().setTextAlign(btn.align).run()}
-                        className={`p-1.5 rounded transition-colors ${editor?.isActive({ textAlign: btn.align }) ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
+                      <button key={btn.cmd} title={btn.title} onClick={() => exec(btn.cmd)}
+                        className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors"
                       >{btn.icon}</button>
                     ))}
 
                     <div className="w-px h-5 bg-border mx-1.5" />
 
                     {/* Lists */}
-                    <button title="Bullet list" onClick={() => editor?.chain().focus().toggleBulletList().run()}
-                      className={`p-1.5 rounded transition-colors ${editor?.isActive("bulletList") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                    <button title="Bullet list" onClick={() => exec("insertUnorderedList")}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors">
                       <List className="h-3.5 w-3.5" />
                     </button>
-                    <button title="Numbered list" onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-                      className={`p-1.5 rounded transition-colors ${editor?.isActive("orderedList") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                    <button title="Numbered list" onClick={() => exec("insertOrderedList")}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors">
                       <ListOrdered className="h-3.5 w-3.5" />
                     </button>
 
                     <div className="w-px h-5 bg-border mx-1.5" />
 
                     {/* Blockquote / Code / HR / Link */}
-                    <button title="Blockquote" onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-                      className={`p-1.5 rounded transition-colors ${editor?.isActive("blockquote") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                    <button title="Blockquote" onClick={() => execInsertHTML('<blockquote style="border-left:4px solid #466DB5;padding:8px 16px;margin:8px 0;color:#555;"></blockquote>')}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors">
                       <Quote className="h-3.5 w-3.5" />
                     </button>
-                    <button title="Code block" onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
-                      className={`p-1.5 rounded transition-colors ${editor?.isActive("codeBlock") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                    <button title="Code block" onClick={() => execInsertHTML('<pre style="background:#f3f4f6;padding:8px 12px;border-radius:4px;font-family:monospace;font-size:12px;"></pre>')}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors">
                       <Code className="h-3.5 w-3.5" />
                     </button>
-                    <button title="Divider line" onClick={() => editor?.chain().focus().setHorizontalRule().run()}
+                    <button title="Divider line" onClick={() => exec("insertHorizontalRule")}
                       className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors">
                       <Minus className="h-3.5 w-3.5" />
                     </button>
-                    <button title={editor?.isActive("link") ? "Edit link" : "Insert link"}
+                    <button title="Insert / edit link"
                       onClick={() => {
-                        const prev = editor?.getAttributes("link").href || "";
-                        const url = window.prompt("Enter URL:", prev);
+                        const sel = window.getSelection();
+                        const url = window.prompt("Enter URL:", (sel?.anchorNode?.parentElement?.closest("a") as HTMLAnchorElement)?.href || "");
                         if (url === null) return;
-                        if (url === "") { editor?.chain().focus().unsetLink().run(); return; }
-                        editor?.chain().focus().setLink({ href: url, target: "_blank" }).run();
+                        if (url === "") { exec("unlink"); return; }
+                        exec("createLink", url);
                       }}
-                      className={`p-1.5 rounded transition-colors ${editor?.isActive("link") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors">
                       <Link2 className="h-3.5 w-3.5" />
                     </button>
 
                     <div className="w-px h-5 bg-border mx-1.5" />
 
                     {/* Table: Insert */}
-                    <button title="Insert table" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-                      className="flex items-center gap-1 px-2 py-1.5 rounded border border-dashed border-border hover:bg-muted hover:border-secondary/50 text-muted-foreground transition-colors text-[11px] font-medium">
+                    <button title="Insert table" onClick={() => {
+                      const rows = 3; const cols = 3;
+                      const header = `<tr>${Array.from({length:cols},(_,i)=>`<th style="padding:8px;border:1px solid #e5e7eb;background:#f8fafc;font-weight:600;color:#0B1933;font-size:13px;">Col ${i+1}</th>`).join("")}</tr>`;
+                      const body = Array.from({length:rows-1},()=>`<tr>${Array.from({length:cols},()=>`<td style="padding:8px;border:1px solid #e5e7eb;font-size:13px;">&nbsp;</td>`).join("")}</tr>`).join("");
+                      execInsertHTML(`<table style="width:100%;border-collapse:collapse;margin-bottom:16px;"><thead>${header}</thead><tbody>${body}</tbody></table>`);
+                    }} className="flex items-center gap-1 px-2 py-1.5 rounded border border-dashed border-border hover:bg-muted hover:border-secondary/50 text-muted-foreground transition-colors text-[11px] font-medium">
                       <Table className="h-3.5 w-3.5" />Table
                     </button>
 
-                    {/* Table row ops */}
+                    {/* Table row ops via DOM */}
                     <div className="flex items-center rounded-md border border-border overflow-hidden">
-                      <button title="Add row above cursor" onClick={() => editor?.chain().focus().addRowBefore().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Row↑</button>
-                      <button title="Add row below cursor" onClick={() => editor?.chain().focus().addRowAfter().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Row↓</button>
-                      <button title="Delete selected row" onClick={() => editor?.chain().focus().deleteRow().run()}
-                        className="px-2 py-1.5 hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px] font-semibold leading-none">−Row</button>
+                      <button title="Add row above cursor" onClick={() => {
+                        const sel = window.getSelection(); const td = sel?.anchorNode?.parentElement?.closest("td,th"); const tr = td?.closest("tr");
+                        if (tr) { const newRow = tr.cloneNode(true) as HTMLElement; newRow.querySelectorAll("td,th").forEach(c => (c as HTMLElement).innerHTML = "&nbsp;"); tr.parentNode?.insertBefore(newRow, tr); }
+                      }} className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Row↑</button>
+                      <button title="Add row below cursor" onClick={() => {
+                        const sel = window.getSelection(); const td = sel?.anchorNode?.parentElement?.closest("td,th"); const tr = td?.closest("tr");
+                        if (tr) { const newRow = tr.cloneNode(true) as HTMLElement; newRow.querySelectorAll("td,th").forEach(c => (c as HTMLElement).innerHTML = "&nbsp;"); tr.parentNode?.insertBefore(newRow, tr.nextSibling); }
+                      }} className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Row↓</button>
+                      <button title="Delete selected row" onClick={() => {
+                        const sel = window.getSelection(); const tr = sel?.anchorNode?.parentElement?.closest("tr");
+                        tr?.parentNode?.removeChild(tr);
+                      }} className="px-2 py-1.5 hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px] font-semibold leading-none">−Row</button>
                     </div>
 
-                    {/* Table col ops */}
+                    {/* Table col ops via DOM */}
                     <div className="flex items-center rounded-md border border-border overflow-hidden">
-                      <button title="Add column to the left" onClick={() => editor?.chain().focus().addColumnBefore().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Col←</button>
-                      <button title="Add column to the right" onClick={() => editor?.chain().focus().addColumnAfter().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Col→</button>
-                      <button title="Delete selected column" onClick={() => editor?.chain().focus().deleteColumn().run()}
-                        className="px-2 py-1.5 hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px] font-semibold leading-none">−Col</button>
-                    </div>
-
-                    {/* Table misc */}
-                    <div className="flex items-center rounded-md border border-border overflow-hidden">
-                      <button title="Toggle header row" onClick={() => editor?.chain().focus().toggleHeaderRow().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">Header</button>
-                      <button title="Merge or split cells" onClick={() => editor?.chain().focus().mergeOrSplit().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">Merge</button>
-                      <button title="Delete entire table" onClick={() => editor?.chain().focus().deleteTable().run()}
-                        className="px-2 py-1.5 hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px] font-semibold leading-none">Del</button>
+                      <button title="Add column to the left" onClick={() => {
+                        const sel = window.getSelection(); const td = sel?.anchorNode?.parentElement?.closest("td,th"); if (!td) return;
+                        const idx = Array.from(td.parentElement?.children ?? []).indexOf(td);
+                        td.closest("table")?.querySelectorAll("tr").forEach(row => { const newCell = row.children[idx]?.cloneNode() as HTMLElement; if (newCell) { newCell.innerHTML = "&nbsp;"; row.insertBefore(newCell, row.children[idx]); } });
+                      }} className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Col←</button>
+                      <button title="Add column to the right" onClick={() => {
+                        const sel = window.getSelection(); const td = sel?.anchorNode?.parentElement?.closest("td,th"); if (!td) return;
+                        const idx = Array.from(td.parentElement?.children ?? []).indexOf(td);
+                        td.closest("table")?.querySelectorAll("tr").forEach(row => { const newCell = row.children[idx]?.cloneNode() as HTMLElement; if (newCell) { newCell.innerHTML = "&nbsp;"; row.insertBefore(newCell, row.children[idx + 1] || null); } });
+                      }} className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Col→</button>
+                      <button title="Delete selected column" onClick={() => {
+                        const sel = window.getSelection(); const td = sel?.anchorNode?.parentElement?.closest("td,th"); if (!td) return;
+                        const idx = Array.from(td.parentElement?.children ?? []).indexOf(td);
+                        td.closest("table")?.querySelectorAll("tr").forEach(row => { row.children[idx]?.parentNode?.removeChild(row.children[idx]); });
+                      }} className="px-2 py-1.5 hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px] font-semibold leading-none">−Col</button>
                     </div>
 
                     <div className="w-px h-5 bg-border mx-1.5" />
@@ -1247,9 +1136,24 @@ export function DocTemplatesPanel() {
                     <img src={selected.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
                   )}
                   {mode === "edit" ? (
-                    <div style={{ position: "relative" }}>
-                      <EditorContent editor={editor} />
-                    </div>
+                    <div
+                      ref={editableRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      spellCheck
+                      style={{
+                        padding: "72px 80px",
+                        minHeight: "1123px",
+                        outline: "none",
+                        fontFamily: "Georgia, serif",
+                        fontSize: "14px",
+                        lineHeight: "1.6",
+                        color: "#1a1a1a",
+                        position: "relative",
+                        cursor: "text",
+                      }}
+                      onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); saveContent(); } }}
+                    />
                   ) : (
                     <div
                       style={{ padding: "72px 80px", position: "relative", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a" }}
