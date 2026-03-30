@@ -619,6 +619,11 @@ function Footer() {
                     Terms &amp; Conditions
                   </a>
                 </li>
+                <li>
+                  <a href="/privacy" className="text-sm text-white/50 hover:text-white transition-colors">
+                    Privacy Policy
+                  </a>
+                </li>
               </ul>
             </div>
           </div>

@@ -374,8 +374,8 @@ function AccountStep({
           </Button>
           <p className="text-center text-xs text-muted-foreground">
             By creating an account you agree to our{" "}
-            <a href="#" className="underline hover:text-foreground">Terms of Service</a> and{" "}
-            <a href="#" className="underline hover:text-foreground">Privacy Policy</a>.
+            <a href="/terms" className="underline hover:text-foreground">Terms of Service</a> and{" "}
+            <a href="/privacy" className="underline hover:text-foreground">Privacy Policy</a>.
           </p>
         </form>
       </CardContent>

@@ -18,6 +18,8 @@ import Inspectors from "@/pages/inspectors";
 import Settings from "@/pages/settings";
 import Billing from "@/pages/billing";
 import Admin from "@/pages/admin";
+import Terms from "@/pages/terms";
+import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
 
 // Global fetch interceptor for auth
@@ -70,6 +72,8 @@ function Router() {
       <Route path="/settings" component={Settings} />
       <Route path="/billing" component={Billing} />
       <Route path="/admin" component={Admin} />
+      <Route path="/terms" component={Terms} />
+      <Route path="/privacy" component={Privacy} />
       <Route component={NotFound} />
     </Switch>
   );
