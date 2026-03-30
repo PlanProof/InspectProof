@@ -397,6 +397,7 @@ export default function InspectionDetail() {
   const [pdfViewLoading, setPdfViewLoading] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState("inspection_certificate");
+  const [selectedGenDocTemplateId, setSelectedGenDocTemplateId] = useState<string | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<any>(null);
   const [submittingReport, setSubmittingReport] = useState(false);
@@ -412,6 +413,7 @@ export default function InspectionDetail() {
   const openReportDialog = useCallback((inspection: Inspection) => {
     const suggested = getSuggestedReportType(inspection);
     setSelectedReportType(suggested);
+    setSelectedGenDocTemplateId(null);
     setGeneratedReport(null);
     setReportDialogOpen(true);
   }, []);
@@ -471,28 +473,35 @@ export default function InspectionDetail() {
     setGeneratingReport(true);
     setGeneratedReport(null);
     try {
-      const linkedTemplate =
-        getDirectDocTemplate(docTemplates, inspection.id) ??
-        getLinkedDocTemplate(docTemplates, inspection.checklistTemplateId);
+      // Check for explicit user selection first, then fall back to linked template
+      const selectedDocTpl = selectedGenDocTemplateId
+        ? docTemplates.find(dt => String(dt.id) === selectedGenDocTemplateId) ?? null
+        : null;
+      const linkedTemplate = selectedDocTpl
+        ?? getDirectDocTemplate(docTemplates, inspection.id)
+        ?? getLinkedDocTemplate(docTemplates, inspection.checklistTemplateId);
 
       if (linkedTemplate) {
-        // Use the linked doc template — fill tokens and save directly as a report
-        const html = fillDocTemplate(linkedTemplate, inspection, project);
-        const typeLabel = ALL_REPORT_TYPE_LABELS[selectedReportType] ?? selectedReportType;
+        // Use the chosen doc template — fill tokens and save directly as a report
+        const checklistResults = await apiFetch(`/api/inspections/${inspId}/checklist`).catch(() => []);
+        const inspWithResults = { ...inspection, checklistResults };
+        const html = fillDocTemplate(linkedTemplate, inspWithResults, project);
+        const reportType = linkedTemplate.defaultReportType || selectedReportType;
+        const typeLabel = ALL_REPORT_TYPE_LABELS[reportType] ?? reportType;
         const data = await apiFetch("/api/reports", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             inspectionId: inspId,
             projectId: inspection.projectId,
-            title: `${typeLabel} — ${inspection.projectName}`,
-            reportType: selectedReportType,
+            title: `${linkedTemplate.name} — ${inspection.projectName}`,
+            reportType,
             content: html,
           }),
         });
         setGeneratedReport({ ...data, isHtml: true });
       } else {
-        // Fall back to the AI/plain-text generator
+        // Use the structured HTML generator
         const data = await apiFetch("/api/reports/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -963,92 +972,114 @@ export default function InspectionDetail() {
 
           {!generatedReport ? (
             <>
-              <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-                {inspection && (() => {
-                  const suggested = getSuggestedReportType(inspection);
-                  const discipline = inspection.checklistTemplateDiscipline;
-                  const linkedTpl = getLinkedDocTemplate(docTemplates, inspection.checklistTemplateId);
-                  return (
-                    <>
-                      {discipline && (
-                        <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground">
-                          <Building className="h-3.5 w-3.5 shrink-0" />
-                          <span>All report types are shown. Recommended types for <span className="font-semibold text-foreground">{discipline}</span> appear first.</span>
-                        </div>
-                      )}
-                      {linkedTpl && (
-                        <div className="flex items-center gap-2 p-2.5 rounded-lg bg-brand-pear/10 border border-brand-pear/30 text-xs text-sidebar">
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-brand-pear" />
-                          <span>
-                            Using doc template letterhead: <span className="font-semibold">{linkedTpl.name}</span>
-                            {" "}— checklist items and inspection data will be filled automatically.
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 p-3 rounded-lg bg-sidebar text-white text-xs">
-                        <Zap className="h-3.5 w-3.5 text-brand-pear shrink-0" />
-                        <span>
-                          <span className="font-semibold text-brand-pear">{ALL_REPORT_TYPE_LABELS[suggested]}</span>
-                          {" "}has been pre-selected based on your results
-                          {linkedTpl ? " and linked template settings" : ""}.
-                          You can change it below.
-                        </span>
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+
+                {/* ── Your Templates section ── */}
+                {docTemplates.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Your Templates</span>
+                      <div className="flex-1 border-t border-border" />
+                    </div>
+                    <div className="space-y-1.5">
+                      {docTemplates.map(dt => {
+                        const isSelected = selectedGenDocTemplateId === String(dt.id);
+                        return (
+                          <label
+                            key={dt.id}
+                            className={cn(
+                              "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                              isSelected ? "border-sidebar bg-sidebar/5" : "border-border hover:border-sidebar/30"
+                            )}
+                          >
+                            <input
+                              type="radio"
+                              name="reportSource"
+                              value={String(dt.id)}
+                              checked={isSelected}
+                              onChange={() => { setSelectedGenDocTemplateId(String(dt.id)); }}
+                              className="sr-only"
+                            />
+                            <FileText className={cn("h-4 w-4 shrink-0", isSelected ? "text-sidebar" : "text-muted-foreground")} />
+                            <div className="flex-1 min-w-0">
+                              <span className={cn("text-sm font-medium block truncate", isSelected ? "text-sidebar" : "text-foreground")}>
+                                {dt.name}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">Custom template · fills with live inspection data</span>
+                            </div>
+                            {isSelected && <span className="text-xs text-sidebar font-semibold shrink-0">Selected</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Standard Report Types section ── */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Standard Report Types</span>
+                    <div className="flex-1 border-t border-border" />
+                  </div>
+                  {inspection && (() => {
+                    const suggested = getSuggestedReportType(inspection);
+                    const discipline = inspection.checklistTemplateDiscipline;
+                    return discipline ? (
+                      <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground mb-2">
+                        <Building className="h-3 w-3 shrink-0" />
+                        <span>Recommended for <span className="font-semibold text-foreground">{discipline}</span> appear first</span>
                       </div>
-                    </>
-                  );
-                })()}
-                <div className="space-y-2">
-                  {REPORT_TYPES_DESKTOP.map((rt, idx) => {
-                    const Icon = rt.icon;
-                    const isRecommended = inspection ? rt.key === getSuggestedReportType(inspection) : false;
-                    const isDisciplineType = disciplineReportTypes.includes(rt.key);
-                    const prevIsDiscipline = idx > 0 ? disciplineReportTypes.includes(REPORT_TYPES_DESKTOP[idx - 1].key) : true;
-                    const showSeparator = !isDisciplineType && prevIsDiscipline;
-                    return (
-                      <div key={rt.key}>
-                        {showSeparator && (
-                          <div className="flex items-center gap-2 pt-1 pb-2">
-                            <div className="flex-1 border-t border-border" />
-                            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">All report types</span>
-                            <div className="flex-1 border-t border-border" />
-                          </div>
-                        )}
-                        <label
-                          className={cn(
-                            "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                            selectedReportType === rt.key
-                              ? "border-sidebar bg-sidebar/5"
-                              : "border-border hover:border-sidebar/30"
+                    ) : null;
+                  })()}
+                  <div className="space-y-1.5">
+                    {REPORT_TYPES_DESKTOP.map((rt, idx) => {
+                      const Icon = rt.icon;
+                      const isSelected = !selectedGenDocTemplateId && selectedReportType === rt.key;
+                      const isRecommended = inspection ? rt.key === getSuggestedReportType(inspection) : false;
+                      const isDisciplineType = disciplineReportTypes.includes(rt.key);
+                      const prevIsDiscipline = idx > 0 ? disciplineReportTypes.includes(REPORT_TYPES_DESKTOP[idx - 1].key) : true;
+                      const showDivider = !isDisciplineType && prevIsDiscipline;
+                      return (
+                        <div key={rt.key}>
+                          {showDivider && disciplineReportTypes.length > 0 && (
+                            <div className="flex items-center gap-2 py-1.5">
+                              <div className="flex-1 border-t border-dashed border-border" />
+                              <span className="text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wide">Other types</span>
+                              <div className="flex-1 border-t border-dashed border-border" />
+                            </div>
                           )}
-                        >
-                          <input
-                            type="radio"
-                            name="reportType"
-                            value={rt.key}
-                            checked={selectedReportType === rt.key}
-                            onChange={() => setSelectedReportType(rt.key)}
-                            className="sr-only"
-                          />
-                          <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", selectedReportType === rt.key ? "text-sidebar" : "text-muted-foreground")} />
-                          <div className="flex-1 min-w-0">
-                            <span className={cn("text-sm font-medium block", selectedReportType === rt.key ? "text-sidebar" : "text-foreground")}>
-                              {rt.label}
-                            </span>
-                            <span className="text-[11px] text-muted-foreground leading-snug">{rt.desc}</span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0 mt-0.5">
-                            {isRecommended && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-pear text-sidebar">Recommended</span>
+                          <label
+                            className={cn(
+                              "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                              isSelected ? "border-sidebar bg-sidebar/5" : "border-border hover:border-sidebar/30"
                             )}
-                            {selectedReportType === rt.key && (
-                              <span className="text-xs text-sidebar font-semibold">Selected</span>
-                            )}
-                          </div>
-                        </label>
-                      </div>
-                    );
-                  })}
+                          >
+                            <input
+                              type="radio"
+                              name="reportSource"
+                              value={rt.key}
+                              checked={isSelected}
+                              onChange={() => { setSelectedGenDocTemplateId(null); setSelectedReportType(rt.key); }}
+                              className="sr-only"
+                            />
+                            <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", isSelected ? "text-sidebar" : "text-muted-foreground")} />
+                            <div className="flex-1 min-w-0">
+                              <span className={cn("text-sm font-medium block", isSelected ? "text-sidebar" : "text-foreground")}>
+                                {rt.label}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground leading-snug">{rt.desc}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                              {isRecommended && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-pear text-sidebar">Recommended</span>}
+                              {isSelected && <span className="text-xs text-sidebar font-semibold">Selected</span>}
+                            </div>
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
+
               </div>
               <div className="flex justify-end pt-3 border-t border-border mt-2">
                 <Button onClick={generateReport} disabled={generatingReport}>
