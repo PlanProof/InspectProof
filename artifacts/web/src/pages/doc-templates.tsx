@@ -26,7 +26,7 @@ import { Link as TipTapLink } from "@tiptap/extension-link";
 import { Color } from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { FontFamily } from "@tiptap/extension-font-family";
-import { Extension } from "@tiptap/core";
+import { Extension, Node, mergeAttributes } from "@tiptap/core";
 
 // ── Custom FontSize extension ──────────────────────────────────────────────────
 const FontSize = Extension.create({
@@ -49,6 +49,50 @@ const FontSize = Extension.create({
       setFontSize: (size: string) => ({ chain }: any) => chain().setMark("textStyle", { fontSize: size }).run(),
       unsetFontSize: () => ({ chain }: any) => chain().setMark("textStyle", { fontSize: null }).removeEmptyTextStyle().run(),
     } as any;
+  },
+});
+
+// ── StyleAttribute: preserves style= and class= on all block nodes ────────────
+const StyleAttribute = Extension.create({
+  name: "styleAttribute",
+  addGlobalAttributes() {
+    return [{
+      types: [
+        "heading", "paragraph", "bulletList", "orderedList", "listItem",
+        "blockquote", "codeBlock", "table", "tableRow", "tableCell", "tableHeader",
+      ],
+      attributes: {
+        style: {
+          default: null,
+          parseHTML: (el: HTMLElement) => el.getAttribute("style") || null,
+          renderHTML: (attrs: any) => attrs.style ? { style: attrs.style } : {},
+        },
+        class: {
+          default: null,
+          parseHTML: (el: HTMLElement) => el.getAttribute("class") || null,
+          renderHTML: (attrs: any) => attrs.class ? { class: attrs.class } : {},
+        },
+      },
+    }];
+  },
+});
+
+// ── DivNode: preserves <div style="..."> wrapper elements ─────────────────────
+const DivNode = Node.create({
+  name: "div",
+  group: "block",
+  content: "block+",
+  defining: true,
+  attrs: {
+    style: { default: null },
+    class: { default: null },
+    id: { default: null },
+  },
+  parseHTML() {
+    return [{ tag: "div" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes), 0];
   },
 });
 
@@ -610,6 +654,8 @@ export function DocTemplatesPanel() {
       Color,
       FontSize,
       FontFamily,
+      StyleAttribute,
+      DivNode,
     ],
     content: "",
     editorProps: {
@@ -940,40 +986,31 @@ export function DocTemplatesPanel() {
                 </button>
               </div>
 
-              {/* ── Row 2: Rich formatting toolbar (edit mode only) ── */}
+              {/* ── Formatting toolbar (edit mode only) ── */}
               {mode === "edit" && (
                 <div className="flex flex-col gap-1 mb-2">
-                  {/* ── Toolbar row 1: History + style + text format ── */}
-                  <div className="flex items-center gap-1 flex-wrap bg-card border border-border rounded-xl px-2 py-1.5 shadow-sm">
+
+                  {/* ── Row 1: Text formatting ── */}
+                  <div className="flex items-center gap-0.5 flex-wrap bg-card border border-border rounded-xl px-2 py-1.5 shadow-sm">
 
                     {/* Undo / Redo */}
-                    <div className="flex rounded-md border border-border overflow-hidden">
-                      <button title="Undo (Ctrl+Z)" onClick={() => editor?.chain().focus().undo().run()} disabled={!editor?.can().undo()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30">
-                        <Undo2 className="h-3 w-3" />
-                      </button>
-                      <button title="Redo (Ctrl+Y)" onClick={() => editor?.chain().focus().redo().run()} disabled={!editor?.can().redo()}
-                        className="px-2 py-1.5 hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30">
-                        <Redo2 className="h-3 w-3" />
-                      </button>
-                    </div>
+                    <button title="Undo (Ctrl+Z)" onClick={() => editor?.chain().focus().undo().run()} disabled={!editor?.can().undo()}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30"><Undo2 className="h-3.5 w-3.5" /></button>
+                    <button title="Redo (Ctrl+Y)" onClick={() => editor?.chain().focus().redo().run()} disabled={!editor?.can().redo()}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30"><Redo2 className="h-3.5 w-3.5" /></button>
 
-                    <div className="w-px h-5 bg-border mx-1" />
+                    <div className="w-px h-5 bg-border mx-1.5" />
 
-                    {/* Text style */}
-                    <select
-                      onChange={e => {
-                        const v = e.target.value;
-                        if (v === "p") editor?.chain().focus().setParagraph().run();
-                        else if (v === "h1") editor?.chain().focus().toggleHeading({ level: 1 }).run();
-                        else if (v === "h2") editor?.chain().focus().toggleHeading({ level: 2 }).run();
-                        else if (v === "h3") editor?.chain().focus().toggleHeading({ level: 3 }).run();
-                        e.target.value = "";
-                      }}
-                      className="text-xs rounded-md border border-border bg-background px-1.5 py-1 focus:outline-none"
-                      defaultValue=""
-                    >
-                      <option value="" disabled>Style…</option>
+                    {/* Style */}
+                    <select onChange={e => {
+                      const v = e.target.value;
+                      if (v === "p") editor?.chain().focus().setParagraph().run();
+                      else if (v === "h1") editor?.chain().focus().toggleHeading({ level: 1 }).run();
+                      else if (v === "h2") editor?.chain().focus().toggleHeading({ level: 2 }).run();
+                      else if (v === "h3") editor?.chain().focus().toggleHeading({ level: 3 }).run();
+                      e.target.value = "";
+                    }} className="text-xs rounded-md border border-border bg-background px-2 py-1 focus:outline-none cursor-pointer" defaultValue="">
+                      <option value="" disabled>Style</option>
                       <option value="h1">Heading 1</option>
                       <option value="h2">Heading 2</option>
                       <option value="h3">Heading 3</option>
@@ -981,16 +1018,12 @@ export function DocTemplatesPanel() {
                     </select>
 
                     {/* Font family */}
-                    <select
-                      onChange={e => {
-                        const v = e.target.value;
-                        if (v === "") editor?.chain().focus().unsetFontFamily().run();
-                        else editor?.chain().focus().setFontFamily(v).run();
-                      }}
-                      className="text-xs rounded-md border border-border bg-background px-1.5 py-1 focus:outline-none max-w-[130px]"
-                      defaultValue=""
-                    >
-                      <option value="">Font…</option>
+                    <select onChange={e => {
+                      const v = e.target.value;
+                      if (v === "") editor?.chain().focus().unsetFontFamily().run();
+                      else editor?.chain().focus().setFontFamily(v).run();
+                    }} className="text-xs rounded-md border border-border bg-background px-2 py-1 focus:outline-none w-[110px] cursor-pointer" defaultValue="">
+                      <option value="">Font</option>
                       <option value="Georgia, serif">Georgia</option>
                       <option value="'Times New Roman', serif">Times New Roman</option>
                       <option value="Arial, sans-serif">Arial</option>
@@ -1003,153 +1036,114 @@ export function DocTemplatesPanel() {
                     </select>
 
                     {/* Font size */}
-                    <select
-                      onChange={e => {
-                        const v = e.target.value;
-                        if (v === "") (editor?.chain().focus() as any).unsetFontSize().run();
-                        else (editor?.chain().focus() as any).setFontSize(v).run();
-                      }}
-                      className="text-xs rounded-md border border-border bg-background px-1.5 py-1 focus:outline-none w-[70px]"
-                      defaultValue=""
-                    >
-                      <option value="">Size…</option>
+                    <select onChange={e => {
+                      const v = e.target.value;
+                      if (v === "") (editor?.chain().focus() as any).unsetFontSize().run();
+                      else (editor?.chain().focus() as any).setFontSize(v).run();
+                    }} className="text-xs rounded-md border border-border bg-background px-2 py-1 focus:outline-none w-[64px] cursor-pointer" defaultValue="">
+                      <option value="">Size</option>
                       {[8,9,10,11,12,13,14,15,16,18,20,22,24,28,32,36,42,48,56,64,72].map(s => (
-                        <option key={s} value={`${s}px`}>{s}</option>
+                        <option key={s} value={`${s}px`}>{s}px</option>
                       ))}
                     </select>
 
-                    <div className="w-px h-5 bg-border mx-1" />
+                    <div className="w-px h-5 bg-border mx-1.5" />
 
-                    {/* Basic format: B I U S */}
-                    <div className="flex rounded-md border border-border overflow-hidden">
-                      {[
-                        { title: "Bold (Ctrl+B)", icon: <Bold className="h-3 w-3" />, action: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold") },
-                        { title: "Italic (Ctrl+I)", icon: <Italic className="h-3 w-3" />, action: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic") },
-                        { title: "Underline (Ctrl+U)", icon: <UnderlineIcon className="h-3 w-3" />, action: () => editor?.chain().focus().toggleUnderline().run(), active: editor?.isActive("underline") },
-                        { title: "Strikethrough", icon: <Strikethrough className="h-3 w-3" />, action: () => editor?.chain().focus().toggleStrike().run(), active: editor?.isActive("strike") },
-                      ].map(btn => (
-                        <button key={btn.title} title={btn.title} onClick={btn.action}
-                          className={`px-2 py-1.5 border-r border-border last:border-r-0 transition-colors ${btn.active ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
-                        >{btn.icon}</button>
-                      ))}
-                    </div>
+                    {/* B I U S */}
+                    {[
+                      { title: "Bold (Ctrl+B)", icon: <Bold className="h-3.5 w-3.5" />, action: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold") },
+                      { title: "Italic (Ctrl+I)", icon: <Italic className="h-3.5 w-3.5" />, action: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic") },
+                      { title: "Underline (Ctrl+U)", icon: <UnderlineIcon className="h-3.5 w-3.5" />, action: () => editor?.chain().focus().toggleUnderline().run(), active: editor?.isActive("underline") },
+                      { title: "Strikethrough", icon: <Strikethrough className="h-3.5 w-3.5" />, action: () => editor?.chain().focus().toggleStrike().run(), active: editor?.isActive("strike") },
+                    ].map(btn => (
+                      <button key={btn.title} title={btn.title} onClick={btn.action}
+                        className={`p-1.5 rounded transition-colors ${btn.active ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
+                      >{btn.icon}</button>
+                    ))}
 
-                    <div className="w-px h-5 bg-border mx-1" />
+                    <div className="w-px h-5 bg-border mx-1.5" />
 
                     {/* Superscript / Subscript */}
-                    <div className="flex rounded-md border border-border overflow-hidden">
-                      <button title="Superscript" onClick={() => editor?.chain().focus().toggleSuperscript().run()}
-                        className={`px-2 py-1.5 border-r border-border transition-colors ${editor?.isActive("superscript") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
-                        <Superscript className="h-3 w-3" />
-                      </button>
-                      <button title="Subscript" onClick={() => editor?.chain().focus().toggleSubscript().run()}
-                        className={`px-2 py-1.5 transition-colors ${editor?.isActive("subscript") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
-                        <Subscript className="h-3 w-3" />
-                      </button>
-                    </div>
+                    <button title="Superscript" onClick={() => editor?.chain().focus().toggleSuperscript().run()}
+                      className={`p-1.5 rounded transition-colors ${editor?.isActive("superscript") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                      <Superscript className="h-3.5 w-3.5" />
+                    </button>
+                    <button title="Subscript" onClick={() => editor?.chain().focus().toggleSubscript().run()}
+                      className={`p-1.5 rounded transition-colors ${editor?.isActive("subscript") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                      <Subscript className="h-3.5 w-3.5" />
+                    </button>
 
-                    <div className="w-px h-5 bg-border mx-1" />
+                    <div className="w-px h-5 bg-border mx-1.5" />
 
                     {/* Text colour */}
-                    <div className="relative flex rounded-md border border-border overflow-hidden">
-                      <button
-                        title="Text colour"
-                        onClick={() => colorInputRef.current?.click()}
-                        className="px-2 py-1.5 hover:bg-muted text-muted-foreground transition-colors flex items-center gap-1"
-                      >
-                        <Palette className="h-3 w-3" />
-                        <span
-                          className="w-3 h-1.5 rounded-sm border border-border"
-                          style={{ background: editor?.getAttributes("textStyle").color || "#000000" }}
-                        />
-                      </button>
-                      <input
-                        ref={colorInputRef}
-                        type="color"
-                        className="sr-only"
-                        defaultValue="#000000"
-                        onChange={e => editor?.chain().focus().setColor(e.target.value).run()}
-                      />
-                      <button title="Remove text colour" onClick={() => editor?.chain().focus().unsetColor().run()}
-                        className="px-1.5 py-1.5 hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors border-l border-border text-[9px] font-bold">
-                        ×
-                      </button>
-                    </div>
+                    <button title="Text colour" onClick={() => colorInputRef.current?.click()}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors flex items-center gap-1">
+                      <Palette className="h-3.5 w-3.5" />
+                      <span className="w-3 h-1.5 rounded-sm border border-border"
+                        style={{ background: editor?.getAttributes("textStyle").color || "#000000" }} />
+                    </button>
+                    <input ref={colorInputRef} type="color" className="sr-only" defaultValue="#000000"
+                      onChange={e => editor?.chain().focus().setColor(e.target.value).run()} />
+                    <button title="Remove text colour" onClick={() => editor?.chain().focus().unsetColor().run()}
+                      className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px] font-bold leading-none">A×</button>
 
                     {/* Highlight */}
-                    <div className="relative flex rounded-md border border-border overflow-hidden">
-                      <button title="Highlight" onClick={() => editor?.chain().focus().toggleHighlight({ color: "#FDE68A" }).run()}
-                        className={`px-2 py-1.5 transition-colors ${editor?.isActive("highlight") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
-                        <Highlighter className="h-3 w-3" />
-                      </button>
-                    </div>
+                    <button title="Highlight text" onClick={() => editor?.chain().focus().toggleHighlight({ color: "#FDE68A" }).run()}
+                      className={`p-1.5 rounded transition-colors ${editor?.isActive("highlight") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                      <Highlighter className="h-3.5 w-3.5" />
+                    </button>
 
-                    <div className="w-px h-5 bg-border mx-1" />
+                    <div className="w-px h-5 bg-border mx-1.5" />
 
                     {/* Clear formatting */}
                     <button title="Clear all formatting" onClick={() => editor?.chain().focus().clearNodes().unsetAllMarks().run()}
-                      className="px-2 py-1.5 rounded-md border border-border hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors">
-                      <Eraser className="h-3 w-3" />
+                      className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors">
+                      <Eraser className="h-3.5 w-3.5" />
                     </button>
                   </div>
 
-                  {/* ── Toolbar row 2: Alignment + lists + blocks + table + insert ── */}
-                  <div className="flex items-center gap-1 flex-wrap bg-card border border-border rounded-xl px-2 py-1.5 shadow-sm">
+                  {/* ── Row 2: Structure, table & insert ── */}
+                  <div className="flex items-center gap-0.5 flex-wrap bg-card border border-border rounded-xl px-2 py-1.5 shadow-sm">
 
                     {/* Alignment */}
-                    <div className="flex rounded-md border border-border overflow-hidden">
-                      {[
-                        { title: "Align Left", icon: <AlignLeft className="h-3 w-3" />, align: "left" },
-                        { title: "Align Center", icon: <AlignCenter className="h-3 w-3" />, align: "center" },
-                        { title: "Align Right", icon: <AlignRight className="h-3 w-3" />, align: "right" },
-                      ].map(btn => (
-                        <button key={btn.align} title={btn.title} onClick={() => editor?.chain().focus().setTextAlign(btn.align).run()}
-                          className={`px-2 py-1.5 border-r border-border last:border-r-0 transition-colors ${editor?.isActive({ textAlign: btn.align }) ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
-                        >{btn.icon}</button>
-                      ))}
-                    </div>
+                    {[
+                      { title: "Align Left", icon: <AlignLeft className="h-3.5 w-3.5" />, align: "left" },
+                      { title: "Align Centre", icon: <AlignCenter className="h-3.5 w-3.5" />, align: "center" },
+                      { title: "Align Right", icon: <AlignRight className="h-3.5 w-3.5" />, align: "right" },
+                    ].map(btn => (
+                      <button key={btn.align} title={btn.title} onClick={() => editor?.chain().focus().setTextAlign(btn.align).run()}
+                        className={`p-1.5 rounded transition-colors ${editor?.isActive({ textAlign: btn.align }) ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
+                      >{btn.icon}</button>
+                    ))}
 
-                    <div className="w-px h-5 bg-border mx-1" />
+                    <div className="w-px h-5 bg-border mx-1.5" />
 
                     {/* Lists */}
-                    <div className="flex rounded-md border border-border overflow-hidden">
-                      <button title="Bullet list" onClick={() => editor?.chain().focus().toggleBulletList().run()}
-                        className={`px-2 py-1.5 border-r border-border transition-colors ${editor?.isActive("bulletList") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
-                      ><List className="h-3 w-3" /></button>
-                      <button title="Numbered list" onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-                        className={`px-2 py-1.5 transition-colors ${editor?.isActive("orderedList") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}
-                      ><ListOrdered className="h-3 w-3" /></button>
-                    </div>
-
-                    <div className="w-px h-5 bg-border mx-1" />
-
-                    {/* Blockquote + Code block + Inline code */}
-                    <div className="flex rounded-md border border-border overflow-hidden">
-                      <button title="Blockquote" onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-                        className={`px-2 py-1.5 border-r border-border transition-colors ${editor?.isActive("blockquote") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
-                        <Quote className="h-3 w-3" />
-                      </button>
-                      <button title="Code block" onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
-                        className={`px-2 py-1.5 border-r border-border transition-colors ${editor?.isActive("codeBlock") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
-                        <Code className="h-3 w-3" />
-                      </button>
-                      <button title="Inline code" onClick={() => editor?.chain().focus().toggleCode().run()}
-                        className={`px-2 py-1.5 transition-colors ${editor?.isActive("code") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"} text-[9px] font-mono font-bold`}>
-                        {"<>"}
-                      </button>
-                    </div>
-
-                    <div className="w-px h-5 bg-border mx-1" />
-
-                    {/* Horizontal rule */}
-                    <button title="Horizontal rule" onClick={() => editor?.chain().focus().setHorizontalRule().run()}
-                      className="px-2 py-1.5 rounded-md border border-border hover:bg-muted text-muted-foreground transition-colors">
-                      <Minus className="h-3 w-3" />
+                    <button title="Bullet list" onClick={() => editor?.chain().focus().toggleBulletList().run()}
+                      className={`p-1.5 rounded transition-colors ${editor?.isActive("bulletList") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                      <List className="h-3.5 w-3.5" />
+                    </button>
+                    <button title="Numbered list" onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+                      className={`p-1.5 rounded transition-colors ${editor?.isActive("orderedList") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                      <ListOrdered className="h-3.5 w-3.5" />
                     </button>
 
-                    {/* Link */}
-                    <button
-                      title={editor?.isActive("link") ? "Edit link" : "Insert link"}
+                    <div className="w-px h-5 bg-border mx-1.5" />
+
+                    {/* Blockquote / Code / HR / Link */}
+                    <button title="Blockquote" onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+                      className={`p-1.5 rounded transition-colors ${editor?.isActive("blockquote") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                      <Quote className="h-3.5 w-3.5" />
+                    </button>
+                    <button title="Code block" onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+                      className={`p-1.5 rounded transition-colors ${editor?.isActive("codeBlock") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                      <Code className="h-3.5 w-3.5" />
+                    </button>
+                    <button title="Divider line" onClick={() => editor?.chain().focus().setHorizontalRule().run()}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground transition-colors">
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <button title={editor?.isActive("link") ? "Edit link" : "Insert link"}
                       onClick={() => {
                         const prev = editor?.getAttributes("link").href || "";
                         const url = window.prompt("Enter URL:", prev);
@@ -1157,60 +1151,72 @@ export function DocTemplatesPanel() {
                         if (url === "") { editor?.chain().focus().unsetLink().run(); return; }
                         editor?.chain().focus().setLink({ href: url, target: "_blank" }).run();
                       }}
-                      className={`px-2 py-1.5 rounded-md border border-border transition-colors ${editor?.isActive("link") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
-                      <Link2 className="h-3 w-3" />
+                      className={`p-1.5 rounded transition-colors ${editor?.isActive("link") ? "bg-secondary text-white" : "hover:bg-muted text-muted-foreground"}`}>
+                      <Link2 className="h-3.5 w-3.5" />
                     </button>
 
-                    <div className="w-px h-5 bg-border mx-1" />
+                    <div className="w-px h-5 bg-border mx-1.5" />
 
-                    {/* Table controls */}
-                    <div className="flex rounded-md border border-border overflow-hidden">
-                      <button title="Insert table" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-                        className="flex items-center gap-1 px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold"
-                      ><Table className="h-3 w-3" />Table</button>
-                      <button title="Add row above" onClick={() => editor?.chain().focus().addRowBefore().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px]">↑R</button>
-                      <button title="Add row below" onClick={() => editor?.chain().focus().addRowAfter().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px]">↓R</button>
-                      <button title="Add column left" onClick={() => editor?.chain().focus().addColumnBefore().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px]">←C</button>
-                      <button title="Add column right" onClick={() => editor?.chain().focus().addColumnAfter().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px]">→C</button>
-                      <button title="Delete row" onClick={() => editor?.chain().focus().deleteRow().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px]">-R</button>
-                      <button title="Delete column" onClick={() => editor?.chain().focus().deleteColumn().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px]">-C</button>
-                      <button title="Toggle header row" onClick={() => editor?.chain().focus().toggleHeaderRow().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold">H</button>
-                      <button title="Merge / split cells" onClick={() => editor?.chain().focus().mergeOrSplit().run()}
-                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px]">M⇔</button>
-                      <button title="Delete table" onClick={() => editor?.chain().focus().deleteTable().run()}
-                        className="px-2 py-1.5 hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors">
-                        <Minus className="h-3 w-3" />
-                      </button>
+                    {/* Table: Insert */}
+                    <button title="Insert table" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+                      className="flex items-center gap-1 px-2 py-1.5 rounded border border-dashed border-border hover:bg-muted hover:border-secondary/50 text-muted-foreground transition-colors text-[11px] font-medium">
+                      <Table className="h-3.5 w-3.5" />Table
+                    </button>
+
+                    {/* Table row ops */}
+                    <div className="flex items-center rounded-md border border-border overflow-hidden">
+                      <button title="Add row above cursor" onClick={() => editor?.chain().focus().addRowBefore().run()}
+                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Row↑</button>
+                      <button title="Add row below cursor" onClick={() => editor?.chain().focus().addRowAfter().run()}
+                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Row↓</button>
+                      <button title="Delete selected row" onClick={() => editor?.chain().focus().deleteRow().run()}
+                        className="px-2 py-1.5 hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px] font-semibold leading-none">−Row</button>
                     </div>
 
-                    <div className="w-px h-5 bg-border mx-1" />
+                    {/* Table col ops */}
+                    <div className="flex items-center rounded-md border border-border overflow-hidden">
+                      <button title="Add column to the left" onClick={() => editor?.chain().focus().addColumnBefore().run()}
+                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Col←</button>
+                      <button title="Add column to the right" onClick={() => editor?.chain().focus().addColumnAfter().run()}
+                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">+Col→</button>
+                      <button title="Delete selected column" onClick={() => editor?.chain().focus().deleteColumn().run()}
+                        className="px-2 py-1.5 hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px] font-semibold leading-none">−Col</button>
+                    </div>
 
-                    {/* Background + DOCX import */}
-                    <button onClick={() => bgInputRef.current?.click()} title="Page background image" className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-border bg-background hover:bg-muted text-muted-foreground text-xs transition-colors">
-                      <Image className="h-3 w-3" />BG
+                    {/* Table misc */}
+                    <div className="flex items-center rounded-md border border-border overflow-hidden">
+                      <button title="Toggle header row" onClick={() => editor?.chain().focus().toggleHeaderRow().run()}
+                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">Header</button>
+                      <button title="Merge or split cells" onClick={() => editor?.chain().focus().mergeOrSplit().run()}
+                        className="px-2 py-1.5 border-r border-border hover:bg-muted text-muted-foreground transition-colors text-[10px] font-semibold leading-none">Merge</button>
+                      <button title="Delete entire table" onClick={() => editor?.chain().focus().deleteTable().run()}
+                        className="px-2 py-1.5 hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors text-[10px] font-semibold leading-none">Del</button>
+                    </div>
+
+                    <div className="w-px h-5 bg-border mx-1.5" />
+
+                    {/* BG image + DOCX import */}
+                    <button onClick={() => bgInputRef.current?.click()} title="Set page background image"
+                      className="flex items-center gap-1 px-2 py-1.5 rounded border border-border hover:bg-muted text-muted-foreground text-[11px] font-medium transition-colors">
+                      <Image className="h-3.5 w-3.5" />BG
                     </button>
                     {selected.backgroundImage && (
-                      <button onClick={removeBgImage} title="Remove background" className="p-1.5 rounded-md border border-border bg-background hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors">
-                        <X className="h-3 w-3" />
+                      <button onClick={removeBgImage} title="Remove background image"
+                        className="p-1.5 rounded border border-border hover:bg-red-50 hover:text-red-600 text-muted-foreground transition-colors">
+                        <X className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    <button onClick={() => docxInputRef.current?.click()} title="Import .docx file" className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-border bg-background hover:bg-muted text-muted-foreground text-xs transition-colors">
-                      <Upload className="h-3 w-3" />DOCX
+                    <button onClick={() => docxInputRef.current?.click()} title="Import from Word (.docx)"
+                      className="flex items-center gap-1 px-2 py-1.5 rounded border border-border hover:bg-muted text-muted-foreground text-[11px] font-medium transition-colors">
+                      <Upload className="h-3.5 w-3.5" />Word
                     </button>
 
                     <input ref={bgInputRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
                     <input ref={docxInputRef} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleDocxImport} />
 
                     <div className="ml-auto">
-                      <button onClick={() => saveContent()} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${saved ? "bg-green-50 text-green-700 border border-green-200" : "bg-secondary text-white hover:bg-secondary/90"}`}>
-                        {saved ? <><Check className="h-3.5 w-3.5" />Saved</> : "Save"}
+                      <button onClick={() => saveContent()} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${saved ? "bg-green-100 text-green-700 border border-green-200" : "bg-secondary text-white hover:bg-secondary/90"}`}>
+                        {saved ? <><Check className="h-3.5 w-3.5" />Saved!</> : <><Check className="h-3.5 w-3.5 opacity-60" />Save</>}
                       </button>
                     </div>
                   </div>
