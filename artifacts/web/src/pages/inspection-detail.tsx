@@ -170,10 +170,10 @@ function loadDocTemplates(): DocTemplate[] {
   } catch { return []; }
 }
 
-function getLinkedDocTemplate(checklistTemplateId: number | undefined): DocTemplate | null {
+function getLinkedDocTemplate(docTemplates: DocTemplate[], checklistTemplateId: number | undefined): DocTemplate | null {
   if (!checklistTemplateId) return null;
   try {
-    return loadDocTemplates().find(dt => dt.linkedChecklistIds.includes(checklistTemplateId)) ?? null;
+    return docTemplates.find(dt => dt.linkedChecklistIds.includes(checklistTemplateId)) ?? null;
   } catch { return null; }
 }
 
@@ -200,11 +200,11 @@ function setDirectDocTemplateId(inspectionId: number, docTemplateId: string | nu
   } catch {}
 }
 
-function getDirectDocTemplate(inspectionId: number): DocTemplate | null {
+function getDirectDocTemplate(docTemplates: DocTemplate[], inspectionId: number): DocTemplate | null {
   const id = getDirectDocTemplateId(inspectionId);
   if (!id) return null;
   try {
-    return loadDocTemplates().find(dt => dt.id === id) ?? null;
+    return docTemplates.find(dt => String(dt.id) === String(id)) ?? null;
   } catch { return null; }
 }
 
@@ -350,18 +350,6 @@ function getAllowedReportTypes(discipline?: string | null): string[] {
 function getSuggestedReportType(inspection: Inspection): string {
   const allowed = getAllowedReportTypes(inspection.checklistTemplateDiscipline);
 
-  // 1. Check doc templates linked to this inspection's checklist template
-  try {
-    const raw = localStorage.getItem("inspectproof_doc_templates");
-    if (raw) {
-      const docTemplates: Array<{ defaultReportType?: string; linkedChecklistIds: number[] }> = JSON.parse(raw);
-      const linked = docTemplates.find(
-        dt => dt.defaultReportType && dt.linkedChecklistIds.includes(inspection.checklistTemplateId as number)
-      );
-      if (linked?.defaultReportType && allowed.includes(linked.defaultReportType)) return linked.defaultReportType;
-    }
-  } catch {}
-
   // 2. Heuristic: prefer a defect-type report when failures exist
   if (inspection.failCount > 0) {
     const defectType = allowed.find(k => ["defect_notice", "non_conformance_report", "safety_inspection_report", "hazard_assessment_report", "pre_purchase_report"].includes(k));
@@ -417,13 +405,14 @@ export default function InspectionDetail() {
       setInspection(data);
 
       // Parallel loads
-      const [docsWithLinks, reports, users, tmpls, projDocs, proj] = await Promise.all([
+      const [docsWithLinks, reports, users, tmpls, projDocs, proj, docTmpls] = await Promise.all([
         data.projectId ? apiFetch(`/api/projects/${data.projectId}/documents-with-links`).catch(() => []) : Promise.resolve([]),
         apiFetch(`/api/reports?inspectionId=${inspId}`).catch(() => []),
         apiFetch("/api/users").catch(() => []),
         apiFetch("/api/checklist-templates").catch(() => []),
         data.projectId ? apiFetch(`/api/projects/${data.projectId}/documents`).catch(() => []) : Promise.resolve([]),
         data.projectId ? apiFetch(`/api/projects/${data.projectId}`).catch(() => null) : Promise.resolve(null),
+        apiFetch("/api/doc-templates").catch(() => []),
       ]);
 
       // Build docsByItem map
@@ -440,6 +429,7 @@ export default function InspectionDetail() {
       setTemplates(tmpls);
       setProjectDocuments(projDocs);
       setProject(proj);
+      setDocTemplates(Array.isArray(docTmpls) ? docTmpls : []);
     } catch {
       setError("Failed to load inspection");
     } finally {
@@ -460,8 +450,8 @@ export default function InspectionDetail() {
     setGeneratedReport(null);
     try {
       const linkedTemplate =
-        getDirectDocTemplate(inspection.id) ??
-        getLinkedDocTemplate(inspection.checklistTemplateId);
+        getDirectDocTemplate(docTemplates, inspection.id) ??
+        getLinkedDocTemplate(docTemplates, inspection.checklistTemplateId);
 
       if (linkedTemplate) {
         // Use the linked doc template — fill tokens and save directly as a report
@@ -954,7 +944,7 @@ export default function InspectionDetail() {
                 {inspection && (() => {
                   const suggested = getSuggestedReportType(inspection);
                   const discipline = inspection.checklistTemplateDiscipline;
-                  const linkedTpl = getLinkedDocTemplate(inspection.checklistTemplateId);
+                  const linkedTpl = getLinkedDocTemplate(docTemplates, inspection.checklistTemplateId);
                   return (
                     <>
                       {discipline && (
@@ -1532,7 +1522,7 @@ function OverviewTab({
   const [confirmReplaceOpen, setConfirmReplaceOpen] = useState(false);
 
   // Doc template direct-link state
-  const [docTemplates] = useState<DocTemplate[]>(() => loadDocTemplates());
+  const [docTemplates, setDocTemplates] = useState<DocTemplate[]>([]);
   const [selectedDocTemplateId, setSelectedDocTemplateId] = useState<string>(
     () => getDirectDocTemplateId(inspection.id) ?? ""
   );
