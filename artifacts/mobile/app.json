@@ -1,17 +1,17 @@
 {
   "expo": {
     "name": "InspectProof",
-    "slug": "mobile",
+    "slug": "inspectproof",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
-    "scheme": "mobile",
+    "scheme": "inspectproof",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0B1933"
     },
     "ios": {
       "supportsTablet": false,
