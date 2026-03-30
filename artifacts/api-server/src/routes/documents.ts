@@ -28,12 +28,14 @@ async function formatDoc(d: any) {
 
 router.get("/", async (req, res) => {
   try {
-    const { projectId, category } = req.query;
+    const { projectId, category, inspectionId, folder } = req.query;
     let docs = await db.select().from(documentsTable)
       .orderBy(sql`${documentsTable.createdAt} DESC`);
 
     if (projectId) docs = docs.filter(d => d.projectId === parseInt(projectId as string));
     if (category) docs = docs.filter(d => d.category === category);
+    if (inspectionId) docs = docs.filter(d => d.inspectionId === parseInt(inspectionId as string));
+    if (folder) docs = docs.filter(d => d.folder === (folder as string));
 
     const result = await Promise.all(docs.map(formatDoc));
     res.json(result);
