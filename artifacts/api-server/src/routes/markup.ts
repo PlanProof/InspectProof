@@ -87,7 +87,7 @@ router.post("/markup/generate", requireAuth, async (req, res) => {
     const objectPath = await storage.uploadFile(outputBytes, "application/pdf");
 
     // ── 4. Create project document record ────────────────────────────────────
-    const userId = (req as any).user?.id;
+    const userId = req.authUser?.id;
     let newDocId: number | null = null;
 
     if (projectId) {

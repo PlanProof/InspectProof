@@ -395,23 +395,24 @@ export default function PhotoMarkupScreen() {
       </View>
 
       <View style={[styles.previewActions, { paddingBottom: insets.bottom + 12 }]}>
+        {/* Primary action — take another photo immediately */}
         <Pressable
           style={[styles.btnPrimary, !isSaved && { opacity: 0.45 }]}
-          onPress={() => setPhase("markup")}
+          onPress={takeAnother}
           disabled={!isSaved}
         >
-          <Feather name="edit-2" size={18} color="#fff" />
-          <Text style={styles.btnPrimaryText}>Add Markup</Text>
+          <Feather name="camera" size={18} color="#fff" />
+          <Text style={styles.btnPrimaryText}>Take Another Photo</Text>
         </Pressable>
 
         <View style={styles.previewRow}>
           <Pressable
             style={[styles.btnSecondary, { flex: 1 }, !isSaved && { opacity: 0.45 }]}
-            onPress={takeAnother}
+            onPress={() => setPhase("markup")}
             disabled={!isSaved}
           >
-            <Feather name="camera" size={16} color={Colors.secondary} />
-            <Text style={styles.btnSecondaryText}>Take Another</Text>
+            <Feather name="edit-2" size={16} color={Colors.secondary} />
+            <Text style={styles.btnSecondaryText}>Add Markup</Text>
           </Pressable>
 
           <Pressable

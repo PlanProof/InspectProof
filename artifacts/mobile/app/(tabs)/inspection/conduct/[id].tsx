@@ -1024,6 +1024,14 @@ function ItemModal({
   const selectedOpt = RESULT_OPTS.find(r => r.key === result);
   const suggestions = getSuggestionsForItem(item.category, item.description);
   const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const photoUrls: string[] = item.photoUrls ?? [];
+
+  const openLightbox = (idx: number) => setLightboxIndex(idx);
+  const closeLightbox = () => setLightboxIndex(null);
+  const goPrev = () => setLightboxIndex(i => (i !== null && i > 0 ? i - 1 : i));
+  const goNext = () => setLightboxIndex(i => (i !== null && i < photoUrls.length - 1 ? i + 1 : i));
 
   const applySuggestion = (text: string) => {
     if (!notes.trim()) {
@@ -1032,6 +1040,76 @@ function ItemModal({
       onNotesChange(notes.trimEnd() + "\n" + text);
     }
   };
+
+  if (lightboxIndex !== null && photoUrls.length > 0) {
+    const photoPath = photoUrls[lightboxIndex];
+    const markup = item.photoMarkups?.[photoPath];
+    return (
+      <View style={[modalStyles.container, { paddingTop: insets.top, backgroundColor: "#000" }]}>
+        <View style={[modalStyles.header, { backgroundColor: "#111", borderBottomColor: "#222" }]}>
+          <Pressable onPress={closeLightbox} hitSlop={12} style={modalStyles.closeBtn}>
+            <Feather name="arrow-left" size={22} color="#fff" />
+          </Pressable>
+          <Text style={[modalStyles.headerTitle, { color: "#fff" }]}>
+            Photo {lightboxIndex + 1} of {photoUrls.length}
+          </Text>
+          <Pressable
+            onPress={() => { onRemovePhoto(photoPath); closeLightbox(); }}
+            hitSlop={12}
+            style={[modalStyles.closeBtn, { marginLeft: 0 }]}
+          >
+            <Feather name="trash-2" size={20} color={Colors.danger} />
+          </Pressable>
+        </View>
+
+        <View style={{ flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" }}>
+          <View style={{ width: screenW, height: screenH * 0.72 }}>
+            <Image
+              source={{ uri: `${baseUrl}/api/storage${photoPath}` }}
+              style={{ width: screenW, height: screenH * 0.72 }}
+              resizeMode="contain"
+            />
+            {markup && markup.strokes.length > 0 && (
+              <Svg
+                style={StyleSheet.absoluteFill}
+                width={screenW}
+                height={screenH * 0.72}
+                viewBox={`0 0 ${markup.w} ${markup.h}`}
+                preserveAspectRatio="xMidYMid meet"
+              >
+                {markup.strokes.map((stroke, si) => {
+                  const d = stroke.points.map((p, pi) => `${pi === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+                  return (
+                    <Path key={si} d={d} stroke={stroke.color} strokeWidth={stroke.width}
+                      strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  );
+                })}
+              </Svg>
+            )}
+          </View>
+        </View>
+
+        <View style={[{ flexDirection: "row", paddingHorizontal: 24, paddingBottom: insets.bottom + 16, paddingTop: 12, gap: 12, backgroundColor: "#111" }]}>
+          <Pressable
+            onPress={goPrev}
+            disabled={lightboxIndex === 0}
+            style={[lightboxStyles.navBtn, lightboxIndex === 0 && { opacity: 0.3 }]}
+          >
+            <Feather name="chevron-left" size={22} color="#fff" />
+            <Text style={lightboxStyles.navBtnText}>Previous</Text>
+          </Pressable>
+          <Pressable
+            onPress={goNext}
+            disabled={lightboxIndex === photoUrls.length - 1}
+            style={[lightboxStyles.navBtn, lightboxIndex === photoUrls.length - 1 && { opacity: 0.3 }]}
+          >
+            <Text style={lightboxStyles.navBtnText}>Next</Text>
+            <Feather name="chevron-right" size={22} color="#fff" />
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   if (previewDoc) {
     return (
@@ -1201,15 +1279,17 @@ function ItemModal({
 
         {/* Photos */}
         <View style={modalStyles.section}>
-          <Text style={modalStyles.sectionLabel}>Photos ({item.photoUrls?.length || 0})</Text>
+          <Text style={modalStyles.sectionLabel}>
+            Photos ({photoUrls.length}){photoUrls.length > 0 ? " — tap to view" : ""}
+          </Text>
 
-          {item.photoUrls && item.photoUrls.length > 0 && (
+          {photoUrls.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={modalStyles.photoRow}>
-              {item.photoUrls.map((photoPath, idx) => {
+              {photoUrls.map((photoPath, idx) => {
                 const markup: MarkupData | undefined = item.photoMarkups?.[photoPath];
                 const hasMarkup = markup && markup.strokes.length > 0;
                 return (
-                  <View key={idx} style={modalStyles.photoThumb}>
+                  <Pressable key={idx} style={modalStyles.photoThumb} onPress={() => openLightbox(idx)}>
                     <Image
                       source={{ uri: `${baseUrl}/api/storage${photoPath}` }}
                       style={modalStyles.thumbImage}
@@ -1218,8 +1298,8 @@ function ItemModal({
                     {hasMarkup && markup && (
                       <Svg
                         style={StyleSheet.absoluteFill}
-                        width={80}
-                        height={80}
+                        width={88}
+                        height={88}
                         viewBox={`0 0 ${markup.w} ${markup.h}`}
                         preserveAspectRatio="xMidYMid meet"
                       >
@@ -1239,15 +1319,22 @@ function ItemModal({
                         })}
                       </Svg>
                     )}
+                    <View style={modalStyles.thumbOverlay}>
+                      <Feather name="maximize-2" size={14} color="#fff" />
+                    </View>
                     {hasMarkup && (
                       <View style={modalStyles.markupBadge}>
                         <Feather name="edit-2" size={8} color="#fff" />
                       </View>
                     )}
-                    <Pressable style={modalStyles.removePhoto} onPress={() => onRemovePhoto(photoPath)} hitSlop={4}>
+                    <Pressable
+                      style={modalStyles.removePhoto}
+                      onPress={e => { e.stopPropagation?.(); onRemovePhoto(photoPath); }}
+                      hitSlop={4}
+                    >
                       <Feather name="x" size={12} color="#fff" />
                     </Pressable>
-                  </View>
+                  </Pressable>
                 );
               })}
             </ScrollView>
@@ -1812,8 +1899,13 @@ const modalStyles = StyleSheet.create({
     minHeight: 100,
   },
   photoRow: { gap: 10, paddingBottom: 4 },
-  photoThumb: { width: 80, height: 80, borderRadius: 8, overflow: "visible", position: "relative" },
-  thumbImage: { width: 80, height: 80, borderRadius: 8 },
+  photoThumb: { width: 88, height: 88, borderRadius: 8, overflow: "visible", position: "relative" },
+  thumbImage: { width: 88, height: 88, borderRadius: 8 },
+  thumbOverlay: {
+    position: "absolute", bottom: 4, right: 4,
+    backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 4,
+    width: 22, height: 22, alignItems: "center", justifyContent: "center",
+  },
   removePhoto: {
     position: "absolute",
     top: -6,
@@ -2001,4 +2093,13 @@ const panelStyles = StyleSheet.create({
   markupBtnText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   previewContainer: { flex: 1, backgroundColor: "#000" },
   previewImage: { flex: 1, width: "100%" },
+});
+
+const lightboxStyles = StyleSheet.create({
+  navBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: "#2a2a2a",
+  },
+  navBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
 });
