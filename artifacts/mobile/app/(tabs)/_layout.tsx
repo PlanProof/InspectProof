@@ -18,26 +18,31 @@ function NativeTabLayout() {
         <Icon sf={{ default: "house", selected: "house.fill" }} />
         <Label>Home</Label>
       </NativeTabs.Trigger>
+
+      {/* Inspections tab + all its nested screens */}
       <NativeTabs.Trigger name="inspections">
         <Icon sf={{ default: "clipboard", selected: "clipboard.fill" }} />
         <Label>Inspections</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="projects">
-        <Icon sf={{ default: "folder", selected: "folder.fill" }} />
-        <Label>Projects</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="more">
-        <Icon sf={{ default: "ellipsis.circle", selected: "ellipsis.circle.fill" }} />
-        <Label>More</Label>
-      </NativeTabs.Trigger>
-      {/* Hidden nested screens — no trigger, keeps tab bar visible */}
-      <HiddenTrigger name="project/[id]" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/[id]" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/create" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/conduct/[id]" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/generate-report" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/document-viewer" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/photo-markup" style={{ display: "none" }} />
+
+      {/* Projects tab + its nested screens */}
+      <NativeTabs.Trigger name="projects">
+        <Icon sf={{ default: "folder", selected: "folder.fill" }} />
+        <Label>Projects</Label>
+      </NativeTabs.Trigger>
+      <HiddenTrigger name="project/[id]" style={{ display: "none" }} />
+
+      {/* More tab + all its nested screens */}
+      <NativeTabs.Trigger name="more">
+        <Icon sf={{ default: "ellipsis.circle", selected: "ellipsis.circle.fill" }} />
+        <Label>More</Label>
+      </NativeTabs.Trigger>
       <HiddenTrigger name="feedback" style={{ display: "none" }} />
       <HiddenTrigger name="profile" style={{ display: "none" }} />
       <HiddenTrigger name="settings" style={{ display: "none" }} />

@@ -2,7 +2,7 @@ import React, { useRef, useState, useCallback, useEffect, useMemo } from "react"
 import {
   View, Text, StyleSheet, Pressable, Alert, ActivityIndicator,
   useWindowDimensions, Platform, Modal, TextInput,
-  KeyboardAvoidingView,
+  KeyboardAvoidingView, Image, ScrollView,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -348,6 +348,9 @@ export default function DocumentViewerScreen() {
     : null;
   const isPdf =
     mimeType === "application/pdf" || name?.toLowerCase().endsWith(".pdf");
+  const isImage =
+    mimeType?.startsWith("image/") ||
+    /\.(jpe?g|png|gif|webp|bmp)$/i.test(name ?? "");
 
   // ── Drawing gesture (pen mode) — GestureHandler for new-arch compatibility ──
 
@@ -984,6 +987,27 @@ export default function DocumentViewerScreen() {
                 setWebError(true);
               },
             })
+          ) : isImage ? (
+            /* Native image renderer — no WKWebView sandboxing; supports pinch-zoom */
+            <ScrollView
+              style={styles.webview}
+              contentContainerStyle={styles.imageContainer}
+              maximumZoomScale={8}
+              minimumZoomScale={1}
+              bouncesZoom
+              centerContent
+              scrollEnabled={!drawing}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+            >
+              <Image
+                source={{ uri: webviewUri }}
+                style={[styles.imageContent, { height: bodyH }]}
+                resizeMode="contain"
+                onLoad={() => setWebLoading(false)}
+                onError={() => { setWebLoading(false); setWebError(true); }}
+              />
+            </ScrollView>
           ) : (
             <WebView
               source={{ uri: webviewUri }}
@@ -1366,6 +1390,17 @@ const styles = StyleSheet.create({
   drawHintText: { color: "#fff", fontSize: 13, fontWeight: "500" },
 
   capturingBg: { backgroundColor: "#ffffff" },
+
+  imageContainer: {
+    flexGrow: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f0f0f0",
+    minHeight: "100%",
+  },
+  imageContent: {
+    width: "100%",
+  },
 
   textAnnotationView: {
     position: "absolute",
