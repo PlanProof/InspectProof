@@ -17,6 +17,7 @@ import { captureRef } from "react-native-view-shot";
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@/context/AuthContext";
 import { Colors } from "@/constants/colors";
+import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 import * as ScreenOrientation from "expo-screen-orientation";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -266,9 +267,10 @@ export default function DocumentViewerScreen() {
   useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
 
+  const tabBarHeight = useTabBarHeight();
   const headerH = 56;
   const toolbarH = drawing ? 56 : 0;
-  const bodyH = screenH - insets.top - headerH - toolbarH;
+  const bodyH = screenH - insets.top - headerH - toolbarH - tabBarHeight;
 
   // ── Screen orientation: unlock on mount, re-lock on unmount ─────────────────
   useEffect(() => {
@@ -562,10 +564,12 @@ export default function DocumentViewerScreen() {
 
         Alert.alert("Saved", `Marked-up PDF "${docName}" saved.`);
       } else {
-        // ── Image / non-PDF path: single capture (annotation layer only) ──
+        // ── Image / non-PDF path: capture the full container (image + annotations)
+        // Use containerRef so the underlying image is included in the composite.
+        // captureRef works on native Image components without the WKWebView black issue.
         setCapturing(true);
         await new Promise<void>((r) => setTimeout(r, 100));
-        const capturedUri = await captureRef(drawLayerRef, {
+        const capturedUri = await captureRef(containerRef, {
           format: "jpg",
           quality: 0.92,
           result: "tmpfile",
@@ -643,12 +647,8 @@ export default function DocumentViewerScreen() {
         }
       }
 
-      // Navigate back to the inspection
-      if (inspectionId) {
-        router.replace(`/inspection/conduct/${inspectionId}`);
-      } else {
-        router.back();
-      }
+      // Navigate back to wherever the user came from
+      router.back();
     } catch {
       setCapturing(false);
       setRenderingPage(null);
@@ -1167,11 +1167,19 @@ export default function DocumentViewerScreen() {
           )}
 
           {/* ── Drawing layer — native only ── */}
-          {drawing && Platform.OS !== "web" && (
+          {/* Always rendered when there are annotations or when drawing, so strokes
+              remain visible after toggling out of markup mode. Non-interactive when
+              not actively drawing so scroll/zoom gestures pass through. */}
+          {Platform.OS !== "web" && (drawing || hasMarkup) && (
             <View
               ref={drawLayerRef}
-              style={[StyleSheet.absoluteFill, capturing && styles.capturingBg]}
-              pointerEvents="box-none"
+              style={[
+                StyleSheet.absoluteFill,
+                // White bg only for PDF annotation capture (so the PNG is opaque).
+                // For image captures we use containerRef, so no bg needed here.
+                capturing && isPdf && styles.capturingBg,
+              ]}
+              pointerEvents={drawing ? "box-none" : "none"}
               collapsable={false}
             >
 
