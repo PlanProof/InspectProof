@@ -1,7 +1,7 @@
-import React, { useRef, useState, useCallback, useEffect } from "react";
+import React, { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import {
   View, Text, StyleSheet, Pressable, Alert, ActivityIndicator,
-  PanResponder, useWindowDimensions, Platform, Modal, TextInput,
+  useWindowDimensions, Platform, Modal, TextInput,
   KeyboardAvoidingView,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -347,38 +347,57 @@ export default function DocumentViewerScreen() {
   const isPdf =
     mimeType === "application/pdf" || name?.toLowerCase().endsWith(".pdf");
 
-  // ── Drawing PanResponder (pen mode only) ────────────────────────────────────
+  // ── Drawing gesture (pen mode) — GestureHandler for new-arch compatibility ──
 
-  const penPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => activeToolRef.current === "pen",
-      onMoveShouldSetPanResponder: () => activeToolRef.current === "pen",
-      onPanResponderGrant: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        currentPoints.current = [{ x: locationX, y: locationY }];
-        setLiveStroke([{ x: locationX, y: locationY }]);
-      },
-      onPanResponderMove: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        currentPoints.current.push({ x: locationX, y: locationY });
-        setLiveStroke([...currentPoints.current]);
-      },
-      onPanResponderRelease: () => {
-        if (currentPoints.current.length > 1) {
-          setStrokes((prev) => [
-            ...prev,
-            {
-              points: [...currentPoints.current],
-              color: selectedColorRef.current,
-              width: selectedWidthRef.current,
-            },
-          ]);
-        }
-        currentPoints.current = [];
-        setLiveStroke([]);
-      },
-    })
-  ).current;
+  const onPenStart = useCallback((x: number, y: number) => {
+    currentPoints.current = [{ x, y }];
+    setLiveStroke([{ x, y }]);
+  }, []);
+
+  const onPenMove = useCallback((x: number, y: number) => {
+    currentPoints.current.push({ x, y });
+    setLiveStroke([...currentPoints.current]);
+  }, []);
+
+  const onPenEnd = useCallback(() => {
+    const pts = [...currentPoints.current];
+    currentPoints.current = [];
+    setLiveStroke([]);
+    if (pts.length > 1) {
+      setStrokes((prev) => [
+        ...prev,
+        {
+          points: pts,
+          color: selectedColorRef.current,
+          width: selectedWidthRef.current,
+        },
+      ]);
+    }
+  }, []);
+
+  const penGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .minDistance(0)
+        .maxPointers(1)
+        .onStart((e) => {
+          "worklet";
+          runOnJS(onPenStart)(e.x, e.y);
+        })
+        .onUpdate((e) => {
+          "worklet";
+          runOnJS(onPenMove)(e.x, e.y);
+        })
+        .onEnd(() => {
+          "worklet";
+          runOnJS(onPenEnd)();
+        })
+        .onFinalize(() => {
+          "worklet";
+          runOnJS(onPenEnd)();
+        }),
+    [onPenStart, onPenMove, onPenEnd]
+  );
 
   // ── Add text annotation ──────────────────────────────────────────────────────
 
@@ -984,14 +1003,11 @@ export default function DocumentViewerScreen() {
             </View>
           )}
 
-          {/* ── Drawing capture layer — native only ── */}
+          {/* ── Drawing layer — native only ── */}
           {drawing && Platform.OS !== "web" && (
-            <View
-              style={StyleSheet.absoluteFill}
-              pointerEvents={activeTool === "pen" ? "auto" : "box-none"}
-              {...(activeTool === "pen" ? penPanResponder.panHandlers : {})}
-            >
-              {/* SVG strokes layer */}
+            <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+
+              {/* SVG: completed strokes + live stroke (non-interactive) */}
               <Svg
                 style={StyleSheet.absoluteFill}
                 width={screenW}
@@ -1021,7 +1037,7 @@ export default function DocumentViewerScreen() {
                 )}
               </Svg>
 
-              {/* Draggable text annotations */}
+              {/* Text annotations — own pan+pinch gestures */}
               {textAnnotations.map((ann) => (
                 <DraggableText
                   key={ann.id}
@@ -1041,7 +1057,7 @@ export default function DocumentViewerScreen() {
                 />
               ))}
 
-              {/* Text mode tap area — tapping empty space creates new annotation */}
+              {/* Text mode: tap on empty space to create annotation */}
               {activeTool === "text" && (
                 <Pressable
                   style={StyleSheet.absoluteFill}
@@ -1053,6 +1069,13 @@ export default function DocumentViewerScreen() {
                     );
                   }}
                 />
+              )}
+
+              {/* Pen mode: GestureDetector on TOP captures all drawing touches */}
+              {activeTool === "pen" && (
+                <GestureDetector gesture={penGesture}>
+                  <View style={StyleSheet.absoluteFill} />
+                </GestureDetector>
               )}
             </View>
           )}
