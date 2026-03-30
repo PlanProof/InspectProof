@@ -914,7 +914,8 @@ function DocumentsPanel({
           mimeType: doc.mimeType || "application/octet-stream",
           documentId: String(doc.id),
           ...(projectId ? { projectId } : {}),
-          ...(inspectionId && activeItemId ? { inspectionId, itemId: String(activeItemId) } : {}),
+          ...(inspectionId ? { inspectionId } : {}),
+          ...(activeItemId ? { itemId: String(activeItemId) } : {}),
         },
       });
     }
@@ -1393,7 +1394,9 @@ function ItemModal({
                                 url: `${baseUrl}/api/storage${doc.fileUrl}`,
                                 name: doc.name,
                                 mimeType: doc.mimeType || "application/octet-stream",
-                                ...(inspectionId && item?.id ? { inspectionId, itemId: String(item.id) } : {}),
+                                documentId: String(doc.id),
+                                ...(inspectionId ? { inspectionId } : {}),
+                                ...(item?.id ? { itemId: String(item.id) } : {}),
                               },
                             });
                           }
