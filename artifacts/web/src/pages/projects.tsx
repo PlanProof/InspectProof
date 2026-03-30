@@ -334,7 +334,11 @@ function NewProjectDialog({ open, onOpenChange, onSuccess }: { open: boolean, on
 
   return (
     <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) { setSelectedClasses([]); setClassError(false); } }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        onInteractOutside={e => e.preventDefault()}
+        onPointerDownOutside={e => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Create New Project</DialogTitle>
         </DialogHeader>
