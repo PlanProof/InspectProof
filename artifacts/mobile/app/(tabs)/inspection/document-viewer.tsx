@@ -267,6 +267,19 @@ export default function DocumentViewerScreen() {
   useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
 
+  // Reset ALL annotation state when the document URL changes — Expo Router can
+  // reuse this component instance across navigations (same route, new params),
+  // so we must explicitly wipe strokes from the previous document.
+  useEffect(() => {
+    setStrokes([]);
+    setLiveStroke([]);
+    setTextAnnotations([]);
+    setSelectedTextId(null);
+    setCurrentPage(1);
+    setDrawing(false);
+    currentPageRef.current = 1;
+  }, [url]);
+
   const tabBarHeight = useTabBarHeight();
   const headerH = 56;
   const toolbarH = drawing ? 56 : 0;
@@ -1198,12 +1211,7 @@ export default function DocumentViewerScreen() {
           {Platform.OS !== "web" && (drawing || hasMarkup) && (
             <View
               ref={drawLayerRef}
-              style={[
-                StyleSheet.absoluteFill,
-                // White bg only for PDF annotation capture (so the PNG is opaque).
-                // For image captures we use containerRef, so no bg needed here.
-                capturing && isPdf && styles.capturingBg,
-              ]}
+              style={StyleSheet.absoluteFill}
               pointerEvents={drawing ? "box-none" : "none"}
               collapsable={false}
             >
