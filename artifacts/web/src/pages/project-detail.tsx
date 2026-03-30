@@ -1426,6 +1426,10 @@ function BookInspectionDialog({
     if (!form.scheduledDate) { setError("Please set a scheduled date."); return; }
     setSubmitting(true);
     try {
+      // Prefer the explicit defaultTemplateId (from booking a specific card),
+      // then fall back to the allocated type's templateId that matches the selected inspectionType
+      const matchedTemplateId = defaultTemplateId
+        ?? allocatedTypes.find(t => t.inspectionType === form.inspectionType)?.templateId;
       await createInspection.mutateAsync({
         data: {
           projectId,
@@ -1434,7 +1438,7 @@ function BookInspectionDialog({
           scheduledTime: form.scheduledTime || undefined,
           inspectorId: form.inspectorId ? Number(form.inspectorId) : undefined,
           notes: form.notes || undefined,
-          ...(defaultTemplateId ? { checklistTemplateId: defaultTemplateId } : {}),
+          ...(matchedTemplateId ? { checklistTemplateId: matchedTemplateId } : {}),
         } as any,
       });
       onCreated();

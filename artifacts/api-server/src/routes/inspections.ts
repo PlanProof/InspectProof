@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, ilike } from "drizzle-orm";
 import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable, reportsTable } from "@workspace/db";
 import { checkInspectionQuota } from "../lib/quota";
 import { optionalAuth, isInspectorOnly } from "../middleware/auth";
@@ -117,6 +117,17 @@ router.get("/", optionalAuth, async (req, res) => {
 router.post("/", checkInspectionQuota, async (req, res) => {
   try {
     const data = req.body;
+
+    // Auto-resolve checklistTemplateId from inspectionType if not explicitly provided
+    let resolvedTemplateId: number | null = data.checklistTemplateId ?? null;
+    if (!resolvedTemplateId && data.inspectionType) {
+      const [matched] = await db.select()
+        .from(checklistTemplatesTable)
+        .where(ilike(checklistTemplatesTable.inspectionType, data.inspectionType))
+        .limit(1);
+      if (matched) resolvedTemplateId = matched.id;
+    }
+
     const [inspection] = await db.insert(inspectionsTable).values({
       projectId: data.projectId,
       inspectionType: data.inspectionType,
@@ -126,13 +137,13 @@ router.post("/", checkInspectionQuota, async (req, res) => {
       inspectorId: data.inspectorId,
       duration: data.duration,
       notes: data.notes,
-      checklistTemplateId: data.checklistTemplateId,
+      checklistTemplateId: resolvedTemplateId,
     }).returning();
 
-    // If checklist template selected, pre-populate results
-    if (data.checklistTemplateId) {
+    // Pre-populate checklist results from the resolved template
+    if (resolvedTemplateId) {
       const items = await db.select().from(checklistItemsTable)
-        .where(eq(checklistItemsTable.templateId, data.checklistTemplateId));
+        .where(eq(checklistItemsTable.templateId, resolvedTemplateId));
       if (items.length > 0) {
         await db.insert(checklistResultsTable).values(
           items.map(item => ({

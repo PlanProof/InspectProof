@@ -138,6 +138,8 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
     if (!form.scheduledDate) { setError("Please set a scheduled date."); return; }
     setSubmitting(true);
     try {
+      // Auto-link the matching checklist template for the selected inspection type
+      const matchedTemplateId = allocatedTypes.find(t => t.inspectionType === form.inspectionType)?.templateId;
       await createInspection.mutateAsync({
         data: {
           ...(isCustom ? {} : { projectId: Number(form.projectId) }),
@@ -146,6 +148,7 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
           scheduledTime: form.scheduledTime || undefined,
           inspectorId: form.inspectorId ? Number(form.inspectorId) : undefined,
           notes: form.notes || undefined,
+          ...(matchedTemplateId ? { checklistTemplateId: matchedTemplateId } : {}),
         } as any,
       });
       onCreated();
