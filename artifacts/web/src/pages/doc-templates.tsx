@@ -25,6 +25,32 @@ import { Superscript as TipTapSuperscript } from "@tiptap/extension-superscript"
 import { Link as TipTapLink } from "@tiptap/extension-link";
 import { Color } from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
+import { FontFamily } from "@tiptap/extension-font-family";
+import { Extension } from "@tiptap/core";
+
+// ── Custom FontSize extension ──────────────────────────────────────────────────
+const FontSize = Extension.create({
+  name: "fontSize",
+  addOptions() { return { types: ["textStyle"] }; },
+  addGlobalAttributes() {
+    return [{
+      types: this.options.types,
+      attributes: {
+        fontSize: {
+          default: null,
+          parseHTML: el => el.style.fontSize?.replace(/['"]/g, "") || null,
+          renderHTML: attrs => attrs.fontSize ? { style: `font-size: ${attrs.fontSize}` } : {},
+        },
+      },
+    }];
+  },
+  addCommands() {
+    return {
+      setFontSize: (size: string) => ({ chain }: any) => chain().setMark("textStyle", { fontSize: size }).run(),
+      unsetFontSize: () => ({ chain }: any) => chain().setMark("textStyle", { fontSize: null }).removeEmptyTextStyle().run(),
+    } as any;
+  },
+});
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface DocTemplate {
@@ -568,7 +594,7 @@ export function DocTemplatesPanel() {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ underline: false }),
       TipTapUnderline,
       TipTapImage,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
@@ -582,6 +608,8 @@ export function DocTemplatesPanel() {
       TipTapLink.configure({ openOnClick: false, HTMLAttributes: { class: "tiptap-link" } }),
       TextStyle,
       Color,
+      FontSize,
+      FontFamily,
     ],
     content: "",
     editorProps: {
@@ -942,7 +970,7 @@ export function DocTemplatesPanel() {
                         else if (v === "h3") editor?.chain().focus().toggleHeading({ level: 3 }).run();
                         e.target.value = "";
                       }}
-                      className="text-xs rounded-md border border-border bg-background px-1.5 py-1 focus:outline-none mr-1"
+                      className="text-xs rounded-md border border-border bg-background px-1.5 py-1 focus:outline-none"
                       defaultValue=""
                     >
                       <option value="" disabled>Style…</option>
@@ -951,6 +979,46 @@ export function DocTemplatesPanel() {
                       <option value="h3">Heading 3</option>
                       <option value="p">Paragraph</option>
                     </select>
+
+                    {/* Font family */}
+                    <select
+                      onChange={e => {
+                        const v = e.target.value;
+                        if (v === "") editor?.chain().focus().unsetFontFamily().run();
+                        else editor?.chain().focus().setFontFamily(v).run();
+                      }}
+                      className="text-xs rounded-md border border-border bg-background px-1.5 py-1 focus:outline-none max-w-[130px]"
+                      defaultValue=""
+                    >
+                      <option value="">Font…</option>
+                      <option value="Georgia, serif">Georgia</option>
+                      <option value="'Times New Roman', serif">Times New Roman</option>
+                      <option value="Arial, sans-serif">Arial</option>
+                      <option value="Helvetica, sans-serif">Helvetica</option>
+                      <option value="'Calibri', sans-serif">Calibri</option>
+                      <option value="'Trebuchet MS', sans-serif">Trebuchet</option>
+                      <option value="Verdana, sans-serif">Verdana</option>
+                      <option value="'Courier New', monospace">Courier New</option>
+                      <option value="'Roboto', sans-serif">Roboto</option>
+                    </select>
+
+                    {/* Font size */}
+                    <select
+                      onChange={e => {
+                        const v = e.target.value;
+                        if (v === "") (editor?.chain().focus() as any).unsetFontSize().run();
+                        else (editor?.chain().focus() as any).setFontSize(v).run();
+                      }}
+                      className="text-xs rounded-md border border-border bg-background px-1.5 py-1 focus:outline-none w-[70px]"
+                      defaultValue=""
+                    >
+                      <option value="">Size…</option>
+                      {[8,9,10,11,12,13,14,15,16,18,20,22,24,28,32,36,42,48,56,64,72].map(s => (
+                        <option key={s} value={`${s}px`}>{s}</option>
+                      ))}
+                    </select>
+
+                    <div className="w-px h-5 bg-border mx-1" />
 
                     {/* Basic format: B I U S */}
                     <div className="flex rounded-md border border-border overflow-hidden">
