@@ -24,11 +24,24 @@ import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 // ── Pre-download helpers ──────────────────────────────────────────────────────
 const DOC_CACHE_DIR = Platform.OS !== "web" ? ((FileSystem.cacheDirectory ?? "") + "inspectproof-docs/") : "";
 
-function docUrlToFilename(url: string): string {
-  const ext = url.split("?")[0].split(".").pop()?.toLowerCase();
+function mimeToExt(mime: string): string | null {
+  if (mime === "application/pdf") return "pdf";
+  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
+  if (mime === "image/png") return "png";
+  if (mime.includes("word") || mime.includes("document")) return "docx";
+  if (mime.includes("spreadsheet") || mime.includes("excel")) return "xlsx";
+  return null;
+}
+
+function docUrlToFilename(url: string, mimeType?: string): string {
+  const urlNoQuery = url.split("?")[0];
+  const rawExt = urlNoQuery.split(".").pop()?.toLowerCase();
+  const lastSegment = urlNoQuery.split("/").pop() ?? "";
+  const hasRealExt = !!rawExt && rawExt.length <= 4 && rawExt !== lastSegment;
+  const ext = hasRealExt ? rawExt : (mimeType ? mimeToExt(mimeType) : null);
   const safe = url.replace(/[^a-z0-9]/gi, "_");
   const trimmed = safe.slice(Math.max(0, safe.length - 80));
-  return ext && ext.length <= 4 ? `${trimmed}.${ext}` : trimmed;
+  return ext ? `${trimmed}.${ext}` : trimmed;
 }
 
 // In-memory set — once downloaded, stays "done" for the session
@@ -267,7 +280,7 @@ function InspCard({ insp, onEditTime, reportSent, hasReport }: InspCardProps) {
         let allCached = true;
         for (const doc of pdfs) {
           const fileUrl = `${baseUrl}/api/storage${doc.fileUrl}`;
-          const dest = DOC_CACHE_DIR + docUrlToFilename(fileUrl);
+          const dest = DOC_CACHE_DIR + docUrlToFilename(fileUrl, doc.mimeType);
           const info = await FileSystem.getInfoAsync(dest);
           if (!info.exists || !(info as any).size) { allCached = false; break; }
         }
@@ -297,7 +310,7 @@ function InspCard({ insp, onEditTime, reportSent, hasReport }: InspCardProps) {
       for (let i = 0; i < pdfs.length; i++) {
         const doc = pdfs[i];
         const fileUrl = `${baseUrl}/api/storage${doc.fileUrl}`;
-        const dest = DOC_CACHE_DIR + docUrlToFilename(fileUrl);
+        const dest = DOC_CACHE_DIR + docUrlToFilename(fileUrl, doc.mimeType);
         const info = await FileSystem.getInfoAsync(dest);
         if (!info.exists || !(info as any).size) {
           const dl = FileSystem.createDownloadResumable(

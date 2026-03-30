@@ -37,12 +37,28 @@ function pointsToPath(points: { x: number; y: number }[]): string {
   return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
 }
 
-function urlToFilename(url: string): string {
-  // Stable filename from URL — keep extension if present
-  const ext = url.split("?")[0].split(".").pop()?.toLowerCase();
+function mimeToExt(mime: string): string | null {
+  if (mime === "application/pdf") return "pdf";
+  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
+  if (mime === "image/png") return "png";
+  if (mime === "image/gif") return "gif";
+  if (mime === "image/webp") return "webp";
+  if (mime.includes("word") || mime.includes("document")) return "docx";
+  if (mime.includes("spreadsheet") || mime.includes("excel")) return "xlsx";
+  return null;
+}
+
+function urlToFilename(url: string, mimeType?: string): string {
+  // Stable filename from URL — use MIME type to add extension when URL has none
+  const urlNoQuery = url.split("?")[0];
+  const rawExt = urlNoQuery.split(".").pop()?.toLowerCase();
+  const lastSegment = urlNoQuery.split("/").pop() ?? "";
+  // Consider it a real extension only if it's short AND different from the full last URL segment
+  const hasRealExt = !!rawExt && rawExt.length <= 4 && rawExt !== lastSegment;
+  const ext = hasRealExt ? rawExt : (mimeType ? mimeToExt(mimeType) : null);
   const safe = url.replace(/[^a-z0-9]/gi, "_");
   const trimmed = safe.slice(Math.max(0, safe.length - 80));
-  return ext && ext.length <= 4 ? `${trimmed}.${ext}` : trimmed;
+  return ext ? `${trimmed}.${ext}` : trimmed;
 }
 
 // ── Screen ───────────────────────────────────────────────────────────────────
@@ -124,7 +140,7 @@ export default function DocumentViewerScreen() {
     (async () => {
       try {
         await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
-        const filename = urlToFilename(url);
+        const filename = urlToFilename(url, mimeType);
         const destPath = CACHE_DIR + filename;
 
         // Check if already cached
@@ -419,7 +435,7 @@ export default function DocumentViewerScreen() {
               (async () => {
                 try {
                   await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
-                  const filename = urlToFilename(url);
+                  const filename = urlToFilename(url, mimeType);
                   const destPath = CACHE_DIR + filename;
                   const dl = FileSystem.createDownloadResumable(
                     url, destPath,
