@@ -3873,11 +3873,16 @@ export async function seedBuildingSurveyorTemplates(): Promise<void> {
   const { checklistResultsTable } = await import("../schema/checklists");
 
   for (const tmpl of BS_TEMPLATES) {
-    // 1. Upsert template by inspectionType — preserve ID, mark as global
+    // 1. Upsert template by (folder + inspectionType) — multiple BS templates
+    //    share the same inspectionType across building classes, so folder
+    //    (e.g. "Class 1a") is needed to make the key unique.
     const [existing] = await db
       .select({ id: checklistTemplatesTable.id })
       .from(checklistTemplatesTable)
-      .where(eq(checklistTemplatesTable.inspectionType, tmpl.inspectionType))
+      .where(and(
+        eq(checklistTemplatesTable.folder, tmpl.folder),
+        eq(checklistTemplatesTable.inspectionType, tmpl.inspectionType),
+      ))
       .limit(1);
 
     let templateId: number;
