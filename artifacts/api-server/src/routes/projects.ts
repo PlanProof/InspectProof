@@ -53,6 +53,7 @@ function formatDoc(d: any) {
   return {
     id: d.id,
     projectId: d.projectId,
+    inspectionId: d.inspectionId ?? null,
     name: d.name,
     category: d.category,
     fileName: d.fileName,

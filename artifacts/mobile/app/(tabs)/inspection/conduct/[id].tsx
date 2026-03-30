@@ -141,7 +141,7 @@ export default function ConductInspectionScreen() {
     enabled: !!token && !!id,
   });
 
-  const { data: projectDocuments = [] } = useQuery<ProjectDocument[]>({
+  const { data: projectDocuments = [], refetch: refetchDocuments } = useQuery<ProjectDocument[]>({
     queryKey: ["project-documents", inspection?.projectId, token],
     queryFn: () => fetchWithAuth(`/api/projects/${inspection.projectId}/documents`),
     enabled: !!token && !!inspection?.projectId,
@@ -151,7 +151,8 @@ export default function ConductInspectionScreen() {
   useFocusEffect(
     useCallback(() => {
       refetchChecklist();
-    }, [refetchChecklist])
+      refetchDocuments();
+    }, [refetchChecklist, refetchDocuments])
   );
 
   const sortedItems = [...checklistItems].sort((a, b) => a.orderIndex - b.orderIndex);

@@ -731,6 +731,7 @@ export default function DocumentViewerScreen() {
         <View style={styles.headerActions}>
           {(inspectionId || projectId) && isReady && (
             <Pressable
+              disabled={uploading}
               onPress={() => {
                 if (drawing && hasMarkup) {
                   const target =
@@ -768,7 +769,7 @@ export default function DocumentViewerScreen() {
                   setDrawing((d) => !d);
                 }
               }}
-              style={[styles.drawBtn, drawing && styles.drawBtnActive]}
+              style={[styles.drawBtn, drawing && styles.drawBtnActive, uploading && { opacity: 0.4 }]}
             >
               <Feather
                 name="edit-2"

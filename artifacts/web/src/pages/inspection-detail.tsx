@@ -149,6 +149,7 @@ interface ProjectDocument {
   folder?: string;
   uploadedByName?: string;
   createdAt: string;
+  inspectionId?: number | null;
 }
 
 // ── Doc template integration ──────────────────────────────────────────────────
@@ -2881,9 +2882,12 @@ function DocumentsTab({
     }
   };
 
+  // Filter: show docs belonging to this inspection OR docs not linked to any inspection (general project docs)
+  const filteredDocs = documents.filter(d => d.inspectionId == null || d.inspectionId === inspectionId);
+
   // Group by folder
   const byFolder: Record<string, ProjectDocument[]> = {};
-  for (const doc of documents) {
+  for (const doc of filteredDocs) {
     const folder = doc.folder || "General";
     if (!byFolder[folder]) byFolder[folder] = [];
     byFolder[folder].push(doc);
@@ -2895,7 +2899,7 @@ function DocumentsTab({
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
-            {documents.length === 0 ? "No documents yet." : `${documents.length} document${documents.length !== 1 ? "s" : ""} attached to this project.`}
+            {filteredDocs.length === 0 ? "No documents yet." : `${filteredDocs.length} document${filteredDocs.length !== 1 ? "s" : ""} attached to this inspection.`}
           </p>
         </div>
         <button
@@ -2920,11 +2924,11 @@ function DocumentsTab({
 
       {uploadError && <p className="text-sm text-red-500">{uploadError}</p>}
 
-      {documents.length === 0 ? (
+      {filteredDocs.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground border-2 border-dashed border-muted rounded-xl">
           <FolderOpen className="h-10 w-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No documents uploaded</p>
-          <p className="text-sm mt-1">Upload drawings, specs, or approval documents to keep them alongside this project.</p>
+          <p className="text-sm mt-1">Upload drawings, specs, or approval documents to keep them alongside this inspection.</p>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-sidebar text-white rounded-lg hover:bg-sidebar/90 transition-colors"
