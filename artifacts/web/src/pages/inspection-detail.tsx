@@ -209,29 +209,46 @@ function getDirectDocTemplate(docTemplates: DocTemplate[], inspectionId: number)
 }
 
 function buildChecklistTable(results: any[]): string {
-  if (!results || results.length === 0) return "<p style='color:#666;font-style:italic;'>No checklist items recorded.</p>";
-  const rows = results
-    .slice()
-    .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
-    .map((r, i) => {
-      const color = r.result === "pass" ? "#15803d" : r.result === "fail" ? "#b91c1c" : r.result === "pending" ? "#9333ea" : "#6b7280";
-      const bg = r.result === "pass" ? "#f0fdf4" : r.result === "fail" ? "#fef2f2" : "transparent";
-      return `<tr style="background:${bg};">
-        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#374151;">${i + 1}</td>
-        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;">${r.description ?? ""}</td>
-        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;text-align:center;font-weight:600;color:${color};">${(r.result ?? "pending").toUpperCase()}</td>
-        <td style="padding:5px 8px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280;">${r.notes ?? ""}</td>
+  if (!results || results.length === 0) return "<p style='color:#6b7280;font-style:italic;font-size:12px;'>No checklist items recorded.</p>";
+  const sorted = [...results].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+  const categories = Array.from(new Set(sorted.map((r: any) => r.category).filter(Boolean))) as string[];
+  if (categories.length === 0) categories.push("General");
+
+  const resultStyle = (res: string | null) => {
+    switch (res) {
+      case "pass":    return { bg: "#f0fdf4", border: "#86efac", color: "#15803d", label: "PASS" };
+      case "fail":    return { bg: "#fef2f2", border: "#fca5a5", color: "#b91c1c", label: "FAIL" };
+      case "monitor": return { bg: "#fffbeb", border: "#fde68a", color: "#b45309", label: "MON" };
+      case "na":      return { bg: "#f9fafb", border: "#e5e7eb", color: "#6b7280", label: "N/A" };
+      default:        return { bg: "#f5f3ff", border: "#c4b5fd", color: "#7c3aed", label: "PEND" };
+    }
+  };
+
+  return categories.map(cat => {
+    const items = sorted.filter((r: any) => (r.category || "General") === cat);
+    const rows = items.map((r: any, i: number) => {
+      const st = resultStyle(r.result ?? null);
+      const rowBg = r.result === "fail" ? "#fff5f5" : r.result === "pass" ? "#f8fffe" : "#ffffff";
+      return `<tr style="background:${rowBg};">
+        <td style="padding:5px 8px;font-size:11px;color:#9ca3af;font-weight:600;border:1px solid #e5e7eb;">${i + 1}</td>
+        <td style="padding:5px 8px;font-size:11px;color:#111827;border:1px solid #e5e7eb;">${r.description ?? ""}${r.codeReference ? ` <span style="font-size:9px;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;padding:1px 4px;border-radius:3px;font-weight:600;">${r.codeReference}</span>` : ""}</td>
+        <td style="padding:5px 8px;text-align:center;border:1px solid #e5e7eb;"><span style="display:inline-block;background:${st.bg};border:1px solid ${st.border};color:${st.color};font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;">${st.label}</span></td>
+        <td style="padding:5px 8px;font-size:11px;color:#6b7280;border:1px solid #e5e7eb;">${r.notes ?? ""}${r.severity ? ` <span style="font-size:9px;font-weight:600;color:#b45309;">[${r.severity}]</span>` : ""}</td>
       </tr>`;
     }).join("");
-  return `<table style="width:100%;border-collapse:collapse;margin:8px 0;">
-    <thead><tr style="background:#f3f4f6;">
-      <th style="text-align:left;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;width:32px;">#</th>
-      <th style="text-align:left;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;">Description</th>
-      <th style="text-align:center;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;width:80px;">Result</th>
-      <th style="text-align:left;padding:6px 8px;border:1px solid #e5e7eb;font-size:11px;color:#6b7280;font-weight:600;">Notes</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+    return `<div style="margin-bottom:16px;">
+      <div style="background:#e8ecf2;border-left:3px solid #466DB5;padding:5px 10px;font-size:10px;font-weight:700;color:#0B1933;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">${cat}</div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:#f1f5f9;">
+          <th style="text-align:left;padding:5px 8px;font-size:10px;color:#6b7280;font-weight:600;border:1px solid #e5e7eb;width:26px;">#</th>
+          <th style="text-align:left;padding:5px 8px;font-size:10px;color:#6b7280;font-weight:600;border:1px solid #e5e7eb;">Item</th>
+          <th style="text-align:center;padding:5px 8px;font-size:10px;color:#6b7280;font-weight:600;border:1px solid #e5e7eb;width:60px;">Result</th>
+          <th style="text-align:left;padding:5px 8px;font-size:10px;color:#6b7280;font-weight:600;border:1px solid #e5e7eb;width:30%;">Notes</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }).join("");
 }
 
 function fillDocTemplate(template: DocTemplate, inspection: any, project: any): string {

@@ -60,6 +60,255 @@ const ROLE_LABELS: Record<string, string> = {
   fire_engineer:"Fire Safety Engineer",
 };
 
+function isHtmlContent(s: string): boolean {
+  return s.trimStart().startsWith("<");
+}
+
+function buildHtmlChecklistTable(checklistResults: any[]): string {
+  if (!checklistResults || checklistResults.length === 0) {
+    return "<p style='color:#6b7280;font-style:italic;font-size:12px;'>No checklist items recorded.</p>";
+  }
+  const sorted = [...checklistResults].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+  const categories = Array.from(new Set(sorted.map(r => r.category).filter(Boolean)));
+  if (categories.length === 0) categories.push("General");
+
+  const resultStyle = (res: string | null) => {
+    switch (res) {
+      case "pass":    return { bg: "#f0fdf4", border: "#86efac", color: "#15803d", label: "PASS" };
+      case "fail":    return { bg: "#fef2f2", border: "#fca5a5", color: "#b91c1c", label: "FAIL" };
+      case "monitor": return { bg: "#fffbeb", border: "#fde68a", color: "#b45309", label: "MON" };
+      case "na":      return { bg: "#f9fafb", border: "#e5e7eb", color: "#6b7280", label: "N/A" };
+      default:        return { bg: "#f5f3ff", border: "#c4b5fd", color: "#7c3aed", label: "PEND" };
+    }
+  };
+
+  let html = "";
+  for (const cat of categories) {
+    const items = sorted.filter(r => (r.category || "General") === cat);
+    html += `
+      <div style="margin-bottom:16px;">
+        <div style="background:#e8ecf2;border-left:3px solid #466DB5;padding:5px 10px;font-size:10px;font-weight:700;color:#0B1933;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">${cat}</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="text-align:left;padding:5px 8px;font-size:10px;color:#6b7280;font-weight:600;border:1px solid #e5e7eb;width:26px;">#</th>
+              <th style="text-align:left;padding:5px 8px;font-size:10px;color:#6b7280;font-weight:600;border:1px solid #e5e7eb;">Item</th>
+              <th style="text-align:center;padding:5px 8px;font-size:10px;color:#6b7280;font-weight:600;border:1px solid #e5e7eb;width:60px;">Result</th>
+              <th style="text-align:left;padding:5px 8px;font-size:10px;color:#6b7280;font-weight:600;border:1px solid #e5e7eb;width:30%;">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((r, i) => {
+              const st = resultStyle(r.result ?? null);
+              const rowBg = r.result === "fail" ? "#fff5f5" : r.result === "pass" ? "#f8fffe" : "#ffffff";
+              return `<tr style="background:${rowBg};">
+                <td style="padding:5px 8px;font-size:11px;color:#9ca3af;font-weight:600;border:1px solid #e5e7eb;">${i + 1}</td>
+                <td style="padding:5px 8px;font-size:11px;color:#111827;border:1px solid #e5e7eb;">${r.description ?? ""}${r.codeReference ? ` <span style="font-size:9px;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;padding:1px 4px;border-radius:3px;font-weight:600;">${r.codeReference}</span>` : ""}</td>
+                <td style="padding:5px 8px;text-align:center;border:1px solid #e5e7eb;">
+                  <span style="display:inline-block;background:${st.bg};border:1px solid ${st.border};color:${st.color};font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;">${st.label}</span>
+                </td>
+                <td style="padding:5px 8px;font-size:11px;color:#6b7280;border:1px solid #e5e7eb;">${r.notes ?? ""}${r.severity ? ` <span style="font-size:9px;font-weight:600;color:#b45309;">[${r.severity}]</span>` : ""}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>`;
+  }
+  return html;
+}
+
+function generateReportHtml(
+  reportType: string,
+  project: any,
+  inspection: any,
+  checklistResults: any[],
+  issues: any[],
+  inspector: any,
+): string {
+  const typeLabel = REPORT_TYPE_LABELS[reportType] || reportType;
+  const passItems = checklistResults.filter(i => i.result === "pass");
+  const failItems = checklistResults.filter(i => i.result === "fail");
+  const monitorItems = checklistResults.filter(i => i.result === "monitor");
+  const naItems = checklistResults.filter(i => i.result === "na");
+  const pendingItems = checklistResults.filter(i => !i.result || i.result === "pending");
+  const total = checklistResults.length;
+  const passRate = total > 0 && pendingItems.length === 0
+    ? Math.round((passItems.length / Math.max(total - naItems.length, 1)) * 100)
+    : null;
+  const isPending = pendingItems.length > 0;
+  const hasFails = failItems.length > 0;
+
+  const formatDate = (d: string | null) =>
+    d ? new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }) : "—";
+
+  const inspType = (inspection?.inspectionType || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+  const siteAddress = project
+    ? [project.siteAddress, project.suburb, project.state, project.postcode].filter(Boolean).join(" ")
+    : [inspection?.siteAddress].filter(Boolean).join(" ") || "—";
+
+  const inspectorName = inspector
+    ? `${inspector.firstName} ${inspector.lastName}`
+    : inspection?.inspectorName || "—";
+
+  const today = new Date().toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+
+  // Accent colors based on report type
+  const accentMap: Record<string, { titleBg: string; titleBorder: string; titleColor: string; titleText: string; resultBg: string; resultBorder: string; resultColor: string }> = {
+    inspection_certificate:  { titleBg: "#f9fafb", titleBorder: "#C5D92D", titleColor: "#0B1933", titleText: "Inspection Certificate", resultBg: "#f0fdf4", resultBorder: "#86efac", resultColor: "#15803d" },
+    defect_notice:           { titleBg: "#fff7ed", titleBorder: "#f97316", titleColor: "#c2410c", titleText: "⚠ Defect Notice",        resultBg: "#fef2f2", resultBorder: "#fca5a5", resultColor: "#991b1b" },
+    non_compliance_notice:   { titleBg: "#fef2f2", titleBorder: "#ef4444", titleColor: "#991b1b", titleText: "Non-Compliance Notice",  resultBg: "#fef2f2", resultBorder: "#fca5a5", resultColor: "#991b1b" },
+    compliance_report:       { titleBg: "#f0fdf4", titleBorder: "#22c55e", titleColor: "#15803d", titleText: "Compliance Report",       resultBg: "#f0fdf4", resultBorder: "#86efac", resultColor: "#15803d" },
+    quality_control_report:  { titleBg: "#eff6ff", titleBorder: "#466DB5", titleColor: "#1e40af", titleText: "Quality Control Report",  resultBg: "#eff6ff", resultBorder: "#bfdbfe", resultColor: "#1e40af" },
+    safety_inspection_report:{ titleBg: "#fff7ed", titleBorder: "#f97316", titleColor: "#c2410c", titleText: "Safety Inspection Report",resultBg: "#fff7ed", resultBorder: "#fed7aa", resultColor: "#9a3412" },
+    pre_purchase_report:     { titleBg: "#faf5ff", titleBorder: "#a855f7", titleColor: "#7e22ce", titleText: "Pre-Purchase Building Report", resultBg: "#faf5ff", resultBorder: "#e9d5ff", resultColor: "#6b21a8" },
+  };
+  const accent = accentMap[reportType] ?? {
+    titleBg: "#f9fafb", titleBorder: "#466DB5", titleColor: "#0B1933", titleText: typeLabel,
+    resultBg: "#f0fdf4", resultBorder: "#86efac", resultColor: "#15803d",
+  };
+
+  // Result summary box
+  const resultLabel = isPending
+    ? "PENDING — Inspection not yet fully conducted"
+    : hasFails
+      ? `RESULT: ${passItems.length} Pass / ${failItems.length} Fail — Non-Compliances Identified`
+      : `✓ RESULT: ${passItems.length} Pass / ${failItems.length} Fail${passRate !== null ? ` (${passRate}% pass rate)` : ""}`;
+
+  const resultBody = isPending
+    ? "Some checklist items have not yet been assessed. A final result will be available once all items are completed."
+    : hasFails
+      ? `Non-compliances have been identified and are detailed in the checklist below. Re-inspection will be required following rectification.`
+      : `This report confirms the above inspection has been carried out and the work is found to satisfy the relevant development consent and applicable standards.`;
+
+  const resultBoxBg   = isPending ? "#f5f3ff" : hasFails ? "#fef2f2" : accent.resultBg;
+  const resultBoxBdr  = isPending ? "#c4b5fd" : hasFails ? "#fca5a5" : accent.resultBorder;
+  const resultBoxClr  = isPending ? "#6d28d9" : hasFails ? "#991b1b" : accent.resultColor;
+
+  const summaryRows = [
+    ["Total Items", String(total)],
+    ["Pass", `<span style="color:#15803d;font-weight:700;">${passItems.length}</span>`],
+    ["Fail", `<span style="color:#b91c1c;font-weight:700;">${failItems.length}</span>`],
+    ["Monitor", `<span style="color:#b45309;font-weight:700;">${monitorItems.length}</span>`],
+    ["N/A", String(naItems.length)],
+    ...(pendingItems.length > 0 ? [["Pending", `<span style="color:#6d28d9;font-weight:700;">${pendingItems.length}</span>`]] : []),
+    ...(passRate !== null ? [["Pass Rate", `<strong>${passRate}%</strong>`]] : []),
+  ];
+
+  const detailRows: [string, string][] = [
+    ["Project Name",     project?.name || inspection?.projectName || "—"],
+    ["Site Address",     siteAddress],
+    ["Lot / DP Number",  project?.lotNumber || "—"],
+    ["DA / BA Number",   project?.daNumber || "—"],
+    ["Council / Permit", project?.councilRef || "—"],
+    ["NCC Building Class", project?.buildingClassification || project?.nccClass || "—"],
+    ["Inspection Type",  inspType],
+    ["Inspection Date",  formatDate(inspection?.scheduledDate)],
+    ["Inspection Time",  inspection?.scheduledTime || "—"],
+    ["Inspector Name",   inspectorName],
+  ];
+
+  const checklistHtml = buildHtmlChecklistTable(checklistResults);
+
+  const failIssues = issues.filter(i => i.status !== "resolved");
+
+  return `<div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:40px;">
+  <!-- Header -->
+  <div style="background:#0B1933;color:#fff;padding:24px 32px;display:flex;justify-content:space-between;align-items:center;border-radius:8px 8px 0 0;">
+    <div>
+      <div style="font-size:22px;font-weight:700;letter-spacing:1px;">InspectProof</div>
+      <div style="font-size:11px;color:#C5D92D;margin-top:4px;letter-spacing:0.5px;">Licensed Building Certifier · ABN —</div>
+    </div>
+    <div style="text-align:right;font-size:11px;color:#ccc;">
+      <div>${today}</div>
+      <div style="margin-top:2px;color:#9ca3af;font-size:10px;">${typeLabel.toUpperCase()}</div>
+    </div>
+  </div>
+  <!-- Title Banner -->
+  <div style="border:2px solid ${accent.titleBorder};padding:18px 32px;background:${accent.titleBg};">
+    <div style="font-size:18px;font-weight:700;color:${accent.titleColor};letter-spacing:1px;text-align:center;text-transform:uppercase;">${accent.titleText}</div>
+    <div style="text-align:center;font-size:11px;color:#466DB5;margin-top:4px;">Issued under the Environmental Planning and Assessment Act 1979</div>
+  </div>
+  <!-- Body -->
+  <div style="padding:28px 32px;background:#fff;border:1px solid #e5e7eb;border-top:none;">
+    <!-- Details table -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+      ${detailRows.map(([label, value]) => `
+      <tr>
+        <td style="padding:8px;background:#f1f5f9;font-weight:600;color:#0B1933;width:36%;font-size:13px;">${label}</td>
+        <td style="padding:8px;font-size:13px;border-bottom:1px solid #e5e7eb;">${value}</td>
+      </tr>`).join("")}
+    </table>
+
+    <!-- Result box -->
+    <div style="background:${resultBoxBg};border:1px solid ${resultBoxBdr};border-radius:6px;padding:14px 18px;margin-bottom:20px;">
+      <div style="font-weight:700;color:${resultBoxClr};font-size:13px;margin-bottom:4px;">${resultLabel}</div>
+      <div style="font-size:12px;color:${resultBoxClr};">${resultBody}</div>
+    </div>
+
+    <!-- Summary stats -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
+      ${summaryRows.map(([k, v]) => `
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px 14px;min-width:80px;text-align:center;">
+        <div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">${k}</div>
+        <div style="font-size:18px;font-weight:700;color:#0B1933;margin-top:2px;">${v}</div>
+      </div>`).join("")}
+    </div>
+
+    ${inspection?.notes ? `
+    <!-- Inspector Notes -->
+    <div style="margin-bottom:20px;">
+      <div style="font-weight:600;color:#0B1933;font-size:13px;margin-bottom:8px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;">Inspector Notes</div>
+      <div style="font-size:13px;color:#374151;line-height:1.6;white-space:pre-wrap;">${inspection.notes}</div>
+    </div>` : ""}
+
+    ${failIssues.length > 0 ? `
+    <!-- Open Issues -->
+    <div style="margin-bottom:20px;">
+      <div style="font-weight:600;color:#0B1933;font-size:13px;margin-bottom:8px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;">Open Issues / Defects (${failIssues.length})</div>
+      ${failIssues.map((iss, i) => {
+        const sevColor: Record<string, string> = { critical: "#b91c1c", major: "#c2410c", high: "#c2410c", minor: "#b45309", medium: "#b45309", low: "#15803d", cosmetic: "#6b7280" };
+        const sevBg: Record<string, string> = { critical: "#fef2f2", major: "#fff7ed", high: "#fff7ed", minor: "#fffbeb", medium: "#fffbeb", low: "#f0fdf4", cosmetic: "#f9fafb" };
+        const sc = sevColor[iss.severity ?? ""] ?? "#6b7280";
+        const sb = sevBg[iss.severity ?? ""] ?? "#f9fafb";
+        return `<div style="background:${sb};border-left:3px solid ${sc};padding:8px 12px;margin-bottom:6px;border-radius:0 4px 4px 0;">
+          <div style="font-size:11px;font-weight:700;color:${sc};text-transform:uppercase;">${iss.severity || "Issue"} — ${iss.category || ""}</div>
+          <div style="font-size:12px;color:#111827;margin-top:2px;">${iss.description || ""}</div>
+          ${iss.nccReference ? `<div style="font-size:10px;color:#6b7280;margin-top:2px;">NCC: ${iss.nccReference}</div>` : ""}
+        </div>`;
+      }).join("")}
+    </div>` : ""}
+
+    <!-- Checklist -->
+    <div style="margin-bottom:24px;">
+      <div style="font-weight:600;color:#0B1933;font-size:13px;margin-bottom:12px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;">Inspection Checklist — Full Results</div>
+      ${checklistHtml}
+    </div>
+
+    <!-- Signature -->
+    <div style="border-top:2px solid #e5e7eb;padding-top:20px;">
+      <div style="display:flex;justify-content:space-between;margin-top:16px;">
+        <div>
+          <div style="border-top:1px solid #374151;width:220px;margin-bottom:4px;padding-top:4px;"></div>
+          <div style="font-size:11px;color:#6b7280;">Certifier Signature</div>
+          <div style="font-size:12px;font-weight:600;color:#0B1933;margin-top:2px;">${inspectorName}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:#6b7280;">Date Issued</div>
+          <div style="font-size:13px;font-weight:600;color:#0B1933;margin-top:2px;">${today}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Footer -->
+  <div style="background:#0B1933;color:#9ca3af;font-size:10px;padding:10px 32px;text-align:center;border-radius:0 0 8px 8px;">
+    This document was generated by InspectProof · ${project?.name || inspection?.projectName || ""} · ${today}
+  </div>
+</div>`;
+}
+
 async function generateReportContent(
   reportType: string,
   project: any,
@@ -570,7 +819,7 @@ router.post("/generate", async (req, res) => {
     const typeLabel = REPORT_TYPE_LABELS[reportType] || reportType;
     const projectLabel = project?.name ?? "Standalone Inspection";
     const title = `${typeLabel} — ${inspType} — ${projectLabel}`;
-    const content = await generateReportContent(reportType, project, inspection, checklistResults, issues, inspector);
+    const content = generateReportHtml(reportType, project, inspection, checklistResults, issues, inspector);
 
     const [report] = await db.insert(reportsTable).values({
       projectId: project?.id ?? null,
@@ -1114,7 +1363,47 @@ router.get("/:id/pdf", async (req, res) => {
       }
     }
 
-    const formatted = await formatReport(report);
+    // If the report was saved as HTML (from template or new generator), re-generate
+    // plain text content for the styled pdfkit renderer
+    let formatted = await formatReport(report);
+    if (isHtmlContent(formatted.content || "")) {
+      try {
+        if (report.inspectionId) {
+          const inspRows = await db.select().from(inspectionsTable)
+            .where(eq(inspectionsTable.id, report.inspectionId));
+          const insp = inspRows[0] ?? null;
+          if (insp) {
+            const projRows = insp.projectId
+              ? await db.select().from(projectsTable).where(eq(projectsTable.id, insp.projectId))
+              : [];
+            const proj = projRows[0] ?? null;
+            const clRows = await db.select({ result: checklistResultsTable, item: checklistItemsTable })
+              .from(checklistResultsTable)
+              .innerJoin(checklistItemsTable, eq(checklistResultsTable.checklistItemId, checklistItemsTable.id))
+              .where(eq(checklistResultsTable.inspectionId, insp.id));
+            const clResults = clRows.map(r => ({
+              result: r.result.result, notes: r.result.notes, severity: r.result.severity,
+              location: r.result.location, tradeAllocated: r.result.tradeAllocated,
+              recommendedAction: r.result.recommendedAction, photoCount: 0,
+              category: r.item.category, description: r.item.description,
+              codeReference: r.item.codeReference, riskLevel: r.item.riskLevel,
+              orderIndex: r.item.orderIndex,
+            }));
+            let inspectorForPdf: any = null;
+            if (insp.inspectorId) {
+              const uRows = await db.select().from(usersTable).where(eq(usersTable.id, insp.inspectorId));
+              inspectorForPdf = uRows[0] ?? null;
+            }
+            const issRows = await db.select().from(issuesTable).where(eq(issuesTable.inspectionId, insp.id));
+            const plainText = await generateReportContent(report.reportType || "summary", proj, insp, clResults, issRows, inspectorForPdf);
+            formatted = { ...formatted, content: plainText };
+          }
+        }
+      } catch (htmlFallbackErr) {
+        req.log.warn({ htmlFallbackErr }, "Could not regenerate plain text for PDF; using stored content as-is");
+      }
+    }
+
     const doc = buildPdf(formatted, project, signatureBuffer, photosByDesc, photoBuffers);
 
     const safeName = (report.title || "report")
