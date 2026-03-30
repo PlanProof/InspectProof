@@ -9,15 +9,30 @@ import {
   Platform,
   Modal,
   TextInput,
+  ActivityIndicator,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
+import * as FileSystem from "expo-file-system/legacy";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { useNotifications } from "@/context/NotificationsContext";
 import { useTabBarHeight } from "@/hooks/useTabBarHeight";
+
+// ── Pre-download helpers ──────────────────────────────────────────────────────
+const DOC_CACHE_DIR = Platform.OS !== "web" ? ((FileSystem.cacheDirectory ?? "") + "inspectproof-docs/") : "";
+
+function docUrlToFilename(url: string): string {
+  const ext = url.split("?")[0].split(".").pop()?.toLowerCase();
+  const safe = url.replace(/[^a-z0-9]/gi, "_");
+  const trimmed = safe.slice(Math.max(0, safe.length - 80));
+  return ext && ext.length <= 4 ? `${trimmed}.${ext}` : trimmed;
+}
+
+// In-memory set — once downloaded, stays "done" for the session
+const downloadedProjects = new Set<number>();
 
 const WEB_TOP = 0;
 
@@ -224,6 +239,81 @@ function InspCard({ insp, onEditTime, reportSent, hasReport }: InspCardProps) {
   const isInProgress = insp.status === "in_progress";
   const isFollowUp = insp.status === "follow_up_required";
 
+  const { token } = useAuth();
+  const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
+
+  type DlState = "checking" | "idle" | "downloading" | "done" | "error";
+  const [dlState, setDlState] = useState<DlState>(
+    downloadedProjects.has(insp.projectId) ? "done" : "checking"
+  );
+  const [dlProgress, setDlProgress] = useState(0);
+  const [dlTotal, setDlTotal] = useState(0);
+  const [dlCount, setDlCount] = useState(0);
+
+  // On mount: check if docs are already in cache (native only, non-completed)
+  useEffect(() => {
+    if (Platform.OS === "web" || isCompleted || !insp.projectId || downloadedProjects.has(insp.projectId)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${baseUrl}/api/projects/${insp.projectId}/documents`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok || cancelled) { setDlState("idle"); return; }
+        const docs: any[] = await res.json();
+        const pdfs = docs.filter(d => d.mimeType === "application/pdf" && d.fileUrl);
+        if (pdfs.length === 0) { setDlState("idle"); return; }
+        await FileSystem.makeDirectoryAsync(DOC_CACHE_DIR, { intermediates: true });
+        let allCached = true;
+        for (const doc of pdfs) {
+          const fileUrl = `${baseUrl}/api/storage${doc.fileUrl}`;
+          const dest = DOC_CACHE_DIR + docUrlToFilename(fileUrl);
+          const info = await FileSystem.getInfoAsync(dest);
+          if (!info.exists || !(info as any).size) { allCached = false; break; }
+        }
+        if (!cancelled) {
+          if (allCached) { downloadedProjects.add(insp.projectId); setDlState("done"); }
+          else setDlState("idle");
+        }
+      } catch { if (!cancelled) setDlState("idle"); }
+    })();
+    return () => { cancelled = true; };
+  }, [insp.projectId]);
+
+  const downloadDocs = async () => {
+    if (dlState === "downloading" || dlState === "done") return;
+    setDlState("downloading");
+    setDlProgress(0); setDlCount(0); setDlTotal(0);
+    try {
+      const res = await fetch(`${baseUrl}/api/projects/${insp.projectId}/documents`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("fetch failed");
+      const docs: any[] = await res.json();
+      const pdfs = docs.filter(d => d.mimeType === "application/pdf" && d.fileUrl);
+      if (pdfs.length === 0) { setDlState("done"); return; }
+      setDlTotal(pdfs.length);
+      await FileSystem.makeDirectoryAsync(DOC_CACHE_DIR, { intermediates: true });
+      for (let i = 0; i < pdfs.length; i++) {
+        const doc = pdfs[i];
+        const fileUrl = `${baseUrl}/api/storage${doc.fileUrl}`;
+        const dest = DOC_CACHE_DIR + docUrlToFilename(fileUrl);
+        const info = await FileSystem.getInfoAsync(dest);
+        if (!info.exists || !(info as any).size) {
+          const dl = FileSystem.createDownloadResumable(
+            fileUrl, dest,
+            { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+          );
+          await dl.downloadAsync();
+        }
+        setDlCount(i + 1);
+        setDlProgress((i + 1) / pdfs.length);
+      }
+      downloadedProjects.add(insp.projectId);
+      setDlState("done");
+    } catch { setDlState("error"); }
+  };
+
   return (
     <View style={tlStyles.item}>
       <View style={[tlStyles.card, isCompleted && tlStyles.cardCompleted]}>
@@ -278,6 +368,37 @@ function InspCard({ insp, onEditTime, reportSent, hasReport }: InspCardProps) {
                 <Text style={tlStyles.viewBtnText}>View Results</Text>
               </Pressable>
             </View>
+          )}
+
+          {!isCompleted && insp.status !== "cancelled" && Platform.OS !== "web" && (
+            dlState === "done" ? (
+              <View style={tlStyles.dlDoneRow}>
+                <Feather name="check-circle" size={12} color={Colors.success} />
+                <Text style={tlStyles.dlDoneText}>Documents downloaded</Text>
+              </View>
+            ) : dlState === "downloading" ? (
+              <View style={tlStyles.dlProgressRow}>
+                <ActivityIndicator size="small" color={Colors.secondary} style={{ transform: [{ scale: 0.75 }] }} />
+                <Text style={tlStyles.dlProgressText}>
+                  {dlTotal > 0 ? `Downloading ${dlCount}/${dlTotal}…` : "Downloading…"}
+                </Text>
+                {dlTotal > 0 && (
+                  <View style={tlStyles.dlBar}>
+                    <View style={[tlStyles.dlBarFill, { width: `${Math.round(dlProgress * 100)}%` as any }]} />
+                  </View>
+                )}
+              </View>
+            ) : dlState === "idle" || dlState === "error" ? (
+              <Pressable
+                onPress={downloadDocs}
+                style={({ pressed }) => [tlStyles.dlBtn, pressed && { opacity: 0.75 }]}
+              >
+                <Feather name="download" size={12} color={Colors.secondary} />
+                <Text style={tlStyles.dlBtnText}>
+                  {dlState === "error" ? "Retry download" : "Download for offline"}
+                </Text>
+              </Pressable>
+            ) : null
           )}
 
           {!isCompleted && insp.status !== "cancelled" && (
@@ -666,6 +787,31 @@ const tlStyles = StyleSheet.create({
     paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, marginTop: 2,
   },
   actionText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+
+  // Pre-download button
+  dlBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    alignSelf: "flex-start",
+    borderWidth: 1, borderColor: Colors.secondary + "50",
+    backgroundColor: Colors.secondary + "10",
+    paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, marginTop: 2, marginBottom: 4,
+  },
+  dlBtnText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  dlProgressRow: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    marginTop: 2, marginBottom: 4,
+  },
+  dlProgressText: { fontSize: 11, color: Colors.textSecondary, fontFamily: "PlusJakartaSans_400Regular", flex: 1 },
+  dlBar: {
+    height: 3, width: 60, borderRadius: 2, backgroundColor: Colors.borderLight, overflow: "hidden",
+  },
+  dlBarFill: { height: 3, backgroundColor: Colors.secondary, borderRadius: 2 },
+  dlDoneRow: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    marginTop: 2, marginBottom: 4,
+  },
+  dlDoneText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.success },
+
   reportSentRow: {
     flexDirection: "row", justifyContent: "flex-end", marginTop: 6,
   },
