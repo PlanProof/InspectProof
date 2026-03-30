@@ -2,8 +2,12 @@ import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
   View, Text, StyleSheet, Pressable, Alert, ActivityIndicator,
   PanResponder, useWindowDimensions, Platform, Modal, TextInput,
-  Animated, KeyboardAvoidingView,
+  KeyboardAvoidingView,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  useSharedValue, useAnimatedStyle, runOnJS,
+} from "react-native-reanimated";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -82,77 +86,109 @@ function urlToFilename(url: string, mimeType?: string): string {
   return ext ? `${trimmed}.${ext}` : trimmed;
 }
 
-// ── Draggable text annotation component ───────────────────────────────────────
+// ── Draggable + pinch-to-scale text annotation component ─────────────────────
 
 interface DraggableTextProps {
   ann: TextAnnotation;
   isSelected: boolean;
   onSelect: () => void;
   onMove: (id: string, x: number, y: number) => void;
+  onScale: (id: string, fontSize: number) => void;
 }
 
-function DraggableText({ ann, isSelected, onSelect, onMove }: DraggableTextProps) {
-  const pan = useRef(new Animated.ValueXY({ x: ann.x, y: ann.y })).current;
-  const offsetRef = useRef({ x: ann.x, y: ann.y });
+function DraggableText({ ann, isSelected, onSelect, onMove, onScale }: DraggableTextProps) {
+  const tx = useSharedValue(ann.x);
+  const ty = useSharedValue(ann.y);
+  const savedTx = useSharedValue(ann.x);
+  const savedTy = useSharedValue(ann.y);
+  const pinchScale = useSharedValue(1);
+  const savedPinchScale = useSharedValue(1);
 
+  // Sync position if parent changes (e.g. on mount or external update)
   useEffect(() => {
-    pan.setValue({ x: ann.x, y: ann.y });
-    offsetRef.current = { x: ann.x, y: ann.y };
+    tx.value = ann.x;
+    ty.value = ann.y;
+    savedTx.value = ann.x;
+    savedTy.value = ann.y;
   }, [ann.x, ann.y]);
 
-  const pr = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (_, gs) => {
-        onSelect();
-        pan.setOffset(offsetRef.current);
-        pan.setValue({ x: 0, y: 0 });
-      },
-      onPanResponderMove: Animated.event(
-        [null, { dx: pan.x, dy: pan.y }],
-        { useNativeDriver: false }
-      ),
-      onPanResponderRelease: (_, gs) => {
-        pan.flattenOffset();
-        const newX = offsetRef.current.x + gs.dx;
-        const newY = offsetRef.current.y + gs.dy;
-        offsetRef.current = { x: newX, y: newY };
-        onMove(ann.id, newX, newY);
-      },
+  const selectCb = useCallback(() => onSelect(), [onSelect]);
+  const moveCb = useCallback(
+    (x: number, y: number) => onMove(ann.id, x, y),
+    [ann.id, onMove]
+  );
+  const scaleCb = useCallback(
+    (s: number) => {
+      const newSize = Math.round(Math.max(10, Math.min(120, ann.fontSize * s)));
+      onScale(ann.id, newSize);
+    },
+    [ann.id, ann.fontSize, onScale]
+  );
+
+  const panGesture = Gesture.Pan()
+    .onStart(() => {
+      savedTx.value = tx.value;
+      savedTy.value = ty.value;
+      runOnJS(selectCb)();
     })
-  ).current;
+    .onUpdate((e) => {
+      tx.value = savedTx.value + e.translationX;
+      ty.value = savedTy.value + e.translationY;
+    })
+    .onEnd(() => {
+      runOnJS(moveCb)(tx.value, ty.value);
+    });
+
+  const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      savedPinchScale.value = pinchScale.value;
+    })
+    .onUpdate((e) => {
+      pinchScale.value = Math.max(0.25, Math.min(8, savedPinchScale.value * e.scale));
+    })
+    .onEnd(() => {
+      runOnJS(scaleCb)(pinchScale.value);
+      // reset visual scale — parent will re-render with new fontSize
+      pinchScale.value = 1;
+      savedPinchScale.value = 1;
+    });
+
+  const composed = Gesture.Simultaneous(panGesture, pinchGesture);
+
+  const animStyle = useAnimatedStyle(() => ({
+    position: "absolute" as const,
+    transform: [
+      { translateX: tx.value },
+      { translateY: ty.value },
+      { scale: pinchScale.value },
+    ],
+  }));
 
   return (
-    <Animated.View
-      style={[
-        styles.textAnnotationView,
-        {
-          transform: pan.getTranslateTransform(),
-          borderColor: isSelected ? "rgba(70,109,181,0.8)" : "transparent",
-          borderWidth: isSelected ? 1.5 : 0,
-        },
-      ]}
-      {...pr.panHandlers}
-    >
-      <Text
-        style={{
-          color: ann.color,
-          fontSize: ann.fontSize,
-          fontWeight: "600",
-          textShadowColor: "rgba(0,0,0,0.6)",
-          textShadowOffset: { width: 1, height: 1 },
-          textShadowRadius: 2,
-        }}
-      >
-        {ann.text}
-      </Text>
-      {isSelected && (
-        <View style={styles.dragHandle}>
-          <Feather name="move" size={10} color="rgba(255,255,255,0.7)" />
-        </View>
-      )}
-    </Animated.View>
+    <GestureDetector gesture={composed}>
+      <Animated.View style={[animStyle, styles.textAnnotationView, {
+        borderColor: isSelected ? "rgba(70,109,181,0.8)" : "transparent",
+        borderWidth: isSelected ? 1.5 : 0,
+      }]}>
+        <Text
+          style={{
+            color: ann.color,
+            fontSize: ann.fontSize,
+            fontWeight: "600",
+            textShadowColor: "rgba(0,0,0,0.6)",
+            textShadowOffset: { width: 1, height: 1 },
+            textShadowRadius: 2,
+          }}
+        >
+          {ann.text}
+        </Text>
+        {isSelected && (
+          <View style={styles.dragHandle}>
+            <Feather name="move" size={10} color="rgba(255,255,255,0.7)" />
+          </View>
+        )}
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
@@ -995,6 +1031,11 @@ export default function DocumentViewerScreen() {
                   onMove={(id, x, y) =>
                     setTextAnnotations((prev) =>
                       prev.map((a) => (a.id === id ? { ...a, x, y } : a))
+                    )
+                  }
+                  onScale={(id, fontSize) =>
+                    setTextAnnotations((prev) =>
+                      prev.map((a) => (a.id === id ? { ...a, fontSize } : a))
                     )
                   }
                 />
