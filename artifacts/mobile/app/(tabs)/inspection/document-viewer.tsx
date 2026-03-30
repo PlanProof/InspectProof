@@ -491,9 +491,20 @@ export default function DocumentViewerScreen() {
     [baseUrl, token]
   );
 
+  const goBack = useCallback(() => {
+    if (inspectionId) {
+      router.replace({
+        pathname: "/inspection/conduct/[id]" as any,
+        params: { id: inspectionId },
+      });
+    } else {
+      router.back();
+    }
+  }, [inspectionId]);
+
   const saveMarkup = async () => {
-    if (strokes.length === 0 && textAnnotations.length === 0) { router.back(); return; }
-    if (!inspectionId && !projectId) { router.back(); return; }
+    if (strokes.length === 0 && textAnnotations.length === 0) { goBack(); return; }
+    if (!inspectionId && !projectId) { goBack(); return; }
 
     setUploading(true);
     try {
@@ -647,8 +658,7 @@ export default function DocumentViewerScreen() {
         }
       }
 
-      // Navigate back to wherever the user came from
-      router.back();
+      goBack();
     } catch {
       setCapturing(false);
       setRenderingPage(null);
@@ -687,7 +697,7 @@ export default function DocumentViewerScreen() {
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.iconBtn}>
+        <Pressable onPress={goBack} hitSlop={12} style={styles.iconBtn}>
           <Feather name="arrow-left" size={22} color="#fff" />
         </Pressable>
         <View style={styles.headerCenter}>
