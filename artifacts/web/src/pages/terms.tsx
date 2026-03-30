@@ -26,7 +26,7 @@ export default function Terms() {
           <section>
             <h2 className="text-lg font-semibold text-sidebar mb-3">1. About These Terms</h2>
             <p className="text-muted-foreground leading-relaxed">
-              These Terms and Conditions ("Terms") govern your access to and use of the InspectProof platform ("Platform"), operated by PlanProof Pty Ltd ABN [ABN number] ("we", "us", "our"). By creating an account or using the Platform, you agree to be bound by these Terms. If you do not agree, do not use the Platform.
+              These Terms and Conditions ("Terms") govern your access to and use of the InspectProof platform ("Platform"), operated by PlanProof Pty Ltd ABN 25 690 548 406 ("we", "us", "our"). By creating an account or using the Platform, you agree to be bound by these Terms. If you do not agree, do not use the Platform.
             </p>
             <p className="text-muted-foreground leading-relaxed mt-3">
               These Terms are governed by the laws of New South Wales, Australia, and you submit to the non-exclusive jurisdiction of the courts of that state.

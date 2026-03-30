@@ -26,7 +26,7 @@ export default function Privacy() {
           <section>
             <h2 className="text-lg font-semibold text-sidebar mb-3">1. Our Commitment to Your Privacy</h2>
             <p className="text-muted-foreground leading-relaxed">
-              PlanProof Pty Ltd (ABN [ABN number]), trading as InspectProof ("we", "us", "our"), is committed to protecting your personal information in accordance with the <strong>Privacy Act 1988 (Cth)</strong> and the Australian Privacy Principles (APPs).
+              PlanProof Pty Ltd (ABN 25 690 548 406), trading as InspectProof ("we", "us", "our"), is committed to protecting your personal information in accordance with the <strong>Privacy Act 1988 (Cth)</strong> and the Australian Privacy Principles (APPs).
             </p>
             <p className="text-muted-foreground leading-relaxed mt-3">
               This Privacy Policy explains how we collect, hold, use and disclose personal information in connection with the InspectProof platform ("Platform"). By using the Platform, you agree to the handling of your personal information as described in this policy.
