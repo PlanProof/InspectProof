@@ -94,6 +94,7 @@ router.post("/markup/generate", requireAuth, async (req, res) => {
         fileUrl: objectPath,
         folder: "Markups",
         includedInInspection: true,
+        ...(inspectionId ? { inspectionId } : {}),
       } as any).returning();
       newDocId = doc?.id ?? null;
     }

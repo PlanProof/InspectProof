@@ -1,6 +1,6 @@
 import path from "path";
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 import { ObjectStorageService } from "../lib/objectStorage";
 
@@ -17,7 +17,7 @@ const FB       = "PJS-Bold";
 const FODDLINI = "OddliniUX";
 import {
   db, reportsTable, projectsTable, inspectionsTable, issuesTable,
-  usersTable, checklistResultsTable, checklistItemsTable,
+  usersTable, checklistResultsTable, checklistItemsTable, documentsTable,
 } from "@workspace/db";
 
 // ── Primary colors ─────────────────────────────────────────────────────────
@@ -1404,7 +1404,105 @@ router.get("/:id/pdf", async (req, res) => {
       }
     }
 
+    // ── Fetch markup documents for this inspection (if requested) ────────────
+    const includeMarkup = req.query.includeMarkup === "true";
+    let markupBuffers: Buffer[] = [];
+    let markupNames: string[] = [];
+
+    if (includeMarkup && report.inspectionId) {
+      try {
+        const markupDocs = await db
+          .select()
+          .from(documentsTable)
+          .where(
+            and(
+              eq(documentsTable.inspectionId, report.inspectionId),
+              eq(documentsTable.folder, "Markups")
+            )
+          );
+
+        const storageService = new ObjectStorageService();
+        await Promise.allSettled(
+          markupDocs.map(async (mdoc) => {
+            if (!mdoc.fileUrl) return;
+            try {
+              const { buffer } = await storageService.fetchObjectBuffer(mdoc.fileUrl);
+              markupBuffers.push(buffer);
+              markupNames.push(mdoc.name);
+            } catch {
+              // skip unavailable markup
+            }
+          })
+        );
+      } catch (markupErr) {
+        req.log.warn({ markupErr }, "Could not load markups — omitting from PDF");
+      }
+    }
+
     const doc = buildPdf(formatted, project, signatureBuffer, photosByDesc, photoBuffers);
+
+    // ── Append markup pages at end of report ─────────────────────────────────
+    if (markupBuffers.length > 0) {
+      const { PDFDocument: LibPdf } = await import("pdf-lib");
+      const reportBytes = await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        doc.on("data", (c: Buffer) => chunks.push(c));
+        doc.on("end", () => resolve(Buffer.concat(chunks)));
+        doc.on("error", reject);
+        doc.end();
+      });
+
+      const merged = await LibPdf.create();
+
+      // Copy all pages from the base report
+      const basePdf = await LibPdf.load(reportBytes);
+      const basePageCount = basePdf.getPageCount();
+      const basePagesCopied = await merged.copyPages(basePdf, Array.from({ length: basePageCount }, (_, i) => i));
+      basePagesCopied.forEach((p) => merged.addPage(p));
+
+      // Add a "Markups" cover page
+      const coverPage = merged.addPage([595.28, 841.89]); // A4
+      const { rgb } = await import("pdf-lib");
+      coverPage.drawRectangle({ x: 0, y: 821.89, width: 595.28, height: 20, color: rgb(0.773, 0.851, 0.176) }); // pear bar
+      coverPage.drawRectangle({ x: 0, y: 0, width: 595.28, height: 821.89, color: rgb(0.97, 0.98, 0.99) });
+      coverPage.drawText("MARKUPS", {
+        x: 40,
+        y: 800,
+        size: 18,
+        color: rgb(0.043, 0.098, 0.2),
+      });
+      coverPage.drawText(`${markupBuffers.length} marked-up document${markupBuffers.length !== 1 ? "s" : ""} attached to this inspection.`, {
+        x: 40,
+        y: 775,
+        size: 11,
+        color: rgb(0.28, 0.43, 0.71),
+      });
+
+      // Embed each markup PDF
+      for (let mi = 0; mi < markupBuffers.length; mi++) {
+        try {
+          const markupPdf = await LibPdf.load(markupBuffers[mi]);
+          const markupPageCount = markupPdf.getPageCount();
+          const copiedPages = await merged.copyPages(markupPdf, Array.from({ length: markupPageCount }, (_, i) => i));
+          copiedPages.forEach((p) => merged.addPage(p));
+        } catch {
+          // skip malformed markup PDF
+        }
+      }
+
+      const mergedBytes = await merged.save();
+      const mergedBuffer = Buffer.from(mergedBytes);
+
+      const safeName = (report.title || "report")
+        .replace(/[^a-z0-9\s\-_]/gi, "")
+        .replace(/\s+/g, "_")
+        .slice(0, 80);
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${safeName}.pdf"`);
+      res.end(mergedBuffer);
+      return;
+    }
 
     const safeName = (report.title || "report")
       .replace(/[^a-z0-9\s\-_]/gi, "")
