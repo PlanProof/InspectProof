@@ -170,6 +170,7 @@ export default function ConductInspectionScreen() {
   // Score only counts pass/fail — N/A and monitor items are excluded from pass rate
   const scored = passCount + failCount;
   const passRate = scored > 0 ? passCount / scored : null;
+  const totalPhotoCount = checklistItems.reduce((sum, item) => sum + (item.photoUrls?.length ?? 0), 0);
 
   // Auto-set to in_progress when inspection is first opened
   const startedRef = useRef(false);
@@ -461,6 +462,29 @@ export default function ConductInspectionScreen() {
     } catch { }
   };
 
+  const removePhotoFromItem = useCallback(async (itemId: number, photoPath: string) => {
+    const item = checklistItems.find(i => i.id === itemId);
+    if (!item) return;
+    const newPhotoUrls = (item.photoUrls || []).filter(p => p !== photoPath);
+    const newMarkups = { ...(item.photoMarkups || {}) };
+    delete newMarkups[photoPath];
+    queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+      (old ?? []).map(i => i.id === itemId ? { ...i, photoUrls: newPhotoUrls, photoMarkups: newMarkups } : i)
+    );
+    try {
+      await fetchWithAuth(`/api/inspections/${id}/checklist/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrls: newPhotoUrls, photoMarkups: newMarkups }),
+      });
+    } catch {
+      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+        (old ?? []).map(i => i.id === itemId ? item : i)
+      );
+      Alert.alert("Error", "Could not delete photo.");
+    }
+  }, [checklistItems, fetchWithAuth, id, queryClient, ckKey]);
+
 
   if ((loadingInspection && !inspection) || (loadingChecklist && checklistItems.length === 0)) {
     return (
@@ -525,6 +549,15 @@ export default function ConductInspectionScreen() {
             Documents{projectDocuments.length > 0 ? ` (${projectDocuments.length})` : ""}
           </Text>
           {projectDocuments.length > 0 && activePage !== 1 && (
+            <View style={styles.tabBadgeDot} />
+          )}
+        </Pressable>
+        <Pressable style={[styles.tab, activePage === 2 && styles.tabActive]} onPress={() => scrollToPage(2)}>
+          <Feather name="camera" size={13} color={activePage === 2 ? Colors.secondary : Colors.textTertiary} />
+          <Text style={[styles.tabText, activePage === 2 && styles.tabTextActive]}>
+            Photos{totalPhotoCount > 0 ? ` (${totalPhotoCount})` : ""}
+          </Text>
+          {totalPhotoCount > 0 && activePage !== 2 && (
             <View style={styles.tabBadgeDot} />
           )}
         </Pressable>
@@ -688,6 +721,16 @@ export default function ConductInspectionScreen() {
                 Alert.alert("Select a checklist item first", "Go back to the checklist, open an item, then annotate a document to attach it.");
               }
             }}
+          />
+        </View>
+
+        {/* ── Page 2: Photos ── */}
+        <View style={{ width: screenW, flex: 1 }}>
+          <PhotosPanel
+            items={checklistItems}
+            baseUrl={baseUrl}
+            insets={insets}
+            onDeletePhoto={removePhotoFromItem}
           />
         </View>
       </ScrollView>
@@ -1000,6 +1043,217 @@ function DocumentsPanel({
         </>
       )}
     </View>
+  );
+}
+
+// ── AllPhotos interface ────────────────────────────────────────────────────
+interface AllPhotoEntry {
+  path: string;
+  itemId: number;
+  description: string;
+  category: string;
+  markup?: MarkupData;
+}
+
+function PhotosPanel({
+  items,
+  baseUrl,
+  insets,
+  onDeletePhoto,
+}: {
+  items: ChecklistItem[];
+  baseUrl: string;
+  insets: any;
+  onDeletePhoto: (itemId: number, photoPath: string) => void;
+}) {
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const COLS = 3;
+  const THUMB = Math.floor((screenW - 32 - (COLS - 1) * 4) / COLS);
+
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const allPhotos: AllPhotoEntry[] = items.flatMap(item =>
+    (item.photoUrls || []).map(path => ({
+      path,
+      itemId: item.id,
+      description: item.description,
+      category: item.category,
+      markup: item.photoMarkups?.[path],
+    }))
+  );
+
+  const itemsWithPhotos = items.filter(i => (i.photoUrls?.length ?? 0) > 0);
+
+  if (lightboxIndex !== null && allPhotos.length > 0) {
+    const photo = allPhotos[lightboxIndex];
+    return (
+      <View style={[galleryStyles.lightboxScreen, { paddingTop: insets.top }]}>
+        <View style={galleryStyles.lightboxHeader}>
+          <Pressable onPress={() => setLightboxIndex(null)} hitSlop={12} style={galleryStyles.lightboxBtn}>
+            <Feather name="arrow-left" size={22} color="#fff" />
+          </Pressable>
+          <View style={{ flex: 1, paddingHorizontal: 8 }}>
+            <Text style={galleryStyles.lightboxTitle} numberOfLines={1}>{photo.description}</Text>
+            <Text style={galleryStyles.lightboxSub}>{photo.category} · {lightboxIndex + 1} of {allPhotos.length}</Text>
+          </View>
+          <Pressable
+            onPress={() =>
+              Alert.alert("Delete photo?", "Remove this photo from the checklist item?", [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete", style: "destructive",
+                  onPress: () => {
+                    onDeletePhoto(photo.itemId, photo.path);
+                    if (allPhotos.length <= 1) {
+                      setLightboxIndex(null);
+                    } else {
+                      setLightboxIndex(i => Math.min(i ?? 0, allPhotos.length - 2));
+                    }
+                  },
+                },
+              ])
+            }
+            hitSlop={12}
+            style={galleryStyles.lightboxBtn}
+          >
+            <Feather name="trash-2" size={20} color={Colors.danger} />
+          </Pressable>
+        </View>
+
+        <View style={{ flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" }}>
+          <View style={{ width: screenW, height: screenH * 0.72 }}>
+            <Image
+              source={{ uri: `${baseUrl}/api/storage${photo.path}` }}
+              style={{ width: screenW, height: screenH * 0.72 }}
+              resizeMode="contain"
+            />
+            {photo.markup && photo.markup.strokes.length > 0 && (
+              <Svg
+                style={StyleSheet.absoluteFill}
+                width={screenW}
+                height={screenH * 0.72}
+                viewBox={`0 0 ${photo.markup.w} ${photo.markup.h}`}
+                preserveAspectRatio="xMidYMid meet"
+              >
+                {photo.markup.strokes.map((stroke, si) => {
+                  const d = stroke.points.map((p, pi) => `${pi === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+                  return <Path key={si} d={d} stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" fill="none" />;
+                })}
+              </Svg>
+            )}
+          </View>
+        </View>
+
+        <View style={[galleryStyles.lightboxNav, { paddingBottom: insets.bottom + 16 }]}>
+          <Pressable
+            onPress={() => setLightboxIndex(i => (i !== null && i > 0 ? i - 1 : i))}
+            disabled={lightboxIndex === 0}
+            style={[lightboxStyles.navBtn, lightboxIndex === 0 && { opacity: 0.3 }]}
+          >
+            <Feather name="chevron-left" size={22} color="#fff" />
+            <Text style={lightboxStyles.navBtnText}>Previous</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setLightboxIndex(i => (i !== null && i < allPhotos.length - 1 ? i + 1 : i))}
+            disabled={lightboxIndex === allPhotos.length - 1}
+            style={[lightboxStyles.navBtn, lightboxIndex === allPhotos.length - 1 && { opacity: 0.3 }]}
+          >
+            <Text style={lightboxStyles.navBtnText}>Next</Text>
+            <Feather name="chevron-right" size={22} color="#fff" />
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  if (allPhotos.length === 0) {
+    return (
+      <View style={galleryStyles.empty}>
+        <Feather name="camera" size={48} color={Colors.textTertiary} />
+        <Text style={galleryStyles.emptyTitle}>No photos yet</Text>
+        <Text style={galleryStyles.emptySub}>Open a checklist item and take a photo — it will appear here.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={[galleryStyles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
+      showsVerticalScrollIndicator={false}
+    >
+      {itemsWithPhotos.map(item => {
+        const photos = item.photoUrls || [];
+        const startIdx = allPhotos.findIndex(p => p.itemId === item.id && p.path === photos[0]);
+        return (
+          <View key={item.id} style={galleryStyles.group}>
+            <View style={galleryStyles.groupHeader}>
+              <Text style={galleryStyles.groupTitle} numberOfLines={2}>{item.description}</Text>
+              <Text style={galleryStyles.groupMeta}>{item.category} · {photos.length} photo{photos.length !== 1 ? "s" : ""}</Text>
+            </View>
+            <View style={galleryStyles.grid}>
+              {photos.map((path, localIdx) => {
+                const globalIdx = startIdx + localIdx;
+                const markup = item.photoMarkups?.[path];
+                const hasMarkup = !!(markup && markup.strokes.length > 0);
+                return (
+                  <Pressable
+                    key={path}
+                    style={[galleryStyles.thumb, { width: THUMB, height: THUMB }]}
+                    onPress={() => setLightboxIndex(globalIdx)}
+                  >
+                    <Image
+                      source={{ uri: `${baseUrl}/api/storage${path}` }}
+                      style={{ width: THUMB, height: THUMB }}
+                      resizeMode="cover"
+                    />
+                    {hasMarkup && markup && (
+                      <Svg
+                        style={StyleSheet.absoluteFill}
+                        width={THUMB}
+                        height={THUMB}
+                        viewBox={`0 0 ${markup.w} ${markup.h}`}
+                        preserveAspectRatio="xMidYMid meet"
+                      >
+                        {markup.strokes.map((stroke, si) => {
+                          const d = stroke.points.map((p, pi) => `${pi === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+                          return <Path key={si} d={d} stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" fill="none" />;
+                        })}
+                      </Svg>
+                    )}
+                    <View style={galleryStyles.thumbExpand}>
+                      <Feather name="maximize-2" size={11} color="#fff" />
+                    </View>
+                    {hasMarkup && (
+                      <View style={galleryStyles.markupBadge}>
+                        <Feather name="edit-2" size={8} color="#fff" />
+                      </View>
+                    )}
+                    <Pressable
+                      style={galleryStyles.thumbDelete}
+                      hitSlop={4}
+                      onPress={e => {
+                        e.stopPropagation?.();
+                        Alert.alert(
+                          "Delete photo?",
+                          "Remove this photo from the checklist item?",
+                          [
+                            { text: "Cancel", style: "cancel" },
+                            { text: "Delete", style: "destructive", onPress: () => onDeletePhoto(item.id, path) },
+                          ]
+                        );
+                      }}
+                    >
+                      <Feather name="trash-2" size={11} color="#fff" />
+                    </Pressable>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        );
+      })}
+    </ScrollView>
   );
 }
 
@@ -1528,7 +1782,7 @@ const styles = StyleSheet.create({
   tabActive: {
     borderBottomColor: Colors.secondary,
   },
-  tabText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  tabText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
   tabTextActive: { color: Colors.secondary },
   tabBadgeDot: {
     position: "absolute",
@@ -2105,4 +2359,71 @@ const lightboxStyles = StyleSheet.create({
     backgroundColor: "#2a2a2a",
   },
   navBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+});
+
+const galleryStyles = StyleSheet.create({
+  lightboxScreen: { flex: 1, backgroundColor: "#000" },
+  lightboxHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingBottom: 12,
+    backgroundColor: "#111",
+    borderBottomWidth: 1,
+    borderBottomColor: "#222",
+  },
+  lightboxBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  lightboxTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+  lightboxSub: { fontSize: 11, fontFamily: "PlusJakartaSans_400Regular", color: "#aaa", marginTop: 1 },
+  lightboxNav: {
+    flexDirection: "row",
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    gap: 12,
+    backgroundColor: "#111",
+  },
+  empty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 40,
+    gap: 12,
+  },
+  emptyTitle: { fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  emptySub: { fontSize: 13, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  scrollContent: { padding: 16, gap: 24 },
+  group: { gap: 10 },
+  groupHeader: { gap: 2 },
+  groupTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  groupMeta: { fontSize: 12, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textSecondary },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
+  thumb: {
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: Colors.borderLight,
+  },
+  thumbExpand: {
+    position: "absolute",
+    bottom: 5,
+    right: 5,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 4,
+    padding: 3,
+  },
+  markupBadge: {
+    position: "absolute",
+    top: 5,
+    left: 5,
+    backgroundColor: Colors.secondary,
+    borderRadius: 4,
+    padding: 3,
+  },
+  thumbDelete: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 4,
+    padding: 4,
+  },
 });
