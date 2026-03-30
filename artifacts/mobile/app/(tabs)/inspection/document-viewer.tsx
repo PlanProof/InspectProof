@@ -1,7 +1,8 @@
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
   View, Text, StyleSheet, Pressable, Alert, ActivityIndicator,
-  PanResponder, useWindowDimensions, Platform,
+  PanResponder, useWindowDimensions, Platform, Modal, TextInput,
+  Animated, KeyboardAvoidingView,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,14 +13,26 @@ import { captureRef } from "react-native-view-shot";
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@/context/AuthContext";
 import { Colors } from "@/constants/colors";
+import * as ScreenOrientation from "expo-screen-orientation";
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Stroke {
   points: { x: number; y: number }[];
   color: string;
   width: number;
 }
+
+interface TextAnnotation {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  color: string;
+}
+
+type Tool = "pen" | "text";
 
 const PEN_COLORS = [
   { value: "#EF4444", label: "Red" },
@@ -30,11 +43,16 @@ const PEN_COLORS = [
 ];
 const PEN_WIDTHS = [2, 4, 7];
 
-const CACHE_DIR = Platform.OS !== "web" ? (FileSystem.cacheDirectory ?? "") + "inspectproof-docs/" : "";
+const CACHE_DIR =
+  Platform.OS !== "web"
+    ? (FileSystem.cacheDirectory ?? "") + "inspectproof-docs/"
+    : "";
 
-function pointsToPath(points: { x: number; y: number }[]): string {
-  if (points.length < 2) return "";
-  return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+function pointsToPath(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return "";
+  return pts
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(" ");
 }
 
 function mimeToExt(mime: string): string | null {
@@ -49,23 +67,100 @@ function mimeToExt(mime: string): string | null {
 }
 
 function urlToFilename(url: string, mimeType?: string): string {
-  // Stable filename from URL — use MIME type to add extension when URL has none
   const urlNoQuery = url.split("?")[0];
   const rawExt = urlNoQuery.split(".").pop()?.toLowerCase();
   const lastSegment = urlNoQuery.split("/").pop() ?? "";
-  // Consider it a real extension only if it's short AND different from the full last URL segment
-  const hasRealExt = !!rawExt && rawExt.length <= 4 && rawExt !== lastSegment;
-  const ext = hasRealExt ? rawExt : (mimeType ? mimeToExt(mimeType) : null);
+  const hasRealExt =
+    !!rawExt && rawExt.length <= 4 && rawExt !== lastSegment;
+  const ext = hasRealExt
+    ? rawExt
+    : mimeType
+    ? mimeToExt(mimeType)
+    : null;
   const safe = url.replace(/[^a-z0-9]/gi, "_");
   const trimmed = safe.slice(Math.max(0, safe.length - 80));
   return ext ? `${trimmed}.${ext}` : trimmed;
 }
 
-// ── Screen ───────────────────────────────────────────────────────────────────
+// ── Draggable text annotation component ───────────────────────────────────────
+
+interface DraggableTextProps {
+  ann: TextAnnotation;
+  isSelected: boolean;
+  onSelect: () => void;
+  onMove: (id: string, x: number, y: number) => void;
+}
+
+function DraggableText({ ann, isSelected, onSelect, onMove }: DraggableTextProps) {
+  const pan = useRef(new Animated.ValueXY({ x: ann.x, y: ann.y })).current;
+  const offsetRef = useRef({ x: ann.x, y: ann.y });
+
+  useEffect(() => {
+    pan.setValue({ x: ann.x, y: ann.y });
+    offsetRef.current = { x: ann.x, y: ann.y };
+  }, [ann.x, ann.y]);
+
+  const pr = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (_, gs) => {
+        onSelect();
+        pan.setOffset(offsetRef.current);
+        pan.setValue({ x: 0, y: 0 });
+      },
+      onPanResponderMove: Animated.event(
+        [null, { dx: pan.x, dy: pan.y }],
+        { useNativeDriver: false }
+      ),
+      onPanResponderRelease: (_, gs) => {
+        pan.flattenOffset();
+        const newX = offsetRef.current.x + gs.dx;
+        const newY = offsetRef.current.y + gs.dy;
+        offsetRef.current = { x: newX, y: newY };
+        onMove(ann.id, newX, newY);
+      },
+    })
+  ).current;
+
+  return (
+    <Animated.View
+      style={[
+        styles.textAnnotationView,
+        {
+          transform: pan.getTranslateTransform(),
+          borderColor: isSelected ? "rgba(70,109,181,0.8)" : "transparent",
+          borderWidth: isSelected ? 1.5 : 0,
+        },
+      ]}
+      {...pr.panHandlers}
+    >
+      <Text
+        style={{
+          color: ann.color,
+          fontSize: ann.fontSize,
+          fontWeight: "600",
+          textShadowColor: "rgba(0,0,0,0.6)",
+          textShadowOffset: { width: 1, height: 1 },
+          textShadowRadius: 2,
+        }}
+      >
+        {ann.text}
+      </Text>
+      {isSelected && (
+        <View style={styles.dragHandle}>
+          <Feather name="move" size={10} color="rgba(255,255,255,0.7)" />
+        </View>
+      )}
+    </Animated.View>
+  );
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function DocumentViewerScreen() {
   const {
-    url, name, mimeType, inspectionId, itemId, projectId,
+    url, name, mimeType, inspectionId, itemId, projectId, documentId,
   } = useLocalSearchParams<{
     url: string;
     name: string;
@@ -79,21 +174,31 @@ export default function DocumentViewerScreen() {
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const { width: screenW, height: screenH } = useWindowDimensions();
-  const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
+  const baseUrl = process.env.EXPO_PUBLIC_DOMAIN
+    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+    : "";
 
-  // ── Download state ─────────────────────────────────────────────────────────
+  // ── Download state ──────────────────────────────────────────────────────────
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
-  const [downloadState, setDownloadState] = useState<"idle" | "cached" | "downloading" | "done" | "error">("idle");
+  const [downloadState, setDownloadState] = useState<
+    "idle" | "cached" | "downloading" | "done" | "error"
+  >("idle");
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const downloadRef = useRef<FileSystem.DownloadResumable | null>(null);
 
-  // ── Drawing state ──────────────────────────────────────────────────────────
+  // ── Drawing state ───────────────────────────────────────────────────────────
   const [drawing, setDrawing] = useState(false);
+  const [activeTool, setActiveTool] = useState<Tool>("pen");
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [liveStroke, setLiveStroke] = useState<{ x: number; y: number }[]>([]);
   const [selectedColor, setSelectedColor] = useState("#EF4444");
   const [selectedWidth, setSelectedWidth] = useState(4);
+  const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [showTextModal, setShowTextModal] = useState(false);
+  const [pendingPos, setPendingPos] = useState({ x: 100, y: 100 });
+  const [textInputValue, setTextInputValue] = useState("");
   const [uploading, setUploading] = useState(false);
   const [webLoading, setWebLoading] = useState(true);
   const [webError, setWebError] = useState(false);
@@ -102,20 +207,35 @@ export default function DocumentViewerScreen() {
   const currentPoints = useRef<{ x: number; y: number }[]>([]);
   const selectedColorRef = useRef(selectedColor);
   const selectedWidthRef = useRef(selectedWidth);
+  const activeToolRef = useRef<Tool>("pen");
 
-  React.useEffect(() => { selectedColorRef.current = selectedColor; }, [selectedColor]);
-  React.useEffect(() => { selectedWidthRef.current = selectedWidth; }, [selectedWidth]);
+  useEffect(() => { selectedColorRef.current = selectedColor; }, [selectedColor]);
+  useEffect(() => { selectedWidthRef.current = selectedWidth; }, [selectedWidth]);
+  useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
 
   const headerH = 56;
   const toolbarH = drawing ? 56 : 0;
-  const bodyH = screenH - insets.top - headerH;
+  const bodyH = screenH - insets.top - headerH - toolbarH;
 
-  // ── Download / cache logic ─────────────────────────────────────────────────
+  // ── Screen orientation: unlock on mount, re-lock on unmount ─────────────────
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      ScreenOrientation.unlockAsync().catch(() => {});
+    }
+    return () => {
+      if (Platform.OS !== "web") {
+        ScreenOrientation.lockAsync(
+          ScreenOrientation.OrientationLock.PORTRAIT_UP
+        ).catch(() => {});
+      }
+    };
+  }, []);
+
+  // ── Download / cache logic ──────────────────────────────────────────────────
 
   useEffect(() => {
     if (!url) return;
 
-    // Web: fetch with auth headers and create a blob URL — no file system needed
     if (Platform.OS === "web") {
       (async () => {
         try {
@@ -125,8 +245,7 @@ export default function DocumentViewerScreen() {
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const blob = await res.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          setLocalUri(blobUrl);
+          setLocalUri(URL.createObjectURL(blob));
           setDownloadState("done");
         } catch (e: any) {
           setDownloadState("error");
@@ -136,14 +255,12 @@ export default function DocumentViewerScreen() {
       return;
     }
 
-    // Native: download to cache dir with progress tracking
     (async () => {
       try {
         await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
         const filename = urlToFilename(url, mimeType);
         const destPath = CACHE_DIR + filename;
 
-        // Check if already cached
         const info = await FileSystem.getInfoAsync(destPath);
         if (info.exists && info.size && info.size > 0) {
           setLocalUri(destPath);
@@ -151,24 +268,22 @@ export default function DocumentViewerScreen() {
           return;
         }
 
-        // Download with auth headers and progress tracking
         setDownloadState("downloading");
         setDownloadProgress(0);
 
         const dl = FileSystem.createDownloadResumable(
           url,
           destPath,
-          {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          },
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
           (prog) => {
             if (prog.totalBytesExpectedToWrite > 0) {
-              setDownloadProgress(prog.totalBytesWritten / prog.totalBytesExpectedToWrite);
+              setDownloadProgress(
+                prog.totalBytesWritten / prog.totalBytesExpectedToWrite
+              );
             }
           }
         );
         downloadRef.current = dl;
-
         const result = await dl.downloadAsync();
         if (result?.uri) {
           setLocalUri(result.uri);
@@ -188,16 +303,20 @@ export default function DocumentViewerScreen() {
     };
   }, [url, token]);
 
-  // Build WebView source from local file
-  const webviewUri = localUri ? (Platform.OS === "android" ? `file://${localUri}` : localUri) : null;
-  const isPdf = mimeType === "application/pdf" || name?.toLowerCase().endsWith(".pdf");
+  const webviewUri = localUri
+    ? Platform.OS === "android"
+      ? `file://${localUri}`
+      : localUri
+    : null;
+  const isPdf =
+    mimeType === "application/pdf" || name?.toLowerCase().endsWith(".pdf");
 
-  // ── Drawing PanResponder ───────────────────────────────────────────────────
+  // ── Drawing PanResponder (pen mode only) ────────────────────────────────────
 
-  const panResponder = useRef(
+  const penPanResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => drawing,
-      onMoveShouldSetPanResponder: () => drawing,
+      onStartShouldSetPanResponder: () => activeToolRef.current === "pen",
+      onMoveShouldSetPanResponder: () => activeToolRef.current === "pen",
       onPanResponderGrant: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
         currentPoints.current = [{ x: locationX, y: locationY }];
@@ -210,11 +329,14 @@ export default function DocumentViewerScreen() {
       },
       onPanResponderRelease: () => {
         if (currentPoints.current.length > 1) {
-          setStrokes(prev => [...prev, {
-            points: [...currentPoints.current],
-            color: selectedColorRef.current,
-            width: selectedWidthRef.current,
-          }]);
+          setStrokes((prev) => [
+            ...prev,
+            {
+              points: [...currentPoints.current],
+              color: selectedColorRef.current,
+              width: selectedWidthRef.current,
+            },
+          ]);
         }
         currentPoints.current = [];
         setLiveStroke([]);
@@ -222,54 +344,144 @@ export default function DocumentViewerScreen() {
     })
   ).current;
 
-  // ── Save markup ───────────────────────────────────────────────────────────
+  // ── Add text annotation ──────────────────────────────────────────────────────
 
-  const fetchWithAuth = useCallback(async (path: string, opts?: RequestInit) => {
-    const res = await fetch(`${baseUrl}${path}`, {
-      ...opts,
-      headers: { ...(opts?.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
-  }, [baseUrl, token]);
+  const openTextAtPos = (x: number, y: number) => {
+    setPendingPos({ x, y });
+    setTextInputValue("");
+    if (Platform.OS === "ios") {
+      Alert.prompt(
+        "Add text",
+        "Type your annotation",
+        (text) => {
+          if (text?.trim()) {
+            setTextAnnotations((prev) => [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                text: text.trim(),
+                x,
+                y,
+                fontSize: 18,
+                color: selectedColorRef.current,
+              },
+            ]);
+          }
+        },
+        "plain-text",
+        ""
+      );
+    } else {
+      setShowTextModal(true);
+    }
+  };
+
+  const confirmTextInput = () => {
+    if (textInputValue.trim()) {
+      setTextAnnotations((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          text: textInputValue.trim(),
+          x: pendingPos.x,
+          y: pendingPos.y,
+          fontSize: 18,
+          color: selectedColorRef.current,
+        },
+      ]);
+    }
+    setShowTextModal(false);
+    setTextInputValue("");
+  };
+
+  // ── Save markup ──────────────────────────────────────────────────────────────
+
+  const fetchWithAuth = useCallback(
+    async (path: string, opts?: RequestInit) => {
+      const res = await fetch(`${baseUrl}${path}`, {
+        ...opts,
+        headers: {
+          ...(opts?.headers || {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+    [baseUrl, token]
+  );
+
+  const hasMarkup = strokes.length > 0 || textAnnotations.length > 0;
 
   const saveMarkup = async () => {
-    if (strokes.length === 0) { router.back(); return; }
+    if (!hasMarkup) { router.back(); return; }
     if (!inspectionId && !projectId) { router.back(); return; }
 
     setUploading(true);
     try {
       const capturedUri = await captureRef(containerRef, {
         format: "jpg",
-        quality: 0.85,
+        quality: 0.9,
         result: "tmpfile",
       });
 
-      const markupFileName = `markup-${(name || "doc").replace(/[^a-z0-9]/gi, "-").toLowerCase()}-${Date.now()}.jpg`;
+      const safeName = (name || "doc").replace(/[^a-z0-9]/gi, "-").toLowerCase();
+      const markupFileName = `markup-${safeName}-${Date.now()}.jpg`;
+
       const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: markupFileName, size: 0, contentType: "image/jpeg" }),
+        body: JSON.stringify({
+          name: markupFileName,
+          size: 0,
+          contentType: "image/jpeg",
+        }),
       });
 
       const blob = await (await fetch(capturedUri)).blob();
-      await fetch(urlRes.uploadURL, { method: "PUT", headers: { "Content-Type": "image/jpeg" }, body: blob });
+      await fetch(urlRes.uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": "image/jpeg" },
+        body: blob,
+      });
       const objectPath: string = urlRes.objectPath;
 
+      const insp = inspectionId ? `Inspection #${inspectionId}` : "";
+      const docName = `${name || "Document"} – Marked Up${insp ? ` (${insp})` : ""}`;
+
       if (inspectionId && itemId) {
-        const currentItem = await fetchWithAuth(`/api/inspections/${inspectionId}/checklist`);
+        const currentItem = await fetchWithAuth(
+          `/api/inspections/${inspectionId}/checklist`
+        );
         const item = Array.isArray(currentItem)
           ? currentItem.find((i: any) => i.id === parseInt(itemId))
           : null;
         const existingUrls: string[] = item?.photoUrls || [];
-        await fetchWithAuth(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ photoUrls: [...existingUrls, objectPath] }),
-        });
-        Alert.alert("Saved", "Markup attached to the checklist item.");
+        await fetchWithAuth(
+          `/api/inspections/${inspectionId}/checklist/${itemId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ photoUrls: [...existingUrls, objectPath] }),
+          }
+        );
+        if (projectId) {
+          await fetchWithAuth(`/api/projects/${projectId}/documents`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: docName,
+              fileName: markupFileName,
+              fileSize: 0,
+              mimeType: "image/jpeg",
+              fileUrl: objectPath,
+              folder: "Markups",
+              includedInInspection: true,
+            }),
+          });
+        }
+        Alert.alert("Saved", `Markup saved and attached to checklist item.`);
       } else if (projectId) {
-        const docName = `${name || "Plan"} — Markup`;
         await fetchWithAuth(`/api/projects/${projectId}/documents`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -283,7 +495,7 @@ export default function DocumentViewerScreen() {
             includedInInspection: true,
           }),
         });
-        Alert.alert("Markup saved", `"${docName}" has been saved to the project's Markups folder.`);
+        Alert.alert("Markup saved", `"${docName}" has been added to your project documents.`);
       }
 
       router.back();
@@ -297,7 +509,10 @@ export default function DocumentViewerScreen() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const isOffline = downloadState === "cached";
-  const isReady = downloadState === "done" || downloadState === "cached";
+  const isReady =
+    downloadState === "done" || downloadState === "cached";
+
+  const selectedText = textAnnotations.find((a) => a.id === selectedTextId);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -308,7 +523,9 @@ export default function DocumentViewerScreen() {
           <Feather name="arrow-left" size={22} color="#fff" />
         </Pressable>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{name || "Document"}</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {name || "Document"}
+          </Text>
           {isOffline && (
             <View style={styles.cachedBadge}>
               <Feather name="wifi-off" size={9} color="#C5D92D" />
@@ -317,26 +534,63 @@ export default function DocumentViewerScreen() {
           )}
         </View>
         <View style={styles.headerActions}>
-          {(inspectionId && itemId || projectId) && isReady && (
+          {(inspectionId || projectId) && isReady && (
             <Pressable
               onPress={() => {
-                if (drawing && strokes.length > 0) {
-                  const saveTarget = (inspectionId && itemId) ? "attach it to the checklist item" : "save it to the project";
-                  Alert.alert("Save markup?", `Save your drawings and ${saveTarget}.`, [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Save", onPress: saveMarkup },
-                    { text: "Discard", style: "destructive", onPress: () => { setStrokes([]); setDrawing(false); } },
-                  ]);
+                if (drawing && hasMarkup) {
+                  const target =
+                    inspectionId && itemId
+                      ? "attach it to the checklist item"
+                      : "save it to the project";
+                  Alert.alert(
+                    "Save markup?",
+                    `Save your annotations and ${target}.`,
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Save", onPress: saveMarkup },
+                      {
+                        text: "Discard",
+                        style: "destructive",
+                        onPress: () => {
+                          setStrokes([]);
+                          setLiveStroke([]);
+                          setTextAnnotations([]);
+                          setSelectedTextId(null);
+                          setDrawing(false);
+                          setActiveTool("pen");
+                        },
+                      },
+                    ]
+                  );
                 } else {
-                  setDrawing(d => !d);
-                  if (drawing) { setStrokes([]); setLiveStroke([]); }
+                  if (drawing) {
+                    setStrokes([]);
+                    setLiveStroke([]);
+                    setTextAnnotations([]);
+                    setSelectedTextId(null);
+                    setActiveTool("pen");
+                  }
+                  setDrawing((d) => !d);
                 }
               }}
               style={[styles.drawBtn, drawing && styles.drawBtnActive]}
             >
-              <Feather name="edit-2" size={14} color={drawing ? "#fff" : Colors.secondary} />
-              <Text style={[styles.drawBtnText, drawing && styles.drawBtnActiveText]}>
-                {drawing ? (strokes.length > 0 ? "Save" : "Cancel") : "Markup"}
+              <Feather
+                name="edit-2"
+                size={14}
+                color={drawing ? "#fff" : Colors.secondary}
+              />
+              <Text
+                style={[
+                  styles.drawBtnText,
+                  drawing && styles.drawBtnActiveText,
+                ]}
+              >
+                {drawing
+                  ? hasMarkup
+                    ? "Save"
+                    : "Cancel"
+                  : "Markup"}
               </Text>
             </Pressable>
           )}
@@ -346,38 +600,174 @@ export default function DocumentViewerScreen() {
       {/* ── Drawing toolbar ── */}
       {drawing && (
         <View style={styles.toolbar}>
+          {/* Tool selector */}
+          <Pressable
+            onPress={() => {
+              setActiveTool("pen");
+              setSelectedTextId(null);
+            }}
+            style={[
+              styles.toolBtn,
+              activeTool === "pen" && styles.toolBtnActive,
+            ]}
+          >
+            <Feather
+              name="edit-3"
+              size={15}
+              color={activeTool === "pen" ? "#fff" : "rgba(255,255,255,0.6)"}
+            />
+          </Pressable>
+          <Pressable
+            onPress={() => setActiveTool("text")}
+            style={[
+              styles.toolBtn,
+              activeTool === "text" && styles.toolBtnActive,
+            ]}
+          >
+            <Text
+              style={{
+                color: activeTool === "text" ? "#fff" : "rgba(255,255,255,0.6)",
+                fontSize: 14,
+                fontWeight: "700",
+              }}
+            >
+              T
+            </Text>
+          </Pressable>
+
+          <View style={styles.toolbarDivider} />
+
+          {/* Color picker */}
           <View style={styles.toolbarColors}>
-            {PEN_COLORS.map(c => (
+            {PEN_COLORS.map((c) => (
               <Pressable
                 key={c.value}
-                onPress={() => setSelectedColor(c.value)}
+                onPress={() => {
+                  setSelectedColor(c.value);
+                  if (selectedTextId) {
+                    setTextAnnotations((prev) =>
+                      prev.map((a) =>
+                        a.id === selectedTextId ? { ...a, color: c.value } : a
+                      )
+                    );
+                  }
+                }}
                 style={[
                   styles.colorDot,
                   { backgroundColor: c.value },
-                  c.value === "#FFFFFF" && { borderWidth: 1, borderColor: "#ccc" },
+                  c.value === "#FFFFFF" && {
+                    borderWidth: 1,
+                    borderColor: "#ccc",
+                  },
                   selectedColor === c.value && styles.colorDotSelected,
                 ]}
               />
             ))}
           </View>
-          <View style={styles.toolbarWidths}>
-            {PEN_WIDTHS.map(w => (
-              <Pressable key={w} onPress={() => setSelectedWidth(w)} style={styles.widthBtn}>
-                <View style={[
-                  styles.widthDot,
-                  { width: w * 2.5, height: w * 2.5, backgroundColor: selectedColor },
-                  selectedWidth === w && styles.widthDotSelected,
-                ]} />
+
+          {/* Pen widths — only for pen mode */}
+          {activeTool === "pen" && (
+            <View style={styles.toolbarWidths}>
+              {PEN_WIDTHS.map((w) => (
+                <Pressable
+                  key={w}
+                  onPress={() => setSelectedWidth(w)}
+                  style={styles.widthBtn}
+                >
+                  <View
+                    style={[
+                      styles.widthDot,
+                      {
+                        width: w * 2.5,
+                        height: w * 2.5,
+                        backgroundColor: selectedColor,
+                      },
+                      selectedWidth === w && styles.widthDotSelected,
+                    ]}
+                  />
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {/* Text size controls — only when text selected */}
+          {activeTool === "text" && selectedText && (
+            <View style={styles.toolbarWidths}>
+              <Pressable
+                hitSlop={8}
+                onPress={() =>
+                  setTextAnnotations((prev) =>
+                    prev.map((a) =>
+                      a.id === selectedTextId
+                        ? { ...a, fontSize: Math.max(10, a.fontSize - 2) }
+                        : a
+                    )
+                  )
+                }
+                style={styles.sizeBtn}
+              >
+                <Text style={styles.sizeBtnText}>A−</Text>
               </Pressable>
-            ))}
-          </View>
-          <Pressable onPress={() => setStrokes(prev => prev.slice(0, -1))} style={styles.iconBtn} hitSlop={8}>
-            <Feather name="corner-up-left" size={18} color="#fff" />
+              <Text style={styles.sizeLabel}>{selectedText.fontSize}</Text>
+              <Pressable
+                hitSlop={8}
+                onPress={() =>
+                  setTextAnnotations((prev) =>
+                    prev.map((a) =>
+                      a.id === selectedTextId
+                        ? { ...a, fontSize: Math.min(72, a.fontSize + 2) }
+                        : a
+                    )
+                  )
+                }
+                style={styles.sizeBtn}
+              >
+                <Text style={styles.sizeBtnText}>A+</Text>
+              </Pressable>
+            </View>
+          )}
+
+          <View style={{ flex: 1 }} />
+
+          {/* Undo / clear */}
+          {activeTool === "pen" && (
+            <Pressable
+              onPress={() => setStrokes((prev) => prev.slice(0, -1))}
+              style={styles.iconBtn}
+              hitSlop={8}
+            >
+              <Feather name="corner-up-left" size={18} color="#fff" />
+            </Pressable>
+          )}
+          {activeTool === "text" && selectedTextId && (
+            <Pressable
+              onPress={() => {
+                setTextAnnotations((prev) =>
+                  prev.filter((a) => a.id !== selectedTextId)
+                );
+                setSelectedTextId(null);
+              }}
+              style={styles.iconBtn}
+              hitSlop={8}
+            >
+              <Feather name="trash-2" size={17} color="rgba(255,80,80,0.8)" />
+            </Pressable>
+          )}
+          <Pressable
+            onPress={() => {
+              setStrokes([]);
+              setLiveStroke([]);
+              setTextAnnotations([]);
+              setSelectedTextId(null);
+            }}
+            style={styles.iconBtn}
+            hitSlop={8}
+          >
+            <Feather name="trash-2" size={18} color="rgba(255,255,255,0.5)" />
           </Pressable>
-          <Pressable onPress={() => { setStrokes([]); setLiveStroke([]); }} style={styles.iconBtn} hitSlop={8}>
-            <Feather name="trash-2" size={18} color="rgba(255,255,255,0.6)" />
-          </Pressable>
-          {uploading && <ActivityIndicator size="small" color={Colors.secondary} />}
+          {uploading && (
+            <ActivityIndicator size="small" color={Colors.secondary} />
+          )}
         </View>
       )}
 
@@ -385,7 +775,12 @@ export default function DocumentViewerScreen() {
       {downloadState === "downloading" && (
         <View style={styles.downloadBar}>
           <View style={styles.downloadBarFill}>
-            <View style={[styles.downloadBarProgress, { width: `${Math.round(downloadProgress * 100)}%` }]} />
+            <View
+              style={[
+                styles.downloadBarProgress,
+                { width: `${Math.round(downloadProgress * 100)}%` },
+              ]}
+            />
           </View>
           <View style={styles.downloadInfo}>
             <ActivityIndicator size="small" color={Colors.secondary} />
@@ -403,7 +798,9 @@ export default function DocumentViewerScreen() {
         <View style={styles.errorFull}>
           <Feather name="alert-circle" size={44} color={Colors.textTertiary} />
           <Text style={styles.errorTitle}>Could not load document</Text>
-          <Text style={styles.errorSub}>{downloadError || "Check your connection and try again."}</Text>
+          <Text style={styles.errorSub}>
+            {downloadError || "Check your connection and try again."}
+          </Text>
           <Pressable
             onPress={() => {
               setDownloadState("idle");
@@ -413,11 +810,12 @@ export default function DocumentViewerScreen() {
               setDownloadProgress(0);
 
               if (Platform.OS === "web") {
-                // Web: fetch with auth headers and create blob URL
                 (async () => {
                   try {
                     const res = await fetch(url, {
-                      headers: token ? { Authorization: `Bearer ${token}` } : {},
+                      headers: token
+                        ? { Authorization: `Bearer ${token}` }
+                        : {},
                     });
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     const blob = await res.blob();
@@ -431,25 +829,35 @@ export default function DocumentViewerScreen() {
                 return;
               }
 
-              // Native: download to cache dir
               (async () => {
                 try {
-                  await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
+                  await FileSystem.makeDirectoryAsync(CACHE_DIR, {
+                    intermediates: true,
+                  });
                   const filename = urlToFilename(url, mimeType);
                   const destPath = CACHE_DIR + filename;
                   const dl = FileSystem.createDownloadResumable(
-                    url, destPath,
+                    url,
+                    destPath,
                     { headers: token ? { Authorization: `Bearer ${token}` } : {} },
                     (prog) => {
                       if (prog.totalBytesExpectedToWrite > 0)
-                        setDownloadProgress(prog.totalBytesWritten / prog.totalBytesExpectedToWrite);
+                        setDownloadProgress(
+                          prog.totalBytesWritten /
+                            prog.totalBytesExpectedToWrite
+                        );
                     }
                   );
                   downloadRef.current = dl;
                   const result = await dl.downloadAsync();
-                  if (result?.uri) { setLocalUri(result.uri); setDownloadState("done"); }
-                  else setDownloadState("error");
-                } catch (e: any) { setDownloadState("error"); setDownloadError(e?.message); }
+                  if (result?.uri) {
+                    setLocalUri(result.uri);
+                    setDownloadState("done");
+                  } else setDownloadState("error");
+                } catch (e: any) {
+                  setDownloadState("error");
+                  setDownloadError(e?.message);
+                }
               })();
             }}
             style={styles.retryBtn}
@@ -464,12 +872,10 @@ export default function DocumentViewerScreen() {
       {isReady && webviewUri && (
         <View
           ref={containerRef}
-          style={[styles.body, { height: bodyH - toolbarH }]}
+          style={[styles.body, { height: bodyH }]}
           collapsable={false}
-          {...(drawing && Platform.OS !== "web" ? panResponder.panHandlers : {})}
         >
           {Platform.OS === "web" ? (
-            // Web: use a native <iframe> — WebView is native-only
             React.createElement("iframe", {
               src: webviewUri,
               title: name || "Document",
@@ -481,7 +887,10 @@ export default function DocumentViewerScreen() {
                 backgroundColor: "#fff",
               },
               onLoad: () => setWebLoading(false),
-              onError: () => { setWebLoading(false); setWebError(true); },
+              onError: () => {
+                setWebLoading(false);
+                setWebError(true);
+              },
             })
           ) : (
             <WebView
@@ -489,9 +898,12 @@ export default function DocumentViewerScreen() {
               style={styles.webview}
               onLoadStart={() => setWebLoading(true)}
               onLoadEnd={() => setWebLoading(false)}
-              onError={() => { setWebLoading(false); setWebError(true); }}
+              onError={() => {
+                setWebLoading(false);
+                setWebError(true);
+              }}
               scrollEnabled={!drawing}
-              bounces={false}
+              bounces={!drawing}
               originWhitelist={["*", "file://*"]}
               allowFileAccess
               allowUniversalAccessFromFileURLs
@@ -500,6 +912,7 @@ export default function DocumentViewerScreen() {
               domStorageEnabled
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
+              scalesPageToFit={Platform.OS === "android"}
             />
           )}
 
@@ -516,19 +929,39 @@ export default function DocumentViewerScreen() {
           {/* Render error */}
           {webError && !webLoading && (
             <View style={styles.loadingOverlay}>
-              <Feather name="alert-circle" size={36} color={Colors.textTertiary} />
+              <Feather
+                name="alert-circle"
+                size={36}
+                color={Colors.textTertiary}
+              />
               <Text style={styles.loadingText}>Unable to render this file</Text>
-              <Pressable onPress={() => { setWebError(false); setWebLoading(true); }} style={styles.retryBtn}>
+              <Pressable
+                onPress={() => {
+                  setWebError(false);
+                  setWebLoading(true);
+                }}
+                style={styles.retryBtn}
+              >
                 <Feather name="refresh-cw" size={15} color="#fff" />
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>
             </View>
           )}
 
-          {/* Drawing canvas overlay — native only */}
+          {/* ── Drawing capture layer — native only ── */}
           {drawing && Platform.OS !== "web" && (
-            <View style={StyleSheet.absoluteFill} pointerEvents="none">
-              <Svg width={screenW} height={bodyH - toolbarH}>
+            <View
+              style={StyleSheet.absoluteFill}
+              pointerEvents={activeTool === "pen" ? "auto" : "box-none"}
+              {...(activeTool === "pen" ? penPanResponder.panHandlers : {})}
+            >
+              {/* SVG strokes layer */}
+              <Svg
+                style={StyleSheet.absoluteFill}
+                width={screenW}
+                height={bodyH}
+                pointerEvents="none"
+              >
                 {strokes.map((s, i) => (
                   <Path
                     key={i}
@@ -551,25 +984,107 @@ export default function DocumentViewerScreen() {
                   />
                 )}
               </Svg>
+
+              {/* Draggable text annotations */}
+              {textAnnotations.map((ann) => (
+                <DraggableText
+                  key={ann.id}
+                  ann={ann}
+                  isSelected={selectedTextId === ann.id}
+                  onSelect={() => setSelectedTextId(ann.id)}
+                  onMove={(id, x, y) =>
+                    setTextAnnotations((prev) =>
+                      prev.map((a) => (a.id === id ? { ...a, x, y } : a))
+                    )
+                  }
+                />
+              ))}
+
+              {/* Text mode tap area — tapping empty space creates new annotation */}
+              {activeTool === "text" && (
+                <Pressable
+                  style={StyleSheet.absoluteFill}
+                  onPress={(e) => {
+                    setSelectedTextId(null);
+                    openTextAtPos(
+                      e.nativeEvent.locationX,
+                      e.nativeEvent.locationY
+                    );
+                  }}
+                />
+              )}
             </View>
           )}
 
           {/* Draw mode hint */}
-          {drawing && strokes.length === 0 && !webLoading && (
+          {drawing && !hasMarkup && !webLoading && (
             <View style={styles.drawHint} pointerEvents="none">
               <View style={styles.drawHintPill}>
-                <Feather name="edit-2" size={12} color="#fff" />
-                <Text style={styles.drawHintText}>Draw on the document</Text>
+                <Feather
+                  name={activeTool === "text" ? "type" : "edit-2"}
+                  size={12}
+                  color="#fff"
+                />
+                <Text style={styles.drawHintText}>
+                  {activeTool === "text"
+                    ? "Tap to add text"
+                    : "Draw on the document"}
+                </Text>
               </View>
             </View>
           )}
         </View>
       )}
+
+      {/* ── Text input modal (Android) ── */}
+      <Modal
+        visible={showTextModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTextModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior="padding"
+        >
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Add text annotation</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={textInputValue}
+              onChangeText={setTextInputValue}
+              placeholder="Enter annotation text…"
+              placeholderTextColor="rgba(0,0,0,0.35)"
+              autoFocus
+              multiline={false}
+              returnKeyType="done"
+              onSubmitEditing={confirmTextInput}
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={() => {
+                  setShowTextModal(false);
+                  setTextInputValue("");
+                }}
+                style={[styles.modalBtn, styles.modalBtnCancel]}
+              >
+                <Text style={styles.modalBtnCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={confirmTextInput}
+                style={[styles.modalBtn, styles.modalBtnConfirm]}
+              >
+                <Text style={styles.modalBtnConfirmText}>Add</Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#000" },
@@ -584,12 +1099,7 @@ const styles = StyleSheet.create({
   },
   headerCenter: { flex: 1 },
   headerTitle: { color: "#fff", fontSize: 15, fontWeight: "600" },
-  cachedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    marginTop: 2,
-  },
+  cachedBadge: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
   cachedBadgeText: { color: "#C5D92D", fontSize: 10, fontWeight: "600" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   iconBtn: { padding: 6 },
@@ -604,7 +1114,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.secondary,
   },
-  drawBtnActive: { backgroundColor: Colors.secondary, borderColor: Colors.secondary },
+  drawBtnActive: {
+    backgroundColor: Colors.secondary,
+    borderColor: Colors.secondary,
+  },
   drawBtnText: { color: Colors.secondary, fontSize: 13, fontWeight: "600" },
   drawBtnActiveText: { color: "#fff" },
 
@@ -613,18 +1126,49 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 12,
-    gap: 10,
+    gap: 8,
     backgroundColor: Colors.primary,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "rgba(255,255,255,0.1)",
   },
+  toolBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  toolBtnActive: { backgroundColor: Colors.secondary },
+  toolbarDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    marginHorizontal: 2,
+  },
   toolbarColors: { flexDirection: "row", alignItems: "center", gap: 6 },
-  colorDot: { width: 20, height: 20, borderRadius: 10, shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
+  colorDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+  },
   colorDotSelected: { transform: [{ scale: 1.3 }], shadowOpacity: 0.5 },
-  toolbarWidths: { flexDirection: "row", alignItems: "center", gap: 8 },
+  toolbarWidths: { flexDirection: "row", alignItems: "center", gap: 6 },
   widthBtn: { padding: 4 },
   widthDot: { borderRadius: 20 },
   widthDotSelected: { opacity: 1, transform: [{ scale: 1.3 }] },
+  sizeBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  sizeBtnText: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  sizeLabel: { color: "rgba(255,255,255,0.7)", fontSize: 12, minWidth: 20, textAlign: "center" },
 
   downloadBar: {
     backgroundColor: Colors.primary,
@@ -660,8 +1204,18 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 32,
   },
-  errorTitle: { fontSize: 17, fontWeight: "600", color: Colors.text, textAlign: "center" },
-  errorSub: { fontSize: 13, color: Colors.textSecondary, textAlign: "center", lineHeight: 19 },
+  errorTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: Colors.text,
+    textAlign: "center",
+  },
+  errorSub: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 19,
+  },
 
   body: { flex: 1, backgroundColor: "#fff" },
   webview: { flex: 1 },
@@ -687,7 +1241,13 @@ const styles = StyleSheet.create({
   },
   retryText: { color: "#fff", fontSize: 14, fontWeight: "600" },
 
-  drawHint: { position: "absolute", top: 16, left: 0, right: 0, alignItems: "center" },
+  drawHint: {
+    position: "absolute",
+    top: 16,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
   drawHintPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -698,4 +1258,67 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   drawHintText: { color: "#fff", fontSize: 13, fontWeight: "500" },
+
+  textAnnotationView: {
+    position: "absolute",
+    padding: 4,
+    borderRadius: 4,
+    minWidth: 40,
+  },
+  dragHandle: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalBox: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 20,
+    width: "100%",
+    maxWidth: 400,
+    gap: 14,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.15)",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: Colors.text,
+    backgroundColor: "#f9f9f9",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "flex-end",
+  },
+  modalBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 8,
+  },
+  modalBtnCancel: { backgroundColor: "rgba(0,0,0,0.07)" },
+  modalBtnCancelText: { color: Colors.textSecondary, fontWeight: "600" },
+  modalBtnConfirm: { backgroundColor: Colors.secondary },
+  modalBtnConfirmText: { color: "#fff", fontWeight: "700" },
 });
