@@ -390,6 +390,7 @@ export default function InspectionDetail() {
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>([]);
   const [project, setProject] = useState<any>(null);
+  const [docTemplates, setDocTemplates] = useState<DocTemplate[]>([]);
 
   const openReportDialog = useCallback((inspection: Inspection) => {
     const suggested = getSuggestedReportType(inspection);
@@ -769,6 +770,7 @@ export default function InspectionDetail() {
           inspection={inspection}
           inspectors={inspectors}
           templates={templates}
+          docTemplates={docTemplates}
           onReload={load}
         />
       )}
@@ -1407,11 +1409,13 @@ function OverviewTab({
   inspection,
   inspectors,
   templates,
+  docTemplates,
   onReload,
 }: {
   inspection: Inspection;
   inspectors: Inspector[];
   templates: ChecklistTemplate[];
+  docTemplates: DocTemplate[];
   onReload: () => void;
 }) {
   // ── Pre-inspection Details edit state ──
@@ -1522,7 +1526,6 @@ function OverviewTab({
   const [confirmReplaceOpen, setConfirmReplaceOpen] = useState(false);
 
   // Doc template direct-link state
-  const [docTemplates, setDocTemplates] = useState<DocTemplate[]>([]);
   const [selectedDocTemplateId, setSelectedDocTemplateId] = useState<string>(
     () => getDirectDocTemplateId(inspection.id) ?? ""
   );
@@ -2184,13 +2187,11 @@ function ChecklistTab({
   const handleItemFileUpload = async (file: File, itemId: number, type: "photo" | "doc") => {
     setUploadingItemId(itemId);
     try {
-      const { uploadURL, objectPath } = await apiFetch("/api/storage/uploads/request-url", {
+      const { objectPath } = await apiFetch("/api/storage/uploads/file", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+        headers: { "Content-Type": "application/octet-stream", "X-File-Content-Type": file.type || "application/octet-stream" },
+        body: file,
       });
-      const putRes = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-      if (!putRes.ok) throw new Error("Upload failed");
 
       if (type === "photo") {
         const item = localResults.find(r => r.id === itemId);
@@ -2740,22 +2741,14 @@ function DocumentsTab({
     setUploadError("");
     setUploading(true);
     try {
-      // 1. Get a pre-signed upload URL
-      const { uploadURL, objectPath } = await apiFetch("/api/storage/uploads/request-url", {
+      // 1. Upload file through API server
+      const { objectPath } = await apiFetch("/api/storage/uploads/file", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
-      });
-
-      // 2. Upload to signed URL
-      const putRes = await fetch(uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
+        headers: { "Content-Type": "application/octet-stream", "X-File-Content-Type": file.type || "application/octet-stream" },
         body: file,
       });
-      if (!putRes.ok) throw new Error("Upload failed");
 
-      // 3. Register document with project
+      // 2. Register document with project
       await apiFetch(`/api/projects/${projectId}/documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -743,8 +743,11 @@ function DocumentsTab({ projectId }: { projectId: number }) {
     const folder = selectedFolder || "General";
     try {
       for (const file of Array.from(files)) {
-        const { uploadURL, objectPath } = await apiFetch("/api/storage/uploads/request-url", { method: "POST" });
-        await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+        const { objectPath } = await apiFetch("/api/storage/uploads/file", {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream", "X-File-Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        });
         await apiFetch(`/api/projects/${projectId}/documents`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

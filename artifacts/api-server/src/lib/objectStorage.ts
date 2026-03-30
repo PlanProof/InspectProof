@@ -128,6 +128,77 @@ export class ObjectStorageService {
     });
   }
 
+  async uploadFile(buffer: Buffer, contentType: string): Promise<string> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    const objectId = randomUUID();
+    const fullPath = `${privateObjectDir}/uploads/${objectId}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+
+    const signedUrl = await signObjectURL({ bucketName, objectName, method: "PUT", ttlSec: 300 });
+    const putRes = await fetch(signedUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: buffer,
+    });
+    if (!putRes.ok) {
+      const body = await putRes.text().catch(() => "");
+      throw new Error(`GCS upload failed ${putRes.status}: ${body}`);
+    }
+
+    return `/objects/uploads/${objectId}`;
+  }
+
+  async getObjectEntityFileUnchecked(objectPath: string): Promise<File> {
+    if (!objectPath.startsWith("/objects/")) {
+      throw new ObjectNotFoundError();
+    }
+    const parts = objectPath.slice(1).split("/");
+    if (parts.length < 2) {
+      throw new ObjectNotFoundError();
+    }
+    const entityId = parts.slice(1).join("/");
+    let entityDir = this.getPrivateObjectDir();
+    if (!entityDir.endsWith("/")) {
+      entityDir = `${entityDir}/`;
+    }
+    const objectEntityPath = `${entityDir}${entityId}`;
+    const { bucketName, objectName } = parseObjectPath(objectEntityPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    return bucket.file(objectName);
+  }
+
+  async getTokenDownloadURL(objectPath: string): Promise<string> {
+    if (!objectPath.startsWith("/objects/")) {
+      throw new ObjectNotFoundError();
+    }
+    const parts = objectPath.slice(1).split("/");
+    if (parts.length < 2) {
+      throw new ObjectNotFoundError();
+    }
+    const entityId = parts.slice(1).join("/");
+    let entityDir = this.getPrivateObjectDir();
+    if (!entityDir.endsWith("/")) {
+      entityDir = `${entityDir}/`;
+    }
+    const objectEntityPath = `${entityDir}${entityId}`;
+    const { bucketName, objectName } = parseObjectPath(objectEntityPath);
+
+    // Use proper OAuth token exchange to get a real GCS access token,
+    // then redirect to the GCS JSON API download endpoint.
+    const accessToken = await getAccessToken();
+    return `https://storage.googleapis.com/download/storage/v1/b/${encodeURIComponent(bucketName)}/o/${encodeURIComponent(objectName)}?alt=media&access_token=${encodeURIComponent(accessToken)}`;
+  }
+
+  async fetchObjectBuffer(objectPath: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const downloadUrl = await this.getTokenDownloadURL(objectPath);
+    const res = await fetch(downloadUrl, { redirect: "follow", signal: AbortSignal.timeout(30_000) });
+    if (res.status === 404) throw new ObjectNotFoundError();
+    if (!res.ok) throw new Error(`GCS download failed: ${res.status}`);
+    const contentType = res.headers.get("content-type") || "application/octet-stream";
+    const arrayBuf = await res.arrayBuffer();
+    return { buffer: Buffer.from(arrayBuf), contentType };
+  }
+
   async getObjectEntityFile(objectPath: string): Promise<File> {
     if (!objectPath.startsWith("/objects/")) {
       throw new ObjectNotFoundError();
@@ -225,6 +296,36 @@ function parseObjectPath(path: string): {
     bucketName,
     objectName,
   };
+}
+
+async function getAccessToken(): Promise<string> {
+  // Step 1: get the subject token from /credential
+  const credRes = await fetch(`${REPLIT_SIDECAR_ENDPOINT}/credential`, {
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!credRes.ok) {
+    throw new Error(`Failed to get credential from sidecar: ${credRes.status}`);
+  }
+  const { access_token: subjectToken } = await credRes.json() as { access_token: string };
+
+  // Step 2: exchange subject token for a real Google OAuth access token
+  const params = new URLSearchParams({
+    grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+    subject_token: subjectToken,
+    subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
+    scope: "https://www.googleapis.com/auth/cloud-platform",
+  });
+  const tokenRes = await fetch(`${REPLIT_SIDECAR_ENDPOINT}/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!tokenRes.ok) {
+    throw new Error(`Failed to exchange token: ${tokenRes.status}`);
+  }
+  const { access_token } = await tokenRes.json() as { access_token: string };
+  return access_token;
 }
 
 async function signObjectURL({

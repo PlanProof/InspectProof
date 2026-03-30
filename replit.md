@@ -70,11 +70,17 @@ All checklist templates and report templates are seeded automatically on server 
 | Integration | Config |
 |---|---|
 | **Database** | Supabase PostgreSQL (`SUPABASE_DATABASE_URL`) — Session Pooler, ap-southeast-2 |
-| **File Storage** | Replit Object Storage (fallback); Supabase Storage (`inspectproof-files`) when `SUPABASE_SERVICE_ROLE_KEY` + `SUPABASE_URL` set |
+| **File Storage** | Replit Object Storage (`PRIVATE_OBJECT_DIR` env var, GCS bucket `replit-objstore-97d074d9-8576-42de-97b0-9bf4a2a327c8`); Supabase Storage optional when `SUPABASE_SERVICE_ROLE_KEY` + `SUPABASE_URL` set |
 | **Email** | Office365 SMTP via nodemailer (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) |
 | **Stripe** | Replit Stripe connector (dev) / `STRIPE_SECRET_KEY` env var (prod) |
 
 Storage auto-detection: presence of `SUPABASE_SERVICE_ROLE_KEY` env var enables Supabase Storage; otherwise uses Replit Object Storage.
+
+**Storage architecture notes (Replit Object Storage):**
+- Upload: `POST /api/storage/uploads/request-url` → returns signed PUT URL (client uploads directly to GCS) OR `POST /api/storage/uploads/file` (server-side upload).
+- Download: `GET /api/storage/objects/uploads/{uuid}` → 302 redirect to GCS JSON API URL with short-lived OAuth token (token exchanged via sidecar `/token` endpoint). Note: Express `{*path}` wildcard returns an array — always use `Array.isArray(rawPath) ? rawPath.join("/") : rawPath` to avoid Array.toString() joining with commas.
+- The Replit sidecar (`http://127.0.0.1:1106`) provides: `/credential` (subject token), `/token` (token exchange for real OAuth), `/object-storage/signed-object-url` (PUT signed URLs only — GET signed URLs produce incorrect comma-separated paths).
+- Reports PDF generation: uses `fetchObjectBuffer(objectPath)` to download signature images and checklist photos via the OAuth token approach.
 
 ## Users (Supabase)
 

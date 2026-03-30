@@ -1060,19 +1060,8 @@ router.get("/:id/pdf", async (req, res) => {
           const signatureUrl = users[0]?.signatureUrl;
           if (signatureUrl) {
             const storageService = new ObjectStorageService();
-            const file = await storageService.getObjectEntityFile(signatureUrl);
-            const response = await storageService.downloadObject(file);
-            if (response.body) {
-              const chunks: Buffer[] = [];
-              const reader = response.body.getReader();
-              let done = false;
-              while (!done) {
-                const result = await reader.read();
-                done = result.done;
-                if (result.value) chunks.push(Buffer.from(result.value));
-              }
-              signatureBuffer = Buffer.concat(chunks);
-            }
+            const { buffer } = await storageService.fetchObjectBuffer(signatureUrl);
+            signatureBuffer = buffer;
           }
         }
       } catch (sigErr) {
@@ -1113,19 +1102,8 @@ router.get("/:id/pdf", async (req, res) => {
           await Promise.allSettled(paths.map(async (photoPath) => {
             if (photoBuffers!.has(photoPath)) return;
             try {
-              const file = await storageService.getObjectEntityFile(photoPath);
-              const response = await storageService.downloadObject(file);
-              if (response.body) {
-                const chunks: Buffer[] = [];
-                const reader = response.body.getReader();
-                let done = false;
-                while (!done) {
-                  const chunk = await reader.read();
-                  done = chunk.done;
-                  if (chunk.value) chunks.push(Buffer.from(chunk.value));
-                }
-                photoBuffers!.set(photoPath, Buffer.concat(chunks));
-              }
+              const { buffer } = await storageService.fetchObjectBuffer(photoPath);
+              photoBuffers!.set(photoPath, buffer);
             } catch {
               // skip — photo unavailable
             }

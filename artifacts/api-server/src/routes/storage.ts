@@ -1,9 +1,8 @@
-import { Router, type IRouter, type Request, type Response } from "express";
-import { Readable } from "stream";
+import express, { Router, type IRouter, type Request, type Response } from "express";
 import {
   isSupabaseStorageAvailable,
   getSupabaseSignedUploadURL,
-  streamFromSupabase,
+  getSupabaseSignedDownloadURL,
 } from "../lib/supabaseStorage";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 
@@ -13,6 +12,27 @@ const replitStorage = new ObjectStorageService();
 function isSupabasePath(objectPath: string): boolean {
   return objectPath.startsWith("/objects/supabase/");
 }
+
+router.post(
+  "/storage/uploads/file",
+  express.raw({ type: "*/*", limit: "200mb" }),
+  async (req: Request, res: Response) => {
+    try {
+      const buffer = req.body as Buffer;
+      if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
+        res.status(400).json({ error: "empty_body" });
+        return;
+      }
+      const contentType = (req.headers["x-file-content-type"] as string) || req.headers["content-type"] || "application/octet-stream";
+      const objectPath = await replitStorage.uploadFile(buffer, contentType.split(";")[0].trim());
+      res.json({ objectPath });
+    } catch (err) {
+      req.log.error({ err }, "Server upload error");
+      res.status(500).json({ error: "internal_error" });
+    }
+  }
+);
+
 
 router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
   try {
@@ -31,36 +51,21 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
 });
 
 router.get("/storage/objects/{*path}", async (req: Request, res: Response) => {
-  const rawPath = (req.params as any).path as string;
+  // Express {*path} wildcard passes segments as an array; join with "/" to avoid
+  // Array.toString() which joins with "," and corrupts the path.
+  const rawPathParam = (req.params as any).path;
+  const rawPath = Array.isArray(rawPathParam) ? rawPathParam.join("/") : String(rawPathParam);
   const objectPath = "/objects/" + rawPath;
 
   try {
     if (isSupabasePath(objectPath)) {
-      const upstream = await streamFromSupabase(objectPath);
-      if (!upstream.ok) {
-        res.status(upstream.status).json({ error: "not_found" });
-        return;
-      }
-      const headers = Object.fromEntries(upstream.headers.entries());
-      for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
-      res.status(upstream.status);
-      if (upstream.body) {
-        Readable.fromWeb(upstream.body as any).pipe(res);
-      } else {
-        res.end();
-      }
-    } else {
-      const file = await replitStorage.getObjectEntityFile(objectPath);
-      const response = await replitStorage.downloadObject(file);
-      const headers = Object.fromEntries(response.headers.entries());
-      for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
-      res.status(response.status);
-      if (response.body) {
-        Readable.fromWeb(response.body as any).pipe(res);
-      } else {
-        res.end();
-      }
+      const signedUrl = await getSupabaseSignedDownloadURL(objectPath);
+      res.redirect(302, signedUrl);
+      return;
     }
+
+    const downloadUrl = await replitStorage.getTokenDownloadURL(objectPath);
+    res.redirect(302, downloadUrl);
   } catch (err) {
     if (err instanceof ObjectNotFoundError) {
       res.status(404).json({ error: "not_found" });
