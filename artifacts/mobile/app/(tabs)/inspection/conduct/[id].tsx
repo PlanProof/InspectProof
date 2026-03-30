@@ -241,16 +241,26 @@ export default function ConductInspectionScreen() {
     setEditRecommendedAction("");
   };
 
+  const ckKey = ["inspection-checklist", id, token];
+
   const quickPass = async (item: ChecklistItem) => {
     const next = item.result === "pass" ? "pending" : "pass";
+    // Optimistic update — instant UI response
+    queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+      (old ?? []).map(i => i.id === item.id ? { ...i, result: next } : i)
+    );
     try {
       await fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ result: next, notes: item.notes || null, photoUrls: item.photoUrls || [] }),
       });
-      await refetchChecklist();
+      refetchChecklist(); // silent background sync — no await
     } catch {
+      // Revert on failure
+      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+        (old ?? []).map(i => i.id === item.id ? { ...i, result: item.result } : i)
+      );
       Alert.alert("Error", "Failed to update. Please try again.");
     }
   };
@@ -258,6 +268,11 @@ export default function ConductInspectionScreen() {
   const quickPassAll = async (items: ChecklistItem[]) => {
     const allPassed = items.every(i => i.result === "pass");
     const next = allPassed ? "pending" : "pass";
+    const prevResults = Object.fromEntries(items.map(i => [i.id, i.result]));
+    // Optimistic update — all items at once
+    queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+      (old ?? []).map(i => items.find(x => x.id === i.id) ? { ...i, result: next } : i)
+    );
     try {
       await Promise.all(items.map(item =>
         fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
@@ -266,22 +281,34 @@ export default function ConductInspectionScreen() {
           body: JSON.stringify({ result: next, notes: item.notes || null, photoUrls: item.photoUrls || [] }),
         })
       ));
-      await refetchChecklist();
+      refetchChecklist(); // silent background sync
     } catch {
+      // Revert on failure
+      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+        (old ?? []).map(i => prevResults[i.id] !== undefined ? { ...i, result: prevResults[i.id] } : i)
+      );
       Alert.alert("Error", "Failed to update items. Please try again.");
     }
   };
 
   const quickNA = async (item: ChecklistItem) => {
     const next = item.result === "na" ? "pending" : "na";
+    // Optimistic update
+    queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+      (old ?? []).map(i => i.id === item.id ? { ...i, result: next } : i)
+    );
     try {
       await fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ result: next, notes: item.notes || null, photoUrls: item.photoUrls || [] }),
       });
-      await refetchChecklist();
+      refetchChecklist(); // silent background sync
     } catch {
+      // Revert on failure
+      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+        (old ?? []).map(i => i.id === item.id ? { ...i, result: item.result } : i)
+      );
       Alert.alert("Error", "Failed to update. Please try again.");
     }
   };
@@ -334,24 +361,29 @@ export default function ConductInspectionScreen() {
     if (!activeItem) return;
     setSavingItem(true);
     const showDefectFields = editResult === "fail" || editResult === "monitor";
+    const patch = {
+      result: editResult,
+      notes: editNotes || null,
+      photoUrls: activeItem.photoUrls || [],
+      ...(showDefectFields ? {
+        severity: editSeverity || null,
+        location: editLocation || null,
+        tradeAllocated: editTradeAllocated || null,
+        recommendedAction: editRecommendedAction || null,
+      } : {}),
+    };
+    // Optimistic update — close modal immediately after API call without waiting for refetch
     try {
       await fetchWithAuth(`/api/inspections/${id}/checklist/${activeItem.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          result: editResult,
-          notes: editNotes || null,
-          photoUrls: activeItem.photoUrls || [],
-          ...(showDefectFields ? {
-            severity: editSeverity || null,
-            location: editLocation || null,
-            tradeAllocated: editTradeAllocated || null,
-            recommendedAction: editRecommendedAction || null,
-          } : {}),
-        }),
+        body: JSON.stringify(patch),
       });
-      await refetchChecklist();
+      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+        (old ?? []).map(i => i.id === activeItem.id ? { ...i, ...patch } : i)
+      );
       closeModal();
+      refetchChecklist(); // silent background sync
     } catch (e: any) {
       Alert.alert("Error", "Failed to save. Please try again.");
     } finally {
@@ -430,7 +462,7 @@ export default function ConductInspectionScreen() {
   };
 
 
-  if (loadingInspection || loadingChecklist) {
+  if ((loadingInspection && !inspection) || (loadingChecklist && checklistItems.length === 0)) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.secondary} />
