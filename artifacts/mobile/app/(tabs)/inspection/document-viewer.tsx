@@ -553,7 +553,12 @@ export default function DocumentViewerScreen() {
         Alert.alert("Markup saved", `"${docName}" has been added to your project documents.`);
       }
 
-      router.back();
+      // Navigate back to the inspection, not just one step (which may be home)
+      if (inspectionId) {
+        router.replace(`/inspection/conduct/${inspectionId}`);
+      } else {
+        router.back();
+      }
     } catch {
       Alert.alert("Save failed", "Could not save the markup. Please try again.");
     } finally {
