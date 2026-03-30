@@ -43,9 +43,19 @@ router.post("/markup/generate", requireAuth, async (req, res) => {
     return;
   }
 
+  // Normalise documentUrl — mobile sends the full API URL
+  // (e.g. https://host/api/storage/objects/uploads/uuid), but
+  // fetchObjectBuffer expects just the object path (/objects/uploads/uuid).
+  let objectStoragePath = documentUrl;
+  const apiStorageMarker = "/api/storage";
+  const markerIdx = objectStoragePath.indexOf(apiStorageMarker);
+  if (markerIdx !== -1) {
+    objectStoragePath = objectStoragePath.slice(markerIdx + apiStorageMarker.length);
+  }
+
   try {
     // ── 1. Download the original PDF ─────────────────────────────────────────
-    const { buffer: pdfBuffer } = await storage.fetchObjectBuffer(documentUrl);
+    const { buffer: pdfBuffer } = await storage.fetchObjectBuffer(objectStoragePath);
     const originalPdf = await PDFDocument.load(pdfBuffer);
     const pageCount = originalPdf.getPageCount();
 
