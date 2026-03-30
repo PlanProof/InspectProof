@@ -64,8 +64,15 @@ router.get("/storage/objects/{*path}", async (req: Request, res: Response) => {
       return;
     }
 
-    const downloadUrl = await replitStorage.getTokenDownloadURL(objectPath);
-    res.redirect(302, downloadUrl);
+    // Proxy the file through the server with proper headers so PDFs open inline
+    // in the browser rather than being force-downloaded via GCS redirect.
+    const { buffer, contentType } = await replitStorage.fetchObjectBuffer(objectPath);
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
   } catch (err) {
     if (err instanceof ObjectNotFoundError) {
       res.status(404).json({ error: "not_found" });
