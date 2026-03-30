@@ -29,7 +29,7 @@ export const INSPECTION_TYPES: Record<string, string> = {
   pre_purchase_combined: "Building & Pest",
   fire_active: "Active Systems", fire_passive: "Passive Systems",
   fire_safety: "Fire Safety", annual_fire_safety: "Annual Fire Safety", fire_egress: "Egress & Evacuation",
-  structural_footing: "Structural — Footings", structural_frame: "Structural — Frame",
+  structural_footing_slab: "Structural — Footing & Slab", structural_frame: "Structural — Frame",
   structural_final: "Structural — Final",
   plumbing: "Plumbing", drainage: "Drainage", pressure_test: "Pressure Test",
   electrical: "Electrical", compliance: "Compliance", structural: "Structural",

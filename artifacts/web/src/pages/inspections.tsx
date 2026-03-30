@@ -51,9 +51,9 @@ const INSPECTION_TYPES = [
     { value: "fire_egress",     label: "Egress & Evacuation" },
   ]},
   { group: "Structural Engineering", items: [
-    { value: "structural_footing", label: "Structural — Footings" },
-    { value: "structural_frame",   label: "Structural — Frame" },
-    { value: "structural_final",   label: "Structural — Final" },
+    { value: "structural_footing_slab", label: "Structural — Footing & Slab" },
+    { value: "structural_frame",        label: "Structural — Frame" },
+    { value: "structural_final",        label: "Structural — Final" },
   ]},
   { group: "Plumbing", items: [
     { value: "plumbing",        label: "Plumbing" },
