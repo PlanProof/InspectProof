@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
-import { db, documentsTable, usersTable } from "@workspace/db";
+import { db, documentsTable, usersTable, projectsTable } from "@workspace/db";
+import { optionalAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -26,11 +27,23 @@ async function formatDoc(d: any) {
   };
 }
 
-router.get("/", async (req, res) => {
+router.get("/", optionalAuth, async (req, res) => {
   try {
     const { projectId, category, inspectionId, folder } = req.query;
     let docs = await db.select().from(documentsTable)
       .orderBy(sql`${documentsTable.createdAt} DESC`);
+
+    // Scope to user-owned projects (admins see all; unauthenticated see nothing)
+    if (req.authUser && !req.authUser.isAdmin) {
+      const ownedProjects = await db
+        .select({ id: projectsTable.id })
+        .from(projectsTable)
+        .where(eq(projectsTable.createdById, req.authUser.id));
+      const ownedIds = new Set(ownedProjects.map(p => p.id));
+      docs = docs.filter(d => d.projectId !== null && ownedIds.has(d.projectId));
+    } else if (!req.authUser) {
+      docs = [];
+    }
 
     if (projectId) docs = docs.filter(d => d.projectId === parseInt(projectId as string));
     if (category) docs = docs.filter(d => d.category === category);

@@ -19,6 +19,7 @@ import {
   db, reportsTable, projectsTable, inspectionsTable, issuesTable,
   usersTable, checklistResultsTable, checklistItemsTable, documentsTable,
 } from "@workspace/db";
+import { optionalAuth } from "../middleware/auth";
 
 // ── Primary colors ─────────────────────────────────────────────────────────
 const COLOR_NAVY  = "#0B1933";
@@ -721,11 +722,23 @@ async function formatReport(r: any) {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-router.get("/", async (req, res) => {
+router.get("/", optionalAuth, async (req, res) => {
   try {
     const { projectId, inspectionId } = req.query;
     let reports = await db.select().from(reportsTable)
       .orderBy(sql`${reportsTable.createdAt} DESC`);
+
+    // Scope to user-owned projects (admins see all; unauthenticated see nothing)
+    if (req.authUser && !req.authUser.isAdmin) {
+      const ownedProjects = await db
+        .select({ id: projectsTable.id })
+        .from(projectsTable)
+        .where(eq(projectsTable.createdById, req.authUser.id));
+      const ownedIds = new Set(ownedProjects.map(p => p.id));
+      reports = reports.filter(r => r.projectId !== null && ownedIds.has(r.projectId));
+    } else if (!req.authUser) {
+      reports = [];
+    }
 
     if (projectId) reports = reports.filter(r => r.projectId === parseInt(projectId as string));
     if (inspectionId) reports = reports.filter(r => r.inspectionId === parseInt(inspectionId as string));

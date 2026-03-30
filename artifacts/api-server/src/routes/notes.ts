@@ -1,14 +1,27 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
-import { db, notesTable, usersTable } from "@workspace/db";
+import { db, notesTable, usersTable, projectsTable } from "@workspace/db";
+import { optionalAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
 
-router.get("/", async (req, res) => {
+router.get("/", optionalAuth, async (req, res) => {
   try {
     const { projectId, inspectionId } = req.query;
     let notes = await db.select().from(notesTable)
       .orderBy(sql`${notesTable.createdAt} DESC`);
+
+    // Scope to user-owned projects (admins see all; unauthenticated see nothing)
+    if (req.authUser && !req.authUser.isAdmin) {
+      const ownedProjects = await db
+        .select({ id: projectsTable.id })
+        .from(projectsTable)
+        .where(eq(projectsTable.createdById, req.authUser.id));
+      const ownedIds = new Set(ownedProjects.map(p => p.id));
+      notes = notes.filter(n => n.projectId !== null && ownedIds.has(n.projectId));
+    } else if (!req.authUser) {
+      notes = [];
+    }
 
     if (projectId) notes = notes.filter(n => n.projectId === parseInt(projectId as string));
     if (inspectionId) notes = notes.filter(n => n.inspectionId === parseInt(inspectionId as string));
