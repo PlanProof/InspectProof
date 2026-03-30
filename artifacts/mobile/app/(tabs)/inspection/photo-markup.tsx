@@ -7,6 +7,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { Feather } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "@/context/AuthContext";
 import { Colors } from "@/constants/colors";
 
@@ -24,11 +25,14 @@ interface MarkupData {
   strokes: Stroke[];
 }
 
+type Phase = "preview" | "markup";
+
 const PEN_COLORS = [
   { value: "#EF4444", label: "Red" },
   { value: "#F59E0B", label: "Yellow" },
   { value: "#22C55E", label: "Green" },
   { value: "#3B82F6", label: "Blue" },
+  { value: "#000000", label: "Black" },
   { value: "#FFFFFF", label: "White" },
 ];
 
@@ -37,7 +41,6 @@ const PEN_WIDTHS = [2, 4, 7];
 function pointsToPath(points: { x: number; y: number }[]): string {
   if (points.length === 0) return "";
   if (points.length === 1) {
-    // Single-point dot: draw a tiny line so it renders
     const p = points[0];
     return `M ${p.x.toFixed(1)} ${p.y.toFixed(1)} L ${(p.x + 0.1).toFixed(1)} ${p.y.toFixed(1)}`;
   }
@@ -47,22 +50,24 @@ function pointsToPath(points: { x: number; y: number }[]): string {
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function PhotoMarkupScreen() {
-  const { photoUri, inspectionId, itemId } = useLocalSearchParams<{
+  const { photoUri: initialPhotoUri, inspectionId, itemId } = useLocalSearchParams<{
     photoUri: string;
     inspectionId: string;
     itemId: string;
   }>();
+
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const { width: screenW, height: screenH } = useWindowDimensions();
 
+  const [phase, setPhase] = useState<Phase>("preview");
+  const [currentPhotoUri, setCurrentPhotoUri] = useState(initialPhotoUri);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [liveStroke, setLiveStroke] = useState<{ x: number; y: number }[]>([]);
   const [selectedColor, setSelectedColor] = useState("#EF4444");
   const [selectedWidth, setSelectedWidth] = useState(4);
   const [uploading, setUploading] = useState(false);
 
-  // Refs must be declared BEFORE the PanResponder so the closures capture them
   const currentPoints = useRef<{ x: number; y: number }[]>([]);
   const selectedColorRef = useRef(selectedColor);
   const selectedWidthRef = useRef(selectedWidth);
@@ -74,7 +79,19 @@ export default function PhotoMarkupScreen() {
   const drawAreaH = screenH - insets.top - insets.bottom - 56 - 120;
   const drawAreaW = screenW;
 
-  // Commit the current live stroke to the permanent strokes list
+  const goBackToInspection = useCallback(() => {
+    if (inspectionId) {
+      router.replace({
+        pathname: "/inspection/conduct/[id]" as any,
+        params: { id: inspectionId },
+      });
+    } else {
+      router.back();
+    }
+  }, [inspectionId]);
+
+  // ── Markup canvas ─────────────────────────────────────────────────────────
+
   const commitStroke = useCallback(() => {
     if (currentPoints.current.length >= 1) {
       setStrokes(prev => [...prev, {
@@ -103,19 +120,16 @@ export default function PhotoMarkupScreen() {
         currentPoints.current.push({ x: locationX, y: locationY });
         setLiveStroke([...currentPoints.current]);
       },
-      onPanResponderRelease: () => {
-        commitStroke();
-      },
-      // Also commit on terminate so gesture system cancellations don't drop strokes
-      onPanResponderTerminate: () => {
-        commitStroke();
-      },
+      onPanResponderRelease: () => { commitStroke(); },
+      onPanResponderTerminate: () => { commitStroke(); },
       onShouldBlockNativeResponder: () => true,
     })
   ).current;
 
   const undo = () => setStrokes(prev => prev.slice(0, -1));
   const clear = () => { setStrokes([]); setLiveStroke([]); };
+
+  // ── Auth fetch ────────────────────────────────────────────────────────────
 
   const fetchWithAuth = useCallback(async (url: string, opts?: RequestInit) => {
     const res = await fetch(`${baseUrl}${url}`, {
@@ -129,13 +143,17 @@ export default function PhotoMarkupScreen() {
     return res.json();
   }, [baseUrl, token]);
 
-  const save = async (overrideStrokes?: Stroke[]) => {
-    if (!photoUri) { router.back(); return; }
+  // ── Upload + save ─────────────────────────────────────────────────────────
+
+  const uploadAndSave = useCallback(async (
+    photoUri: string,
+    overrideStrokes?: Stroke[]
+  ): Promise<void> => {
+    if (!photoUri) return;
     setUploading(true);
     try {
       const effectiveStrokes = overrideStrokes ?? strokes;
 
-      // 1. Request presigned upload URL
       const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -146,7 +164,6 @@ export default function PhotoMarkupScreen() {
         }),
       });
 
-      // 2. Upload original photo to storage
       const blob = await (await fetch(photoUri)).blob();
       const uploadResp = await fetch(urlRes.uploadURL, {
         method: "PUT",
@@ -156,15 +173,20 @@ export default function PhotoMarkupScreen() {
       if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
       const objectPath: string = urlRes.objectPath;
 
-      // 3. Get current checklist item data then patch
       const currentItem = await fetchWithAuth(`/api/inspections/${inspectionId}/checklist`);
-      const item = Array.isArray(currentItem) ? currentItem.find((i: any) => i.id === parseInt(itemId)) : null;
+      const item = Array.isArray(currentItem)
+        ? currentItem.find((i: any) => i.id === parseInt(itemId))
+        : null;
 
       const existingUrls: string[] = item?.photoUrls || [];
       const existingMarkups: Record<string, MarkupData> = item?.photoMarkups || {};
 
       const newUrls = [...existingUrls, objectPath];
-      const markupData: MarkupData = { w: drawAreaW, h: drawAreaH, strokes: effectiveStrokes };
+      const markupData: MarkupData = {
+        w: drawAreaW,
+        h: drawAreaH,
+        strokes: effectiveStrokes,
+      };
       const newMarkups = { ...existingMarkups, [objectPath]: markupData };
 
       await fetchWithAuth(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
@@ -172,26 +194,129 @@ export default function PhotoMarkupScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ photoUrls: newUrls, photoMarkups: newMarkups }),
       });
-
-      router.back();
-    } catch (err) {
-      console.error("[photo-markup] save error:", err);
-      Alert.alert("Save failed", "Could not save the photo. Please try again.");
     } finally {
       setUploading(false);
     }
+  }, [strokes, fetchWithAuth, inspectionId, itemId, drawAreaW, drawAreaH]);
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+
+  const saveAndDone = async (withMarkup: boolean) => {
+    if (!currentPhotoUri) { goBackToInspection(); return; }
+    try {
+      await uploadAndSave(currentPhotoUri, withMarkup ? undefined : []);
+      goBackToInspection();
+    } catch {
+      Alert.alert("Save failed", "Could not save the photo. Please try again.");
+    }
   };
+
+  const saveAndTakeAnother = async (withMarkup: boolean) => {
+    if (!currentPhotoUri) return;
+    try {
+      await uploadAndSave(currentPhotoUri, withMarkup ? undefined : []);
+    } catch {
+      Alert.alert("Save failed", "Could not save the photo. Please try again.");
+      return;
+    }
+
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Please allow camera access to take photos.");
+      goBackToInspection();
+      return;
+    }
+    const picked = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+    if (picked.canceled || !picked.assets[0]) {
+      goBackToInspection();
+      return;
+    }
+
+    setCurrentPhotoUri(picked.assets[0].uri);
+    setStrokes([]);
+    setLiveStroke([]);
+    setPhase("preview");
+  };
+
+  // ── Preview phase ─────────────────────────────────────────────────────────
+
+  if (phase === "preview") {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Pressable onPress={goBackToInspection} hitSlop={12} style={styles.iconBtn}>
+            <Feather name="arrow-left" size={22} color="#fff" />
+          </Pressable>
+          <Text style={styles.headerTitle}>Review Photo</Text>
+          <View style={styles.iconBtn} />
+        </View>
+
+        <View style={styles.previewImageWrap}>
+          {currentPhotoUri ? (
+            <Image
+              source={{ uri: currentPhotoUri }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: "#111" }]} />
+          )}
+        </View>
+
+        <View style={[styles.previewActions, { paddingBottom: insets.bottom + 12 }]}>
+          <Pressable
+            style={styles.btnPrimary}
+            onPress={() => setPhase("markup")}
+          >
+            <Feather name="edit-2" size={18} color="#fff" />
+            <Text style={styles.btnPrimaryText}>Add Markup</Text>
+          </Pressable>
+
+          <View style={styles.previewRow}>
+            <Pressable
+              style={[styles.btnSecondary, { flex: 1 }]}
+              onPress={() => saveAndTakeAnother(false)}
+              disabled={uploading}
+            >
+              {uploading
+                ? <ActivityIndicator size="small" color={Colors.secondary} />
+                : <>
+                    <Feather name="camera" size={16} color={Colors.secondary} />
+                    <Text style={styles.btnSecondaryText}>Save & Take Another</Text>
+                  </>
+              }
+            </Pressable>
+
+            <Pressable
+              style={[styles.btnOutline, { flex: 1 }]}
+              onPress={() => saveAndDone(false)}
+              disabled={uploading}
+            >
+              {uploading
+                ? <ActivityIndicator size="small" color={Colors.text} />
+                : <>
+                    <Feather name="check" size={16} color={Colors.text} />
+                    <Text style={styles.btnOutlineText}>Save & Done</Text>
+                  </>
+              }
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // ── Markup phase ──────────────────────────────────────────────────────────
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.iconBtn}>
-          <Feather name="x" size={22} color={Colors.text} />
+        <Pressable onPress={() => setPhase("preview")} hitSlop={12} style={styles.iconBtn}>
+          <Feather name="arrow-left" size={22} color="#fff" />
         </Pressable>
         <Text style={styles.headerTitle}>Add Markup</Text>
         <Pressable
-          onPress={() => { void save(); }}
+          onPress={() => saveAndDone(true)}
           disabled={uploading}
           style={[styles.saveBtn, uploading && { opacity: 0.6 }]}
         >
@@ -201,29 +326,19 @@ export default function PhotoMarkupScreen() {
         </Pressable>
       </View>
 
-      {/* Drawing canvas — collapsable={false} prevents Android from collapsing the view */}
       <View
         collapsable={false}
         style={[styles.canvas, { width: drawAreaW, height: drawAreaH }]}
         {...panResponder.panHandlers}
       >
-        {/* pointerEvents="none" on these views is critical — without it the Image
-            (and background View) intercept touch events on web, preventing the
-            PanResponder from receiving any move events */}
-        {photoUri ? (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Image
-              source={{ uri: photoUri }}
-              style={StyleSheet.absoluteFill}
-              resizeMode="contain"
-            />
-          </View>
-        ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: "#111" }]} pointerEvents="none" />
-        )}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Image
+            source={{ uri: currentPhotoUri }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="contain"
+          />
+        </View>
 
-        {/* pointerEvents="none" is critical — without it the SVG intercepts touches
-            after strokes are drawn, causing the PanResponder to stop receiving events */}
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <Svg width={drawAreaW} height={drawAreaH}>
             {strokes.map((stroke, i) => (
@@ -250,7 +365,6 @@ export default function PhotoMarkupScreen() {
           </Svg>
         </View>
 
-        {/* Hint */}
         {strokes.length === 0 && liveStroke.length === 0 && (
           <View style={styles.hintBox} pointerEvents="none">
             <Feather name="edit-2" size={20} color="rgba(255,255,255,0.6)" />
@@ -259,9 +373,7 @@ export default function PhotoMarkupScreen() {
         )}
       </View>
 
-      {/* Toolbar */}
       <View style={[styles.toolbar, { paddingBottom: insets.bottom + 8 }]}>
-        {/* Colors */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorRow}>
           {PEN_COLORS.map(c => (
             <Pressable
@@ -275,7 +387,6 @@ export default function PhotoMarkupScreen() {
             />
           ))}
           <View style={styles.divider} />
-          {/* Widths */}
           {PEN_WIDTHS.map(w => (
             <Pressable
               key={w}
@@ -287,7 +398,6 @@ export default function PhotoMarkupScreen() {
           ))}
         </ScrollView>
 
-        {/* Undo / Clear */}
         <View style={styles.actionRow}>
           <Pressable
             onPress={undo}
@@ -305,9 +415,13 @@ export default function PhotoMarkupScreen() {
             <Feather name="trash-2" size={18} color={Colors.danger} />
             <Text style={[styles.toolBtnText, { color: Colors.danger }]}>Clear</Text>
           </Pressable>
-          <Pressable onPress={() => save([])} disabled={uploading} style={[styles.toolBtn, uploading && { opacity: 0.35 }]}>
-            <Feather name="image" size={18} color={Colors.textSecondary} />
-            <Text style={[styles.toolBtnText, { color: Colors.textSecondary }]}>Save without markup</Text>
+          <Pressable
+            onPress={() => saveAndTakeAnother(true)}
+            disabled={uploading}
+            style={[styles.toolBtn, uploading && { opacity: 0.35 }]}
+          >
+            <Feather name="camera" size={18} color={Colors.secondary} />
+            <Text style={[styles.toolBtnText, { color: Colors.secondary }]}>Save & Another</Text>
           </Pressable>
         </View>
       </View>
@@ -329,6 +443,71 @@ const styles = StyleSheet.create({
     borderRadius: 8, minWidth: 56, alignItems: "center",
   },
   saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+
+  // Preview phase
+  previewImageWrap: {
+    flex: 1,
+    backgroundColor: "#111",
+    position: "relative",
+  },
+  previewActions: {
+    backgroundColor: "#1a1a1a",
+    borderTopWidth: 1,
+    borderTopColor: "#333",
+    paddingTop: 14,
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  previewRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  btnPrimary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.secondary,
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+  btnPrimaryText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  btnSecondary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: Colors.secondary,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  btnSecondaryText: {
+    color: Colors.secondary,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  btnOutline: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: "#555",
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  btnOutlineText: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  // Markup phase
   canvas: { position: "relative", backgroundColor: "#111", overflow: "hidden" },
   hintBox: {
     position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
