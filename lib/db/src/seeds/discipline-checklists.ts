@@ -1,6 +1,6 @@
 import { db } from "../index";
-import { checklistTemplatesTable, checklistItemsTable } from "../schema/checklists";
-import { inArray } from "drizzle-orm";
+import { checklistTemplatesTable, checklistItemsTable, checklistResultsTable } from "../schema/checklists";
+import { eq, and, gt } from "drizzle-orm";
 
 type ItemDef = {
   category: string;
@@ -12,16 +12,12 @@ type ItemDef = {
   recommendedAction?: string;
 };
 
-const NON_BS_DISCIPLINES = [
-  "Structural Engineer",
-  "Plumbing Officer",
-  "Builder / QC",
-  "Site Supervisor",
-  "WHS Officer",
-  "Pre-Purchase Inspector",
-  "Fire Safety Engineer",
-];
-
+/**
+ * Upsert a platform (global) checklist template and its items in-place.
+ * Matches templates by inspectionType — preserves IDs so existing inspection
+ * checklist results remain valid. New items are inserted; removed items are
+ * only hard-deleted if they have never been used in any inspection.
+ */
 async function seedTemplate(
   name: string,
   discipline: string,
@@ -31,45 +27,86 @@ async function seedTemplate(
   sortOrder: number,
   items: ItemDef[],
 ) {
-  const [tmpl] = await db.insert(checklistTemplatesTable)
-    .values({ name, discipline, inspectionType, folder, description, sortOrder })
-    .returning();
-  if (items.length > 0) {
-    await db.insert(checklistItemsTable).values(
-      items.map((item, i) => ({
-        templateId: tmpl.id,
-        orderIndex: i + 1,
-        category: item.category,
-        description: item.description,
-        riskLevel: (item.riskLevel ?? "medium") as "low" | "medium" | "high" | "critical",
-        defectTrigger: item.defectTrigger ?? false,
-        requirePhoto: item.requirePhoto ?? false,
-        codeReference: item.codeReference ?? null,
-        recommendedAction: item.recommendedAction ?? null,
-        isRequired: true,
-        includeInReport: true,
-      })),
-    );
+  // 1. Upsert template by inspectionType — mark as global platform template
+  const [existing] = await db
+    .select({ id: checklistTemplatesTable.id })
+    .from(checklistTemplatesTable)
+    .where(eq(checklistTemplatesTable.inspectionType, inspectionType))
+    .limit(1);
+
+  let templateId: number;
+  if (existing) {
+    await db.update(checklistTemplatesTable)
+      .set({ name, discipline, folder, description, sortOrder, isGlobal: true })
+      .where(eq(checklistTemplatesTable.id, existing.id));
+    templateId = existing.id;
+  } else {
+    const [tmpl] = await db.insert(checklistTemplatesTable)
+      .values({ name, discipline, inspectionType, folder, description, sortOrder, isGlobal: true })
+      .returning();
+    templateId = tmpl.id;
   }
+
+  // 2. Upsert items by orderIndex — update in-place to preserve IDs
+  for (const [i, item] of items.entries()) {
+    const orderIndex = i + 1;
+    const itemData = {
+      category: item.category,
+      description: item.description,
+      riskLevel: (item.riskLevel ?? "medium") as "low" | "medium" | "high" | "critical",
+      defectTrigger: item.defectTrigger ?? false,
+      requirePhoto: item.requirePhoto ?? false,
+      codeReference: item.codeReference ?? null,
+      recommendedAction: item.recommendedAction ?? null,
+      isRequired: true,
+      includeInReport: true,
+    };
+
+    const [existingItem] = await db
+      .select({ id: checklistItemsTable.id })
+      .from(checklistItemsTable)
+      .where(and(
+        eq(checklistItemsTable.templateId, templateId),
+        eq(checklistItemsTable.orderIndex, orderIndex),
+      ))
+      .limit(1);
+
+    if (existingItem) {
+      await db.update(checklistItemsTable)
+        .set(itemData)
+        .where(eq(checklistItemsTable.id, existingItem.id));
+    } else {
+      await db.insert(checklistItemsTable)
+        .values({ templateId, orderIndex, ...itemData });
+    }
+  }
+
+  // 3. Remove items beyond the current count only if they have never been used
+  const extras = await db
+    .select({ id: checklistItemsTable.id })
+    .from(checklistItemsTable)
+    .where(and(
+      eq(checklistItemsTable.templateId, templateId),
+      gt(checklistItemsTable.orderIndex, items.length),
+    ));
+
+  for (const extra of extras) {
+    const [used] = await db
+      .select({ id: checklistResultsTable.id })
+      .from(checklistResultsTable)
+      .where(eq(checklistResultsTable.checklistItemId, extra.id))
+      .limit(1);
+    if (!used) {
+      await db.delete(checklistItemsTable)
+        .where(eq(checklistItemsTable.id, extra.id));
+    }
+  }
+
   console.log(`  ✓ [${discipline}] ${folder} — ${name} (${items.length} items)`);
 }
 
 export async function seedDisciplineChecklists() {
-  console.log("\n=== Removing ALL non-Building Surveyor templates ===");
-
-  const allNonBS = await db
-    .select({ id: checklistTemplatesTable.id })
-    .from(checklistTemplatesTable)
-    .where(inArray(checklistTemplatesTable.discipline, NON_BS_DISCIPLINES));
-
-  if (allNonBS.length > 0) {
-    const ids = allNonBS.map(t => t.id);
-    await db.delete(checklistItemsTable).where(inArray(checklistItemsTable.templateId, ids));
-    await db.delete(checklistTemplatesTable).where(inArray(checklistTemplatesTable.id, ids));
-    console.log(`  Deleted ${allNonBS.length} non-BS templates.\n`);
-  } else {
-    console.log("  Nothing to delete.\n");
-  }
+  console.log("\n=== Upserting discipline checklist templates ===\n");
 
   // ─────────────────────────────────────────────────────────────────────────
   // STRUCTURAL ENGINEER

@@ -10,6 +10,7 @@ export const checklistTemplatesTable = pgTable("checklist_templates", {
   folder: text("folder").notNull().default("Class 1a"),
   discipline: text("discipline").notNull().default("Building Surveyor"),
   sortOrder: integer("sort_order").notNull().default(0),
+  isGlobal: boolean("is_global").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

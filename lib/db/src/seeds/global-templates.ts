@@ -1,6 +1,8 @@
 import { db } from "../index";
 import { docTemplatesTable } from "../schema/docTemplates";
-import { checklistTemplatesTable } from "../schema/checklists";
+import { checklistTemplatesTable, checklistItemsTable, checklistResultsTable } from "../schema/checklists";
+import { inspectionsTable } from "../schema/inspections";
+import { eq, and, isNotNull, notInArray } from "drizzle-orm";
 import { seedBuildingSurveyorTemplates } from "./bs-templates";
 import { seedDisciplineChecklists } from "./discipline-checklists";
 
@@ -419,24 +421,86 @@ const GLOBAL_DOC_TEMPLATES = [
   },
 ];
 
+/**
+ * Propagates any newly-added platform checklist items to existing active
+ * inspections that use those global templates. Safe to run on every boot —
+ * it only inserts rows for items not already present in an inspection.
+ */
+async function propagatePlatformUpdatesToActiveInspections(): Promise<void> {
+  // Find all non-completed inspections that use a global (platform) template
+  const activeInspections = await db
+    .select({
+      inspectionId: inspectionsTable.id,
+      templateId: inspectionsTable.checklistTemplateId,
+    })
+    .from(inspectionsTable)
+    .innerJoin(
+      checklistTemplatesTable,
+      eq(inspectionsTable.checklistTemplateId, checklistTemplatesTable.id),
+    )
+    .where(and(
+      isNotNull(inspectionsTable.checklistTemplateId),
+      eq(checklistTemplatesTable.isGlobal, true),
+      notInArray(inspectionsTable.status, ["completed", "cancelled"]),
+    ));
+
+  let totalAdded = 0;
+
+  for (const { inspectionId, templateId } of activeInspections) {
+    if (!templateId) continue;
+
+    // Find template items that don't yet have a checklist_result in this inspection
+    const existingItemIds = await db
+      .select({ id: checklistResultsTable.checklistItemId })
+      .from(checklistResultsTable)
+      .where(eq(checklistResultsTable.inspectionId, inspectionId));
+
+    const coveredIds = existingItemIds.map(r => r.id);
+
+    const missingItems = coveredIds.length > 0
+      ? await db
+          .select({ id: checklistItemsTable.id })
+          .from(checklistItemsTable)
+          .where(and(
+            eq(checklistItemsTable.templateId, templateId),
+            notInArray(checklistItemsTable.id, coveredIds),
+          ))
+      : await db
+          .select({ id: checklistItemsTable.id })
+          .from(checklistItemsTable)
+          .where(eq(checklistItemsTable.templateId, templateId));
+
+    if (missingItems.length > 0) {
+      await db.insert(checklistResultsTable).values(
+        missingItems.map(item => ({
+          inspectionId,
+          checklistItemId: item.id,
+          result: "pending" as const,
+        })),
+      );
+      totalAdded += missingItems.length;
+    }
+  }
+
+  if (totalAdded > 0) {
+    console.log(`[Propagate] Added ${totalAdded} new checklist item(s) to active inspections`);
+  } else {
+    console.log("[Propagate] All active inspections are up to date");
+  }
+}
+
 export async function ensureGlobalTemplatesSeed(): Promise<void> {
   try {
-    // Check if checklist templates already exist (limit 1 is fast and reliable)
-    const existingChecklists = await db
-      .select({ id: checklistTemplatesTable.id })
-      .from(checklistTemplatesTable)
-      .limit(1);
+    // Always upsert platform checklist templates so changes reach all users immediately
+    console.log("[Seed] Syncing platform checklist templates...");
+    await seedBuildingSurveyorTemplates();
+    await seedDisciplineChecklists();
+    console.log("[Seed] Platform checklist templates synced");
 
-    if (existingChecklists.length === 0) {
-      console.log("[Seed] No checklist templates found — seeding global library...");
-      await seedBuildingSurveyorTemplates();
-      await seedDisciplineChecklists();
-      console.log("[Seed] Checklist templates seeded successfully");
-    } else {
-      console.log("[Seed] Checklist templates already exist — skipping checklist seed");
-    }
+    // Propagate any new items to active inspections
+    await propagatePlatformUpdatesToActiveInspections();
 
-    // Check if doc templates exist
+    // Doc templates — only seed once (no upsert logic needed yet)
     const existingDocs = await db
       .select({ id: docTemplatesTable.id })
       .from(docTemplatesTable)

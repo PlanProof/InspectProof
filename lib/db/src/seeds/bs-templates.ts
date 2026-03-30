@@ -3866,36 +3866,104 @@ const BS_TEMPLATES: BSTemplate[] = [
 ];
 
 export async function seedBuildingSurveyorTemplates(): Promise<void> {
-  console.log("\n--- Building Surveyor Templates ---");
+  console.log("\n--- Building Surveyor Templates (upsert) ---");
+
+  // Import helpers inline to avoid circular issues
+  const { eq, and, gt } = await import("drizzle-orm");
+  const { checklistResultsTable } = await import("../schema/checklists");
+
   for (const tmpl of BS_TEMPLATES) {
-    const [tmplRow] = await db
-      .insert(checklistTemplatesTable)
-      .values({
-        name: tmpl.name,
-        discipline: "Building Surveyor",
-        inspectionType: tmpl.inspectionType,
-        folder: tmpl.folder,
-        description: tmpl.description,
-        sortOrder: tmpl.sortOrder,
-      })
-      .returning();
-    if (tmpl.items.length > 0) {
-      await db.insert(checklistItemsTable).values(
-        tmpl.items.map((item, i) => ({
-          templateId: tmplRow.id,
-          orderIndex: i + 1,
-          category: item.category,
-          description: item.description,
-          codeReference: item.codeReference ?? null,
-          riskLevel: item.riskLevel,
-          isRequired: item.isRequired,
-          requirePhoto: item.requirePhoto,
-          defectTrigger: item.defectTrigger,
-          recommendedAction: item.recommendedAction ?? null,
-          includeInReport: item.includeInReport,
-        })),
-      );
+    // 1. Upsert template by inspectionType — preserve ID, mark as global
+    const [existing] = await db
+      .select({ id: checklistTemplatesTable.id })
+      .from(checklistTemplatesTable)
+      .where(eq(checklistTemplatesTable.inspectionType, tmpl.inspectionType))
+      .limit(1);
+
+    let templateId: number;
+    if (existing) {
+      await db.update(checklistTemplatesTable)
+        .set({
+          name: tmpl.name,
+          discipline: "Building Surveyor",
+          folder: tmpl.folder,
+          description: tmpl.description,
+          sortOrder: tmpl.sortOrder,
+          isGlobal: true,
+        })
+        .where(eq(checklistTemplatesTable.id, existing.id));
+      templateId = existing.id;
+    } else {
+      const [tmplRow] = await db
+        .insert(checklistTemplatesTable)
+        .values({
+          name: tmpl.name,
+          discipline: "Building Surveyor",
+          inspectionType: tmpl.inspectionType,
+          folder: tmpl.folder,
+          description: tmpl.description,
+          sortOrder: tmpl.sortOrder,
+          isGlobal: true,
+        })
+        .returning();
+      templateId = tmplRow.id;
     }
+
+    // 2. Upsert items by orderIndex — update in-place to preserve IDs
+    for (const [i, item] of tmpl.items.entries()) {
+      const orderIndex = i + 1;
+      const itemData = {
+        category: item.category,
+        description: item.description,
+        codeReference: item.codeReference ?? null,
+        riskLevel: item.riskLevel,
+        isRequired: item.isRequired,
+        requirePhoto: item.requirePhoto,
+        defectTrigger: item.defectTrigger,
+        recommendedAction: item.recommendedAction ?? null,
+        includeInReport: item.includeInReport,
+      };
+
+      const [existingItem] = await db
+        .select({ id: checklistItemsTable.id })
+        .from(checklistItemsTable)
+        .where(and(
+          eq(checklistItemsTable.templateId, templateId),
+          eq(checklistItemsTable.orderIndex, orderIndex),
+        ))
+        .limit(1);
+
+      if (existingItem) {
+        await db.update(checklistItemsTable)
+          .set(itemData)
+          .where(eq(checklistItemsTable.id, existingItem.id));
+      } else {
+        await db.insert(checklistItemsTable)
+          .values({ templateId, orderIndex, ...itemData });
+      }
+    }
+
+    // 3. Remove extra items only if unused in any inspection
+    const extras = await db
+      .select({ id: checklistItemsTable.id })
+      .from(checklistItemsTable)
+      .where(and(
+        eq(checklistItemsTable.templateId, templateId),
+        gt(checklistItemsTable.orderIndex, tmpl.items.length),
+      ));
+
+    for (const extra of extras) {
+      const [used] = await db
+        .select({ id: checklistResultsTable.id })
+        .from(checklistResultsTable)
+        .where(eq(checklistResultsTable.checklistItemId, extra.id))
+        .limit(1);
+      if (!used) {
+        await db.delete(checklistItemsTable)
+          .where(eq(checklistItemsTable.id, extra.id));
+      }
+    }
+
     console.log(`  ✓ [Building Surveyor] ${tmpl.folder} — ${tmpl.name} (${tmpl.items.length} items)`);
   }
 }
