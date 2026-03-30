@@ -1876,6 +1876,9 @@ function InspectionTypesTab({ projectId }: { projectId: number }) {
         : `/api/projects/${projectId}/inspection-types`;
       const data = await apiFetch(url);
       setTypes(data);
+      // Collapse all folders by default on load
+      const allFolders = Array.from(new Set((data as InspectionTypeRow[]).map((t: InspectionTypeRow) => t.folder)));
+      setCollapsedFolders(new Set(allFolders));
     } catch {
     } finally {
       setLoading(false);
@@ -1914,7 +1917,9 @@ function InspectionTypesTab({ projectId }: { projectId: number }) {
     }
   };
 
-  const folders = Array.from(new Set(types.map(t => t.folder))).sort();
+  const folders = Array.from(new Set(types.map(t => t.folder))).sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+  );
   const selectedCount = types.filter(t => t.isSelected).length;
   const allCollapsed = folders.length > 0 && collapsedFolders.size === folders.length;
 
