@@ -953,7 +953,7 @@ export default function InspectionDetail() {
 
       {/* ── Generate Report Dialog ── */}
       <Dialog open={reportDialogOpen} onOpenChange={o => { setReportDialogOpen(o); if (!o) setGeneratedReport(null); }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogContent className="max-w-2xl h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-sidebar" />
@@ -963,7 +963,7 @@ export default function InspectionDetail() {
 
           {!generatedReport ? (
             <>
-              <div className="overflow-auto space-y-4">
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1">
                 {inspection && (() => {
                   const suggested = getSuggestedReportType(inspection);
                   const discipline = inspection.checklistTemplateDiscipline;
@@ -973,7 +973,7 @@ export default function InspectionDetail() {
                       {discipline && (
                         <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground">
                           <Building className="h-3.5 w-3.5 shrink-0" />
-                          <span>Showing report types for <span className="font-semibold text-foreground">{discipline}</span></span>
+                          <span>All report types are shown. Recommended types for <span className="font-semibold text-foreground">{discipline}</span> appear first.</span>
                         </div>
                       )}
                       {linkedTpl && (
