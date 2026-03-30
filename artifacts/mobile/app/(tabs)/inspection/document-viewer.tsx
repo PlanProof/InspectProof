@@ -489,10 +489,8 @@ export default function DocumentViewerScreen() {
     [baseUrl, token]
   );
 
-  const hasMarkup = strokes.length > 0 || textAnnotations.length > 0;
-
   const saveMarkup = async () => {
-    if (!hasMarkup) { router.back(); return; }
+    if (strokes.length === 0 && textAnnotations.length === 0) { router.back(); return; }
     if (!inspectionId && !projectId) { router.back(); return; }
 
     setUploading(true);
@@ -525,7 +523,7 @@ export default function DocumentViewerScreen() {
       setSelectedTextId(null); // clear selection ring before capture
 
       // ── PDF path: per-page overlay via /api/markup/generate ──────────────
-      if (isPdf && documentUrl) {
+      if (isPdf && url) {
         // Capture each annotated page's annotation layer as PNG base64
         const annotatedPages: { pageNumber: number; pngBase64: string }[] = [];
 
@@ -551,7 +549,7 @@ export default function DocumentViewerScreen() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            documentUrl,
+            documentUrl: url,
             annotatedPages,
             documentName: docName,
             projectId: projectId ? parseInt(projectId) : undefined,
@@ -560,7 +558,7 @@ export default function DocumentViewerScreen() {
           }),
         });
 
-        if (!result?.documentId) throw new Error("No documentId returned");
+        if (!result?.success) throw new Error("Markup generation failed");
 
         Alert.alert("Saved", `Marked-up PDF "${docName}" saved.`);
       } else {
@@ -895,6 +893,35 @@ export default function DocumentViewerScreen() {
                 <Text style={styles.sizeBtnText}>A+</Text>
               </Pressable>
             </View>
+          )}
+
+          {/* Page navigator — PDF only */}
+          {isPdf && (
+            <>
+              <View style={styles.toolbarDivider} />
+              <View style={styles.pageNav}>
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  style={styles.pageNavBtn}
+                >
+                  <Feather name="chevron-left" size={14} color="#fff" />
+                </Pressable>
+                <Text style={styles.pageNavLabel}>
+                  {currentPage}
+                  {annotatedPageNumbers.length > 0 && (
+                    <Text style={styles.pageNavAnnotated}> ●</Text>
+                  )}
+                </Text>
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => setCurrentPage((p) => p + 1)}
+                  style={styles.pageNavBtn}
+                >
+                  <Feather name="chevron-right" size={14} color="#fff" />
+                </Pressable>
+              </View>
+            </>
           )}
 
           <View style={{ flex: 1 }} />
@@ -1376,6 +1403,26 @@ const styles = StyleSheet.create({
   },
   sizeBtnText: { color: "#fff", fontSize: 12, fontWeight: "600" },
   sizeLabel: { color: "rgba(255,255,255,0.7)", fontSize: 12, minWidth: 20, textAlign: "center" },
+
+  pageNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  pageNavBtn: {
+    padding: 4,
+  },
+  pageNavLabel: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    minWidth: 22,
+    textAlign: "center",
+  },
+  pageNavAnnotated: {
+    color: Colors.accent,
+    fontSize: 10,
+  },
 
   downloadBar: {
     backgroundColor: Colors.primary,
