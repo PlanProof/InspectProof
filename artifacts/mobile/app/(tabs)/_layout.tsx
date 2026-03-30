@@ -36,6 +36,8 @@ function NativeTabLayout() {
       <HiddenTrigger name="inspection/create" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/conduct/[id]" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/generate-report" style={{ display: "none" }} />
+      <HiddenTrigger name="inspection/document-viewer" style={{ display: "none" }} />
+      <HiddenTrigger name="inspection/photo-markup" style={{ display: "none" }} />
       <HiddenTrigger name="feedback" style={{ display: "none" }} />
       <HiddenTrigger name="profile" style={{ display: "none" }} />
       <HiddenTrigger name="settings" style={{ display: "none" }} />
