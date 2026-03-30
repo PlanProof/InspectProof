@@ -11,8 +11,6 @@ import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "@/context/AuthContext";
 import { Colors } from "@/constants/colors";
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
 interface Stroke {
   points: { x: number; y: number }[];
   color: string;
@@ -26,6 +24,7 @@ interface MarkupData {
 }
 
 type Phase = "preview" | "markup";
+type UploadState = "uploading" | "saved" | "error";
 
 const PEN_COLORS = [
   { value: "#EF4444", label: "Red" },
@@ -35,7 +34,6 @@ const PEN_COLORS = [
   { value: "#000000", label: "Black" },
   { value: "#FFFFFF", label: "White" },
 ];
-
 const PEN_WIDTHS = [2, 4, 7];
 
 function pointsToPath(points: { x: number; y: number }[]): string {
@@ -46,8 +44,6 @@ function pointsToPath(points: { x: number; y: number }[]): string {
   }
   return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
 }
-
-// ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function PhotoMarkupScreen() {
   const { photoUri: initialPhotoUri, inspectionId, itemId } = useLocalSearchParams<{
@@ -62,11 +58,15 @@ export default function PhotoMarkupScreen() {
 
   const [phase, setPhase] = useState<Phase>("preview");
   const [currentPhotoUri, setCurrentPhotoUri] = useState(initialPhotoUri);
+  const [uploadState, setUploadState] = useState<UploadState>("uploading");
+  const [savedObjectPath, setSavedObjectPath] = useState<string | null>(null);
+
+  // Markup state
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [liveStroke, setLiveStroke] = useState<{ x: number; y: number }[]>([]);
   const [selectedColor, setSelectedColor] = useState("#EF4444");
   const [selectedWidth, setSelectedWidth] = useState(4);
-  const [uploading, setUploading] = useState(false);
+  const [savingMarkup, setSavingMarkup] = useState(false);
 
   const currentPoints = useRef<{ x: number; y: number }[]>([]);
   const selectedColorRef = useRef(selectedColor);
@@ -75,11 +75,22 @@ export default function PhotoMarkupScreen() {
   useEffect(() => { selectedWidthRef.current = selectedWidth; }, [selectedWidth]);
 
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
-
   const drawAreaH = screenH - insets.top - insets.bottom - 56 - 120;
   const drawAreaW = screenW;
 
-  const goBackToInspection = useCallback(() => {
+  const fetchWithAuth = useCallback(async (url: string, opts?: RequestInit) => {
+    const res = await fetch(`${baseUrl}${url}`, {
+      ...opts,
+      headers: {
+        ...(opts?.headers ?? {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }, [baseUrl, token]);
+
+  const goToInspection = useCallback(() => {
     if (inspectionId) {
       router.replace({
         pathname: "/inspection/conduct/[id]" as any,
@@ -89,6 +100,115 @@ export default function PhotoMarkupScreen() {
       router.back();
     }
   }, [inspectionId]);
+
+  // ── Auto-upload on mount ──────────────────────────────────────────────────
+
+  const uploadPhoto = useCallback(async (photoUri: string): Promise<string> => {
+    const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: `inspection-photo-${Date.now()}.jpg`,
+        size: 0,
+        contentType: "image/jpeg",
+      }),
+    });
+    const blob = await (await fetch(photoUri)).blob();
+    const uploadResp = await fetch(urlRes.uploadURL, {
+      method: "PUT",
+      headers: { "Content-Type": blob.type || "image/jpeg" },
+      body: blob,
+    });
+    if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
+    return urlRes.objectPath as string;
+  }, [fetchWithAuth]);
+
+  const appendPhotoToChecklist = useCallback(async (objectPath: string) => {
+    const currentItems = await fetchWithAuth(`/api/inspections/${inspectionId}/checklist`);
+    const item = Array.isArray(currentItems)
+      ? currentItems.find((i: any) => i.id === parseInt(itemId))
+      : null;
+    const existingUrls: string[] = item?.photoUrls ?? [];
+    await fetchWithAuth(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photoUrls: [...existingUrls, objectPath] }),
+    });
+  }, [fetchWithAuth, inspectionId, itemId]);
+
+  useEffect(() => {
+    if (!currentPhotoUri) return;
+    let cancelled = false;
+    setUploadState("uploading");
+    setSavedObjectPath(null);
+
+    (async () => {
+      try {
+        const objectPath = await uploadPhoto(currentPhotoUri);
+        if (cancelled) return;
+        await appendPhotoToChecklist(objectPath);
+        if (cancelled) return;
+        setSavedObjectPath(objectPath);
+        setUploadState("saved");
+      } catch (err) {
+        if (cancelled) return;
+        console.error("[photo-markup] auto-upload error:", err);
+        setUploadState("error");
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [currentPhotoUri]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+
+  const deletePhoto = () => {
+    Alert.alert(
+      "Delete Photo",
+      "Remove this photo from the inspection?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive",
+          onPress: async () => {
+            if (!savedObjectPath) { goToInspection(); return; }
+            try {
+              const currentItems = await fetchWithAuth(`/api/inspections/${inspectionId}/checklist`);
+              const item = Array.isArray(currentItems)
+                ? currentItems.find((i: any) => i.id === parseInt(itemId))
+                : null;
+              const newUrls = (item?.photoUrls ?? []).filter((u: string) => u !== savedObjectPath);
+              const newMarkups = { ...(item?.photoMarkups ?? {}) };
+              delete newMarkups[savedObjectPath];
+              await fetchWithAuth(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ photoUrls: newUrls, photoMarkups: newMarkups }),
+              });
+            } catch { }
+            goToInspection();
+          },
+        },
+      ]
+    );
+  };
+
+  // ── Take another ──────────────────────────────────────────────────────────
+
+  const takeAnother = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Please allow camera access to take photos.");
+      return;
+    }
+    const picked = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+    if (picked.canceled || !picked.assets[0]) return;
+    // Reset state and auto-upload the new photo
+    setPhase("preview");
+    setStrokes([]);
+    setLiveStroke([]);
+    setCurrentPhotoUri(picked.assets[0].uri);
+  };
 
   // ── Markup canvas ─────────────────────────────────────────────────────────
 
@@ -126,179 +246,102 @@ export default function PhotoMarkupScreen() {
     })
   ).current;
 
-  const undo = () => setStrokes(prev => prev.slice(0, -1));
-  const clear = () => { setStrokes([]); setLiveStroke([]); };
-
-  // ── Auth fetch ────────────────────────────────────────────────────────────
-
-  const fetchWithAuth = useCallback(async (url: string, opts?: RequestInit) => {
-    const res = await fetch(`${baseUrl}${url}`, {
-      ...opts,
-      headers: {
-        ...(opts?.headers || {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
-  }, [baseUrl, token]);
-
-  // ── Upload + save ─────────────────────────────────────────────────────────
-
-  const uploadAndSave = useCallback(async (
-    photoUri: string,
-    overrideStrokes?: Stroke[]
-  ): Promise<void> => {
-    if (!photoUri) return;
-    setUploading(true);
+  const saveMarkup = async () => {
+    if (!savedObjectPath) return;
+    setSavingMarkup(true);
     try {
-      const effectiveStrokes = overrideStrokes ?? strokes;
-
-      const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: `inspection-photo-${Date.now()}.jpg`,
-          size: 0,
-          contentType: "image/jpeg",
-        }),
-      });
-
-      const blob = await (await fetch(photoUri)).blob();
-      const uploadResp = await fetch(urlRes.uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": blob.type || "image/jpeg" },
-        body: blob,
-      });
-      if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
-      const objectPath: string = urlRes.objectPath;
-
-      const currentItem = await fetchWithAuth(`/api/inspections/${inspectionId}/checklist`);
-      const item = Array.isArray(currentItem)
-        ? currentItem.find((i: any) => i.id === parseInt(itemId))
+      const currentItems = await fetchWithAuth(`/api/inspections/${inspectionId}/checklist`);
+      const item = Array.isArray(currentItems)
+        ? currentItems.find((i: any) => i.id === parseInt(itemId))
         : null;
-
-      const existingUrls: string[] = item?.photoUrls || [];
-      const existingMarkups: Record<string, MarkupData> = item?.photoMarkups || {};
-
-      const newUrls = [...existingUrls, objectPath];
-      const markupData: MarkupData = {
-        w: drawAreaW,
-        h: drawAreaH,
-        strokes: effectiveStrokes,
-      };
-      const newMarkups = { ...existingMarkups, [objectPath]: markupData };
-
+      const existingMarkups: Record<string, MarkupData> = item?.photoMarkups ?? {};
+      const markupData: MarkupData = { w: drawAreaW, h: drawAreaH, strokes };
       await fetchWithAuth(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoUrls: newUrls, photoMarkups: newMarkups }),
+        body: JSON.stringify({ photoMarkups: { ...existingMarkups, [savedObjectPath]: markupData } }),
       });
+      setPhase("preview");
+    } catch {
+      Alert.alert("Error", "Could not save markup. Please try again.");
     } finally {
-      setUploading(false);
-    }
-  }, [strokes, fetchWithAuth, inspectionId, itemId, drawAreaW, drawAreaH]);
-
-  // ── Actions ───────────────────────────────────────────────────────────────
-
-  const saveAndDone = async (withMarkup: boolean) => {
-    if (!currentPhotoUri) { goBackToInspection(); return; }
-    try {
-      await uploadAndSave(currentPhotoUri, withMarkup ? undefined : []);
-      goBackToInspection();
-    } catch {
-      Alert.alert("Save failed", "Could not save the photo. Please try again.");
+      setSavingMarkup(false);
     }
   };
 
-  const saveAndTakeAnother = async (withMarkup: boolean) => {
-    if (!currentPhotoUri) return;
-    try {
-      await uploadAndSave(currentPhotoUri, withMarkup ? undefined : []);
-    } catch {
-      Alert.alert("Save failed", "Could not save the photo. Please try again.");
-      return;
-    }
+  // ── Render: markup phase ──────────────────────────────────────────────────
 
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission needed", "Please allow camera access to take photos.");
-      goBackToInspection();
-      return;
-    }
-    const picked = await ImagePicker.launchCameraAsync({ quality: 0.8 });
-    if (picked.canceled || !picked.assets[0]) {
-      goBackToInspection();
-      return;
-    }
-
-    setCurrentPhotoUri(picked.assets[0].uri);
-    setStrokes([]);
-    setLiveStroke([]);
-    setPhase("preview");
-  };
-
-  // ── Preview phase ─────────────────────────────────────────────────────────
-
-  if (phase === "preview") {
+  if (phase === "markup") {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <Pressable onPress={goBackToInspection} hitSlop={12} style={styles.iconBtn}>
+          <Pressable onPress={() => setPhase("preview")} hitSlop={12} style={styles.iconBtn}>
             <Feather name="arrow-left" size={22} color="#fff" />
           </Pressable>
-          <Text style={styles.headerTitle}>Review Photo</Text>
-          <View style={styles.iconBtn} />
+          <Text style={styles.headerTitle}>Add Markup</Text>
+          <Pressable
+            onPress={saveMarkup}
+            disabled={savingMarkup}
+            style={[styles.saveBtn, savingMarkup && { opacity: 0.6 }]}
+          >
+            {savingMarkup
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Text style={styles.saveBtnText}>Save</Text>}
+          </Pressable>
         </View>
 
-        <View style={styles.previewImageWrap}>
-          {currentPhotoUri ? (
-            <Image
-              source={{ uri: currentPhotoUri }}
-              style={StyleSheet.absoluteFill}
-              resizeMode="contain"
-            />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: "#111" }]} />
+        <View
+          collapsable={false}
+          style={[styles.canvas, { width: drawAreaW, height: drawAreaH }]}
+          {...panResponder.panHandlers}
+        >
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Image source={{ uri: currentPhotoUri }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+          </View>
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Svg width={drawAreaW} height={drawAreaH}>
+              {strokes.map((stroke, i) => (
+                <Path key={i} d={pointsToPath(stroke.points)} stroke={stroke.color}
+                  strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              ))}
+              {liveStroke.length >= 1 && (
+                <Path d={pointsToPath(liveStroke)} stroke={selectedColor}
+                  strokeWidth={selectedWidth} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              )}
+            </Svg>
+          </View>
+          {strokes.length === 0 && liveStroke.length === 0 && (
+            <View style={styles.hintBox} pointerEvents="none">
+              <Feather name="edit-2" size={20} color="rgba(255,255,255,0.6)" />
+              <Text style={styles.hintText}>Draw to annotate</Text>
+            </View>
           )}
         </View>
 
-        <View style={[styles.previewActions, { paddingBottom: insets.bottom + 12 }]}>
-          <Pressable
-            style={styles.btnPrimary}
-            onPress={() => setPhase("markup")}
-          >
-            <Feather name="edit-2" size={18} color="#fff" />
-            <Text style={styles.btnPrimaryText}>Add Markup</Text>
-          </Pressable>
-
-          <View style={styles.previewRow}>
-            <Pressable
-              style={[styles.btnSecondary, { flex: 1 }]}
-              onPress={() => saveAndTakeAnother(false)}
-              disabled={uploading}
-            >
-              {uploading
-                ? <ActivityIndicator size="small" color={Colors.secondary} />
-                : <>
-                    <Feather name="camera" size={16} color={Colors.secondary} />
-                    <Text style={styles.btnSecondaryText}>Save & Take Another</Text>
-                  </>
-              }
+        <View style={[styles.toolbar, { paddingBottom: insets.bottom + 8 }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorRow}>
+            {PEN_COLORS.map(c => (
+              <Pressable key={c.value} onPress={() => setSelectedColor(c.value)}
+                style={[styles.colorDot, { backgroundColor: c.value }, selectedColor === c.value && styles.colorDotActive]} />
+            ))}
+            <View style={styles.divider} />
+            {PEN_WIDTHS.map(w => (
+              <Pressable key={w} onPress={() => setSelectedWidth(w)}
+                style={[styles.widthBtn, selectedWidth === w && styles.widthBtnActive]}>
+                <View style={[styles.widthLine, { height: w, backgroundColor: selectedColor }]} />
+              </Pressable>
+            ))}
+          </ScrollView>
+          <View style={styles.actionRow}>
+            <Pressable onPress={() => setStrokes(prev => prev.slice(0, -1))}
+              disabled={strokes.length === 0} style={[styles.toolBtn, strokes.length === 0 && { opacity: 0.35 }]}>
+              <Feather name="corner-up-left" size={18} color={Colors.text} />
+              <Text style={styles.toolBtnText}>Undo</Text>
             </Pressable>
-
-            <Pressable
-              style={[styles.btnOutline, { flex: 1 }]}
-              onPress={() => saveAndDone(false)}
-              disabled={uploading}
-            >
-              {uploading
-                ? <ActivityIndicator size="small" color={Colors.text} />
-                : <>
-                    <Feather name="check" size={16} color={Colors.text} />
-                    <Text style={styles.btnOutlineText}>Save & Done</Text>
-                  </>
-              }
+            <Pressable onPress={() => { setStrokes([]); setLiveStroke([]); }}
+              disabled={strokes.length === 0} style={[styles.toolBtn, strokes.length === 0 && { opacity: 0.35 }]}>
+              <Feather name="trash-2" size={18} color={Colors.danger} />
+              <Text style={[styles.toolBtnText, { color: Colors.danger }]}>Clear</Text>
             </Pressable>
           </View>
         </View>
@@ -306,122 +349,77 @@ export default function PhotoMarkupScreen() {
     );
   }
 
-  // ── Markup phase ──────────────────────────────────────────────────────────
+  // ── Render: preview phase ─────────────────────────────────────────────────
+
+  const isSaved = uploadState === "saved";
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => setPhase("preview")} hitSlop={12} style={styles.iconBtn}>
+        <Pressable onPress={goToInspection} hitSlop={12} style={styles.iconBtn}>
           <Feather name="arrow-left" size={22} color="#fff" />
         </Pressable>
-        <Text style={styles.headerTitle}>Add Markup</Text>
+        <View style={styles.headerCenter}>
+          {uploadState === "uploading" && (
+            <View style={styles.uploadingPill}>
+              <ActivityIndicator size="small" color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.uploadingText}>Saving…</Text>
+            </View>
+          )}
+          {uploadState === "saved" && (
+            <View style={styles.savedPill}>
+              <Feather name="check" size={13} color="#fff" />
+              <Text style={styles.savedText}>Saved</Text>
+            </View>
+          )}
+          {uploadState === "error" && (
+            <Text style={styles.errorText}>Save failed</Text>
+          )}
+        </View>
         <Pressable
-          onPress={() => saveAndDone(true)}
-          disabled={uploading}
-          style={[styles.saveBtn, uploading && { opacity: 0.6 }]}
+          onPress={deletePhoto}
+          hitSlop={12}
+          style={[styles.iconBtn, !isSaved && { opacity: 0.3 }]}
+          disabled={!isSaved}
         >
-          {uploading
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Text style={styles.saveBtnText}>Save</Text>}
+          <Feather name="trash-2" size={20} color={Colors.danger} />
         </Pressable>
       </View>
 
-      <View
-        collapsable={false}
-        style={[styles.canvas, { width: drawAreaW, height: drawAreaH }]}
-        {...panResponder.panHandlers}
-      >
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          <Image
-            source={{ uri: currentPhotoUri }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="contain"
-          />
-        </View>
-
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          <Svg width={drawAreaW} height={drawAreaH}>
-            {strokes.map((stroke, i) => (
-              <Path
-                key={i}
-                d={pointsToPath(stroke.points)}
-                stroke={stroke.color}
-                strokeWidth={stroke.width}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-            ))}
-            {liveStroke.length >= 1 && (
-              <Path
-                d={pointsToPath(liveStroke)}
-                stroke={selectedColor}
-                strokeWidth={selectedWidth}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-            )}
-          </Svg>
-        </View>
-
-        {strokes.length === 0 && liveStroke.length === 0 && (
-          <View style={styles.hintBox} pointerEvents="none">
-            <Feather name="edit-2" size={20} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.hintText}>Draw to annotate</Text>
-          </View>
+      <View style={styles.previewImageWrap}>
+        {currentPhotoUri ? (
+          <Image source={{ uri: currentPhotoUri }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: "#111" }]} />
         )}
       </View>
 
-      <View style={[styles.toolbar, { paddingBottom: insets.bottom + 8 }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorRow}>
-          {PEN_COLORS.map(c => (
-            <Pressable
-              key={c.value}
-              onPress={() => setSelectedColor(c.value)}
-              style={[
-                styles.colorDot,
-                { backgroundColor: c.value },
-                selectedColor === c.value && styles.colorDotActive,
-              ]}
-            />
-          ))}
-          <View style={styles.divider} />
-          {PEN_WIDTHS.map(w => (
-            <Pressable
-              key={w}
-              onPress={() => setSelectedWidth(w)}
-              style={[styles.widthBtn, selectedWidth === w && styles.widthBtnActive]}
-            >
-              <View style={[styles.widthLine, { height: w, backgroundColor: selectedColor }]} />
-            </Pressable>
-          ))}
-        </ScrollView>
+      <View style={[styles.previewActions, { paddingBottom: insets.bottom + 12 }]}>
+        <Pressable
+          style={[styles.btnPrimary, !isSaved && { opacity: 0.45 }]}
+          onPress={() => setPhase("markup")}
+          disabled={!isSaved}
+        >
+          <Feather name="edit-2" size={18} color="#fff" />
+          <Text style={styles.btnPrimaryText}>Add Markup</Text>
+        </Pressable>
 
-        <View style={styles.actionRow}>
+        <View style={styles.previewRow}>
           <Pressable
-            onPress={undo}
-            disabled={strokes.length === 0}
-            style={[styles.toolBtn, strokes.length === 0 && { opacity: 0.35 }]}
+            style={[styles.btnSecondary, { flex: 1 }, !isSaved && { opacity: 0.45 }]}
+            onPress={takeAnother}
+            disabled={!isSaved}
           >
-            <Feather name="corner-up-left" size={18} color={Colors.text} />
-            <Text style={styles.toolBtnText}>Undo</Text>
+            <Feather name="camera" size={16} color={Colors.secondary} />
+            <Text style={styles.btnSecondaryText}>Take Another</Text>
           </Pressable>
+
           <Pressable
-            onPress={clear}
-            disabled={strokes.length === 0}
-            style={[styles.toolBtn, strokes.length === 0 && { opacity: 0.35 }]}
+            style={[styles.btnOutline, { flex: 1 }]}
+            onPress={goToInspection}
           >
-            <Feather name="trash-2" size={18} color={Colors.danger} />
-            <Text style={[styles.toolBtnText, { color: Colors.danger }]}>Clear</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => saveAndTakeAnother(true)}
-            disabled={uploading}
-            style={[styles.toolBtn, uploading && { opacity: 0.35 }]}
-          >
-            <Feather name="camera" size={18} color={Colors.secondary} />
-            <Text style={[styles.toolBtnText, { color: Colors.secondary }]}>Save & Another</Text>
+            <Feather name="check" size={16} color={Colors.text} />
+            <Text style={styles.btnOutlineText}>Done</Text>
           </Pressable>
         </View>
       </View>
@@ -437,111 +435,61 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: "#222",
   },
   iconBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  headerTitle: { flex: 1, textAlign: "center", fontSize: 16, fontWeight: "600", color: "#fff" },
+  headerCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
+  uploadingPill: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  uploadingText: { color: "#fff", fontSize: 13, fontWeight: "500" },
+  savedPill: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: Colors.success ?? "#22C55E", borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  savedText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  errorText: { color: Colors.danger, fontSize: 13, fontWeight: "600" },
   saveBtn: {
     backgroundColor: Colors.secondary, paddingHorizontal: 16, paddingVertical: 7,
     borderRadius: 8, minWidth: 56, alignItems: "center",
   },
   saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-
-  // Preview phase
-  previewImageWrap: {
-    flex: 1,
-    backgroundColor: "#111",
-    position: "relative",
-  },
+  previewImageWrap: { flex: 1, backgroundColor: "#111", position: "relative" },
   previewActions: {
-    backgroundColor: "#1a1a1a",
-    borderTopWidth: 1,
-    borderTopColor: "#333",
-    paddingTop: 14,
-    paddingHorizontal: 16,
-    gap: 10,
+    backgroundColor: "#1a1a1a", borderTopWidth: 1, borderTopColor: "#333",
+    paddingTop: 14, paddingHorizontal: 16, gap: 10,
   },
-  previewRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  previewRow: { flexDirection: "row", gap: 10 },
   btnPrimary: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: Colors.secondary,
-    paddingVertical: 14,
-    borderRadius: 10,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: Colors.secondary, paddingVertical: 14, borderRadius: 10,
   },
-  btnPrimaryText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  btnPrimaryText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   btnSecondary: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderWidth: 1.5,
-    borderColor: Colors.secondary,
-    paddingVertical: 12,
-    borderRadius: 10,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    borderWidth: 1.5, borderColor: Colors.secondary, paddingVertical: 12, borderRadius: 10,
   },
-  btnSecondaryText: {
-    color: Colors.secondary,
-    fontSize: 14,
-    fontWeight: "600",
-  },
+  btnSecondaryText: { color: Colors.secondary, fontSize: 14, fontWeight: "600" },
   btnOutline: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderWidth: 1.5,
-    borderColor: "#555",
-    paddingVertical: 12,
-    borderRadius: 10,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    borderWidth: 1.5, borderColor: "#555", paddingVertical: 12, borderRadius: 10,
   },
-  btnOutlineText: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  // Markup phase
+  btnOutlineText: { color: Colors.text, fontSize: 14, fontWeight: "600" },
   canvas: { position: "relative", backgroundColor: "#111", overflow: "hidden" },
   hintBox: {
     position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
     alignItems: "center", justifyContent: "center", gap: 8,
   },
   hintText: { color: "rgba(255,255,255,0.5)", fontSize: 14 },
-  toolbar: {
-    backgroundColor: "#1a1a1a",
-    borderTopWidth: 1, borderTopColor: "#333",
-    paddingTop: 10,
-  },
-  colorRow: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 16, paddingBottom: 10, gap: 10,
-  },
-  colorDot: {
-    width: 28, height: 28, borderRadius: 14,
-    borderWidth: 2, borderColor: "transparent",
-  },
+  toolbar: { backgroundColor: "#1a1a1a", borderTopWidth: 1, borderTopColor: "#333", paddingTop: 10 },
+  colorRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 10, gap: 10 },
+  colorDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: "transparent" },
   colorDotActive: { borderColor: "#fff", transform: [{ scale: 1.2 }] },
   divider: { width: 1, height: 24, backgroundColor: "#444", marginHorizontal: 4 },
-  widthBtn: {
-    width: 36, height: 36, borderRadius: 8, alignItems: "center", justifyContent: "center",
-    backgroundColor: "transparent",
-  },
+  widthBtn: { width: 36, height: 36, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   widthBtnActive: { backgroundColor: "#333" },
   widthLine: { width: 20, borderRadius: 4 },
-  actionRow: {
-    flexDirection: "row", justifyContent: "space-around",
-    paddingHorizontal: 12, paddingTop: 2,
-  },
-  toolBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    paddingVertical: 8, paddingHorizontal: 14,
-  },
+  actionRow: { flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 12, paddingTop: 2 },
+  toolBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 14 },
   toolBtnText: { fontSize: 13, fontWeight: "500", color: Colors.text },
 });
