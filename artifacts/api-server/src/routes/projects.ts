@@ -375,7 +375,7 @@ router.get("/:id/documents", async (req, res) => {
 router.post("/:id/documents", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { name, fileName, fileSize, mimeType, fileUrl, folder, includedInInspection } = req.body;
+    const { name, fileName, fileSize, mimeType, fileUrl, folder, includedInInspection, inspectionId } = req.body;
     const [doc] = await db.insert(documentsTable).values({
       projectId: id,
       name: name || fileName,
@@ -387,6 +387,7 @@ router.post("/:id/documents", async (req, res) => {
       folder: folder || "General",
       includedInInspection: includedInInspection ?? true,
       uploadedById: 1,
+      ...(inspectionId ? { inspectionId: Number(inspectionId) } : {}),
     }).returning();
     res.status(201).json(formatDoc(doc));
   } catch (err) {
