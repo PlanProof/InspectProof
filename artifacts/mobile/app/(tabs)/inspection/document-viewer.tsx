@@ -236,10 +236,12 @@ export default function DocumentViewerScreen() {
   const [pendingPos, setPendingPos] = useState({ x: 100, y: 100 });
   const [textInputValue, setTextInputValue] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [capturing, setCapturing] = useState(false);
   const [webLoading, setWebLoading] = useState(true);
   const [webError, setWebError] = useState(false);
 
   const containerRef = useRef<View>(null);
+  const drawLayerRef = useRef<View>(null);
   const currentPoints = useRef<{ x: number; y: number }[]>([]);
   const selectedColorRef = useRef(selectedColor);
   const selectedWidthRef = useRef(selectedWidth);
@@ -474,11 +476,18 @@ export default function DocumentViewerScreen() {
 
     setUploading(true);
     try {
-      const capturedUri = await captureRef(containerRef, {
+      // iOS WKWebView renders in a sandboxed process — captureRef on the full
+      // container returns a black frame. Capture only the annotation layer
+      // (strokes + text) on a clean white background instead.
+      setSelectedTextId(null); // clear selection ring before capture
+      setCapturing(true);
+      await new Promise<void>((r) => setTimeout(r, 100)); // let render flush
+      const capturedUri = await captureRef(drawLayerRef, {
         format: "jpg",
-        quality: 0.9,
+        quality: 0.92,
         result: "tmpfile",
       });
+      setCapturing(false);
 
       const safeName = (name || "doc").replace(/[^a-z0-9]/gi, "-").toLowerCase();
       const markupFileName = `markup-${safeName}-${Date.now()}.jpg`;
@@ -582,6 +591,7 @@ export default function DocumentViewerScreen() {
         router.back();
       }
     } catch {
+      setCapturing(false);
       Alert.alert("Save failed", "Could not save the markup. Please try again.");
     } finally {
       setUploading(false);
@@ -1032,7 +1042,12 @@ export default function DocumentViewerScreen() {
 
           {/* ── Drawing layer — native only ── */}
           {drawing && Platform.OS !== "web" && (
-            <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <View
+              ref={drawLayerRef}
+              style={[StyleSheet.absoluteFill, capturing && styles.capturingBg]}
+              pointerEvents="box-none"
+              collapsable={false}
+            >
 
               {/* SVG: completed strokes + live stroke (non-interactive) */}
               <Svg
@@ -1349,6 +1364,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   drawHintText: { color: "#fff", fontSize: 13, fontWeight: "500" },
+
+  capturingBg: { backgroundColor: "#ffffff" },
 
   textAnnotationView: {
     position: "absolute",
