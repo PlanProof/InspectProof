@@ -1,10 +1,9 @@
 import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
-import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { Colors } from "@/constants/colors";
 
 /**
@@ -22,10 +21,34 @@ function safeIsLiquidGlassAvailable(): boolean {
   }
 }
 
-// NativeTabs.Trigger types don't expose `style` but the underlying component accepts it
-const HiddenTrigger = NativeTabs.Trigger as React.ComponentType<{ name: string; style?: object }>;
+/**
+ * expo-router/unstable-native-tabs uses react-native-bottom-tabs which
+ * registers a native view at import time. On Android Expo Go that native
+ * view is not bundled and throws, crashing the app before any screen loads.
+ * Lazy-load with require() inside a try-catch — falls back to null so
+ * NativeTabLayout is never rendered on unsupported environments.
+ */
+function safeGetNativeTabs(): {
+  NativeTabs: any;
+  Icon: any;
+  Label: any;
+} | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require("expo-router/unstable-native-tabs");
+  } catch {
+    return null;
+  }
+}
 
 function NativeTabLayout() {
+  const nativeTabs = safeGetNativeTabs();
+  if (!nativeTabs) return null;
+
+  const { NativeTabs, Icon, Label } = nativeTabs;
+  // NativeTabs.Trigger types don't expose `style` but the underlying component accepts it
+  const HiddenTrigger = NativeTabs.Trigger as React.ComponentType<{ name: string; style?: object }>;
+
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
