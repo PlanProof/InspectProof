@@ -17,6 +17,7 @@ import adminRouter from "./admin";
 import invitesRouter from "./invites";
 import docTemplatesRouter from "./docTemplates";
 import feedbackRouter from "./feedback";
+import markupRouter from "./markup";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(adminRouter);
 router.use("/invites", invitesRouter);
 router.use("/doc-templates", docTemplatesRouter);
 router.use("/feedback", feedbackRouter);
+router.use(markupRouter);
 
 export default router;

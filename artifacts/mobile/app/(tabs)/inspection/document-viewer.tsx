@@ -25,6 +25,7 @@ interface Stroke {
   points: { x: number; y: number }[];
   color: string;
   width: number;
+  pageNumber: number;
 }
 
 interface TextAnnotation {
@@ -34,6 +35,7 @@ interface TextAnnotation {
   y: number;
   fontSize: number;
   color: string;
+  pageNumber: number;
 }
 
 type Tool = "pen" | "text";
@@ -246,6 +248,8 @@ export default function DocumentViewerScreen() {
   const [textInputValue, setTextInputValue] = useState("");
   const [uploading, setUploading] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [renderingPage, setRenderingPage] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [webLoading, setWebLoading] = useState(true);
   const [webError, setWebError] = useState(false);
 
@@ -255,10 +259,12 @@ export default function DocumentViewerScreen() {
   const selectedColorRef = useRef(selectedColor);
   const selectedWidthRef = useRef(selectedWidth);
   const activeToolRef = useRef<Tool>("pen");
+  const currentPageRef = useRef(1);
 
   useEffect(() => { selectedColorRef.current = selectedColor; }, [selectedColor]);
   useEffect(() => { selectedWidthRef.current = selectedWidth; }, [selectedWidth]);
   useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
+  useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
 
   const headerH = 56;
   const toolbarH = drawing ? 56 : 0;
@@ -384,6 +390,7 @@ export default function DocumentViewerScreen() {
           points: pts,
           color: selectedColorRef.current,
           width: selectedWidthRef.current,
+          pageNumber: currentPageRef.current,
         },
       ]);
     }
@@ -433,6 +440,7 @@ export default function DocumentViewerScreen() {
                 y,
                 fontSize: 18,
                 color: selectedColorRef.current,
+                pageNumber: currentPageRef.current,
               },
             ]);
           }
@@ -456,6 +464,7 @@ export default function DocumentViewerScreen() {
           y: pendingPos.y,
           fontSize: 18,
           color: selectedColorRef.current,
+          pageNumber: currentPageRef.current,
         },
       ]);
     }
@@ -488,45 +497,11 @@ export default function DocumentViewerScreen() {
 
     setUploading(true);
     try {
-      // iOS WKWebView renders in a sandboxed process — captureRef on the full
-      // container returns a black frame. Capture only the annotation layer
-      // (strokes + text) on a clean white background instead.
-      setSelectedTextId(null); // clear selection ring before capture
-      setCapturing(true);
-      await new Promise<void>((r) => setTimeout(r, 100)); // let render flush
-      const capturedUri = await captureRef(drawLayerRef, {
-        format: "jpg",
-        quality: 0.92,
-        result: "tmpfile",
-      });
-      setCapturing(false);
-
-      const safeName = (name || "doc").replace(/[^a-z0-9]/gi, "-").toLowerCase();
-      const markupFileName = `markup-${safeName}-${Date.now()}.jpg`;
-
-      const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: markupFileName,
-          size: 0,
-          contentType: "image/jpeg",
-        }),
-      });
-
-      const blob = await (await fetch(capturedUri)).blob();
-      await fetch(urlRes.uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": "image/jpeg" },
-        body: blob,
-      });
-      const objectPath: string = urlRes.objectPath;
-
-      // Build human-readable markup name: "Doc Name - Marked Up - Inspection Type DD Mon YYYY First Last"
-      const baseName = (name || "Document").replace(/\.[^.]+$/, ""); // strip extension
+      // Build human-readable markup name
+      const baseName = (name || "Document").replace(/\.[^.]+$/, "");
       const dateStr = new Date().toLocaleDateString("en-AU", {
         day: "numeric", month: "short", year: "numeric",
-      }); // e.g. "30 Mar 2026"
+      });
       const userStr = user ? `${user.firstName} ${user.lastName}`.trim() : "";
 
       let inspectionLabel = "";
@@ -547,23 +522,112 @@ export default function DocumentViewerScreen() {
         .join(" - ");
       const docName = nameParts;
 
-      if (inspectionId && itemId) {
-        const currentItem = await fetchWithAuth(
-          `/api/inspections/${inspectionId}/checklist`
-        );
-        const item = Array.isArray(currentItem)
-          ? currentItem.find((i: any) => i.id === parseInt(itemId))
-          : null;
-        const existingUrls: string[] = item?.photoUrls || [];
-        await fetchWithAuth(
-          `/api/inspections/${inspectionId}/checklist/${itemId}`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ photoUrls: [...existingUrls, objectPath] }),
+      setSelectedTextId(null); // clear selection ring before capture
+
+      // ── PDF path: per-page overlay via /api/markup/generate ──────────────
+      if (isPdf && documentUrl) {
+        // Capture each annotated page's annotation layer as PNG base64
+        const annotatedPages: { pageNumber: number; pngBase64: string }[] = [];
+
+        for (const pageNum of annotatedPageNumbers) {
+          setRenderingPage(pageNum);
+          await new Promise<void>((r) => setTimeout(r, 80)); // let render flush
+
+          setCapturing(true);
+          await new Promise<void>((r) => setTimeout(r, 60));
+          const uri = await captureRef(drawLayerRef, {
+            format: "png",
+            quality: 1,
+            result: "base64",
+          });
+          setCapturing(false);
+
+          annotatedPages.push({ pageNumber: pageNum, pngBase64: uri });
+        }
+
+        setRenderingPage(null);
+
+        const result = await fetchWithAuth("/api/markup/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            documentUrl,
+            annotatedPages,
+            documentName: docName,
+            projectId: projectId ? parseInt(projectId) : undefined,
+            inspectionId: inspectionId ? parseInt(inspectionId) : undefined,
+            itemId: itemId ? parseInt(itemId) : undefined,
+          }),
+        });
+
+        if (!result?.documentId) throw new Error("No documentId returned");
+
+        Alert.alert("Saved", `Marked-up PDF "${docName}" saved.`);
+      } else {
+        // ── Image / non-PDF path: single capture (annotation layer only) ──
+        setCapturing(true);
+        await new Promise<void>((r) => setTimeout(r, 100));
+        const capturedUri = await captureRef(drawLayerRef, {
+          format: "jpg",
+          quality: 0.92,
+          result: "tmpfile",
+        });
+        setCapturing(false);
+
+        const safeName = (name || "doc").replace(/[^a-z0-9]/gi, "-").toLowerCase();
+        const markupFileName = `markup-${safeName}-${Date.now()}.jpg`;
+
+        const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: markupFileName,
+            size: 0,
+            contentType: "image/jpeg",
+          }),
+        });
+
+        const blob = await (await fetch(capturedUri)).blob();
+        await fetch(urlRes.uploadURL, {
+          method: "PUT",
+          headers: { "Content-Type": "image/jpeg" },
+          body: blob,
+        });
+        const objectPath: string = urlRes.objectPath;
+
+        if (inspectionId && itemId) {
+          const currentItem = await fetchWithAuth(
+            `/api/inspections/${inspectionId}/checklist`
+          );
+          const item = Array.isArray(currentItem)
+            ? currentItem.find((i: any) => i.id === parseInt(itemId))
+            : null;
+          const existingUrls: string[] = item?.photoUrls || [];
+          await fetchWithAuth(
+            `/api/inspections/${inspectionId}/checklist/${itemId}`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ photoUrls: [...existingUrls, objectPath] }),
+            }
+          );
+          if (projectId) {
+            await fetchWithAuth(`/api/projects/${projectId}/documents`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: docName,
+                fileName: markupFileName,
+                fileSize: 0,
+                mimeType: "image/jpeg",
+                fileUrl: objectPath,
+                folder: "Markups",
+                includedInInspection: true,
+              }),
+            });
           }
-        );
-        if (projectId) {
+          Alert.alert("Saved", `Markup saved and attached to checklist item.`);
+        } else if (projectId) {
           await fetchWithAuth(`/api/projects/${projectId}/documents`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -577,26 +641,11 @@ export default function DocumentViewerScreen() {
               includedInInspection: true,
             }),
           });
+          Alert.alert("Markup saved", `"${docName}" has been added to your project documents.`);
         }
-        Alert.alert("Saved", `Markup saved and attached to checklist item.`);
-      } else if (projectId) {
-        await fetchWithAuth(`/api/projects/${projectId}/documents`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: docName,
-            fileName: markupFileName,
-            fileSize: 0,
-            mimeType: "image/jpeg",
-            fileUrl: objectPath,
-            folder: "Markups",
-            includedInInspection: true,
-          }),
-        });
-        Alert.alert("Markup saved", `"${docName}" has been added to your project documents.`);
       }
 
-      // Navigate back to the inspection, not just one step (which may be home)
+      // Navigate back to the inspection
       if (inspectionId) {
         router.replace(`/inspection/conduct/${inspectionId}`);
       } else {
@@ -604,6 +653,7 @@ export default function DocumentViewerScreen() {
       }
     } catch {
       setCapturing(false);
+      setRenderingPage(null);
       Alert.alert("Save failed", "Could not save the markup. Please try again.");
     } finally {
       setUploading(false);
@@ -616,7 +666,23 @@ export default function DocumentViewerScreen() {
   const isReady =
     downloadState === "done" || downloadState === "cached";
 
-  const selectedText = textAnnotations.find((a) => a.id === selectedTextId);
+  // When saving, renderingPage is set to a specific page number so only that
+  // page's annotations appear in the capture. In normal view mode (null),
+  // show all annotations.
+  const visibleStrokes = renderingPage !== null
+    ? strokes.filter((s) => s.pageNumber === renderingPage)
+    : strokes;
+  const visibleTexts = renderingPage !== null
+    ? textAnnotations.filter((a) => a.pageNumber === renderingPage)
+    : textAnnotations;
+
+  const annotatedPageNumbers = Array.from(
+    new Set([...strokes.map((s) => s.pageNumber), ...textAnnotations.map((a) => a.pageNumber)])
+  ).sort((a, b) => a - b);
+
+  const hasMarkup = annotatedPageNumbers.length > 0;
+
+  const selectedText = visibleTexts.find((a) => a.id === selectedTextId);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -1089,7 +1155,7 @@ export default function DocumentViewerScreen() {
                 height={bodyH}
                 pointerEvents="none"
               >
-                {strokes.map((s, i) => (
+                {visibleStrokes.map((s, i) => (
                   <Path
                     key={i}
                     d={pointsToPath(s.points)}
@@ -1129,7 +1195,7 @@ export default function DocumentViewerScreen() {
               )}
 
               {/* Text annotations — own pan+pinch gestures, sit ABOVE the Pressable */}
-              {textAnnotations.map((ann) => (
+              {visibleTexts.map((ann) => (
                 <DraggableText
                   key={ann.id}
                   ann={ann}
