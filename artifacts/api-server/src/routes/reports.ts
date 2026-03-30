@@ -821,17 +821,36 @@ router.post("/generate", async (req, res) => {
     const title = `${typeLabel} — ${inspType} — ${projectLabel}`;
     const content = generateReportHtml(reportType, project, inspection, checklistResults, issues, inspector);
 
-    const [report] = await db.insert(reportsTable).values({
-      projectId: project?.id ?? null,
-      inspectionId: inspection.id,
-      title,
-      reportType,
-      status: "draft",
-      content,
-      generatedById: userId || 1,
-    }).returning();
+    // Check if a report already exists for this inspection + reportType.
+    // If so, regenerate it in place (update content, reset to draft) rather
+    // than creating a duplicate.
+    const existing = await db.select().from(reportsTable)
+      .where(and(
+        eq(reportsTable.inspectionId, inspection.id),
+        eq(reportsTable.reportType, reportType),
+      ));
 
-    res.status(201).json(await formatReport(report));
+    let report;
+    if (existing.length > 0) {
+      const [updated] = await db.update(reportsTable)
+        .set({ title, content, status: "draft", generatedById: userId || 1 })
+        .where(eq(reportsTable.id, existing[0].id))
+        .returning();
+      report = updated;
+    } else {
+      const [inserted] = await db.insert(reportsTable).values({
+        projectId: project?.id ?? null,
+        inspectionId: inspection.id,
+        title,
+        reportType,
+        status: "draft",
+        content,
+        generatedById: userId || 1,
+      }).returning();
+      report = inserted;
+    }
+
+    res.status(existing.length > 0 ? 200 : 201).json(await formatReport(report));
   } catch (err) {
     req.log.error({ err }, "Generate report error");
     res.status(500).json({ error: "internal_error" });

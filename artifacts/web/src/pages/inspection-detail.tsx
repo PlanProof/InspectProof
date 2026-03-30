@@ -1180,14 +1180,26 @@ const REPORT_STATUS_LABELS: Record<string, string> = {
   sent:           "Sent",
 };
 
-// Progress step bar: Draft → Finalised → Sent
+// Progress step bar: Draft → In Review → Approved → Sent
 function ReportProgressBar({ status }: { status: string }) {
   const steps = [
-    { key: "draft",    label: "Draft" },
-    { key: "approved", label: "Finalised" },
-    { key: "sent",     label: "Sent" },
+    { key: "draft",          label: "Draft" },
+    { key: "pending_review", label: "In Review" },
+    { key: "approved",       label: "Approved" },
+    { key: "sent",           label: "Sent" },
   ];
-  const activeIdx = status === "sent" ? 2 : status === "approved" ? 1 : 0;
+  const activeIdx =
+    status === "sent"           ? 3 :
+    status === "approved"       ? 2 :
+    status === "pending_review" ? 1 : 0;
+
+  const stepColors: Record<string, string> = {
+    draft:          "bg-yellow-50 text-yellow-700 border-yellow-200",
+    pending_review: "bg-blue-50 text-blue-700 border-blue-200",
+    approved:       "bg-green-50 text-green-700 border-green-200",
+    sent:           "bg-purple-50 text-purple-700 border-purple-200",
+  };
+
   return (
     <div className="flex items-center gap-0 text-[11px] font-medium">
       {steps.map((step, i) => {
@@ -1198,16 +1210,14 @@ function ReportProgressBar({ status }: { status: string }) {
             <div className={cn(
               "flex items-center gap-1 px-2.5 py-1 rounded-full border transition-colors",
               done    ? "bg-green-50 text-green-700 border-green-200"
-              : current ? (status === "draft" ? "bg-yellow-50 text-yellow-700 border-yellow-200"
-                         : status === "approved" ? "bg-blue-50 text-blue-700 border-blue-200"
-                         : "bg-purple-50 text-purple-700 border-purple-200")
+              : current ? (stepColors[status] ?? "bg-muted/40 text-muted-foreground border-muted/40")
               : "bg-muted/40 text-muted-foreground border-muted/40"
             )}>
               {done ? <CheckCircle2 className="h-3 w-3" /> : null}
               {step.label}
             </div>
             {i < steps.length - 1 && (
-              <div className={cn("w-6 h-px mx-0.5", done ? "bg-green-300" : "bg-muted/40")} />
+              <div className={cn("w-5 h-px mx-0.5", done ? "bg-green-300" : "bg-muted/40")} />
             )}
           </div>
         );
@@ -1334,6 +1344,11 @@ function ReportsTab({
                     </span>
                   )}
                 </div>
+                {report.status === "pending_review" && (
+                  <p className="text-[11px] text-blue-600 mt-1.5 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1">
+                    Submitted by inspector for review — view the PDF then click <strong>Approve</strong> to finalise.
+                  </p>
+                )}
               </div>
 
               {/* Actions */}
@@ -1368,8 +1383,8 @@ function ReportsTab({
                       <Download className="h-3.5 w-3.5" /> PDF
                     </Button>
 
-                    {/* Finalise — shown for draft only */}
-                    {report.status === "draft" && (
+                    {/* Approve — shown for draft or pending_review */}
+                    {(report.status === "draft" || report.status === "pending_review") && (
                       <Button
                         size="sm"
                         disabled={isFinalising}
@@ -1381,8 +1396,8 @@ function ReportsTab({
                         className="gap-1.5 text-xs h-8 bg-sidebar hover:bg-sidebar/90 text-white"
                       >
                         {isFinalising
-                          ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Finalising…</>
-                          : <><CheckCircle2 className="h-3.5 w-3.5" /> Finalise</>}
+                          ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Approving…</>
+                          : <><CheckCircle2 className="h-3.5 w-3.5" /> Approve</>}
                       </Button>
                     )}
 
