@@ -435,6 +435,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, backgroundColor: "#111",
     borderBottomWidth: 1, borderBottomColor: "#222",
   },
+  headerTitle: { flex: 1, color: "#fff", fontSize: 16, fontWeight: "600", textAlign: "center" },
   iconBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   headerCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
   uploadingPill: {

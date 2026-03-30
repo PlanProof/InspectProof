@@ -381,7 +381,7 @@ export default function ConductInspectionScreen() {
         body: JSON.stringify(patch),
       });
       queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
-        (old ?? []).map(i => i.id === activeItem.id ? { ...i, ...patch } : i)
+        (old ?? []).map(i => i.id === activeItem.id ? { ...i, ...patch } as ChecklistItem : i)
       );
       closeModal();
       refetchChecklist(); // silent background sync

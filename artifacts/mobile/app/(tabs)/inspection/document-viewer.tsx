@@ -1554,8 +1554,6 @@ const styles = StyleSheet.create({
   },
   drawHintText: { color: "#fff", fontSize: 13, fontWeight: "500" },
 
-  capturingBg: { backgroundColor: "#ffffff" },
-
   imageContainer: {
     flexGrow: 1,
     alignItems: "center",
