@@ -74,13 +74,13 @@ router.get("/", optionalAuth, async (req, res) => {
     const { status, search } = req.query;
     let projects = await db.select().from(projectsTable).orderBy(sql`${projectsTable.updatedAt} DESC`);
 
-    // Scope projects to the requesting user unless they are an admin
-    if (req.authUser && !req.authUser.isAdmin) {
+    // Scope projects to the requesting user (all authenticated users including admins)
+    if (req.authUser) {
       projects = projects.filter(p =>
         p.name === TEST_PROJECT_NAME ||
         p.createdById === req.authUser!.id
       );
-    } else if (!req.authUser) {
+    } else {
       // Unauthenticated – only show the test project
       projects = projects.filter(p => p.name === TEST_PROJECT_NAME);
     }

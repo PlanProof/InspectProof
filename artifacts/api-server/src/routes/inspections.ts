@@ -82,18 +82,20 @@ router.get("/", optionalAuth, async (req, res) => {
     let inspections = await db.select().from(inspectionsTable)
       .orderBy(sql`${inspectionsTable.scheduledDate} DESC`);
 
-    // Inspector-role users only see inspections assigned to them (bypass project access filter)
+    // Inspector-role users only see inspections assigned to them
     if (req.authUser && isInspectorOnly(req.authUser)) {
       inspections = inspections.filter(i => i.inspectorId === req.authUser!.id);
-    } else if (req.authUser && !req.authUser.isAdmin) {
-      // Scope inspections to projects owned by the requesting user (managers/admins only)
-      const allProjects = await db.select({ id: projectsTable.id, name: projectsTable.name, createdById: projectsTable.createdById })
+    } else if (req.authUser) {
+      // All other authenticated users (managers, company admins, platform admins) are scoped
+      // to inspections belonging to projects they created
+      const allProjects = await db.select({ id: projectsTable.id, createdById: projectsTable.createdById })
         .from(projectsTable);
       const accessibleProjectIds = allProjects
         .filter(p => p.createdById === req.authUser!.id)
         .map(p => p.id);
       inspections = inspections.filter(i => i.projectId !== null && accessibleProjectIds.includes(i.projectId));
-    } else if (!req.authUser) {
+    } else {
+      // Unauthenticated – only show the test project inspections
       const testProjects = await db.select({ id: projectsTable.id }).from(projectsTable)
         .where(eq(projectsTable.name, "Test Project"));
       const testIds = testProjects.map(p => p.id);

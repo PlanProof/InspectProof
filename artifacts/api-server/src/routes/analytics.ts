@@ -1,31 +1,60 @@
 import { Router, type IRouter } from "express";
 import { sql, eq } from "drizzle-orm";
 import { db, projectsTable, inspectionsTable, issuesTable, reportsTable, activityLogsTable, checklistResultsTable, checklistItemsTable, usersTable } from "@workspace/db";
+import { optionalAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
 
+router.use(optionalAuth);
+
 router.get("/dashboard", async (req, res) => {
   try {
+    const userId = (req as any).authUser?.id ?? null;
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-
-    const [totalProjectsRow] = await db.select({ count: sql<number>`count(*)::int` }).from(projectsTable);
-    const [activeProjectsRow] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(projectsTable).where(sql`${projectsTable.status} = 'active'`);
-    const [totalInspRow] = await db.select({ count: sql<number>`count(*)::int` }).from(inspectionsTable);
-    const [monthlyInspRow] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(inspectionsTable).where(sql`${inspectionsTable.scheduledDate} >= ${monthStart}`);
-    const [openIssuesRow] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(issuesTable).where(sql`${issuesTable.status} NOT IN ('closed', 'resolved')`);
-    const [criticalRow] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(issuesTable).where(sql`${issuesTable.severity} = 'critical' AND ${issuesTable.status} NOT IN ('closed', 'resolved')`);
     const todayStr = now.toISOString().split("T")[0];
-    const [overdueRow] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(issuesTable).where(sql`${issuesTable.dueDate} < ${todayStr} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`);
-    const [pendingReportsRow] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(reportsTable).where(sql`${reportsTable.status} = 'draft'`);
 
-    // Fetch ALL inspections for the calendar (entire year ±)
+    // SQL subquery fragments scoped to the current user's projects
+    const userProjects = userId
+      ? sql`(SELECT id FROM projects WHERE created_by_id = ${userId})`
+      : sql`(SELECT id FROM projects WHERE 1=0)`;
+    const userInspections = userId
+      ? sql`(SELECT id FROM inspections WHERE project_id IN (SELECT id FROM projects WHERE created_by_id = ${userId}))`
+      : sql`(SELECT id FROM inspections WHERE 1=0)`;
+
+    const [totalProjectsRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(projectsTable)
+      .where(userId ? sql`${projectsTable.createdById} = ${userId}` : sql`1=0`);
+
+    const [activeProjectsRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(projectsTable)
+      .where(userId ? sql`${projectsTable.createdById} = ${userId} AND ${projectsTable.status} = 'active'` : sql`1=0`);
+
+    const [totalInspRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(inspectionsTable)
+      .where(sql`${inspectionsTable.projectId} IN ${userProjects}`);
+
+    const [monthlyInspRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(inspectionsTable)
+      .where(sql`${inspectionsTable.projectId} IN ${userProjects} AND ${inspectionsTable.scheduledDate} >= ${monthStart}`);
+
+    const [openIssuesRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(issuesTable)
+      .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`);
+
+    const [criticalRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(issuesTable)
+      .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.severity} = 'critical' AND ${issuesTable.status} NOT IN ('closed', 'resolved')`);
+
+    const [overdueRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(issuesTable)
+      .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.dueDate} < ${todayStr} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`);
+
+    const [pendingReportsRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(reportsTable)
+      .where(sql`${reportsTable.inspectionId} IN ${userInspections} AND ${reportsTable.status} = 'draft'`);
+
+    // Fetch ALL inspections for the calendar scoped to user's projects
     const allInspectionsRaw = await db.select({
       id: inspectionsTable.id,
       projectId: inspectionsTable.projectId,
@@ -43,9 +72,9 @@ router.get("/dashboard", async (req, res) => {
     })
     .from(inspectionsTable)
     .leftJoin(projectsTable, eq(inspectionsTable.projectId, projectsTable.id))
+    .where(sql`${inspectionsTable.projectId} IN ${userProjects}`)
     .orderBy(inspectionsTable.scheduledDate, inspectionsTable.scheduledTime);
 
-    // Resolve inspector names
     const users = await db.select().from(usersTable);
     const userMap = new Map(users.map(u => [u.id, `${u.firstName} ${u.lastName}`]));
 
@@ -55,13 +84,12 @@ router.get("/dashboard", async (req, res) => {
       createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : i.createdAt,
     }));
 
-    // Upcoming (scheduled, future)
-    const todayStr2 = now.toISOString().split("T")[0];
     const formattedUpcoming = allInspections.filter(
-      i => i.status === "scheduled" && i.scheduledDate >= todayStr2
+      i => i.status === "scheduled" && i.scheduledDate >= todayStr
     ).slice(0, 5);
 
     const recentActivity = await db.select().from(activityLogsTable)
+      .where(sql`${activityLogsTable.userId} = ${userId ?? 0}`)
       .orderBy(sql`${activityLogsTable.createdAt} DESC`)
       .limit(10);
 
@@ -69,28 +97,33 @@ router.get("/dashboard", async (req, res) => {
       stage: projectsTable.stage,
       count: sql<number>`count(*)::int`,
     }).from(projectsTable)
-      .where(sql`${projectsTable.status} = 'active'`)
+      .where(userId ? sql`${projectsTable.createdById} = ${userId} AND ${projectsTable.status} = 'active'` : sql`1=0`)
       .groupBy(projectsTable.stage);
 
     const issuesBySeverity = await db.select({
       severity: issuesTable.severity,
       count: sql<number>`count(*)::int`,
     }).from(issuesTable)
-      .where(sql`${issuesTable.status} NOT IN ('closed', 'resolved')`)
+      .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`)
       .groupBy(issuesTable.severity);
 
     const inspectionsByType = await db.select({
       type: inspectionsTable.inspectionType,
       total: sql<number>`count(*)::int`,
-      completed: sql<number>`count(*) filter (where "inspections"."status" = 'completed')::int`,
-      scheduled: sql<number>`count(*) filter (where "inspections"."status" = 'scheduled')::int`,
-    }).from(inspectionsTable).groupBy(inspectionsTable.inspectionType);
+      completed: sql<number>`count(*) filter (where ${inspectionsTable.status} = 'completed')::int`,
+      scheduled: sql<number>`count(*) filter (where ${inspectionsTable.status} = 'scheduled')::int`,
+    }).from(inspectionsTable)
+      .where(sql`${inspectionsTable.projectId} IN ${userProjects}`)
+      .groupBy(inspectionsTable.inspectionType);
 
-    // Overall compliance rate for KPI display
-    const [totalResultsRow] = await db.select({ count: sql<number>`count(*)::int` }).from(checklistResultsTable)
-      .where(sql`${checklistResultsTable.result} != 'pending'`);
-    const [passResultsRow] = await db.select({ count: sql<number>`count(*)::int` }).from(checklistResultsTable)
-      .where(sql`${checklistResultsTable.result} = 'pass'`);
+    const [totalResultsRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(checklistResultsTable)
+      .where(sql`${checklistResultsTable.inspectionId} IN ${userInspections} AND ${checklistResultsTable.result} != 'pending'`);
+
+    const [passResultsRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(checklistResultsTable)
+      .where(sql`${checklistResultsTable.inspectionId} IN ${userInspections} AND ${checklistResultsTable.result} = 'pass'`);
+
     const complianceRate = totalResultsRow.count > 0
       ? Math.round((passResultsRow.count / totalResultsRow.count) * 100)
       : null;
@@ -129,21 +162,28 @@ router.get("/dashboard", async (req, res) => {
 
 router.get("/trends", async (req, res) => {
   try {
-    // Inspections by month (last 12 months)
+    const userId = (req as any).authUser?.id ?? null;
+
+    const userProjects = userId
+      ? sql`(SELECT id FROM projects WHERE created_by_id = ${userId})`
+      : sql`(SELECT id FROM projects WHERE 1=0)`;
+    const userInspections = userId
+      ? sql`(SELECT id FROM inspections WHERE project_id IN (SELECT id FROM projects WHERE created_by_id = ${userId}))`
+      : sql`(SELECT id FROM inspections WHERE 1=0)`;
+
     const inspectionsByMonth = await db.select({
       month: sql<string>`to_char(date_trunc('month', ${inspectionsTable.scheduledDate}::date), 'Mon')`,
       total: sql<number>`count(*)::int`,
     }).from(inspectionsTable)
-      .where(sql`${inspectionsTable.scheduledDate}::date >= now() - interval '12 months'`)
+      .where(sql`${inspectionsTable.projectId} IN ${userProjects} AND ${inspectionsTable.scheduledDate}::date >= now() - interval '12 months'`)
       .groupBy(sql`date_trunc('month', ${inspectionsTable.scheduledDate}::date)`)
       .orderBy(sql`date_trunc('month', ${inspectionsTable.scheduledDate}::date)`);
 
-    // Pass / Fail / N/A breakdown from checklist results
     const passFailRaw = await db.select({
       result: checklistResultsTable.result,
       count: sql<number>`count(*)::int`,
     }).from(checklistResultsTable)
-      .where(sql`${checklistResultsTable.result} != 'pending'`)
+      .where(sql`${checklistResultsTable.inspectionId} IN ${userInspections} AND ${checklistResultsTable.result} != 'pending'`)
       .groupBy(checklistResultsTable.result);
 
     const resultLabelMap: Record<string, string> = {
@@ -152,7 +192,6 @@ router.get("/trends", async (req, res) => {
       na: "N/A",
       monitor: "Monitor",
     };
-    // Merge by label so duplicates combine correctly
     const passFailMap: Record<string, number> = {};
     for (const r of passFailRaw) {
       const label = resultLabelMap[r.result] ?? r.result;
@@ -160,20 +199,20 @@ router.get("/trends", async (req, res) => {
     }
     const passFailBreakdown = Object.entries(passFailMap).map(([name, value]) => ({ name, value }));
 
-    // Compliance rate trend — monthly for last 12 months
     const complianceTrendRaw = await db.execute(sql`
       SELECT
-        to_char(date_trunc('month', created_at::date), 'Mon') AS month,
-        date_trunc('month', created_at::date) AS month_date,
+        to_char(date_trunc('month', cr.created_at::date), 'Mon') AS month,
+        date_trunc('month', cr.created_at::date) AS month_date,
         ROUND(
-          100.0 * COUNT(*) FILTER (WHERE result = 'pass') /
-          NULLIF(COUNT(*) FILTER (WHERE result != 'pending'), 0)
+          100.0 * COUNT(*) FILTER (WHERE cr.result = 'pass') /
+          NULLIF(COUNT(*) FILTER (WHERE cr.result != 'pending'), 0)
         )::int AS rate
-      FROM checklist_results
-      WHERE created_at::date >= now() - interval '12 months'
-        AND result != 'pending'
-      GROUP BY date_trunc('month', created_at::date)
-      ORDER BY date_trunc('month', created_at::date)
+      FROM checklist_results cr
+      WHERE cr.created_at::date >= now() - interval '12 months'
+        AND cr.result != 'pending'
+        AND cr.inspection_id IN ${userInspections}
+      GROUP BY date_trunc('month', cr.created_at::date)
+      ORDER BY date_trunc('month', cr.created_at::date)
     `);
     const trendRows: any[] = Array.isArray(complianceTrendRaw)
       ? complianceTrendRaw
@@ -183,29 +222,26 @@ router.get("/trends", async (req, res) => {
       rate: Number(r.rate ?? 0),
     }));
 
-    // Issues by severity (active only)
     const issuesBySeverity = await db.select({
       name: issuesTable.severity,
       count: sql<number>`count(*)::int`,
     }).from(issuesTable)
-      .where(sql`${issuesTable.status} NOT IN ('closed', 'resolved')`)
+      .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`)
       .groupBy(issuesTable.severity)
       .orderBy(sql`count(*) DESC`);
 
-    // Common failures from checklist
     const commonFailures = await db.select({
       description: checklistItemsTable.description,
       count: sql<number>`count(*)::int`,
     }).from(checklistResultsTable)
       .innerJoin(checklistItemsTable, sql`${checklistResultsTable.checklistItemId} = ${checklistItemsTable.id}`)
-      .where(sql`${checklistResultsTable.result} = 'fail'`)
+      .where(sql`${checklistResultsTable.inspectionId} IN ${userInspections} AND ${checklistResultsTable.result} = 'fail'`)
       .groupBy(checklistItemsTable.description)
       .orderBy(sql`count(*) DESC`)
       .limit(10);
 
-    // Average resolution days
     const resolvedIssues = await db.select().from(issuesTable)
-      .where(sql`${issuesTable.resolvedDate} IS NOT NULL AND ${issuesTable.dueDate} IS NOT NULL`);
+      .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.resolvedDate} IS NOT NULL AND ${issuesTable.dueDate} IS NOT NULL`);
 
     let avgResolutionDays = 0;
     if (resolvedIssues.length > 0) {
@@ -219,11 +255,14 @@ router.get("/trends", async (req, res) => {
       avgResolutionDays = totalDays / resolvedIssues.length;
     }
 
-    // Overall compliance rate
-    const [totalResults] = await db.select({ count: sql<number>`count(*)::int` }).from(checklistResultsTable)
-      .where(sql`${checklistResultsTable.result} != 'pending'`);
-    const [passResults] = await db.select({ count: sql<number>`count(*)::int` }).from(checklistResultsTable)
-      .where(sql`${checklistResultsTable.result} = 'pass'`);
+    const [totalResults] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(checklistResultsTable)
+      .where(sql`${checklistResultsTable.inspectionId} IN ${userInspections} AND ${checklistResultsTable.result} != 'pending'`);
+
+    const [passResults] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(checklistResultsTable)
+      .where(sql`${checklistResultsTable.inspectionId} IN ${userInspections} AND ${checklistResultsTable.result} = 'pass'`);
+
     const complianceRate = totalResults.count > 0
       ? Math.round((passResults.count / totalResults.count) * 100)
       : null;
@@ -245,21 +284,42 @@ router.get("/trends", async (req, res) => {
 
 router.get("/insights", async (req, res) => {
   try {
-    const [totalInspRow] = await db.select({ count: sql<number>`count(*)::int` }).from(inspectionsTable);
+    const userId = (req as any).authUser?.id ?? null;
+
+    const userProjects = userId
+      ? sql`(SELECT id FROM projects WHERE created_by_id = ${userId})`
+      : sql`(SELECT id FROM projects WHERE 1=0)`;
+    const userInspections = userId
+      ? sql`(SELECT id FROM inspections WHERE project_id IN (SELECT id FROM projects WHERE created_by_id = ${userId}))`
+      : sql`(SELECT id FROM inspections WHERE 1=0)`;
+
+    const [totalInspRow] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(inspectionsTable)
+      .where(sql`${inspectionsTable.projectId} IN ${userProjects}`);
+
     const [completedRow] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(inspectionsTable).where(sql`${inspectionsTable.status} = 'completed'`);
+      .from(inspectionsTable)
+      .where(sql`${inspectionsTable.projectId} IN ${userProjects} AND ${inspectionsTable.status} = 'completed'`);
+
     const [openIssuesRow] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(issuesTable).where(sql`${issuesTable.status} NOT IN ('closed', 'resolved')`);
+      .from(issuesTable)
+      .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`);
+
     const [totalResults] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(checklistResultsTable).where(sql`${checklistResultsTable.result} != 'pending'`);
+      .from(checklistResultsTable)
+      .where(sql`${checklistResultsTable.inspectionId} IN ${userInspections} AND ${checklistResultsTable.result} != 'pending'`);
+
     const [passResults] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(checklistResultsTable).where(sql`${checklistResultsTable.result} = 'pass'`);
+      .from(checklistResultsTable)
+      .where(sql`${checklistResultsTable.inspectionId} IN ${userInspections} AND ${checklistResultsTable.result} = 'pass'`);
+
     const complianceRate = totalResults.count > 0
       ? Math.round((passResults.count / totalResults.count) * 100)
       : null;
     const completionRate = totalInspRow.count > 0
       ? Math.round((completedRow.count / totalInspRow.count) * 100)
       : null;
+
     res.json({
       complianceRate,
       completionRate,
