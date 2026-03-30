@@ -39,6 +39,7 @@ interface TextAnnotation {
 type Tool = "pen" | "text";
 
 const PEN_COLORS = [
+  { value: "#000000", label: "Black" },
   { value: "#EF4444", label: "Red" },
   { value: "#F59E0B", label: "Yellow" },
   { value: "#22C55E", label: "Green" },
@@ -153,7 +154,13 @@ function DraggableText({ ann, isSelected, onSelect, onMove, onScale }: Draggable
       savedPinchScale.value = 1;
     });
 
-  const composed = Gesture.Simultaneous(panGesture, pinchGesture);
+  // Tap just selects the annotation — prevents the touch leaking to the
+  // background Pressable (which would create a new annotation).
+  const tapGesture = Gesture.Tap()
+    .maxDuration(500)
+    .onEnd(() => { runOnJS(selectCb)(); });
+
+  const composed = Gesture.Simultaneous(panGesture, pinchGesture, tapGesture);
 
   const animStyle = useAnimatedStyle(() => ({
     position: "absolute" as const,
@@ -175,9 +182,11 @@ function DraggableText({ ann, isSelected, onSelect, onMove, onScale }: Draggable
             color: ann.color,
             fontSize: ann.fontSize,
             fontWeight: "600",
-            textShadowColor: "rgba(0,0,0,0.6)",
-            textShadowOffset: { width: 1, height: 1 },
-            textShadowRadius: 2,
+            ...(ann.color !== "#000000" && ann.color !== "#000" && {
+              textShadowColor: "rgba(0,0,0,0.5)",
+              textShadowOffset: { width: 1, height: 1 },
+              textShadowRadius: 2,
+            }),
           }}
         >
           {ann.text}
@@ -228,7 +237,7 @@ export default function DocumentViewerScreen() {
   const [activeTool, setActiveTool] = useState<Tool>("pen");
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [liveStroke, setLiveStroke] = useState<{ x: number; y: number }[]>([]);
-  const [selectedColor, setSelectedColor] = useState("#EF4444");
+  const [selectedColor, setSelectedColor] = useState("#000000");
   const [selectedWidth, setSelectedWidth] = useState(4);
   const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
@@ -1103,7 +1112,23 @@ export default function DocumentViewerScreen() {
                 )}
               </Svg>
 
-              {/* Text annotations — own pan+pinch gestures */}
+              {/* Text mode: fullscreen tap target for placing new annotations.
+                  Rendered BEFORE (below) the DraggableText views so existing
+                  annotations sit on top and can receive their own gestures. */}
+              {activeTool === "text" && (
+                <Pressable
+                  style={StyleSheet.absoluteFill}
+                  onPress={(e) => {
+                    setSelectedTextId(null);
+                    openTextAtPos(
+                      e.nativeEvent.locationX,
+                      e.nativeEvent.locationY
+                    );
+                  }}
+                />
+              )}
+
+              {/* Text annotations — own pan+pinch gestures, sit ABOVE the Pressable */}
               {textAnnotations.map((ann) => (
                 <DraggableText
                   key={ann.id}
@@ -1122,20 +1147,6 @@ export default function DocumentViewerScreen() {
                   }
                 />
               ))}
-
-              {/* Text mode: tap on empty space to create annotation */}
-              {activeTool === "text" && (
-                <Pressable
-                  style={StyleSheet.absoluteFill}
-                  onPress={(e) => {
-                    setSelectedTextId(null);
-                    openTextAtPos(
-                      e.nativeEvent.locationX,
-                      e.nativeEvent.locationY
-                    );
-                  }}
-                />
-              )}
 
               {/* Pen mode: GestureDetector on TOP captures all drawing touches */}
               {activeTool === "pen" && (
