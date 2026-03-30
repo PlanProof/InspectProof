@@ -176,3 +176,63 @@
 .tiptap-doc-editor p:not([class]) {
   /* tokens render as plain text — let preview mode fill them */
 }
+
+/* Links */
+.tiptap-link { color: #2563EB; text-decoration: underline; cursor: pointer; }
+.tiptap-link:hover { color: #1D4ED8; }
+
+/* Blockquote */
+.tiptap-doc-editor blockquote {
+  border-left: 4px solid #466DB5;
+  margin: 0 0 12px;
+  padding: 8px 16px;
+  color: #374151;
+  background: #f0f4fb;
+  border-radius: 0 6px 6px 0;
+  font-style: italic;
+}
+
+/* Inline code */
+.tiptap-doc-editor code {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  color: #0B1933;
+}
+
+/* Code block */
+.tiptap-doc-editor pre {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 0 0 12px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.tiptap-doc-editor pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* Horizontal rule */
+.tiptap-doc-editor hr {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 16px 0;
+}
+
+/* Superscript / Subscript */
+.tiptap-doc-editor sup { font-size: 0.75em; vertical-align: super; }
+.tiptap-doc-editor sub { font-size: 0.75em; vertical-align: sub; }
+
+/* Highlight */
+.tiptap-doc-editor mark { border-radius: 3px; padding: 0 2px; }
