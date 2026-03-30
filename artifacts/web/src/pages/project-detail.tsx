@@ -1867,6 +1867,9 @@ function InspectionTypesTab({ projectId }: { projectId: number }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customSubmitting, setCustomSubmitting] = useState(false);
 
   const loadTypes = useCallback(async () => {
     try {
@@ -1917,6 +1920,24 @@ function InspectionTypesTab({ projectId }: { projectId: number }) {
     }
   };
 
+  const addCustomInspection = async () => {
+    const name = customName.trim();
+    if (!name) return;
+    setCustomSubmitting(true);
+    try {
+      await apiFetch("/api/inspections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, inspectionType: name }),
+      });
+      setCustomName("");
+      setCustomOpen(false);
+    } catch {
+    } finally {
+      setCustomSubmitting(false);
+    }
+  };
+
   const folders = Array.from(new Set(types.map(t => t.folder))).sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
   );
@@ -1944,8 +1965,51 @@ function InspectionTypesTab({ projectId }: { projectId: number }) {
           <Button onClick={save} disabled={saving} size="sm">
             {saving ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Saving…</> : "Save Selection"}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setCustomName(""); setCustomOpen(true); }}
+          >
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Add custom inspection
+          </Button>
         </div>
       </div>
+
+      {/* Add Custom Inspection Dialog */}
+      <Dialog open={customOpen} onOpenChange={open => { if (!customSubmitting) setCustomOpen(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sidebar">
+              <ClipboardList className="h-4 w-4" />
+              Add Custom Inspection
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground -mt-1">
+            Creates a manual inspection entry for this project with no linked checklist. You can add notes and results freely.
+          </p>
+          <div className="space-y-3 pt-1">
+            <div>
+              <Label className="text-xs font-medium mb-1.5 block">Inspection name</Label>
+              <Input
+                placeholder="e.g. Site visit, Pre-pour inspection, Custom review…"
+                value={customName}
+                onChange={e => setCustomName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addCustomInspection(); }}
+                autoFocus
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setCustomOpen(false)} disabled={customSubmitting}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={addCustomInspection} disabled={customSubmitting || !customName.trim()}>
+              {customSubmitting ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Creating…</> : "Create Inspection"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <div className="flex items-center justify-center py-12 text-muted-foreground">
