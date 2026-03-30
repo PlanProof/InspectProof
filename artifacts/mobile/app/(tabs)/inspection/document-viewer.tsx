@@ -573,7 +573,10 @@ export default function DocumentViewerScreen() {
 
         if (!result?.success) throw new Error("Markup generation failed");
 
-        Alert.alert("Saved", `Marked-up PDF "${docName}" saved.`);
+        Alert.alert("Saved", `Marked-up PDF "${docName}" saved.`, [
+          { text: "OK", onPress: goBack },
+        ]);
+        return; // navigation handled by alert callback
       } else {
         // ── Image / non-PDF path: capture the full container (image + annotations)
         // Use containerRef so the underlying image is included in the composite.
@@ -676,13 +679,14 @@ export default function DocumentViewerScreen() {
 
   // When saving, renderingPage is set to a specific page number so only that
   // page's annotations appear in the capture. In normal view mode (null),
-  // show all annotations.
+  // show only the annotations for the currently displayed page so strokes
+  // from other pages don't "bleed through" onto the current view.
   const visibleStrokes = renderingPage !== null
     ? strokes.filter((s) => s.pageNumber === renderingPage)
-    : strokes;
+    : strokes.filter((s) => s.pageNumber === currentPage);
   const visibleTexts = renderingPage !== null
     ? textAnnotations.filter((a) => a.pageNumber === renderingPage)
-    : textAnnotations;
+    : textAnnotations.filter((a) => a.pageNumber === currentPage);
 
   const annotatedPageNumbers = Array.from(
     new Set([...strokes.map((s) => s.pageNumber), ...textAnnotations.map((a) => a.pageNumber)])
@@ -919,7 +923,7 @@ export default function DocumentViewerScreen() {
                 </Pressable>
                 <Text style={styles.pageNavLabel}>
                   {currentPage}
-                  {annotatedPageNumbers.length > 0 && (
+                  {annotatedPageNumbers.includes(currentPage) && (
                     <Text style={styles.pageNavAnnotated}> ●</Text>
                   )}
                 </Text>
@@ -936,10 +940,20 @@ export default function DocumentViewerScreen() {
 
           <View style={{ flex: 1 }} />
 
-          {/* Undo / clear */}
+          {/* Undo / clear — scoped to the current page */}
           {activeTool === "pen" && (
             <Pressable
-              onPress={() => setStrokes((prev) => prev.slice(0, -1))}
+              onPress={() =>
+                setStrokes((prev) => {
+                  // Remove the last stroke belonging to the current page
+                  const idx = [...prev]
+                    .map((s, i) => (s.pageNumber === currentPage ? i : -1))
+                    .filter((i) => i >= 0)
+                    .pop();
+                  if (idx === undefined) return prev;
+                  return prev.filter((_, i) => i !== idx);
+                })
+              }
               style={styles.iconBtn}
               hitSlop={8}
             >
@@ -962,9 +976,10 @@ export default function DocumentViewerScreen() {
           )}
           <Pressable
             onPress={() => {
-              setStrokes([]);
+              // Clear only the current page's annotations
+              setStrokes((prev) => prev.filter((s) => s.pageNumber !== currentPage));
               setLiveStroke([]);
-              setTextAnnotations([]);
+              setTextAnnotations((prev) => prev.filter((a) => a.pageNumber !== currentPage));
               setSelectedTextId(null);
             }}
             style={styles.iconBtn}
