@@ -208,7 +208,7 @@ export default function DocumentViewerScreen() {
   }>();
 
   const insets = useSafeAreaInsets();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { width: screenW, height: screenH } = useWindowDimensions();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN
     ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
@@ -501,8 +501,30 @@ export default function DocumentViewerScreen() {
       });
       const objectPath: string = urlRes.objectPath;
 
-      const insp = inspectionId ? `Inspection #${inspectionId}` : "";
-      const docName = `${name || "Document"} – Marked Up${insp ? ` (${insp})` : ""}`;
+      // Build human-readable markup name: "Doc Name - Marked Up - Inspection Type DD Mon YYYY First Last"
+      const baseName = (name || "Document").replace(/\.[^.]+$/, ""); // strip extension
+      const dateStr = new Date().toLocaleDateString("en-AU", {
+        day: "numeric", month: "short", year: "numeric",
+      }); // e.g. "30 Mar 2026"
+      const userStr = user ? `${user.firstName} ${user.lastName}`.trim() : "";
+
+      let inspectionLabel = "";
+      if (inspectionId) {
+        try {
+          const inspData = await fetchWithAuth(`/api/inspections/${inspectionId}`);
+          const inspType = (inspData.inspectionType || "Inspection")
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (c: string) => c.toUpperCase());
+          inspectionLabel = inspType;
+        } catch {
+          inspectionLabel = `Inspection #${inspectionId}`;
+        }
+      }
+
+      const nameParts = [baseName, "Marked Up", inspectionLabel, dateStr, userStr]
+        .filter(Boolean)
+        .join(" - ");
+      const docName = nameParts;
 
       if (inspectionId && itemId) {
         const currentItem = await fetchWithAuth(
