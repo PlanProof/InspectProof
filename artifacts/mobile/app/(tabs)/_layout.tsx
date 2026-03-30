@@ -1,5 +1,4 @@
 import { BlurView } from "expo-blur";
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
@@ -7,6 +6,21 @@ import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 import { Colors } from "@/constants/colors";
+
+/**
+ * expo-glass-effect calls requireNativeModule('ExpoGlassEffect') on iOS,
+ * which throws in Expo Go where that native module is not bundled.
+ * We catch any error and safely return false so ClassicTabLayout is used.
+ */
+function safeIsLiquidGlassAvailable(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { isLiquidGlassAvailable } = require("expo-glass-effect");
+    return !!isLiquidGlassAvailable?.();
+  } catch {
+    return false;
+  }
+}
 
 // NativeTabs.Trigger types don't expose `style` but the underlying component accepts it
 const HiddenTrigger = NativeTabs.Trigger as React.ComponentType<{ name: string; style?: object }>;
@@ -171,7 +185,7 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
+  if (safeIsLiquidGlassAvailable()) {
     return <NativeTabLayout />;
   }
   return <ClassicTabLayout />;
