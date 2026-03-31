@@ -1,6 +1,11 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
+
 const SMTP_FROM = process.env.SMTP_FROM || "InspectProof <noreply@inspectproof.com.au>";
 const APP_BASE_URL = process.env.APP_BASE_URL || "https://inspectproof.com.au";
 const FEEDBACK_TO = process.env.FEEDBACK_EMAIL || "contact@inspectproof.com.au";
@@ -118,7 +123,7 @@ export async function sendInspectionAssignedEmail(
   const typeLabel = opts.inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   const heading = opts.isReassignment ? "Inspection Reassigned to You" : "You've Been Assigned an Inspection";
   try {
-    const { error } = await resend.emails.send({
+    const { error } = await getResend().emails.send({
       from: SMTP_FROM,
       to: opts.inspectorEmail,
       subject: `${heading} — ${typeLabel} at ${opts.projectName}`,
@@ -187,7 +192,7 @@ export async function sendFeedbackEmail(
   const submittedAt = new Date().toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" });
   const displayName = opts.senderName || "Anonymous user";
   try {
-    const { error } = await resend.emails.send({
+    const { error } = await getResend().emails.send({
       from: SMTP_FROM,
       to: FEEDBACK_TO,
       replyTo: opts.senderEmail || undefined,
@@ -320,7 +325,7 @@ export async function sendAppInviteEmail(
     ? `${opts.companyName} has invited you to InspectProof`
     : `${opts.inviterName} has invited you to InspectProof`;
   try {
-    const { error } = await resend.emails.send({
+    const { error } = await getResend().emails.send({
       from: SMTP_FROM,
       to: opts.toEmail,
       subject,
@@ -394,7 +399,7 @@ export async function sendWelcomeWithCredentialsEmail(
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping welcome email"); return; }
   const loginUrl = `${APP_BASE_URL}/login`;
   try {
-    const { error } = await resend.emails.send({
+    const { error } = await getResend().emails.send({
       from: SMTP_FROM,
       to: opts.toEmail,
       subject: "Welcome to InspectProof — Your account is ready",
