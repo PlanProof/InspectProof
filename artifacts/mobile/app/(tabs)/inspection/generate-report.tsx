@@ -110,7 +110,8 @@ function ChecklistItemRow({
   token: string | null;
 }) {
   const photos: string[] = item.photoUrls ?? [];
-  const photoW = (SCREEN_WIDTH - 64) / 2;
+  // Available width = screen - section padding(32) - card padding(28) - photoGrid marginLeft(34) - gap(8)
+  const photoW = Math.floor((SCREEN_WIDTH - 102) / 2);
   const borderColor = ITEM_BORDER[item.result] ?? ITEM_BORDER.pending;
   const iconCfg    = ITEM_ICON[item.result]  ?? ITEM_ICON.pending;
 

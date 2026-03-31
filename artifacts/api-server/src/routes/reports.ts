@@ -1026,12 +1026,20 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
   doc.restore();
 }
 
+interface ChecklistPhotoEntry {
+  description: string;
+  category: string;
+  result: string;
+  paths: string[];
+}
+
 function buildPdf(
   report: any,
   _project: any,
   signatureBuffer?: Buffer,
-  photosByDesc?: Map<string, string[]>,   // description → [storagePath, ...]
-  photoBuffers?: Map<string, Buffer>,     // storagePath → image buffer
+  photosByDesc?: Map<string, string[]>,        // description → [storagePath, ...]
+  photoBuffers?: Map<string, Buffer>,          // storagePath → image buffer
+  checklistPhotos?: ChecklistPhotoEntry[],     // ordered list for photo appendix
 ): PDFKit.PDFDocument {
   const doc = new PDFDocument({
     size: "A4",
@@ -1300,6 +1308,119 @@ function buildPdf(
     doc.moveDown(0.3);
   }
 
+  // ── Photo Documentation Appendix ──────────────────────────────────────────
+  // Full-size photos at the end of the report, one item reference per section
+  if (checklistPhotos && checklistPhotos.length > 0 && photoBuffers && photoBuffers.size > 0) {
+    // Only include items that have at least one loadable photo
+    const itemsWithPhotos = checklistPhotos.filter(entry =>
+      entry.paths.some(p => photoBuffers!.has(p))
+    );
+
+    if (itemsWithPhotos.length > 0) {
+      doc.addPage();
+      addPageHeader(doc, "Photo Documentation");
+
+      // Section heading
+      const checkPageBreakAppendix = (needed = 20) => {
+        if (doc.y + needed > doc.page.height - FOOTER_H - 30) {
+          doc.addPage();
+          addPageHeader(doc, "Photo Documentation");
+        }
+      };
+
+      // Header bar
+      doc.rect(MARGIN, doc.y, contentW, 26).fill("#E8ECF2");
+      doc.rect(MARGIN, doc.y, 3, 26).fill(COLOR_PEAR);
+      doc.fillColor(COLOR_NAVY).fontSize(10).font(FB)
+        .text("PHOTO DOCUMENTATION", MARGIN + 10, doc.y + 8, { width: contentW - 16 });
+      doc.y += 36;
+
+      const resultColors: Record<string, { color: string; bg: string; label: string }> = {
+        pass:    { color: "#16A34A", bg: "#F0FDF4", label: "PASS" },
+        fail:    { color: "#DC2626", bg: "#FEF2F2", label: "FAIL" },
+        monitor: { color: "#D97706", bg: "#FFFBEB", label: "MONITOR" },
+        na:      { color: "#9CA3AF", bg: "#F9FAFB", label: "N/A" },
+        pending: { color: "#9CA3AF", bg: "#F9FAFB", label: "PENDING" },
+      };
+
+      for (const entry of itemsWithPhotos) {
+        const validPaths = entry.paths.filter(p => photoBuffers!.has(p));
+        if (validPaths.length === 0) continue;
+
+        const rc = resultColors[entry.result] ?? resultColors.pending;
+        const fullPhotoW = contentW;
+        // Decide height: if photo is portrait use more height, otherwise standard
+        const fullPhotoH = 340;
+
+        // One photo per page (full-width), or two small ones side-by-side
+        for (let pi = 0; pi < validPaths.length; pi++) {
+          const buf = photoBuffers!.get(validPaths[pi]);
+          if (!buf) continue;
+
+          checkPageBreakAppendix(fullPhotoH + 80);
+
+          // ── Item reference header ──────────────────────────────────────────
+          const refY = doc.y;
+          // Result badge
+          const badgeW = rc.label === "MONITOR" ? 48 : 40;
+          doc.roundedRect(MARGIN, refY, badgeW, 16, 2).fillAndStroke(rc.bg, rc.color);
+          doc.fillColor(rc.color).fontSize(7.5).font(FB)
+            .text(rc.label, MARGIN, refY + 4, { width: badgeW, align: "center", lineBreak: false });
+
+          // Category label (right side)
+          if (entry.category) {
+            doc.fillColor("#6B7280").fontSize(8).font(F)
+              .text(entry.category.toUpperCase(), MARGIN + badgeW + 8, refY + 4, {
+                width: contentW - badgeW - 8,
+                align: "right",
+                lineBreak: false,
+              });
+          }
+
+          doc.y = refY + 22;
+
+          // Description
+          doc.fillColor(COLOR_NAVY).fontSize(10).font(FB)
+            .text(entry.description || "Inspection Item", MARGIN, doc.y, { width: contentW });
+          doc.y += 4;
+
+          // Photo count indicator (e.g. "Photo 2 of 3")
+          if (validPaths.length > 1) {
+            doc.fillColor("#9CA3AF").fontSize(8).font(F)
+              .text(`Photo ${pi + 1} of ${validPaths.length}`, MARGIN, doc.y, {
+                width: contentW,
+                align: "right",
+                lineBreak: false,
+              });
+          }
+          doc.y += 10;
+
+          // ── Full-size photo ────────────────────────────────────────────────
+          try {
+            doc.roundedRect(MARGIN, doc.y, fullPhotoW, fullPhotoH, 6)
+              .strokeColor("#D1D5DB").lineWidth(0.75).stroke();
+            doc.image(buf, MARGIN + 3, doc.y + 3, {
+              width:  fullPhotoW - 6,
+              height: fullPhotoH - 6,
+              fit:    [fullPhotoW - 6, fullPhotoH - 6],
+              align:  "center",
+              valign: "center",
+            });
+          } catch {
+            // draw a placeholder if image is corrupt
+            doc.rect(MARGIN, doc.y, fullPhotoW, fullPhotoH).fill("#F3F4F6");
+            doc.fillColor("#9CA3AF").fontSize(10).font(F)
+              .text("Image unavailable", MARGIN, doc.y + fullPhotoH / 2 - 6, {
+                width: fullPhotoW,
+                align: "center",
+              });
+          }
+          doc.y += fullPhotoH + 24;
+        }
+      }
+    }
+  }
+
   // ── Footers on all pages ───────────────────────────────────────────────────
   const range = doc.bufferedPageRange();
   const totalPages = range.count;
@@ -1353,6 +1474,7 @@ router.get("/:id/pdf", async (req, res) => {
     // Fetch checklist results (with photoUrls) for this report's inspection
     let photosByDesc: Map<string, string[]> | undefined;
     let photoBuffers: Map<string, Buffer> | undefined;
+    let checklistPhotos: ChecklistPhotoEntry[] | undefined;
     if (report.inspectionId) {
       try {
         const checklistRows = await db.select({
@@ -1360,35 +1482,50 @@ router.get("/:id/pdf", async (req, res) => {
           item: checklistItemsTable,
         }).from(checklistResultsTable)
           .innerJoin(checklistItemsTable, eq(checklistResultsTable.checklistItemId, checklistItemsTable.id))
-          .where(eq(checklistResultsTable.inspectionId, report.inspectionId));
+          .where(eq(checklistResultsTable.inspectionId, report.inspectionId))
+          .orderBy(checklistItemsTable.orderIndex);
 
         photosByDesc = new Map<string, string[]>();
         photoBuffers = new Map<string, Buffer>();
 
         const storageService = new ObjectStorageService();
 
-        await Promise.allSettled(checklistRows.map(async (row) => {
+        // First pass: collect all paths and fetch buffers
+        const rowsWithPhotos: Array<{ row: typeof checklistRows[0]; paths: string[] }> = [];
+
+        for (const row of checklistRows) {
           const rawUrls = row.result.photoUrls;
-          if (!rawUrls) return;
+          if (!rawUrls) continue;
           let paths: string[];
           try {
             paths = Array.isArray(rawUrls) ? rawUrls : JSON.parse(rawUrls as string);
-          } catch { return; }
-          if (!paths || !paths.length) return;
+          } catch { continue; }
+          if (!paths || !paths.length) continue;
+          rowsWithPhotos.push({ row, paths });
 
           const descKey = (row.item.description || "").toLowerCase().trim();
           if (!photosByDesc!.has(descKey)) photosByDesc!.set(descKey, []);
           photosByDesc!.get(descKey)!.push(...paths);
+        }
 
-          await Promise.allSettled(paths.map(async (photoPath) => {
-            if (photoBuffers!.has(photoPath)) return;
-            try {
-              const { buffer } = await storageService.fetchObjectBuffer(photoPath);
-              photoBuffers!.set(photoPath, buffer);
-            } catch {
-              // skip — photo unavailable
-            }
-          }));
+        // Fetch all photo buffers concurrently
+        const allPaths = [...new Set(rowsWithPhotos.flatMap(r => r.paths))];
+        await Promise.allSettled(allPaths.map(async (photoPath) => {
+          if (photoBuffers!.has(photoPath)) return;
+          try {
+            const { buffer } = await storageService.fetchObjectBuffer(photoPath);
+            photoBuffers!.set(photoPath, buffer);
+          } catch {
+            // skip — photo unavailable
+          }
+        }));
+
+        // Build ordered list for Photo Documentation appendix
+        checklistPhotos = rowsWithPhotos.map(({ row, paths }) => ({
+          description: row.item.description || "",
+          category:    row.item.category    || "",
+          result:      row.result.result    || "pending",
+          paths,
         }));
       } catch (photoErr) {
         req.log.warn({ photoErr }, "Could not load checklist photos — omitting from PDF");
@@ -1471,7 +1608,7 @@ router.get("/:id/pdf", async (req, res) => {
       }
     }
 
-    const doc = buildPdf(formatted, project, signatureBuffer, photosByDesc, photoBuffers);
+    const doc = buildPdf(formatted, project, signatureBuffer, photosByDesc, photoBuffers, checklistPhotos);
 
     // ── Append markup pages at end of report ─────────────────────────────────
     if (markupBuffers.length > 0) {
@@ -1531,7 +1668,7 @@ router.get("/:id/pdf", async (req, res) => {
         .slice(0, 80);
 
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${safeName}.pdf"`);
+      res.setHeader("Content-Disposition", `inline; filename="${safeName}.pdf"`);
       res.end(mergedBuffer);
       return;
     }
@@ -1542,7 +1679,7 @@ router.get("/:id/pdf", async (req, res) => {
       .slice(0, 80);
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${safeName}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="${safeName}.pdf"`);
     doc.pipe(res);
     doc.end();
   } catch (err) {
