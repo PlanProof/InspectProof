@@ -1142,7 +1142,7 @@ export default function Templates() {
                 const FolderIcon = isOpen ? FolderOpen : Folder;
                 const items = grouped[folder] ?? [];
                 const canReorder = discipline !== "Building Surveyor" && !search;
-                const isConfirmingDelete = confirmDeleteFolder === folder;
+                const canDelete = !search;
 
                 const isDragging = dragFolderIdx === fi;
                 const isDragOver = dragOverIdx === fi && dragFolderIdx !== null && dragFolderIdx !== fi;
@@ -1206,35 +1206,16 @@ export default function Templates() {
                         </span>
                       </button>
 
-                      {/* Folder controls — delete only (non-BS; reorder is now drag-and-drop) */}
-                      {canReorder && (
-                        <div className="flex items-center gap-0.5 pr-2 opacity-0 group-hover/folder:opacity-100 transition-opacity">
-                          {isConfirmingDelete ? (
-                            <div className="flex items-center gap-1 ml-1">
-                              <button
-                                onClick={() => deleteFolder(folder)}
-                                disabled={deletingFolder}
-                                className="text-[10px] px-1.5 py-0.5 rounded bg-red-500 text-white hover:bg-red-600 font-semibold"
-                                title="Confirm delete"
-                              >
-                                {deletingFolder ? "…" : "Delete"}
-                              </button>
-                              <button
-                                onClick={() => setConfirmDeleteFolder(null)}
-                                className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground hover:bg-muted/80"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setConfirmDeleteFolder(folder)}
-                              className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors ml-0.5"
-                              title="Delete folder"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          )}
+                      {/* Folder delete button — visible on hover for all disciplines */}
+                      {canDelete && (
+                        <div className="flex items-center pr-2 opacity-0 group-hover/folder:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => setConfirmDeleteFolder(folder)}
+                            className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors ml-0.5"
+                            title="Delete folder"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1334,6 +1315,59 @@ export default function Templates() {
           </div>
         </div>
       </Card>
+
+      {/* ── Delete Folder Confirmation Dialog ── */}
+      <Dialog open={!!confirmDeleteFolder} onOpenChange={open => { if (!open && !deletingFolder) setConfirmDeleteFolder(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5 shrink-0" />
+              Delete Folder
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold text-sidebar">"{confirmDeleteFolder}"</span>?
+            </p>
+            {confirmDeleteFolder && (grouped[confirmDeleteFolder] ?? []).length > 0 && (
+              <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-red-700">
+                  This will permanently delete{" "}
+                  <span className="font-bold">{(grouped[confirmDeleteFolder] ?? []).length} checklist{(grouped[confirmDeleteFolder] ?? []).length !== 1 ? "s" : ""}</span>{" "}
+                  inside this folder. This action cannot be undone.
+                </p>
+              </div>
+            )}
+            {confirmDeleteFolder && (grouped[confirmDeleteFolder] ?? []).length === 0 && (
+              <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-amber-700">
+                  This folder is empty. Deleting it will remove it from the list.
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDeleteFolder(null)}
+              disabled={deletingFolder}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => confirmDeleteFolder && deleteFolder(confirmDeleteFolder)}
+              disabled={deletingFolder}
+              className="bg-red-600 hover:bg-red-700 text-white border-0 gap-2"
+            >
+              {deletingFolder ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              {deletingFolder ? "Deleting…" : "Delete Folder"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── New Checklist Dialog ── */}
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
