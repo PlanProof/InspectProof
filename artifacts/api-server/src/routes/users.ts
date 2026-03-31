@@ -1,11 +1,17 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and, count } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
 import { sendWelcomeWithCredentialsEmail } from "../lib/email";
 import { requireAuth } from "../middleware/auth";
+import { getLimits } from "../lib/planLimits";
 
 const router: IRouter = Router();
+
+function parsePermissions(raw: string | null | undefined) {
+  if (!raw) return { editTemplates: false, addInspectors: false, createProjects: false };
+  try { return JSON.parse(raw); } catch { return { editTemplates: false, addInspectors: false, createProjects: false }; }
+}
 
 function formatUser(u: any) {
   return {
@@ -21,6 +27,9 @@ function formatUser(u: any) {
     licenceNumber: u.licenceNumber ?? null,
     companyName: u.companyName ?? null,
     isActive: u.isActive,
+    isCompanyAdmin: u.isCompanyAdmin ?? false,
+    userType: u.userType ?? "inspector",
+    permissions: parsePermissions(u.permissions),
     createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : u.createdAt,
   };
 }
@@ -28,7 +37,6 @@ function formatUser(u: any) {
 router.get("/", requireAuth, async (req, res) => {
   try {
     let users;
-    // Super-admins (isAdmin=true) see all users; company admins only see users from their own company
     if (req.authUser!.isAdmin && !req.authUser!.companyName) {
       users = await db.select().from(usersTable).orderBy(usersTable.firstName);
     } else if (req.authUser!.companyName) {
@@ -36,7 +44,6 @@ router.get("/", requireAuth, async (req, res) => {
         .where(eq(usersTable.companyName, req.authUser!.companyName))
         .orderBy(usersTable.firstName);
     } else {
-      // User has no company — only return themselves
       users = await db.select().from(usersTable)
         .where(eq(usersTable.id, req.authUser!.id));
     }
@@ -55,6 +62,30 @@ router.post("/", requireAuth, async (req, res) => {
       return;
     }
 
+    const creator = req.authUser!;
+
+    // ── Team member quota check ─────────────────────────────────────────────
+    if (creator.companyName) {
+      const limits = getLimits(creator.plan ?? "free_trial");
+      if (limits.maxTeamMembers !== null) {
+        const [{ value: currentCount }] = await db
+          .select({ value: count() })
+          .from(usersTable)
+          .where(eq(usersTable.companyName, creator.companyName));
+
+        if (currentCount >= limits.maxTeamMembers) {
+          res.status(402).json({
+            error: "team_limit_reached",
+            message: `Your ${limits.label} plan allows up to ${limits.maxTeamMembers} team member${limits.maxTeamMembers === 1 ? "" : "s"}. Upgrade your plan or contact contact@inspectproof.com.au to add more.`,
+            plan: creator.plan,
+            limit: limits.maxTeamMembers,
+            current: currentCount,
+          });
+          return;
+        }
+      }
+    }
+
     const normalizedEmail = data.email.toLowerCase().trim();
 
     const existing = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
@@ -66,8 +97,14 @@ router.post("/", requireAuth, async (req, res) => {
     const temporaryPassword = data.password || generateTempPassword();
     const passwordHash = await bcrypt.hash(temporaryPassword, 12);
 
-    // New users inherit the creating user's company
-    const inheritedCompany = req.authUser!.companyName ?? data.companyName ?? null;
+    const inheritedCompany = creator.companyName ?? data.companyName ?? null;
+
+    // Parse permissions — defaults depend on whether admin explicitly set them
+    const userType: string = data.userType ?? "inspector";
+    const defaultPerms = { editTemplates: false, addInspectors: false, createProjects: false };
+    const permissions = data.permissions
+      ? JSON.stringify({ ...defaultPerms, ...data.permissions })
+      : JSON.stringify(defaultPerms);
 
     const [user] = await db.insert(usersTable).values({
       email: normalizedEmail,
@@ -78,11 +115,13 @@ router.post("/", requireAuth, async (req, res) => {
       phone: data.phone || null,
       companyName: inheritedCompany,
       isActive: true,
+      isCompanyAdmin: false,
+      userType,
+      permissions,
     }).returning();
 
     res.status(201).json({ ...formatUser(user), temporaryPassword });
 
-    // Send welcome email with credentials (non-blocking)
     if (data.sendWelcomeEmail !== false) {
       const inviterName = data.inviterName || "Your team administrator";
       sendWelcomeWithCredentialsEmail(
@@ -137,10 +176,11 @@ router.patch("/me/notification-prefs", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { phone, firstName, lastName, role, signatureUrl, profession, licenceNumber, companyName, isActive } = req.body;
+    const { phone, firstName, lastName, role, signatureUrl, profession, licenceNumber,
+            companyName, isActive, isCompanyAdmin, userType, permissions } = req.body;
 
     const updateData: Record<string, any> = { updatedAt: new Date() };
     if (phone !== undefined) updateData.phone = phone;
@@ -152,6 +192,9 @@ router.patch("/:id", async (req, res) => {
     if (licenceNumber !== undefined) updateData.licenceNumber = licenceNumber;
     if (companyName !== undefined) updateData.companyName = companyName;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (typeof isCompanyAdmin === "boolean") updateData.isCompanyAdmin = isCompanyAdmin;
+    if (userType !== undefined) updateData.userType = userType;
+    if (permissions !== undefined) updateData.permissions = JSON.stringify(permissions);
 
     const [updated] = await db.update(usersTable)
       .set(updateData)

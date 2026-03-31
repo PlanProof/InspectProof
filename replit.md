@@ -34,6 +34,32 @@ InspectProof is a full-stack platform for Australian building certifiers and sur
 3. **Email `toEmail` mismatch** (`email.ts`): `sendWelcomeWithCredentialsEmail` now passes `email: opts.toEmail` when calling `welcomeWithCredentialsHtml`.
 4. **Expo push type** (`expoPush.ts`): Typed `json` as `any` in push response handler to resolve `data` property error.
 
+## Permission System (2026-03-31)
+
+Added granular company-level permissions and user type differentiation:
+
+### Schema Changes (`lib/db/src/schema/users.ts`)
+- `isCompanyAdmin: boolean` — true for self-registered accounts; false for invited team members
+- `userType: text` — `"inspector"` (mobile app field inspector) or `"user"` (desktop office user)
+- `permissions: text` — JSON column with `{ editTemplates, addInspectors, createProjects }` booleans
+
+### API Changes
+- **Registration** (`auth.ts`): Self-registrations now set `isCompanyAdmin: true`, `userType: "user"`, all permissions enabled
+- **Login + /me** (`auth.ts`): All auth responses now include `isCompanyAdmin`, `userType`, `permissions` fields
+- **Team creation** (`users.ts`): `POST /api/users` enforces plan team member quota — returns HTTP 402 with upgrade message when limit reached
+- **Team update** (`users.ts`): `PATCH /api/users/:id` accepts `isCompanyAdmin`, `userType`, `permissions` updates
+
+### Web UI Changes (`inspectors.tsx`)
+- Page renamed "Team Members" with 4 stats cards: Total Team (with limit indicator), Field Inspectors, Office Users, Company Admins
+- Each member row shows: crown badge for admins, Smartphone/Monitor type badge (Inspector vs Office User), granular permission pills (Edit Templates, Add Members, Create Projects) with lock/unlock icons
+- **Edit modal** expanded: Account Type selector (Field Inspector / Office User), Company Admin toggle (auto-grants all permissions), Permissions panel (3 individual toggles — hidden when Company Admin is on)
+- **Add Member modal**: Account Type selector included during creation
+- **Plan limit banner**: Amber warning banner + disabled "Add" button when at plan limit, with mailto link to upgrade
+- Crown icon overlaid on avatar for company admins
+
+### Data Migration
+Existing accounts with `is_admin = true` (system flag) backfilled: `isCompanyAdmin = true`, `userType = "user"`, all permissions enabled.
+
 ## E2E Test Results (2026-03-29)
 
 Full admin → inspector → mobile → report flow verified:

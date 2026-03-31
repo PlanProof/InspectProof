@@ -24,6 +24,9 @@ export const usersTable = pgTable("users", {
   planOverrideInspections: text("plan_override_inspections"),
   expoPushToken: text("expo_push_token"),
   notifyOnAssignment: boolean("notify_on_assignment").notNull().default(true),
+  isCompanyAdmin: boolean("is_company_admin").notNull().default(false),
+  userType: text("user_type").notNull().default("inspector"),
+  permissions: text("permissions"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

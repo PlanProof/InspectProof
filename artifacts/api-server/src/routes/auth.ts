@@ -50,6 +50,9 @@ router.post("/login", async (req, res) => {
         profession: user.profession ?? null,
         licenceNumber: user.licenceNumber ?? null,
         isAdmin: user.isAdmin ?? false,
+        isCompanyAdmin: user.isCompanyAdmin ?? false,
+        userType: user.userType ?? "inspector",
+        permissions: user.permissions ? JSON.parse(user.permissions) : null,
         isActive: user.isActive,
         createdAt: user.createdAt.toISOString(),
       },
@@ -94,6 +97,9 @@ router.post("/register", async (req, res) => {
       profession: profession ? profession.trim() : null,
       companyName: organization ? organization.trim() : null,
       isActive: true,
+      isCompanyAdmin: true,
+      userType: "user",
+      permissions: JSON.stringify({ editTemplates: true, addInspectors: true, createProjects: true }),
     }).returning();
 
     const token = Buffer.from(`${newUser.id}:${newUser.email}:${Date.now()}`).toString("base64");
@@ -112,6 +118,9 @@ router.post("/register", async (req, res) => {
         companyName: newUser.companyName ?? null,
         profession: newUser.profession ?? null,
         isAdmin: newUser.isAdmin ?? false,
+        isCompanyAdmin: newUser.isCompanyAdmin ?? true,
+        userType: newUser.userType ?? "user",
+        permissions: newUser.permissions ? JSON.parse(newUser.permissions) : { editTemplates: true, addInspectors: true, createProjects: true },
         isActive: newUser.isActive,
         createdAt: newUser.createdAt.toISOString(),
       },
@@ -169,6 +178,9 @@ router.get("/me", async (req, res) => {
       companyName: user.companyName ?? null,
       isActive: user.isActive,
       isAdmin: user.isAdmin ?? false,
+      isCompanyAdmin: user.isCompanyAdmin ?? false,
+      userType: user.userType ?? "inspector",
+      permissions: user.permissions ? JSON.parse(user.permissions) : null,
       plan: user.plan,
       createdAt: user.createdAt.toISOString(),
     });
