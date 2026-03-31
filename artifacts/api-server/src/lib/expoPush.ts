@@ -41,7 +41,7 @@ export async function sendExpoPush(
       const text = await res.text().catch(() => "");
       log?.warn({ status: res.status, text }, "Expo push API error");
     } else {
-      const json = await res.json().catch(() => null);
+      const json: any = await res.json().catch(() => null);
       log?.info({ to: token, status: json?.data?.status }, "Expo push sent");
     }
   } catch (err) {

@@ -139,7 +139,6 @@ export default function ConductInspectionScreen() {
     queryKey: ["inspection-checklist", id, token],
     queryFn: () => fetchWithAuth(`/api/inspections/${id}/checklist`),
     enabled: !!token && !!id,
-    staleTime: 30000,
     refetchOnWindowFocus: false,
   });
 

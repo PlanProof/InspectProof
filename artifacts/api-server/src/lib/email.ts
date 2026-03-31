@@ -403,7 +403,7 @@ export async function sendWelcomeWithCredentialsEmail(
       from: SMTP_FROM,
       to: opts.toEmail,
       subject: "Welcome to InspectProof — Your account is ready",
-      html: welcomeWithCredentialsHtml({ ...opts, loginUrl }),
+      html: welcomeWithCredentialsHtml({ ...opts, email: opts.toEmail, loginUrl }),
     });
     if (error) throw new Error(error.message);
     log?.info({ to: opts.toEmail }, "Welcome with credentials email sent");

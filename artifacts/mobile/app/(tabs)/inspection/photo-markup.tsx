@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { Colors } from "@/constants/colors";
 
@@ -54,6 +55,7 @@ export default function PhotoMarkupScreen() {
 
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
+  const queryClient = useQueryClient();
   const { width: screenW, height: screenH } = useWindowDimensions();
 
   const [phase, setPhase] = useState<Phase>("preview");
@@ -134,7 +136,9 @@ export default function PhotoMarkupScreen() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ photoUrls: [...existingUrls, objectPath] }),
     });
-  }, [fetchWithAuth, inspectionId, itemId]);
+    // Invalidate so the conduct screen refreshes photos when user navigates back
+    queryClient.invalidateQueries({ queryKey: ["inspection-checklist", inspectionId] });
+  }, [fetchWithAuth, inspectionId, itemId, queryClient]);
 
   useEffect(() => {
     if (!currentPhotoUri) return;
@@ -185,6 +189,7 @@ export default function PhotoMarkupScreen() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ photoUrls: newUrls, photoMarkups: newMarkups }),
               });
+              queryClient.invalidateQueries({ queryKey: ["inspection-checklist", inspectionId] });
               goToInspection();
             } catch {
               Alert.alert("Error", "Could not delete photo. Please try again.");
@@ -263,6 +268,7 @@ export default function PhotoMarkupScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ photoMarkups: { ...existingMarkups, [savedObjectPath]: markupData } }),
       });
+      queryClient.invalidateQueries({ queryKey: ["inspection-checklist", inspectionId] });
       setPhase("preview");
     } catch {
       Alert.alert("Error", "Could not save markup. Please try again.");

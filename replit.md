@@ -27,6 +27,13 @@ InspectProof is a full-stack platform for Australian building certifiers and sur
 - Secondary: `#466DB5` (BlueYonder)
 - Accent: `#C5D92D` (Pear)
 
+## Recent Fixes (2026-03-31)
+
+1. **Photo cache invalidation** (`photo-markup.tsx`): Added `useQueryClient` to photo-markup screen. Now calls `queryClient.invalidateQueries(["inspection-checklist", inspectionId])` after `appendPhotoToChecklist`, `deletePhoto`, and `saveMarkup` succeed. Ensures the conduct screen's Photos tab is fresh when the user navigates back (previously the stack-restored screen kept stale data since `refetchOnWindowFocus: false`).
+2. **API TypeScript clean** (`lib/db` rebuild): Compiled `lib/db` to generate missing `dist/seeds/global-templates.d.ts` declaration file.
+3. **Email `toEmail` mismatch** (`email.ts`): `sendWelcomeWithCredentialsEmail` now passes `email: opts.toEmail` when calling `welcomeWithCredentialsHtml`.
+4. **Expo push type** (`expoPush.ts`): Typed `json` as `any` in push response handler to resolve `data` property error.
+
 ## E2E Test Results (2026-03-29)
 
 Full admin → inspector → mobile → report flow verified:
