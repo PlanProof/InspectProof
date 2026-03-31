@@ -90,7 +90,7 @@ function apiUserToMember(u: any): TeamMember {
   };
 }
 
-const ROLES = ["Inspector", "Certifier", "Staff"];
+const ROLES = ["Inspector", "Certifier", "Staff", "Admin"];
 const ADD_MEMBER_ROLES = ["Inspector", "Certifier", "Staff", "Admin"];
 
 const ROLE_REVERSE: Record<string, string> = {
