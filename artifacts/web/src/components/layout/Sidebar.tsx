@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import {
@@ -23,9 +24,24 @@ const navigation = [
   { name: "Team",        href: "/inspectors",  icon: UsersRound },
 ];
 
+function useOrgName(apiCompanyName: string | null | undefined): string | null {
+  const [localOrg, setLocalOrg] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("inspectproof_org_details");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setLocalOrg(parsed?.name?.trim() || null);
+      }
+    } catch {}
+  }, []);
+  return apiCompanyName || localOrg || null;
+}
+
 export function Sidebar() {
   const [location] = useLocation();
   const { logout, user } = useAuth();
+  const orgName = useOrgName(user?.companyName);
 
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl">
@@ -33,8 +49,8 @@ export function Sidebar() {
         <img src={`${import.meta.env.BASE_URL}logo-dark.png`} alt="InspectProof" className="h-8 w-8 shrink-0 object-contain" />
         <div className="flex flex-col min-w-0">
           <span className="text-[#F2F3F4] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
-          {user?.companyName && (
-            <span className="text-white/50 text-[11px] font-medium mt-1.5 truncate leading-none">{user.companyName}</span>
+          {orgName && (
+            <span className="text-white/50 text-[11px] font-medium mt-1.5 truncate leading-none">{orgName}</span>
           )}
         </div>
       </div>
