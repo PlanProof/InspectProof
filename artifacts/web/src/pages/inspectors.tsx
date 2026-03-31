@@ -952,16 +952,22 @@ export default function Inspectors() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Card className="shadow-sm border-muted/60">
+        <Card className={cn("shadow-sm", atLimit ? "border-amber-300 bg-amber-50/40" : "border-muted/60")}>
           <div className="p-4 flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-primary/10 text-sidebar">
+            <div className={cn("p-2.5 rounded-xl", atLimit ? "bg-amber-100 text-amber-700" : "bg-primary/10 text-sidebar")}>
               <Users className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-sidebar">
-                {members.length}{planLimit !== null && <span className="text-sm font-normal text-muted-foreground">/{planLimit}</span>}
+              <p className="text-2xl font-bold text-sidebar leading-none">
+                {members.length}
+                <span className="text-sm font-normal text-muted-foreground">
+                  /{planLimit !== null ? planLimit : "∞"}
+                </span>
               </p>
-              <p className="text-xs text-muted-foreground font-medium">Total Team</p>
+              <p className="text-xs text-muted-foreground font-medium mt-0.5">Total Team</p>
+              <p className="text-[10px] text-muted-foreground/70 font-medium mt-0.5 uppercase tracking-wide">
+                {PLAN_LABELS[currentPlan] ?? currentPlan} plan
+              </p>
             </div>
           </div>
         </Card>
