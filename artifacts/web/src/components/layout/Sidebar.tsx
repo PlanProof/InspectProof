@@ -70,6 +70,17 @@ export function Sidebar() {
       </div>
 
       <div className="border-t border-white/10 p-4 space-y-1">
+        {user && (
+          <div className="flex items-center gap-2.5 px-3 py-2 mb-1">
+            <div className="h-7 w-7 rounded-full bg-secondary/40 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
+              {`${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() || "?"}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[12px] font-semibold text-white/90 truncate leading-none">{user.firstName} {user.lastName}</p>
+              <p className="text-[10px] text-white/40 truncate mt-0.5 leading-none">{user.email}</p>
+            </div>
+          </div>
+        )}
         {user && user.plan === "free_trial" && (
           <Link
             href="/billing"
