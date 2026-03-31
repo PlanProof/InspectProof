@@ -139,6 +139,8 @@ export default function ConductInspectionScreen() {
     queryKey: ["inspection-checklist", id, token],
     queryFn: () => fetchWithAuth(`/api/inspections/${id}/checklist`),
     enabled: !!token && !!id,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: projectDocuments = [], refetch: refetchDocuments } = useQuery<ProjectDocument[]>({
@@ -453,6 +455,8 @@ export default function ConductInspectionScreen() {
     const newPhotoUrls = (activeItem.photoUrls || []).filter(p => p !== photoPath);
     const newMarkups = { ...(activeItem.photoMarkups || {}) };
     delete newMarkups[photoPath];
+    // Cancel any in-flight refetches that could overwrite our optimistic update
+    await queryClient.cancelQueries({ queryKey: ckKey });
     // Optimistically update both the modal state and the React Query cache
     setActiveItem(prev => prev ? { ...prev, photoUrls: newPhotoUrls, photoMarkups: newMarkups } : null);
     queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
@@ -475,7 +479,11 @@ export default function ConductInspectionScreen() {
   };
 
   const removePhotoFromItem = useCallback(async (itemId: number, photoPath: string) => {
-    const item = checklistItems.find(i => i.id === itemId);
+    // Cancel any in-flight refetches first to prevent them overwriting our optimistic update
+    await queryClient.cancelQueries({ queryKey: ckKey });
+    // Read latest data from cache (more reliable than closure)
+    const latest = queryClient.getQueryData<ChecklistItem[]>(ckKey) ?? checklistItems;
+    const item = latest.find(i => i.id === itemId);
     if (!item) return;
     const newPhotoUrls = (item.photoUrls || []).filter(p => p !== photoPath);
     const newMarkups = { ...(item.photoMarkups || {}) };
