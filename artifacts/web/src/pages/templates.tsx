@@ -13,27 +13,6 @@ import {
 import { DocTemplatesPanel } from "@/pages/doc-templates";
 import { cn } from "@/lib/utils";
 
-// ── NCC Classifications ───────────────────────────────────────────────────────
-const NCC_CLASSES: Record<string, string> = {
-  "Class 1a":  "Class 1a — Dwelling",
-  "Class 1b":  "Class 1b — Boarding house / Guest house / Hostel (>300m² or >12Pax)",
-  "Class 2":   "Class 2 — Building containing two or more sole-occupancy units",
-  "Class 3":   "Class 3 — Residential building (other than Class 1 or 2)",
-  "Class 4":   "Class 4 — Dwelling in Class 5, 6, 7, 8 or 9 building",
-  "Class 5":   "Class 5 — Office building",
-  "Class 6":   "Class 6 — Shop or commercial premises",
-  "Class 7a":  "Class 7a — Carpark",
-  "Class 7b":  "Class 7b — Storage or display of goods by wholesale",
-  "Class 7c":  "Class 7c — Storage or display of goods by retail",
-  "Class 8":   "Class 8 — Laboratory or production/assembly building",
-  "Class 9a":  "Class 9a — Health-care building",
-  "Class 9b":  "Class 9b — Assembly building",
-  "Class 9c":  "Class 9c — Residential care building",
-  "Class 10a": "Class 10a — Non-habitable building (garage, carport, shed)",
-  "Class 10b": "Class 10b — Fence, mast, antenna, retaining wall, swimming pool",
-  "Class 10c": "Class 10c — Private bushfire shelter",
-};
-
 const DISCIPLINE_ORDER = [
   "Building Surveyor",
   "Structural Engineer",
@@ -796,7 +775,7 @@ export default function Templates() {
 
   const defaultDiscipline = !isAdmin && userDisciplineInList ? userProfession : "Building Surveyor";
   const [discipline, setDiscipline] = useState(defaultDiscipline);
-  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(["Class 1a"]));
+  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set([]));
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [reordering, setReordering] = useState(false);
@@ -853,12 +832,10 @@ export default function Templates() {
       grouped[t.folder].push(t);
     });
 
-  const classOrder = discipline === "Building Surveyor" ? Object.keys(NCC_CLASSES) : [];
-
   // Derive canonical folder list from API data (alphabetical initially)
-  const apiGroupedKeys = Object.keys(grouped).filter(f => !classOrder.includes(f));
+  const apiGroupedKeys = Object.keys(grouped);
 
-  // folderOrder is the user-set order for non-BS disciplines; sync from API keys when discipline changes
+  // folderOrder is the user-set order; sync from API keys when discipline changes
   useEffect(() => {
     const saved = localStorage.getItem(`folderOrder_${activeDisciplineKey}`);
     if (saved) {
@@ -877,15 +854,9 @@ export default function Templates() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discipline, templates.length]);
 
-  const activeFolderKeys = discipline === "Building Surveyor"
-    ? [
-        ...classOrder.filter(f => !search || grouped[f] || NCC_CLASSES[f]?.toLowerCase().includes(search.toLowerCase())),
-        ...apiGroupedKeys.filter(f => !classOrder.includes(f)),
-      ]
-    : (search
-        ? folderOrder.filter(f => grouped[f])  // only folders with matching templates when searching
-        : folderOrder.filter(f => apiGroupedKeys.includes(f))  // only folders that exist in DB
-      );
+  const activeFolderKeys = search
+    ? folderOrder.filter(f => grouped[f])
+    : folderOrder.filter(f => apiGroupedKeys.includes(f));
 
   const folderKeys = activeFolderKeys;
 
@@ -1060,7 +1031,7 @@ export default function Templates() {
           return (
             <div key={d} className="relative flex items-center gap-0.5">
               <button
-                onClick={() => { setDiscipline(d); setSelectedId(null); setOpenFolders(new Set(d === "Building Surveyor" ? ["Class 1a"] : [])); }}
+                onClick={() => { setDiscipline(d); setSelectedId(null); setOpenFolders(new Set([])); }}
                 className={cn(
                   "px-4 py-2 rounded-lg text-sm font-semibold border-2 transition-all",
                   isActive
@@ -1219,12 +1190,6 @@ export default function Templates() {
                         </div>
                       )}
                     </div>
-
-                    {isOpen && NCC_CLASSES[folder] && (
-                      <div className="mx-4 mb-1 px-2 py-1 text-[10px] text-muted-foreground bg-muted/30 rounded italic leading-snug">
-                        {NCC_CLASSES[folder]}
-                      </div>
-                    )}
 
                     {isOpen && items.length === 0 && (
                       <div className="pl-10 pr-4 py-2 text-xs text-muted-foreground/60 italic">
