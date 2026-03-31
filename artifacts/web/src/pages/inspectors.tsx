@@ -114,6 +114,17 @@ function apiBase() {
   return import.meta.env.BASE_URL.replace(/\/$/, "");
 }
 
+// ── userType helpers ──────────────────────────────────────────────────────────
+// userType: "inspector" = mobile only | "user" = web only | "both" = both
+
+function hasMobile(userType: string) { return userType === "inspector" || userType === "both"; }
+function hasWeb(userType: string)    { return userType === "user"      || userType === "both"; }
+function mergeAccess(mobile: boolean, web: boolean): string {
+  if (mobile && web) return "both";
+  if (mobile)        return "inspector";
+  return "user";
+}
+
 // ── Toggle switch ─────────────────────────────────────────────────────────────
 
 function Toggle({ on, onChange, disabled }: { on: boolean; onChange: () => void; disabled?: boolean }) {
@@ -257,24 +268,32 @@ function EditMemberModal({
             </select>
           </div>
 
-          {/* User type */}
+          {/* User type — multi-select: can have both */}
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Account Type</label>
+            <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Account Type <span className="text-[10px] font-normal normal-case text-muted-foreground">(select one or both)</span></label>
             <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: "inspector", label: "Field Inspector", icon: Smartphone, desc: "Uses mobile app" },
-                { value: "user",      label: "Office User",     icon: Monitor,    desc: "Uses web platform" },
-              ].map(({ value, label, icon: Icon, desc }) => (
+              {([
+                { key: "mobile", label: "Field Inspector", icon: Smartphone, desc: "Uses mobile app",    active: hasMobile(form.userType) },
+                { key: "web",    label: "Office User",     icon: Monitor,    desc: "Uses web platform",  active: hasWeb(form.userType) },
+              ] as const).map(({ key, label, icon: Icon, desc, active }) => (
                 <button
-                  key={value}
-                  onClick={() => setForm(f => ({ ...f, userType: value }))}
+                  key={key}
+                  onClick={() => {
+                    const curMobile = hasMobile(form.userType);
+                    const curWeb    = hasWeb(form.userType);
+                    const nextMobile = key === "mobile" ? !curMobile : curMobile;
+                    const nextWeb    = key === "web"    ? !curWeb    : curWeb;
+                    if (!nextMobile && !nextWeb) return; // keep at least one
+                    setForm(f => ({ ...f, userType: mergeAccess(nextMobile, nextWeb) }));
+                  }}
                   className={cn(
-                    "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all",
-                    form.userType === value
+                    "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all relative",
+                    active
                       ? "border-secondary bg-secondary/8 text-secondary"
                       : "border-muted/60 bg-background text-muted-foreground hover:border-secondary/40"
                   )}
                 >
+                  {active && <Check className="absolute top-1.5 right-1.5 h-3 w-3 text-secondary" />}
                   <Icon className="h-4 w-4" />
                   <span className="text-xs font-semibold">{label}</span>
                   <span className="text-[10px] opacity-70">{desc}</span>
@@ -368,7 +387,8 @@ function MemberRow({
   const rawRole = member.role;
   const roleBadge = ROLE_BADGE[rawRole] ?? "bg-muted text-muted-foreground border-muted/60";
   const isInvited = member.status === "invited";
-  const isFieldInspector = member.userType === "inspector";
+  const memberHasMobile = hasMobile(member.userType);
+  const memberHasWeb    = hasWeb(member.userType);
 
   return (
     <div className="flex items-center gap-4 px-6 py-4 hover:bg-muted/30 transition-colors group">
@@ -394,15 +414,16 @@ function MemberRow({
               <Crown className="h-2.5 w-2.5" /> Admin
             </span>
           )}
-          <span className={cn(
-            "text-[10px] font-semibold px-1.5 py-0.5 rounded border flex items-center gap-0.5",
-            isFieldInspector
-              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-              : "bg-sky-50 text-sky-700 border-sky-200"
-          )}>
-            {isFieldInspector ? <Smartphone className="h-2.5 w-2.5" /> : <Monitor className="h-2.5 w-2.5" />}
-            {isFieldInspector ? "Inspector" : "Office User"}
-          </span>
+          {memberHasMobile && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-0.5">
+              <Smartphone className="h-2.5 w-2.5" /> Inspector
+            </span>
+          )}
+          {memberHasWeb && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-sky-50 text-sky-700 border-sky-200 flex items-center gap-0.5">
+              <Monitor className="h-2.5 w-2.5" /> Office User
+            </span>
+          )}
           {isInvited && (
             <span className="text-[10px] text-amber-600 italic">(pending)</span>
           )}
@@ -452,7 +473,7 @@ function MemberRow({
           <span className="flex items-center gap-1 text-[10px] text-secondary font-medium">
             <Loader2 className="h-2.5 w-2.5 animate-spin" /> Sending…
           </span>
-        ) : isFieldInspector ? (
+        ) : memberHasMobile ? (
           <button
             onClick={() => onSendInvite(member.id)}
             className="flex items-center gap-1 text-[10px] text-secondary hover:underline font-medium"
@@ -654,8 +675,8 @@ export default function Inspectors() {
   }, [addMemberForm, currentUser, refetch]);
 
   const adminCount = members.filter(m => m.isCompanyAdmin).length;
-  const inspectorCount = members.filter(m => m.userType === "inspector").length;
-  const officeCount = members.filter(m => m.userType === "user").length;
+  const inspectorCount = members.filter(m => hasMobile(m.userType)).length;
+  const officeCount = members.filter(m => hasWeb(m.userType)).length;
 
   return (
     <AppLayout>
@@ -765,26 +786,34 @@ export default function Inspectors() {
                   </select>
                 </div>
 
-                {/* Account type */}
+                {/* Account type — multi-select */}
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Account Type</label>
+                  <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Account Type <span className="text-[10px] font-normal normal-case text-muted-foreground">(select one or both)</span></label>
                   <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { value: "inspector", label: "Field Inspector", icon: Smartphone, desc: "Uses mobile app" },
-                      { value: "user",      label: "Office User",     icon: Monitor,    desc: "Uses web platform" },
-                    ].map(({ value, label, icon: Icon, desc }) => (
+                    {([
+                      { key: "mobile", label: "Field Inspector", icon: Smartphone, desc: "Uses mobile app",   active: hasMobile(addMemberForm.userType) },
+                      { key: "web",    label: "Office User",     icon: Monitor,    desc: "Uses web platform", active: hasWeb(addMemberForm.userType) },
+                    ] as const).map(({ key, label, icon: Icon, desc, active }) => (
                       <button
-                        key={value}
+                        key={key}
                         type="button"
-                        onClick={() => setAddMemberForm(f => ({ ...f, userType: value }))}
                         disabled={addMemberSaving}
+                        onClick={() => {
+                          const curMobile = hasMobile(addMemberForm.userType);
+                          const curWeb    = hasWeb(addMemberForm.userType);
+                          const nextMobile = key === "mobile" ? !curMobile : curMobile;
+                          const nextWeb    = key === "web"    ? !curWeb    : curWeb;
+                          if (!nextMobile && !nextWeb) return;
+                          setAddMemberForm(f => ({ ...f, userType: mergeAccess(nextMobile, nextWeb) }));
+                        }}
                         className={cn(
-                          "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all",
-                          addMemberForm.userType === value
+                          "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all relative",
+                          active
                             ? "border-secondary bg-secondary/8 text-secondary"
                             : "border-muted/60 bg-background text-muted-foreground hover:border-secondary/40"
                         )}
                       >
+                        {active && <Check className="absolute top-1.5 right-1.5 h-3 w-3 text-secondary" />}
                         <Icon className="h-4 w-4" />
                         <span className="text-xs font-semibold">{label}</span>
                         <span className="text-[10px] opacity-70">{desc}</span>
