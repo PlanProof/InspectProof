@@ -255,7 +255,7 @@ export default function ConductInspectionScreen() {
       await fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ result: next, notes: item.notes || null, photoUrls: item.photoUrls || [] }),
+        body: JSON.stringify({ result: next, notes: item.notes || null }),
       });
       refetchChecklist(); // silent background sync — no await
     } catch {
@@ -280,7 +280,7 @@ export default function ConductInspectionScreen() {
         fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ result: next, notes: item.notes || null, photoUrls: item.photoUrls || [] }),
+          body: JSON.stringify({ result: next, notes: item.notes || null }),
         })
       ));
       refetchChecklist(); // silent background sync
@@ -303,7 +303,7 @@ export default function ConductInspectionScreen() {
       await fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ result: next, notes: item.notes || null, photoUrls: item.photoUrls || [] }),
+        body: JSON.stringify({ result: next, notes: item.notes || null }),
       });
       refetchChecklist(); // silent background sync
     } catch {
@@ -366,7 +366,6 @@ export default function ConductInspectionScreen() {
     const patch = {
       result: editResult,
       notes: editNotes || null,
-      photoUrls: activeItem.photoUrls || [],
       ...(showDefectFields ? {
         severity: editSeverity || null,
         location: editLocation || null,
