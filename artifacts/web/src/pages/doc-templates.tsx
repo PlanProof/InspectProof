@@ -527,7 +527,7 @@ export function DocTemplatesPanel() {
   const [templates, setTemplates] = useState<DocTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [templatesLoading, setTemplatesLoading] = useState(true);
-  const [mode, setMode] = useState<"edit" | "preview">("preview");
+  const [liveContent, setLiveContent] = useState<string>("");
 
   useEffect(() => {
     apiFetch(API_BASE)
@@ -539,7 +539,7 @@ export function DocTemplatesPanel() {
       .catch(console.error)
       .finally(() => setTemplatesLoading(false));
   }, []);
-  const [rightTab, setRightTab] = useState<"fields" | "checklists">("fields");
+  const [rightTab, setRightTab] = useState<"fields" | "preview" | "checklists">("fields");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [saved, setSaved] = useState(false);
@@ -612,7 +612,6 @@ export function DocTemplatesPanel() {
       const t = fromApi(result);
       setTemplates(prev => [...prev, t]);
       setSelectedId(t.id);
-      setMode("edit");
     } catch (err) { console.error(err); }
   }
 
@@ -653,12 +652,13 @@ export function DocTemplatesPanel() {
     } catch (err) { console.error(err); }
   }
 
-  // Load template content into the contenteditable div when selection or mode changes
+  // Load template content into the contenteditable div when selection changes
   useEffect(() => {
-    if (mode === "edit" && editableRef.current && selected) {
+    if (editableRef.current && selected) {
       editableRef.current.innerHTML = selected.content || "";
+      setLiveContent(selected.content || "");
     }
-  }, [selectedId, mode]);
+  }, [selectedId]);
 
   const saveContent = useCallback(async (silent = false) => {
     if (!editableRef.current || !selected) return;
@@ -820,7 +820,7 @@ export function DocTemplatesPanel() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => { setSelectedId(t.id); setMode("preview"); }}
+                    onClick={() => setSelectedId(t.id)}
                     className={`w-full text-left px-2.5 py-2 rounded-lg text-sm transition-colors flex items-start gap-2 ${
                       selectedId === t.id ? "bg-secondary text-white" : "hover:bg-muted text-sidebar"
                     }`}
@@ -856,16 +856,8 @@ export function DocTemplatesPanel() {
         <div className="flex-1 flex flex-col min-w-0">
           {selected ? (
             <>
-              {/* ── Row 1: Mode toggle + Generate Report ──────────── */}
+              {/* ── Row 1: Generate Report ──────────── */}
               <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                <div className="flex rounded-lg border border-border overflow-hidden bg-card shadow-sm">
-                  <button onClick={() => setMode("edit")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${mode === "edit" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}>
-                    <Edit3 className="h-3.5 w-3.5" />Edit
-                  </button>
-                  <button onClick={async () => { await saveContent(true); setMode("preview"); }} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors ${mode === "preview" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}>
-                    <Eye className="h-3.5 w-3.5" />Preview
-                  </button>
-                </div>
                 <button
                   onClick={() => setGenerateOpen(true)}
                   className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0B1933] text-white text-xs font-semibold hover:bg-[#0B1933]/90 transition-colors shadow-sm"
@@ -880,9 +872,8 @@ export function DocTemplatesPanel() {
                 </button>
               </div>
 
-              {/* ── Formatting toolbar (edit mode only) ── */}
-              {mode === "edit" && (
-                <div className="flex flex-col gap-1 mb-2">
+              {/* ── Formatting toolbar ── */}
+              <div className="flex flex-col gap-1 mb-2">
 
                   {/* ── Row 1: Text formatting ── */}
                   <div className="flex items-center gap-0.5 flex-wrap bg-card border border-border rounded-xl px-2 py-1.5 shadow-sm">
@@ -1110,56 +1101,37 @@ export function DocTemplatesPanel() {
                     </div>
                   </div>
                 </div>
-              )}
-
-              {/* Preview mode banner */}
-              {mode === "preview" && (
-                <div className="flex items-center gap-2 px-3 py-2 mb-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs font-medium">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0 ${previewProject ? "bg-green-200 text-green-900" : "bg-amber-200 text-amber-900"}`}>
-                    {previewProject ? "Live Data" : "Test Data"}
-                  </span>
-                  <span className="truncate">
-                    Previewing with <strong>{previewProject?.name ?? "Test Project"}</strong>
-                    {previewProject?.siteAddress ? ` — ${previewProject.siteAddress}` : ""}
-                    {previewInspection ? ` — ${(previewInspection.inspectionType ?? "").replace(/_/g, " ")}` : ""}
-                  </span>
-                </div>
-              )}
 
               {/* A4 document */}
               <div className="flex-1 overflow-auto bg-muted/30 rounded-xl border border-border p-4 flex justify-center">
                 <div
                   className="relative bg-white shadow-xl"
-                  style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a" }}
+                  style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a", overflow: "hidden" }}
                 >
                   {selected.backgroundImage && (
                     <img src={selected.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
                   )}
-                  {mode === "edit" ? (
-                    <div
-                      ref={editableRef}
-                      contentEditable
-                      suppressContentEditableWarning
-                      spellCheck
-                      style={{
-                        padding: "72px 80px",
-                        minHeight: "1123px",
-                        outline: "none",
-                        fontFamily: "Georgia, serif",
-                        fontSize: "14px",
-                        lineHeight: "1.6",
-                        color: "#1a1a1a",
-                        position: "relative",
-                        cursor: "text",
-                      }}
-                      onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); saveContent(); } }}
-                    />
-                  ) : (
-                    <div
-                      style={{ padding: "72px 80px", position: "relative", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a" }}
-                      dangerouslySetInnerHTML={{ __html: fillWithData(selected.content, previewData) }}
-                    />
-                  )}
+                  <div
+                    ref={editableRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    spellCheck
+                    style={{
+                      padding: "72px 80px",
+                      minHeight: "1123px",
+                      outline: "none",
+                      fontFamily: "Georgia, serif",
+                      fontSize: "14px",
+                      lineHeight: "1.6",
+                      color: "#1a1a1a",
+                      position: "relative",
+                      cursor: "text",
+                      wordBreak: "break-word",
+                      overflowWrap: "break-word",
+                    }}
+                    onInput={() => setLiveContent(editableRef.current?.innerHTML ?? "")}
+                    onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); saveContent(); } }}
+                  />
                 </div>
               </div>
             </>
@@ -1176,37 +1148,44 @@ export function DocTemplatesPanel() {
           )}
         </div>
 
-        {/* ── Right panel: Fields + Linked Checklists ───────────────────────── */}
+        {/* ── Right panel: Fields + Preview + Linked Checklists ─────────────── */}
         {selected && (
-          <div className="w-52 shrink-0 flex flex-col bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="w-[280px] shrink-0 flex flex-col bg-card border border-border rounded-xl overflow-hidden shadow-sm">
             {/* Tab bar */}
             <div className="flex border-b border-border">
               <button
                 onClick={() => setRightTab("fields")}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors ${rightTab === "fields" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}
+                className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-[11px] font-semibold transition-colors ${rightTab === "fields" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}
               >
                 <ChevronRight className="h-3 w-3" />
                 Fields
               </button>
               <button
+                onClick={() => setRightTab("preview")}
+                className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-[11px] font-semibold transition-colors ${rightTab === "preview" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}
+              >
+                <Eye className="h-3 w-3" />
+                Preview
+              </button>
+              <button
                 onClick={() => setRightTab("checklists")}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors relative ${rightTab === "checklists" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}
+                className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-[11px] font-semibold transition-colors relative ${rightTab === "checklists" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}
               >
                 <Link2 className="h-3 w-3" />
-                Checklists
+                Link
                 {linkedCount > 0 && (
-                  <span className={`absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${rightTab === "checklists" ? "bg-white text-secondary" : "bg-secondary text-white"}`}>
+                  <span className={`absolute top-1.5 right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${rightTab === "checklists" ? "bg-white text-secondary" : "bg-secondary text-white"}`}>
                     {linkedCount}
                   </span>
                 )}
               </button>
             </div>
 
-            {rightTab === "fields" ? (
-              <div className="flex-1 overflow-y-auto p-2 space-y-3">
-                <div className="px-1 pt-1">
-                  <p className="text-[10px] text-muted-foreground">Click a field to insert at cursor</p>
-                  <div className="mt-1.5 flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+            {rightTab === "preview" ? (
+              <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
+                {/* Project / Inspection selector */}
+                <div>
+                  <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
                     <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wide shrink-0">Project</span>
                     <select
                       value={previewProjectId}
@@ -1235,6 +1214,42 @@ export function DocTemplatesPanel() {
                       </select>
                     </div>
                   )}
+                  <div className={`mt-1 flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-semibold ${previewProject ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-800"}`}>
+                    {previewProject ? "Live data" : "Test data (no project selected)"}
+                  </div>
+                </div>
+                {/* Scaled A4 live preview */}
+                <div style={{ width: "256px", position: "relative", height: `${Math.round(1123 * (256 / 794))}px`, flexShrink: 0 }}>
+                  <div style={{
+                    width: "794px",
+                    minHeight: "1123px",
+                    background: "white",
+                    transform: `scale(${256 / 794})`,
+                    transformOrigin: "top left",
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    boxShadow: "0 2px 12px rgba(0,0,0,0.12)",
+                    pointerEvents: "none",
+                    fontFamily: "Georgia, serif",
+                    fontSize: "14px",
+                    lineHeight: "1.6",
+                    color: "#1a1a1a",
+                  }}>
+                    {selected.backgroundImage && (
+                      <img src={selected.backgroundImage} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                    )}
+                    <div
+                      style={{ padding: "72px 80px", position: "relative", minHeight: "1123px", wordBreak: "break-word", overflowWrap: "break-word" }}
+                      dangerouslySetInnerHTML={{ __html: fillWithData(liveContent || selected.content, previewData) }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : rightTab === "fields" ? (
+              <div className="flex-1 overflow-y-auto p-2 space-y-3">
+                <div className="px-1 pt-1">
+                  <p className="text-[10px] text-muted-foreground">Click a field to insert at cursor. Preview updates live in the Preview tab.</p>
                 </div>
                 {FIELD_GROUPS.map(group => (
                   <div key={group.label}>
