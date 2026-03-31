@@ -449,18 +449,30 @@ export default function ConductInspectionScreen() {
 
   const removePhoto = async (photoPath: string) => {
     if (!activeItem) return;
+    const snapshot = activeItem;
+    const itemId = activeItem.id;
     const newPhotoUrls = (activeItem.photoUrls || []).filter(p => p !== photoPath);
     const newMarkups = { ...(activeItem.photoMarkups || {}) };
     delete newMarkups[photoPath];
+    // Optimistically update both the modal state and the React Query cache
     setActiveItem(prev => prev ? { ...prev, photoUrls: newPhotoUrls, photoMarkups: newMarkups } : null);
+    queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+      (old ?? []).map(i => i.id === itemId ? { ...i, photoUrls: newPhotoUrls, photoMarkups: newMarkups } : i)
+    );
     try {
-      await fetchWithAuth(`/api/inspections/${id}/checklist/${activeItem.id}`, {
+      await fetchWithAuth(`/api/inspections/${id}/checklist/${itemId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ photoUrls: newPhotoUrls, photoMarkups: newMarkups }),
       });
-      await refetchChecklist();
-    } catch { }
+    } catch {
+      // Revert both optimistic updates on failure
+      setActiveItem(prev => prev ? { ...prev, photoUrls: snapshot.photoUrls, photoMarkups: snapshot.photoMarkups } : null);
+      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+        (old ?? []).map(i => i.id === itemId ? snapshot : i)
+      );
+      Alert.alert("Error", "Could not delete photo. Please try again.");
+    }
   };
 
   const removePhotoFromItem = useCallback(async (itemId: number, photoPath: string) => {

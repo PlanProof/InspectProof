@@ -185,8 +185,10 @@ export default function PhotoMarkupScreen() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ photoUrls: newUrls, photoMarkups: newMarkups }),
               });
-            } catch { }
-            goToInspection();
+              goToInspection();
+            } catch {
+              Alert.alert("Error", "Could not delete photo. Please try again.");
+            }
           },
         },
       ]
