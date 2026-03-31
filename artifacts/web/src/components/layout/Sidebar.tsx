@@ -29,9 +29,14 @@ export function Sidebar() {
 
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl">
-      <div className="flex h-16 shrink-0 items-center px-5 gap-3 border-b border-white/10">
+      <div className="shrink-0 flex items-center px-5 gap-3 border-b border-white/10 py-4 min-h-16">
         <img src={`${import.meta.env.BASE_URL}logo-dark.png`} alt="InspectProof" className="h-8 w-8 shrink-0 object-contain" />
-        <span className="text-[#F2F3F4] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
+        <div className="flex flex-col min-w-0">
+          <span className="text-[#F2F3F4] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
+          {user?.companyName && (
+            <span className="text-white/50 text-[11px] font-medium mt-1.5 truncate leading-none">{user.companyName}</span>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-1 flex-col overflow-y-auto pt-6 px-4 pb-4">
