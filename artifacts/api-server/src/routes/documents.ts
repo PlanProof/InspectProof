@@ -17,6 +17,7 @@ async function formatDoc(d: any) {
     name: d.name,
     category: d.category,
     fileName: d.fileName,
+    fileUrl: d.fileUrl ?? null,
     fileSize: d.fileSize,
     mimeType: d.mimeType,
     version: d.version,

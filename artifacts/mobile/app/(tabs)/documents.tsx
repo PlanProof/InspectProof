@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, Pressable,
-  RefreshControl, Platform, TextInput,
+  RefreshControl, TextInput,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -39,6 +39,20 @@ export default function DocumentsScreen() {
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
+
+  const openDoc = useCallback((d: any) => {
+    if (!d.fileUrl) return;
+    const fullUrl = `${baseUrl}/api/storage${d.fileUrl}`;
+    router.push({
+      pathname: "/inspection/document-viewer" as any,
+      params: {
+        url: fullUrl,
+        name: d.name || d.fileName || "Document",
+        mimeType: d.mimeType || "application/octet-stream",
+        documentId: String(d.id),
+      },
+    });
+  }, [baseUrl]);
 
   const { data: docs = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
     queryKey: ["documents", token],
@@ -145,7 +159,11 @@ export default function DocumentsScreen() {
           </View>
         ) : (
           filtered.map(d => (
-            <View key={d.id} style={styles.card}>
+            <Pressable
+              key={d.id}
+              style={({ pressed }) => [styles.card, pressed && { opacity: 0.75 }]}
+              onPress={() => openDoc(d)}
+            >
               <View style={styles.iconWrap}>
                 <Feather name={getMimeIcon(d.mimeType) as any} size={22} color={Colors.secondary} />
               </View>
@@ -170,12 +188,15 @@ export default function DocumentsScreen() {
                   </View>
                 )}
               </View>
-              {d.version && (
-                <View style={styles.versionBadge}>
-                  <Text style={styles.versionText}>v{d.version}</Text>
-                </View>
-              )}
-            </View>
+              <View style={styles.cardRight}>
+                {d.version && (
+                  <View style={styles.versionBadge}>
+                    <Text style={styles.versionText}>v{d.version}</Text>
+                  </View>
+                )}
+                <Feather name="chevron-right" size={16} color={Colors.textTertiary} />
+              </View>
+            </Pressable>
           ))
         )}
       </ScrollView>
@@ -239,6 +260,7 @@ const styles = StyleSheet.create({
   metaText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
   uploaderRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   uploaderText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
+  cardRight: { alignItems: "flex-end", gap: 8, justifyContent: "center" },
   versionBadge: {
     backgroundColor: Colors.accent + "30", paddingHorizontal: 8, paddingVertical: 4,
     borderRadius: 8, alignSelf: "flex-start",
