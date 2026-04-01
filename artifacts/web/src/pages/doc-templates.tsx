@@ -1191,10 +1191,10 @@ export function DocTemplatesPanel() {
 
               {/* A4 document — preview mode (live data filled) */}
               {centerMode === "preview" && (
-                <div className="flex-1 overflow-auto bg-muted/30 rounded-xl border border-border p-4 flex justify-center">
+                <div className="flex-1 overflow-auto bg-muted/30 rounded-xl border border-border p-4 flex justify-center items-start">
                   <div
-                    className="relative bg-white shadow-xl"
-                    style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a", overflow: "hidden" }}
+                    className="relative bg-white shadow-xl mb-4"
+                    style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a" }}
                   >
                     {selected.backgroundImage && (
                       <img src={selected.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
