@@ -123,7 +123,7 @@ function Hero() {
             <div className="flex flex-col sm:flex-row items-start gap-4">
               <Link
                 to="/login"
-                className="inline-flex items-center gap-2 rounded-lg bg-[#C5D92D] px-7 py-3.5 text-base font-semibold text-[#0B1933] hover:bg-[#d4e83a] transition-colors shadow-xl shadow-[#C5D92D]/20"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#C5D92D] px-7 py-3.5 text-base font-semibold text-[#0B1933] hover:bg-[#d4e83a] transition-colors"
               >
                 Get Started <ArrowRight className="h-4 w-4" />
               </Link>
