@@ -784,6 +784,8 @@ export default function Templates() {
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState<string | null>(null);
   const [deletingFolder, setDeletingFolder] = useState(false);
+  const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState<{ id: number; name: string } | null>(null);
+  const [deletingTemplate, setDeletingTemplate] = useState(false);
 
   // Sync default discipline when user data loads
   useEffect(() => {
@@ -964,6 +966,17 @@ export default function Templates() {
     } catch {}
     setDeletingFolder(false);
     setConfirmDeleteFolder(null);
+  };
+
+  const deleteTemplate = async (id: number) => {
+    setDeletingTemplate(true);
+    try {
+      await apiFetch(`/api/checklist-templates/${id}`, { method: "DELETE" });
+      if (selectedId === id) setSelectedId(null);
+      refetch();
+    } catch {}
+    setDeletingTemplate(false);
+    setConfirmDeleteTemplate(null);
   };
 
   const dm = DISCIPLINE_META[discipline] ?? DISCIPLINE_META["Custom"];
@@ -1233,10 +1246,17 @@ export default function Templates() {
                                 refetch();
                               } catch {}
                             }}
-                            className="opacity-0 group-hover/row:opacity-100 transition-opacity p-1 mr-1 rounded hover:bg-muted text-muted-foreground hover:text-sidebar"
+                            className="opacity-0 group-hover/row:opacity-100 transition-opacity p-1 rounded hover:bg-muted text-muted-foreground hover:text-sidebar"
                             title="Duplicate"
                           >
                             <Copy className="h-3 w-3" />
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteTemplate({ id: t.id, name: t.name })}
+                            className="opacity-0 group-hover/row:opacity-100 transition-opacity p-1 mr-0.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
+                            title="Delete checklist"
+                          >
+                            <Trash2 className="h-3 w-3" />
                           </button>
                         </div>
                       );
@@ -1273,7 +1293,7 @@ export default function Templates() {
                 <div className="text-center">
                   <p className="font-semibold text-sidebar">Select a checklist</p>
                   <p className="text-sm mt-1">Click any checklist to view and edit its items.</p>
-                  <p className="text-xs mt-3 text-muted-foreground/70">Hover a row to reorder (↑↓) or duplicate it</p>
+                  <p className="text-xs mt-3 text-muted-foreground/70">Hover a row to reorder (↑↓), duplicate, or delete it</p>
                 </div>
               </div>
             )}
@@ -1329,6 +1349,47 @@ export default function Templates() {
             >
               {deletingFolder ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
               {deletingFolder ? "Deleting…" : "Delete Folder"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Template Confirmation Dialog ── */}
+      <Dialog open={!!confirmDeleteTemplate} onOpenChange={open => { if (!open && !deletingTemplate) setConfirmDeleteTemplate(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5 shrink-0" />
+              Delete Checklist
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold text-sidebar">"{confirmDeleteTemplate?.name}"</span>?
+            </p>
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-red-700">
+                This will permanently delete the checklist and all its items. This action cannot be undone.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDeleteTemplate(null)}
+              disabled={deletingTemplate}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => confirmDeleteTemplate && deleteTemplate(confirmDeleteTemplate.id)}
+              disabled={deletingTemplate}
+              className="bg-red-600 hover:bg-red-700 text-white border-0 gap-2"
+            >
+              {deletingTemplate ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              {deletingTemplate ? "Deleting…" : "Delete Checklist"}
             </Button>
           </DialogFooter>
         </DialogContent>
