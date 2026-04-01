@@ -1859,8 +1859,7 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
 
 function InspectionTypesTab({ projectId }: { projectId: number }) {
   const { data: me } = useGetMe();
-  const isAdmin = me?.isAdmin ?? false;
-  const discipline = !isAdmin ? (me?.profession ?? null) : null;
+  const discipline = me?.profession ?? null;
 
   const [types, setTypes] = useState<InspectionTypeRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1888,7 +1887,7 @@ function InspectionTypesTab({ projectId }: { projectId: number }) {
     }
   }, [projectId, discipline]);
 
-  useState(() => { loadTypes(); });
+  useEffect(() => { loadTypes(); }, [loadTypes]);
 
   const toggle = (templateId: number) => {
     setTypes(prev => prev.map(t => t.templateId === templateId ? { ...t, isSelected: !t.isSelected } : t));

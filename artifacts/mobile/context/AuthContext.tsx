@@ -16,6 +16,7 @@ interface User {
   phone?: string | null;
   avatar?: string | null;
   companyName?: string | null;
+  profession?: string | null;
   isActive: boolean;
   isAdmin?: boolean;
   createdAt: string;

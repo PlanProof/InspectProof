@@ -54,7 +54,8 @@ export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useTabBarHeight();
-  const { token } = useAuth();
+  const { token, user: authUser } = useAuth();
+  const userDiscipline = authUser?.profession ?? null;
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   // Book inspection modal state
@@ -100,11 +101,14 @@ export default function ProjectDetailScreen() {
     enabled: !!token && !!id,
   });
 
-  // Selected inspection types from desktop
+  // Selected inspection types from desktop, filtered by user's discipline
   const { data: inspectionTypes = [] } = useQuery({
-    queryKey: ["project-inspection-types", id, token],
+    queryKey: ["project-inspection-types", id, token, userDiscipline],
     queryFn: async () => {
-      const data = await fetchWithAuth(`/api/projects/${id}/inspection-types`);
+      const url = userDiscipline
+        ? `/api/projects/${id}/inspection-types?discipline=${encodeURIComponent(userDiscipline)}`
+        : `/api/projects/${id}/inspection-types`;
+      const data = await fetchWithAuth(url);
       return data.filter((t: any) => t.isSelected);
     },
     enabled: !!token && !!id && bookOpen,
