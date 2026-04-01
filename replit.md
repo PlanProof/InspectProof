@@ -2,52 +2,67 @@
 
 ## Overview
 
-InspectProof is a full-stack platform designed for Australian building certifiers and surveyors. It aims to streamline certification workflows through a comprehensive suite of tools. The platform features a desktop web application for office administration, a mobile application for field inspections, and a shared API server with a PostgreSQL database.
+InspectProof is a full-stack platform designed for Australian building certifiers and surveyors. It streamlines certification workflows through a comprehensive suite of tools. The platform features a desktop web application for office administration, a mobile application for field inspections, and a shared API server with PostgreSQL.
 
-Key capabilities include:
-- **Comprehensive Project Management**: Tracking projects, inspections, and issues with detailed metadata and status filters.
-- **Advanced Inspection Tools**: Mobile photo markup, digital checklists with templating capabilities, and detailed issue tracking with NCC code references.
-- **Reporting & Analytics**: Generation of inspection certificates and various reports, along with dashboards for live stats and performance insights.
-- **Robust Compliance**: Integration of NCC 2022 standards and various AS standards for comprehensive compliance checks.
-
-The business vision is to become the leading digital platform for building certification in Australia, enhancing efficiency, accuracy, and compliance for certifiers nationwide.
+Key capabilities:
+- **Project Management**: Projects, inspections, issues with full metadata and status filters
+- **Inspection Tools**: Mobile photo markup with SVG annotation, digital checklists, NCC 2022 code references
+- **Reporting & Analytics**: Inspection certificates, PDF reports, live dashboard stats
+- **Template Library**: Full checklist templates for Building Surveyor (Class 1, 10, 2-9, Pool), Structural Engineer, Plumbing Officer, Builder/QC, Site Supervisor, WHS Officer, Pre-Purchase Inspector, Fire Safety Engineer
+- **Team & Permissions**: Company-linked invite flow, granular permissions (`isCompanyAdmin`, `editTemplates`, `addInspectors`, `createProjects`), plan limits
+- **Discipline Filtering**: Inspection Types automatically filtered to the logged-in user's assigned discipline
 
 ## User Preferences
 
-I prefer simple language and detailed explanations. I want iterative development with clear communication at each stage. Please ask before making major changes. I prefer functional programming paradigms where applicable. Do not make changes to files in the `lib/db` folder without explicit approval.
+Simple language and detailed explanations. Iterative development with clear communication. Do not make changes to files in the `lib/db` folder without explicit approval.
 
 ## System Architecture
 
-The InspectProof platform is built as a pnpm workspace monorepo, separating concerns into distinct applications and shared libraries.
+pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vite SPA), `artifacts/api-server` (Express 5 + Node 24), `artifacts/mobile` (Expo React Native).
 
-**UI/UX Decisions:**
-- **Color Palette:** Primary: `#0B1933` (Maastricht Blue), Secondary: `#466DB5` (BlueYonder), Accent: `#C5D92D` (Pear).
-- **Desktop Web App (React + Vite):** Serves as the primary administrative interface, offering features like project management, checklist template editing, analytics, and report generation.
-- **Mobile App (Expo):** Designed for field inspectors, focusing on mobile-first workflows such as photo markup, checklist completion, and issue logging.
+**Color Palette:** Primary `#0B1933`, Secondary `#466DB5`, Accent `#C5D92D`
 
-**Technical Implementations & Feature Specifications:**
-- **Authentication:** Token-based authentication with persistent storage.
-- **Photo Markup:** Mobile inspectors can annotate photos using free-hand SVG drawings, with markup stored as JSON.
-- **Checklist Template Editor:** An inline editor allows for full management of checklist items, including adding/editing/deleting items, section headers, reasons, code references, risk levels, and required toggles.
-- **Permission System:** Granular company-level permissions (`isCompanyAdmin`, `userType`, `permissions` JSON column for `editTemplates`, `addInspectors`, `createProjects`) differentiate user roles and access within the platform. Self-registrations create company admins.
-- **Global Template Library:** Automatically seeded checklist and report templates on server startup for various disciplines (Building Surveyor, Structural Engineer, Plumbing Officer, etc.).
-- **API Server (Express 5):** Provides a shared backend, handling all data operations and business logic, with PostgreSQL and Drizzle ORM for data persistence.
-- **Database Schema:** Defined using Drizzle ORM, with `drizzle-zod` for insert schemas.
-- **API Codegen:** Utilizes Orval to generate OpenAPI spec-derived React Query hooks and Zod schemas for validation.
-- **Monorepo Structure:** `artifacts` for deployable applications (api-server), `lib` for shared libraries (api-spec, api-client-react, api-zod, db), and `scripts` for utilities.
-- **TypeScript & Composite Projects:** All packages leverage TypeScript with composite projects for efficient type checking across the monorepo.
+**Logo rule:** `logo-dark.png` = dark/navy background; `logo-light.png` = light/white background
 
-**System Design Choices:**
-- **Node.js 24 + pnpm:** Modern JavaScript runtime and efficient package manager for monorepo.
-- **PostgreSQL + Drizzle ORM:** Robust relational database with a type-safe ORM for data management.
-- **Express 5:** Fast and flexible web application framework for the API.
-- **Zod:** Schema validation library used across the API for robust data integrity.
+## Technical Implementation
+
+- **Auth:** Token-based (JWT), `req.authUser` in middleware (NOT `req.user`)
+- **Plan limits:** `free_trial`=1, `starter`=3, `professional`=10, `enterprise`=null
+- **API startup order:** schema migrations → admin seed → listen on port 8080 → background (templates + Stripe + storage)
+- **Photo Markup:** Mobile SVG free-hand annotations stored as JSON keyed by `objectPath`; dedup on both client and server side
+- **Inspection Types filter:** `GET /api/projects/:id/inspection-types?discipline=...` — WHERE clause must precede GROUP BY in Drizzle query
+- **Checklist Templates:** 71 global templates across all disciplines, seeded via `ensureGlobalTemplatesSeed()` on startup
+
+## Routes (Web App)
+
+`/`, `/login`, `/dashboard`, `/projects`, `/projects/:id`, `/inspections`, `/inspections/:id`, `/analytics`, `/templates`, `/doc-templates`, `/inspectors`, `/settings`, `/billing`, `/admin`, `/terms`, `/privacy`
+
+**Note:** Reports are accessed via the "Reports" tab inside `/projects/:id` and `/inspections/:id` — there is no standalone `/reports` route.
 
 ## External Dependencies
 
--   **Database:** Supabase PostgreSQL (`SUPABASE_DATABASE_URL`) - utilized for robust and scalable data storage.
--   **File Storage:**
-    -   Replit Object Storage (using `PRIVATE_OBJECT_DIR` env var and GCS bucket `replit-objstore-97d074d9-8576-42de-97b0-9bf4a2a327c8`) is the primary storage.
-    -   Supabase Storage is an optional alternative if `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_URL` are configured.
--   **Email:** Office365 SMTP via nodemailer (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) for sending platform-generated emails.
--   **Stripe:** Integrated for payment processing, using Replit Stripe connector in development and `STRIPE_SECRET_KEY` in production.
+- **Database:** PostgreSQL via `SUPABASE_DATABASE_URL`
+- **File Storage:** Replit Object Storage (bucket `replit-objstore-97d074d9-8576-42de-97b0-9bf4a2a327c8`) via `PRIVATE_OBJECT_DIR`; Supabase Storage optional fallback
+- **Email:** Resend (`RESEND_API_KEY`) from `noreply@inspectproof.com.au`
+- **Stripe:** Replit Stripe connector (development); `STRIPE_SECRET_KEY` in production
+- **Expo Project ID:** `b93ea21e-4b89-4be9-9ca7-c37bd022f2aa`; `newArchEnabled: false` in `app.json`
+
+## Deployment Configuration
+
+### API Server (`artifacts/api-server/.replit-artifact/artifact.toml`)
+- Production build: `pnpm --filter @workspace/api-server run build`
+- Production run: `node --enable-source-maps artifacts/api-server/dist/index.mjs`
+- Health check: `GET /api/healthz` → `{"status":"ok","db":"connected"}`
+- PORT: 8080
+
+### Web App (`artifacts/web/.replit-artifact/artifact.toml`)
+- Production build: `pnpm --filter @workspace/web run build`
+- Serve: static from `artifacts/web/dist/public`
+- SPA rewrite: `/*` → `/index.html`
+
+## Admin Credentials
+
+- Email: `contact@inspectproof.com.au`
+- Password: `InspectProof2024!`
+- Profession: Building Surveyor
+- Plan: enterprise (admin)
