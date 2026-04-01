@@ -19,8 +19,44 @@ if (Number.isNaN(port) || port <= 0) {
 
 async function runSchemaMigrations() {
   try {
+    // users table additions
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token text`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_on_assignment boolean NOT NULL DEFAULT true`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS signature_url text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profession text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS licence_number text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan text NOT NULL DEFAULT 'free_trial'`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_override_projects text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_override_inspections text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_company_admin boolean NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS user_type text NOT NULL DEFAULT 'inspector'`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at timestamp NOT NULL DEFAULT now()`);
+
+    // checklist_templates table additions
+    await pool.query(`ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS folder text NOT NULL DEFAULT 'Class 1a'`);
+    await pool.query(`ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS discipline text NOT NULL DEFAULT 'Building Surveyor'`);
+    await pool.query(`ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS sort_order integer NOT NULL DEFAULT 0`);
+    await pool.query(`ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS is_global boolean NOT NULL DEFAULT false`);
+
+    // checklist_items table additions
+    await pool.query(`ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS risk_level text NOT NULL DEFAULT 'medium'`);
+    await pool.query(`ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS defect_trigger boolean NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS recommended_action text`);
+    await pool.query(`ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS include_in_report boolean NOT NULL DEFAULT true`);
+
+    // checklist_results table additions
+    await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS photo_markups text`);
+    await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS severity text`);
+    await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS location text`);
+    await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS trade_allocated text`);
+    await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS defect_status text DEFAULT 'open'`);
+    await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS client_visible boolean NOT NULL DEFAULT true`);
+    await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS recommended_action text`);
+    await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS updated_at timestamp NOT NULL DEFAULT now()`);
+
     logger.info("Schema migrations applied");
   } catch (err) {
     logger.error({ err }, "Schema migration failed — continuing");
