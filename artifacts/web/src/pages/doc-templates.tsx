@@ -740,6 +740,7 @@ export function DocTemplatesPanel() {
 
   const linkedCount = selected?.linkedChecklistIds.length ?? 0;
 
+  const [centerMode, setCenterMode] = useState<"edit" | "preview">("edit");
   const [migrating, setMigrating] = useState(false);
   const localCount = (() => { try { return JSON.parse(localStorage.getItem("inspectproof_doc_templates") ?? "[]").length; } catch { return 0; } })();
 
@@ -856,8 +857,58 @@ export function DocTemplatesPanel() {
         <div className="flex-1 flex flex-col min-w-0">
           {selected ? (
             <>
-              {/* ── Row 1: Generate Report ──────────── */}
+              {/* ── Row 1: Edit / Preview toggle + Generate Report ── */}
               <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                {/* Edit / Preview toggle */}
+                <div className="flex items-center rounded-lg overflow-hidden border border-border shadow-sm">
+                  <button
+                    onClick={() => setCenterMode("edit")}
+                    className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition-colors ${centerMode === "edit" ? "bg-secondary text-white" : "bg-card text-muted-foreground hover:bg-muted"}`}
+                  >
+                    <Edit3 className="h-3 w-3" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setCenterMode("preview")}
+                    className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition-colors ${centerMode === "preview" ? "bg-secondary text-white" : "bg-card text-muted-foreground hover:bg-muted"}`}
+                  >
+                    <Eye className="h-3 w-3" />
+                    Preview
+                  </button>
+                </div>
+
+                {/* Preview: project + inspection selectors */}
+                {centerMode === "preview" && (
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <select
+                      value={previewProjectId}
+                      onChange={e => setPreviewProjectId(e.target.value)}
+                      className="text-xs rounded-lg border border-border bg-background px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-secondary/50 max-w-[200px] truncate"
+                    >
+                      {!(allProjects as any[])?.length && <option value="">Loading projects…</option>}
+                      {(allProjects as any[] ?? []).map((p: any) => (
+                        <option key={p.id} value={String(p.id)}>{p.name}</option>
+                      ))}
+                    </select>
+                    {previewProjectInspections.length > 0 && (
+                      <select
+                        value={previewInspectionId}
+                        onChange={e => setPreviewInspectionId(e.target.value)}
+                        className="text-xs rounded-lg border border-border bg-background px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-secondary/50 max-w-[240px] truncate"
+                      >
+                        {previewProjectInspections.map((i: any) => (
+                          <option key={i.id} value={String(i.id)}>
+                            {(i.inspectionType ?? "").replace(/_/g, " ")} — {i.scheduledDate}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${previewProject ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
+                      {previewProject ? "Live data" : "Test data"}
+                    </span>
+                  </div>
+                )}
+
                 <button
                   onClick={() => setGenerateOpen(true)}
                   className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0B1933] text-white text-xs font-semibold hover:bg-[#0B1933]/90 transition-colors shadow-sm"
@@ -872,8 +923,8 @@ export function DocTemplatesPanel() {
                 </button>
               </div>
 
-              {/* ── Formatting toolbar ── */}
-              <div className="flex flex-col gap-1 mb-2">
+              {/* ── Formatting toolbar (edit mode only) ── */}
+              {centerMode === "edit" && <div className="flex flex-col gap-1 mb-2">
 
                   {/* ── Row 1: Text formatting ── */}
                   <div className="flex items-center gap-0.5 flex-wrap bg-card border border-border rounded-xl px-2 py-1.5 shadow-sm">
@@ -1101,39 +1152,66 @@ export function DocTemplatesPanel() {
                     </div>
                   </div>
                 </div>
+              }
 
-              {/* A4 document */}
-              <div className="flex-1 overflow-auto bg-muted/30 rounded-xl border border-border p-4 flex justify-center">
-                <div
-                  className="relative bg-white shadow-xl"
-                  style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a", overflow: "hidden" }}
-                >
-                  {selected.backgroundImage && (
-                    <img src={selected.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
-                  )}
+              {/* A4 document — edit mode */}
+              {centerMode === "edit" && (
+                <div className="flex-1 overflow-auto bg-muted/30 rounded-xl border border-border p-4 flex justify-center">
                   <div
-                    ref={editableRef}
-                    contentEditable
-                    suppressContentEditableWarning
-                    spellCheck
-                    style={{
-                      padding: "72px 80px",
-                      minHeight: "1123px",
-                      outline: "none",
-                      fontFamily: "Georgia, serif",
-                      fontSize: "14px",
-                      lineHeight: "1.6",
-                      color: "#1a1a1a",
-                      position: "relative",
-                      cursor: "text",
-                      wordBreak: "break-word",
-                      overflowWrap: "break-word",
-                    }}
-                    onInput={() => setLiveContent(editableRef.current?.innerHTML ?? "")}
-                    onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); saveContent(); } }}
-                  />
+                    className="relative bg-white shadow-xl"
+                    style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a", overflow: "hidden" }}
+                  >
+                    {selected.backgroundImage && (
+                      <img src={selected.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+                    )}
+                    <div
+                      ref={editableRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      spellCheck
+                      style={{
+                        padding: "72px 80px",
+                        minHeight: "1123px",
+                        outline: "none",
+                        fontFamily: "Georgia, serif",
+                        fontSize: "14px",
+                        lineHeight: "1.6",
+                        color: "#1a1a1a",
+                        position: "relative",
+                        cursor: "text",
+                        wordBreak: "break-word",
+                        overflowWrap: "break-word",
+                      }}
+                      onInput={() => setLiveContent(editableRef.current?.innerHTML ?? "")}
+                      onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); saveContent(); } }}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* A4 document — preview mode (live data filled) */}
+              {centerMode === "preview" && (
+                <div className="flex-1 overflow-auto bg-muted/30 rounded-xl border border-border p-4 flex justify-center">
+                  <div
+                    className="relative bg-white shadow-xl"
+                    style={{ width: "794px", minHeight: "1123px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.6", color: "#1a1a1a", overflow: "hidden" }}
+                  >
+                    {selected.backgroundImage && (
+                      <img src={selected.backgroundImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+                    )}
+                    <div
+                      style={{
+                        padding: "72px 80px",
+                        minHeight: "1123px",
+                        position: "relative",
+                        wordBreak: "break-word",
+                        overflowWrap: "break-word",
+                      }}
+                      dangerouslySetInnerHTML={{ __html: fillWithData(liveContent || selected.content, previewData) }}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center bg-card rounded-xl border border-border">
