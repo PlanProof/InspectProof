@@ -2611,6 +2611,132 @@ const SWIMMING_POOL: BSTemplate[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Structural Engineer — Footing & Slab Inspection (replicated into all BS folders)
+// Comprehensive structural checklist aligned with AS 2870, AS 3600, AS 3660.1 and NCC Vol 2 H4.3.
+// ---------------------------------------------------------------------------
+
+const SE_FOOTING_SLAB_ITEMS: BSTemplateItem[] = [
+  // 1. Site & Earthworks
+  { category: "Site & Earthworks", description: "Site classification confirmed per geotechnical report (S / M / H / E / P) — geotechnical report held on site", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 2870-2011 Cl 3.1 / NCC H4.3" },
+  { category: "Site & Earthworks", description: "Topsoil, vegetation and organic matter stripped from entire building footprint", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "NCC Vol 2 H1.4.3" },
+  { category: "Site & Earthworks", description: "Cut and fill conditions at boundaries match engineer design and geotechnical report", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870" },
+  { category: "Site & Earthworks", description: "No uncontrolled fill present beneath any footing or slab panel unless specifically engineered and documented", riskLevel: "critical", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870 Cl 3.3" },
+  // 2. Excavation & Bearing
+  { category: "Excavation & Bearing", description: "Footing trench dimensions (width, depth, step-down heights) match structural drawings throughout", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870-2011 Cl 4.3" },
+  { category: "Excavation & Bearing", description: "Edge / perimeter beams excavated to minimum depth below natural ground level per engineer's drawings (typically ≥ 300 mm)", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870-2011 Cl 4.3.3" },
+  { category: "Excavation & Bearing", description: "Step-down footings formed on undisturbed firm ground — no fill at toe of steps; treads horizontal", riskLevel: "critical", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870-2011 Cl 4.3.4" },
+  { category: "Excavation & Bearing", description: "Founding soil confirmed to match geotechnical report — no fill, soft, reactive or expansive material under footings", riskLevel: "critical", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870-2011 Cl 4.4" },
+  { category: "Excavation & Bearing", description: "Subsoil drainage installed where ground moisture is present or required by geotech (e.g. Class H / E sites)", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 2870 / NCC H4.3" },
+  { category: "Excavation & Bearing", description: "No water present in trench — dewatering completed; base of trench firm and not disturbed", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870" },
+  { category: "Excavation & Bearing", description: "Minimum 300 mm clearance maintained from all drainage pipes, conduits and services", riskLevel: "medium", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 2870" },
+  // 3. Termite & Moisture Protection
+  { category: "Termite & Moisture Protection", description: "Termite management system installed by licensed operator — compliant with AS 3660.1 and relevant state requirements", riskLevel: "critical", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3660.1-2014 / NCC H2.1.1" },
+  { category: "Termite & Moisture Protection", description: "Termite barrier covers all paths of entry to structure — perimeter, internal piers, pipes and conduits addressed", riskLevel: "critical", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3660.1 Cl 6.3" },
+  { category: "Termite & Moisture Protection", description: "Vapour barrier installed — minimum 0.2 mm polyethylene, correct grade, no tears or punctures visible", riskLevel: "medium", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3660.1 / NCC H4.3.2" },
+  { category: "Termite & Moisture Protection", description: "Vapour barrier lapped minimum 200 mm at all joints; laps taped or sealed and turned up at edge beams", riskLevel: "medium", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3660.1" },
+  { category: "Termite & Moisture Protection", description: "Damp-proof course (DPC) provided at all slab-on-ground interfaces with masonry brickwork", riskLevel: "medium", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 3660.1 / NCC H4.3" },
+  // 4. Subgrade & Fill
+  { category: "Subgrade & Fill", description: "Fill material visually consistent with approved specification — no black soil, expansive clay, building waste or reactive material present", riskLevel: "critical", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870 Cl 3.3" },
+  { category: "Subgrade & Fill", description: "Fill surface firm and stable underfoot — no rutting, pumping or soft spots observed; compaction test certificate confirmed as held on site", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870 / NCC H4.3" },
+  { category: "Subgrade & Fill", description: "Fill depth consistent with engineer's drawings — no visible over-filling or undermining at footing lines", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 2870" },
+  { category: "Subgrade & Fill", description: "Sub-base surface level, even and free of voids, soft spots and debris — visually confirmed before membrane placement", riskLevel: "medium", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870" },
+  // 5. Formwork & Setout
+  { category: "Formwork & Setout", description: "Slab overall plan dimensions and setout verified against approved structural/architectural plans — building position, offsets and shaped panels correct", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870 / NCC H4.3" },
+  { category: "Formwork & Setout", description: "Edge formwork set to correct slab thickness throughout — depth verified by direct measurement or string-line", riskLevel: "medium", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 3610 / AS 2870" },
+  { category: "Formwork & Setout", description: "Edge formwork straight, plumb and adequately braced — no bowing, gaps or movement risk observed before pour", riskLevel: "medium", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 3610" },
+  { category: "Formwork & Setout", description: "Thickened edge (haunch) dimensions visually match drawings in width and depth throughout", riskLevel: "medium", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 2870" },
+  { category: "Formwork & Setout", description: "Slab fall / grade set correctly — confirmed against drainage design; ponding areas not acceptable", riskLevel: "medium", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "NCC H4.3" },
+  // 6. Footing Reinforcement
+  { category: "Footing Reinforcement", description: "Rebar grade, size and spacing in all footing beams and edge beams match structural drawings", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3600-2018 Cl 4.8" },
+  { category: "Footing Reinforcement", description: "Bottom cover to footing reinforcement — minimum 65 mm to bottom of bars (ground-bearing exposure A1/A2)", riskLevel: "critical", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3600 Table 4.10.3.2" },
+  { category: "Footing Reinforcement", description: "Ligatures and stirrups installed at correct spacing and tied securely — no missing ligatures", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3600" },
+  { category: "Footing Reinforcement", description: "Lap lengths and splice positions comply with structural drawings — all laps tied", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 3600 Cl 13.2" },
+  { category: "Footing Reinforcement", description: "Starter bars for walls, columns and piers correctly positioned, plumb and tied", riskLevel: "critical", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3600" },
+  { category: "Footing Reinforcement", description: "No reinforcement in direct contact with soil, formwork face or vapour barrier", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 3600 Cl 4.10" },
+  // 7. Slab Reinforcement
+  { category: "Slab Reinforcement", description: "Bottom mesh / rebar — size, bar spacing, laps and layout per structural drawings throughout slab", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3600 / AS 2870" },
+  { category: "Slab Reinforcement", description: "Cover chairs placed at maximum 900 mm each way — mesh not deflected by foot traffic or services", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3600 Cl 4.10" },
+  { category: "Slab Reinforcement", description: "Bottom cover achieved: minimum 40 mm (suspended slab, exposure A1) or 65 mm (ground-bearing) as applicable", riskLevel: "critical", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 3600 Table 4.10.3.2" },
+  { category: "Slab Reinforcement", description: "Top mesh / rebar installed over all supports, at slab edges, openings and re-entrant corners as shown", riskLevel: "high", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3600 / AS 2870" },
+  { category: "Slab Reinforcement", description: "Additional reinforcement trimmed around all penetrations and openings — no unreinforced corners", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 3600 Cl 16.3" },
+  { category: "Slab Reinforcement", description: "Control joint locations marked and formed per structural drawings — no unplanned saw cuts planned as a substitute", riskLevel: "medium", isRequired: true, requirePhoto: false, defectTrigger: false, includeInReport: true, codeReference: "AS 3600 Cl 16.4" },
+  { category: "Slab Reinforcement", description: "Steel is clean and free from mud, scale, mill oil or any contaminant that could reduce bond", riskLevel: "medium", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 3600 Cl 18.2" },
+  // 8. In-Slab Services
+  { category: "In-Slab Services", description: "All in-slab conduit, PVC sleeves and pipes positioned per services drawings — not floating or stacked", riskLevel: "medium", isRequired: true, requirePhoto: true, defectTrigger: true, includeInReport: true, codeReference: "AS 3600 Cl 16.5 / NCC" },
+  { category: "In-Slab Services", description: "Conduit / pipe diameter does not exceed one-third of slab thickness at any cross-section", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 3600 Cl 16.5.1" },
+  { category: "In-Slab Services", description: "Plumber has provided written sign-off confirming all in-slab drainage and supply are complete — no further changes", riskLevel: "critical", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "NCC / Trade ITP" },
+  { category: "In-Slab Services", description: "Electrical conduit checked and signed off by licensed electrician — circuit IDs labelled at tails", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS/NZS 3000 / Trade ITP" },
+  { category: "In-Slab Services", description: "Penetrations through edge formwork sleeved and sealed against concrete ingress", riskLevel: "medium", isRequired: true, requirePhoto: false, defectTrigger: false, includeInReport: true, codeReference: "NCC" },
+  { category: "In-Slab Services", description: "Isolation / de-bonding sleeves installed around pipes at slab / footing interfaces where thermal movement required", riskLevel: "medium", isRequired: true, requirePhoto: false, defectTrigger: false, includeInReport: true, codeReference: "AS 3600 Cl 16.5" },
+  // 9. Pre-Pour Confirmation
+  { category: "Pre-Pour Confirmation", description: "Specified concrete grade confirmed on site before pour — minimum N25 residential (AS 2870) or engineer's stated strength; delivery docket to be checked on arrival of each truck", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 2870 Cl 5 / AS 1379" },
+  { category: "Pre-Pour Confirmation", description: "Builder confirms no additional water is to be added to any concrete load on site — inspector to reject any non-conforming load", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 1379 Cl 7.4 / AS 3600 Cl 19.1" },
+  { category: "Pre-Pour Confirmation", description: "Concrete test cylinder sampling equipment confirmed on site before pour commences — minimum 2 sets per 50 m³ poured", riskLevel: "medium", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "AS 1379 / AS 3600 Cl 19.6" },
+  // 10. Hold Points
+  { category: "Hold Points", description: "This inspection is the structural engineer hold-point — all items on this checklist must be satisfactory before written clearance is issued; concrete must not be placed without this clearance", riskLevel: "critical", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "Engineer's ITP / NCC A2.4" },
+  { category: "Hold Points", description: "Building surveyor hold-point clearance obtained and held on site where required by consent conditions — pour must not proceed without it", riskLevel: "critical", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "NCC A2.4 / State Building Act" },
+  { category: "Hold Points", description: "All trade sign-offs (plumber's written completion certificate, compaction test certificates) held on site and filed in project ITP before pour commences", riskLevel: "critical", isRequired: true, requirePhoto: false, defectTrigger: true, includeInReport: true, codeReference: "NCC / Trade ITP" },
+  // 11. Documentation
+  { category: "Documentation", description: "Geotechnical / soil classification report available on site and referenced on structural drawings", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: false, includeInReport: true, codeReference: "AS 2870-2011 Cl 2" },
+  { category: "Documentation", description: "Compaction test certificates for all fill placed on site available for inspection", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: false, includeInReport: true },
+  { category: "Documentation", description: "Termite management installation report and certificate held on file per AS 3660.1", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: false, includeInReport: true, codeReference: "AS 3660.1" },
+  { category: "Documentation", description: "Engineer's ITP and inspection certificate for footing and slab to be issued on completion of inspection", riskLevel: "high", isRequired: true, requirePhoto: false, defectTrigger: false, includeInReport: true, codeReference: "NCC A2.4" },
+  { category: "Documentation", description: "All inspection clearance records retained on the project file for the life of the building", riskLevel: "medium", isRequired: true, requirePhoto: false, defectTrigger: false, includeInReport: true },
+];
+
+const SE_DESCRIPTION = "Comprehensive structural footing & slab inspection aligned with AS 2870-2011, AS 3600-2018, AS 3660.1-2014 and NCC Volume 2 H4.3 — covering site earthworks, excavation, termite protection, reinforcement, in-slab services and pre-pour hold points.";
+
+const BS_SE_FOOTING_SLAB: BSTemplate[] = [
+  {
+    name: "Footing & Slab Inspection",
+    inspectionType: "se_footing_slab",
+    folder: "Dwelling 1 Storey (Class 1)",
+    description: SE_DESCRIPTION,
+    sortOrder: 8,
+    items: SE_FOOTING_SLAB_ITEMS,
+  },
+  {
+    name: "Footing & Slab Inspection",
+    inspectionType: "se_footing_slab",
+    folder: "Dwelling 2 Storey (Class 1)",
+    description: SE_DESCRIPTION,
+    sortOrder: 8,
+    items: SE_FOOTING_SLAB_ITEMS,
+  },
+  {
+    name: "Footing & Slab Inspection",
+    inspectionType: "se_footing_slab",
+    folder: "Shed Timber Framed (Class 10)",
+    description: SE_DESCRIPTION,
+    sortOrder: 6,
+    items: SE_FOOTING_SLAB_ITEMS,
+  },
+  {
+    name: "Footing & Slab Inspection",
+    inspectionType: "se_footing_slab",
+    folder: "Shed Steel (Class 10)",
+    description: SE_DESCRIPTION,
+    sortOrder: 6,
+    items: SE_FOOTING_SLAB_ITEMS,
+  },
+  {
+    name: "Footing & Slab Inspection",
+    inspectionType: "se_footing_slab",
+    folder: "Class 2-9",
+    description: SE_DESCRIPTION,
+    sortOrder: 7,
+    items: SE_FOOTING_SLAB_ITEMS,
+  },
+  {
+    name: "Footing & Slab Inspection",
+    inspectionType: "se_footing_slab",
+    folder: "Swimming Pool / Spa (Class 10b)",
+    description: SE_DESCRIPTION,
+    sortOrder: 4,
+    items: SE_FOOTING_SLAB_ITEMS,
+  },
+];
+
 // Combined export
 // ---------------------------------------------------------------------------
 
@@ -2621,6 +2747,7 @@ const BS_TEMPLATES: BSTemplate[] = [
   ...SHED_STEEL,
   ...CLASS_2_9,
   ...SWIMMING_POOL,
+  ...BS_SE_FOOTING_SLAB,
 ];
 
 // Folders that are no longer part of the new template structure —
