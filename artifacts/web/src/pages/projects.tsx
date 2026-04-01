@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useListProjects, useCreateProject } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, Label } from "@/components/ui";
-import { Search, Plus, Building, ChevronDown, ChevronUp, ChevronsUpDown, X } from "lucide-react";
-import { formatDate, cn } from "@/lib/utils";
+import { Search, Plus, Building, ChevronDown, ChevronUp, ChevronsUpDown, X, AlertTriangle, TrendingUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
 
 // ── NCC Building Classifications ─────────────────────────────────────────────
@@ -27,7 +28,51 @@ const BUILDING_CLASSES = [
   { value: "Class 10c", label: "Class 10c", description: "Private bushfire shelter" },
 ];
 
-// ── Multi-select Building Classification ─────────────────────────────────────
+// ── API helpers ───────────────────────────────────────────────────────────────
+
+function baseUrl() {
+  return import.meta.env.BASE_URL.replace(/\/$/, "");
+}
+
+function apiFetch(path: string, opts?: RequestInit) {
+  const token = localStorage.getItem("inspectproof_token") ?? "";
+  return fetch(`${baseUrl()}${path}`, {
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(opts?.headers ?? {}),
+    },
+  }).then(async r => {
+    const body = await r.json();
+    if (!r.ok) throw body;
+    return body;
+  });
+}
+
+// ── Subscription hook ─────────────────────────────────────────────────────────
+
+function useSubscription() {
+  return useQuery({
+    queryKey: ["billing-subscription"],
+    queryFn: () => apiFetch("/api/billing/subscription"),
+    staleTime: 30_000,
+  });
+}
+
+// ── Status tabs ───────────────────────────────────────────────────────────────
+
+const STATUS_TABS = [
+  { key: "active",    label: "Active" },
+  { key: "on_hold",  label: "On Hold" },
+  { key: "completed",label: "Completed" },
+  { key: "archived", label: "Archived" },
+  { key: "all",      label: "All" },
+] as const;
+
+type StatusTab = typeof STATUS_TABS[number]["key"];
+
+// ── Multi-select Building Classification ──────────────────────────────────────
 
 function BuildingClassSelect({
   value,
@@ -58,7 +103,6 @@ function BuildingClassSelect({
 
   return (
     <div ref={ref}>
-      {/* Trigger */}
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -88,7 +132,6 @@ function BuildingClassSelect({
         <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 ml-2 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
-      {/* Dropdown — inline (no absolute) so dialog overflow doesn't clip it */}
       {open && (
         <div className="mt-1 w-full rounded-lg border border-border bg-popover shadow-md overflow-hidden">
           <div className="max-h-56 overflow-y-auto py-1">
@@ -145,10 +188,83 @@ function BuildingClassSelect({
   );
 }
 
+// ── Usage bar ─────────────────────────────────────────────────────────────────
+
+function ProjectUsageBar({ current, max, planLabel }: { current: number; max: number | null; planLabel: string }) {
+  const [, navigate] = useLocation();
+  if (max === null) return null;
+
+  const pct = Math.min((current / max) * 100, 100);
+  const atLimit = current >= max;
+  const nearLimit = pct >= 80 && !atLimit;
+
+  return (
+    <div className={cn(
+      "flex items-center gap-3 px-4 py-2.5 border-b text-sm",
+      atLimit ? "bg-red-50 border-red-200" : nearLimit ? "bg-amber-50 border-amber-200" : "bg-muted/10 border-border"
+    )}>
+      <div className={cn(
+        "flex items-center gap-1.5 shrink-0 font-medium",
+        atLimit ? "text-red-700" : nearLimit ? "text-amber-700" : "text-muted-foreground"
+      )}>
+        {atLimit || nearLimit ? <AlertTriangle className="h-3.5 w-3.5" /> : <TrendingUp className="h-3.5 w-3.5" />}
+        <span>Active projects:</span>
+      </div>
+      <div className="flex items-center gap-2 flex-1">
+        <div className="flex-1 max-w-32 bg-muted/40 rounded-full h-1.5 overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              atLimit ? "bg-red-500" : nearLimit ? "bg-amber-400" : "bg-secondary"
+            )}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className={cn(
+          "font-semibold tabular-nums",
+          atLimit ? "text-red-700" : nearLimit ? "text-amber-700" : "text-sidebar"
+        )}>
+          {current} / {max}
+        </span>
+      </div>
+      <div className="flex items-center gap-2 shrink-0 text-xs text-muted-foreground">
+        <span>{planLabel} plan</span>
+        {atLimit && (
+          <>
+            <span>·</span>
+            <span className="text-muted-foreground">Archive a project to free a slot, or</span>
+            <button
+              onClick={() => navigate("/billing")}
+              className="text-secondary font-semibold hover:underline"
+            >
+              upgrade
+            </button>
+          </>
+        )}
+        {nearLimit && !atLimit && (
+          <>
+            <span>·</span>
+            <button
+              onClick={() => navigate("/billing")}
+              className="text-amber-700 font-semibold hover:underline"
+            >
+              upgrade plan
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function Projects() {
   const [search, setSearch] = useState("");
+  const [statusTab, setStatusTab] = useState<StatusTab>("active");
   const [, navigate] = useLocation();
   const { data: projects, isLoading, refetch } = useListProjects({});
+  const { data: subscription } = useSubscription();
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [sortCol, setSortCol] = useState("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -158,7 +274,17 @@ export default function Projects() {
     else { setSortCol(col); setSortDir("asc"); }
   };
 
-  const filtered = projects?.filter(p =>
+  const maxProjects: number | null = subscription?.limits?.maxProjects ?? null;
+  const activeCount: number = subscription?.usage?.projects ?? 0;
+  const atLimit = maxProjects !== null && activeCount >= maxProjects;
+  const planLabel: string = subscription?.limits?.label ?? "";
+
+  const tabFiltered = projects?.filter(p => {
+    if (statusTab === "all") return true;
+    return p.status === statusTab;
+  });
+
+  const filtered = tabFiltered?.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.siteAddress.toLowerCase().includes(search.toLowerCase())
   );
@@ -176,6 +302,14 @@ export default function Projects() {
     }
   });
 
+  const tabCounts = projects ? {
+    active:    projects.filter(p => p.status === "active").length,
+    on_hold:   projects.filter(p => p.status === "on_hold").length,
+    completed: projects.filter(p => p.status === "completed").length,
+    archived:  projects.filter(p => p.status === "archived").length,
+    all:       projects.length,
+  } : null;
+
   return (
     <AppLayout>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
@@ -183,17 +317,80 @@ export default function Projects() {
           <h1 className="text-3xl font-bold text-sidebar tracking-tight">Projects</h1>
           <p className="text-muted-foreground mt-1">Manage construction projects and certifications.</p>
         </div>
-        <Button onClick={() => setIsNewOpen(true)} className="shadow-lg shadow-primary/20">
-          <Plus className="mr-2 h-4 w-4" /> New Project
-        </Button>
+        <div className="flex items-center gap-2">
+          {atLimit ? (
+            <div className="relative group">
+              <Button disabled className="shadow-lg shadow-primary/20 opacity-50 cursor-not-allowed">
+                <Plus className="mr-2 h-4 w-4" /> New Project
+              </Button>
+              <div className="absolute right-0 top-full mt-1.5 w-72 bg-popover border border-border rounded-lg shadow-lg p-3 text-sm hidden group-hover:block z-10">
+                <p className="font-medium text-sidebar mb-1">Project limit reached</p>
+                <p className="text-muted-foreground text-xs mb-2">
+                  Your {planLabel} plan allows up to {maxProjects} active project{maxProjects === 1 ? "" : "s"}.
+                  Archive an existing project to free a slot, or upgrade your plan.
+                </p>
+                <button
+                  onClick={() => navigate("/billing")}
+                  className="text-xs text-secondary font-semibold hover:underline"
+                >
+                  View upgrade options →
+                </button>
+              </div>
+            </div>
+          ) : (
+            <Button onClick={() => setIsNewOpen(true)} className="shadow-lg shadow-primary/20">
+              <Plus className="mr-2 h-4 w-4" /> New Project
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-        <div className="p-4 border-b flex items-center gap-4 bg-muted/20">
+        {/* Usage bar */}
+        {subscription && (
+          <ProjectUsageBar
+            current={activeCount}
+            max={maxProjects}
+            planLabel={planLabel}
+          />
+        )}
+
+        {/* Status tabs */}
+        <div className="flex items-center gap-0 px-4 pt-3 pb-0 border-b border-border/60 bg-muted/10 overflow-x-auto">
+          {STATUS_TABS.map(tab => {
+            const count = tabCounts?.[tab.key];
+            const isActive = statusTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setStatusTab(tab.key)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap -mb-px",
+                  isActive
+                    ? "border-secondary text-secondary"
+                    : "border-transparent text-muted-foreground hover:text-sidebar hover:border-border"
+                )}
+              >
+                {tab.label}
+                {count !== undefined && count > 0 && (
+                  <span className={cn(
+                    "text-[11px] font-semibold px-1.5 py-0.5 rounded-full leading-none",
+                    isActive ? "bg-secondary/15 text-secondary" : "bg-muted text-muted-foreground"
+                  )}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search bar */}
+        <div className="p-4 border-b flex items-center gap-4 bg-muted/10">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search projects..." 
+            <Input
+              placeholder="Search projects..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-9 bg-background"
@@ -208,45 +405,63 @@ export default function Projects() {
             <TableHeader>
               <TableRow>
                 <SortableHead col="name" label="Project" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
-                <SortableHead col="status" label="Status" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                {statusTab === "all" && (
+                  <SortableHead col="status" label="Status" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                )}
                 <SortableHead col="stage" label="Stage" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="clientName" label="Client" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="totalInspections" label="Inspections" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="text-right" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((project) => (
-                <TableRow
-                  key={project.id}
-                  className="group cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/projects/${project.id}`)}
-                >
-                  <TableCell>
-                    <Link href={`/projects/${project.id}`} className="block" onClick={e => e.stopPropagation()}>
-                      <div className="font-semibold text-sidebar group-hover:text-secondary transition-colors flex items-center gap-2">
-                        {project.name}
-                        {project.name === "Test Project" && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-wide">Test</span>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                        <Building className="h-3 w-3" />
-                        {project.siteAddress}, {project.suburb}
-                      </div>
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={project.status} />
-                  </TableCell>
-                  <TableCell className="capitalize text-sm">{project.stage.replace('_', ' ')}</TableCell>
-                  <TableCell>{project.clientName}</TableCell>
-                  <TableCell className="text-right font-medium">{project.totalInspections}</TableCell>
-                </TableRow>
-              ))}
+              {sorted.map((project) => {
+                const isInactive = project.status === "archived" || project.status === "completed";
+                return (
+                  <TableRow
+                    key={project.id}
+                    className={cn(
+                      "group cursor-pointer hover:bg-muted/50",
+                      isInactive && "opacity-50"
+                    )}
+                    onClick={() => navigate(`/projects/${project.id}`)}
+                  >
+                    <TableCell>
+                      <Link href={`/projects/${project.id}`} className="block" onClick={e => e.stopPropagation()}>
+                        <div className="font-semibold text-sidebar group-hover:text-secondary transition-colors flex items-center gap-2">
+                          {project.name}
+                          {project.name === "Test Project" && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-wide">Test</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <Building className="h-3 w-3" />
+                          {project.siteAddress}, {project.suburb}
+                        </div>
+                      </Link>
+                    </TableCell>
+                    {statusTab === "all" && (
+                      <TableCell>
+                        <StatusBadge status={project.status} />
+                      </TableCell>
+                    )}
+                    <TableCell className="capitalize text-sm">{project.stage.replace('_', ' ')}</TableCell>
+                    <TableCell>{project.clientName}</TableCell>
+                    <TableCell className="text-right font-medium">{project.totalInspections}</TableCell>
+                  </TableRow>
+                );
+              })}
               {sorted.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center p-8 text-muted-foreground">
-                    No projects found matching "{search}"
+                    {search
+                      ? `No projects found matching "${search}"`
+                      : statusTab === "archived"
+                        ? "No archived projects. Archive a project from its detail page to free up a slot in your plan."
+                        : statusTab === "completed"
+                          ? "No completed projects yet."
+                          : statusTab === "on_hold"
+                            ? "No projects currently on hold."
+                            : "No active projects. Create your first project to get started."}
                   </TableCell>
                 </TableRow>
               )}
@@ -255,10 +470,19 @@ export default function Projects() {
         )}
       </div>
 
-      <NewProjectDialog open={isNewOpen} onOpenChange={setIsNewOpen} onSuccess={refetch} />
+      <NewProjectDialog
+        open={isNewOpen}
+        onOpenChange={setIsNewOpen}
+        onSuccess={() => { refetch(); }}
+        atLimit={atLimit}
+        maxProjects={maxProjects}
+        planLabel={planLabel}
+      />
     </AppLayout>
   );
 }
+
+// ── Sortable table header ─────────────────────────────────────────────────────
 
 function SortableHead({ col, label, sortCol, sortDir, onSort, className }: {
   col: string; label: string; sortCol: string; sortDir: "asc" | "desc";
@@ -279,6 +503,8 @@ function SortableHead({ col, label, sortCol, sortDir, onSort, className }: {
   );
 }
 
+// ── Status badge ──────────────────────────────────────────────────────────────
+
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, "default" | "success" | "warning" | "secondary"> = {
     active: "success",
@@ -293,9 +519,27 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function NewProjectDialog({ open, onOpenChange, onSuccess }: { open: boolean, onOpenChange: (o: boolean) => void, onSuccess: () => void }) {
+// ── New project dialog ────────────────────────────────────────────────────────
+
+function NewProjectDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+  atLimit,
+  maxProjects,
+  planLabel,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onSuccess: () => void;
+  atLimit: boolean;
+  maxProjects: number | null;
+  planLabel: string;
+}) {
+  const [, navigate] = useLocation();
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [classError, setClassError] = useState(false);
+  const [limitError, setLimitError] = useState<string | null>(null);
 
   const mutation = useCreateProject({
     mutation: {
@@ -304,6 +548,13 @@ function NewProjectDialog({ open, onOpenChange, onSuccess }: { open: boolean, on
         onOpenChange(false);
         setSelectedClasses([]);
         setClassError(false);
+        setLimitError(null);
+      },
+      onError: (err: any) => {
+        const body = err?.data ?? err;
+        if (body?.error === "project_limit_reached") {
+          setLimitError(body.message ?? "Project limit reached. Archive a project or upgrade your plan.");
+        }
       }
     }
   });
@@ -315,6 +566,7 @@ function NewProjectDialog({ open, onOpenChange, onSuccess }: { open: boolean, on
       return;
     }
     setClassError(false);
+    setLimitError(null);
     const fd = new FormData(e.currentTarget);
     const daNumber = (fd.get('daNumber') as string)?.trim();
     mutation.mutate({
@@ -333,7 +585,7 @@ function NewProjectDialog({ open, onOpenChange, onSuccess }: { open: boolean, on
   };
 
   return (
-    <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) { setSelectedClasses([]); setClassError(false); } }}>
+    <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) { setSelectedClasses([]); setClassError(false); setLimitError(null); } }}>
       <DialogContent
         className="max-w-2xl max-h-[90vh] overflow-y-auto"
         onInteractOutside={e => e.preventDefault()}
@@ -342,7 +594,32 @@ function NewProjectDialog({ open, onOpenChange, onSuccess }: { open: boolean, on
         <DialogHeader>
           <DialogTitle>Create New Project</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+
+        {/* Limit warning banner inside dialog */}
+        {(atLimit || limitError) && (
+          <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm">
+            <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-red-700">
+                {limitError ?? `Project limit reached on your ${planLabel} plan`}
+              </p>
+              {maxProjects !== null && (
+                <p className="text-xs text-red-600 mt-0.5">
+                  You have {maxProjects} active project{maxProjects === 1 ? "" : "s"} allowed.
+                  Archive a project from its detail page to free a slot.
+                </p>
+              )}
+              <button
+                onClick={() => { onOpenChange(false); navigate("/billing"); }}
+                className="text-xs font-semibold text-secondary hover:underline mt-1 block"
+              >
+                View upgrade options →
+              </button>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Project Name</Label>
@@ -399,7 +676,7 @@ function NewProjectDialog({ open, onOpenChange, onSuccess }: { open: boolean, on
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={mutation.isPending}>
+            <Button type="submit" disabled={mutation.isPending || atLimit}>
               {mutation.isPending ? "Creating..." : "Create Project"}
             </Button>
           </div>
