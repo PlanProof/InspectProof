@@ -91,23 +91,44 @@ async function initStripe() {
   }
 }
 
-await runSchemaMigrations();
-await ensureAdminSeed();
-await ensureGlobalTemplatesSeed();
-await initStripe();
+async function runBackgroundTasks() {
+  try {
+    await ensureGlobalTemplatesSeed();
+  } catch (err) {
+    logger.error({ err }, "Global template seed failed — continuing");
+  }
 
-if (isSupabaseStorageAvailable()) {
-  logger.info('Supabase Storage detected — ensuring bucket exists...');
-  await ensureSupabaseBucket();
-  logger.info('Supabase Storage bucket ready');
-} else {
-  logger.info('Supabase Storage not configured — using Replit Object Storage');
+  try {
+    await initStripe();
+  } catch (err) {
+    logger.error({ err }, "Stripe init failed in background — continuing");
+  }
+
+  if (isSupabaseStorageAvailable()) {
+    try {
+      logger.info('Supabase Storage detected — ensuring bucket exists...');
+      await ensureSupabaseBucket();
+      logger.info('Supabase Storage bucket ready');
+    } catch (err) {
+      logger.error({ err }, "Supabase bucket setup failed — continuing");
+    }
+  } else {
+    logger.info('Supabase Storage not configured — using Replit Object Storage');
+  }
 }
 
+// Run fast critical setup before listening
+await runSchemaMigrations();
+await ensureAdminSeed();
+
+// Start listening immediately so the port is open for deployment health checks
 app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
   logger.info({ port }, "Server listening");
+
+  // Run seeds and integrations in the background after port is open
+  runBackgroundTasks().catch((err) => logger.error({ err }, "Background tasks failed"));
 });
