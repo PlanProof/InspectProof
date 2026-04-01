@@ -749,6 +749,7 @@ export default function ConductInspectionScreen() {
             items={checklistItems}
             baseUrl={baseUrl}
             insets={insets}
+            inspectionName={inspection?.inspectionType?.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) || "Inspection"}
             onDeletePhoto={removePhotoFromItem}
           />
         </View>
@@ -1078,11 +1079,13 @@ function PhotosPanel({
   items,
   baseUrl,
   insets,
+  inspectionName,
   onDeletePhoto,
 }: {
   items: ChecklistItem[];
   baseUrl: string;
   insets: any;
+  inspectionName: string;
   onDeletePhoto: (itemId: number, photoPath: string) => void;
 }) {
   const { width: screenW, height: screenH } = useWindowDimensions();
@@ -1113,7 +1116,7 @@ function PhotosPanel({
           </Pressable>
           <View style={{ flex: 1, paddingHorizontal: 8 }}>
             <Text style={galleryStyles.lightboxTitle} numberOfLines={1}>{photo.description}</Text>
-            <Text style={galleryStyles.lightboxSub}>{photo.category} · {lightboxIndex + 1} of {allPhotos.length}</Text>
+            <Text style={galleryStyles.lightboxSub}>{inspectionName} · {photo.category} · {lightboxIndex + 1} of {allPhotos.length}</Text>
           </View>
           <Pressable
             onPress={() =>
@@ -1201,6 +1204,13 @@ function PhotosPanel({
       contentContainerStyle={[galleryStyles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
       showsVerticalScrollIndicator={false}
     >
+      {/* Inspection name banner */}
+      <View style={galleryStyles.inspectionBanner}>
+        <Feather name="clipboard" size={13} color={Colors.secondary} />
+        <Text style={galleryStyles.inspectionBannerText}>{inspectionName}</Text>
+        <Text style={galleryStyles.inspectionBannerCount}>{allPhotos.length} photo{allPhotos.length !== 1 ? "s" : ""}</Text>
+      </View>
+
       {itemsWithPhotos.map(item => {
         const photos = item.photoUrls || [];
         const startIdx = allPhotos.findIndex(p => p.itemId === item.id && p.path === photos[0]);
@@ -2411,6 +2421,26 @@ const galleryStyles = StyleSheet.create({
   emptyTitle: { fontSize: 17, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   emptySub: { fontSize: 13, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textSecondary, textAlign: "center" },
   scrollContent: { padding: 16, gap: 24 },
+  inspectionBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.infoLight,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  inspectionBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.secondary,
+  },
+  inspectionBannerCount: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.textSecondary,
+  },
   group: { gap: 10 },
   groupHeader: { gap: 2 },
   groupTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },

@@ -665,7 +665,16 @@ router.patch("/:id/checklist/:resultId", async (req, res) => {
     const updateData: any = { updatedAt: new Date() };
     if (result !== undefined) updateData.result = result;
     if (notes !== undefined) updateData.notes = notes;
-    if (photoUrls !== undefined) updateData.photoUrls = JSON.stringify(photoUrls);
+    if (photoUrls !== undefined) {
+      // Deduplicate: preserve order, remove duplicate paths
+      const seen = new Set<string>();
+      const deduped = (photoUrls as string[]).filter(p => {
+        if (seen.has(p)) return false;
+        seen.add(p);
+        return true;
+      });
+      updateData.photoUrls = JSON.stringify(deduped);
+    }
     if (photoMarkups !== undefined) updateData.photoMarkups = JSON.stringify(photoMarkups);
     if (severity !== undefined) updateData.severity = severity;
     if (location !== undefined) updateData.location = location;

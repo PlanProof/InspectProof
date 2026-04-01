@@ -2,221 +2,52 @@
 
 ## Overview
 
-InspectProof is a full-stack platform for Australian building certifiers and surveyors. Built as a pnpm workspace monorepo with:
-- **Desktop Web App** (React + Vite) — office/admin interface at `/`
-- **Mobile App** (Expo) — field inspection app at `/mobile/`
-- **API Server** (Express 5) — shared backend with PostgreSQL + Drizzle ORM
+InspectProof is a full-stack platform designed for Australian building certifiers and surveyors. It aims to streamline certification workflows through a comprehensive suite of tools. The platform features a desktop web application for office administration, a mobile application for field inspections, and a shared API server with a PostgreSQL database.
 
-**Admin login:** `contact@inspectproof.com.au` / `InspectProof2024!`
+Key capabilities include:
+- **Comprehensive Project Management**: Tracking projects, inspections, and issues with detailed metadata and status filters.
+- **Advanced Inspection Tools**: Mobile photo markup, digital checklists with templating capabilities, and detailed issue tracking with NCC code references.
+- **Reporting & Analytics**: Generation of inspection certificates and various reports, along with dashboards for live stats and performance insights.
+- **Robust Compliance**: Integration of NCC 2022 standards and various AS standards for comprehensive compliance checks.
 
-## Features
+The business vision is to become the leading digital platform for building certification in Australia, enhancing efficiency, accuracy, and compliance for certifiers nationwide.
 
-- **Photo Markup** — Mobile field inspectors can annotate photos with free-hand SVG drawings (5 pen colors: red, yellow, green, blue, white; 3 stroke widths; undo/clear). Markup stored as JSON alongside object paths in `checklistResultsTable.photoMarkups`. Desktop checklist tab displays photo thumbnails with markup overlays and links to full-size images.
-- **Checklist Template Editor** — Full inline editing of checklist items per template: add/edit/delete items, add section headers, reorder items up/down, per-item `reason` field (NCC intent, safety justification), code reference, risk level, required toggle. Saves atomically via PATCH/POST/DELETE to API.
-- **Authentication** — Token-based login with persistent storage
-- **Dashboard** — Live stats (active projects, inspections, open issues, critical issues), upcoming inspections, recent activity, projects by stage
-- **Projects** — List with search and status filters, detail view with inspections, issues, and project metadata (council approval, PCA ref, contract value, building classification)
-- **Inspections** — List grouped by upcoming/past with type filters, detail view with checklist items by category (pass/fail/N/A), result summary progress bar
-- **Issues/Defects** — Dual filter by severity (Critical/High/Medium/Low) and status, overdue detection, NCC code references, actions panel
-- **More Tab** — Profile card, quick access menu (Analytics, Reports, Documents, Checklists), NCC compliance reference grid (NCC 2022 Part A-H, AS standards)
-- **Analytics** — Overview stats, issues by severity chart, inspections by type bar chart, projects by stage grid, NCC compliance summary
+## User Preferences
 
-## Color Palette
+I prefer simple language and detailed explanations. I want iterative development with clear communication at each stage. Please ask before making major changes. I prefer functional programming paradigms where applicable. Do not make changes to files in the `lib/db` folder without explicit approval.
 
-- Primary: `#0B1933` (Maastricht Blue)
-- Secondary: `#466DB5` (BlueYonder)
-- Accent: `#C5D92D` (Pear)
+## System Architecture
 
-## Recent Fixes (2026-03-31)
+The InspectProof platform is built as a pnpm workspace monorepo, separating concerns into distinct applications and shared libraries.
 
-1. **Photo cache invalidation** (`photo-markup.tsx`): Added `useQueryClient` to photo-markup screen. Now calls `queryClient.invalidateQueries(["inspection-checklist", inspectionId])` after `appendPhotoToChecklist`, `deletePhoto`, and `saveMarkup` succeed. Ensures the conduct screen's Photos tab is fresh when the user navigates back (previously the stack-restored screen kept stale data since `refetchOnWindowFocus: false`).
-2. **API TypeScript clean** (`lib/db` rebuild): Compiled `lib/db` to generate missing `dist/seeds/global-templates.d.ts` declaration file.
-3. **Email `toEmail` mismatch** (`email.ts`): `sendWelcomeWithCredentialsEmail` now passes `email: opts.toEmail` when calling `welcomeWithCredentialsHtml`.
-4. **Expo push type** (`expoPush.ts`): Typed `json` as `any` in push response handler to resolve `data` property error.
+**UI/UX Decisions:**
+- **Color Palette:** Primary: `#0B1933` (Maastricht Blue), Secondary: `#466DB5` (BlueYonder), Accent: `#C5D92D` (Pear).
+- **Desktop Web App (React + Vite):** Serves as the primary administrative interface, offering features like project management, checklist template editing, analytics, and report generation.
+- **Mobile App (Expo):** Designed for field inspectors, focusing on mobile-first workflows such as photo markup, checklist completion, and issue logging.
 
-## Permission System (2026-03-31)
+**Technical Implementations & Feature Specifications:**
+- **Authentication:** Token-based authentication with persistent storage.
+- **Photo Markup:** Mobile inspectors can annotate photos using free-hand SVG drawings, with markup stored as JSON.
+- **Checklist Template Editor:** An inline editor allows for full management of checklist items, including adding/editing/deleting items, section headers, reasons, code references, risk levels, and required toggles.
+- **Permission System:** Granular company-level permissions (`isCompanyAdmin`, `userType`, `permissions` JSON column for `editTemplates`, `addInspectors`, `createProjects`) differentiate user roles and access within the platform. Self-registrations create company admins.
+- **Global Template Library:** Automatically seeded checklist and report templates on server startup for various disciplines (Building Surveyor, Structural Engineer, Plumbing Officer, etc.).
+- **API Server (Express 5):** Provides a shared backend, handling all data operations and business logic, with PostgreSQL and Drizzle ORM for data persistence.
+- **Database Schema:** Defined using Drizzle ORM, with `drizzle-zod` for insert schemas.
+- **API Codegen:** Utilizes Orval to generate OpenAPI spec-derived React Query hooks and Zod schemas for validation.
+- **Monorepo Structure:** `artifacts` for deployable applications (api-server), `lib` for shared libraries (api-spec, api-client-react, api-zod, db), and `scripts` for utilities.
+- **TypeScript & Composite Projects:** All packages leverage TypeScript with composite projects for efficient type checking across the monorepo.
 
-Added granular company-level permissions and user type differentiation:
+**System Design Choices:**
+- **Node.js 24 + pnpm:** Modern JavaScript runtime and efficient package manager for monorepo.
+- **PostgreSQL + Drizzle ORM:** Robust relational database with a type-safe ORM for data management.
+- **Express 5:** Fast and flexible web application framework for the API.
+- **Zod:** Schema validation library used across the API for robust data integrity.
 
-### Schema Changes (`lib/db/src/schema/users.ts`)
-- `isCompanyAdmin: boolean` — true for self-registered accounts; false for invited team members
-- `userType: text` — `"inspector"` (mobile app field inspector) or `"user"` (desktop office user)
-- `permissions: text` — JSON column with `{ editTemplates, addInspectors, createProjects }` booleans
+## External Dependencies
 
-### API Changes
-- **Registration** (`auth.ts`): Self-registrations now set `isCompanyAdmin: true`, `userType: "user"`, all permissions enabled
-- **Login + /me** (`auth.ts`): All auth responses now include `isCompanyAdmin`, `userType`, `permissions` fields
-- **Team creation** (`users.ts`): `POST /api/users` enforces plan team member quota — returns HTTP 402 with upgrade message when limit reached
-- **Team update** (`users.ts`): `PATCH /api/users/:id` accepts `isCompanyAdmin`, `userType`, `permissions` updates
-
-### Web UI Changes (`inspectors.tsx`)
-- Page renamed "Team Members" with 4 stats cards: Total Team (with limit indicator), Field Inspectors, Office Users, Company Admins
-- Each member row shows: crown badge for admins, Smartphone/Monitor type badge (Inspector vs Office User), granular permission pills (Edit Templates, Add Members, Create Projects) with lock/unlock icons
-- **Edit modal** expanded: Account Type selector (Field Inspector / Office User), Company Admin toggle (auto-grants all permissions), Permissions panel (3 individual toggles — hidden when Company Admin is on)
-- **Add Member modal**: Account Type selector included during creation
-- **Plan limit banner**: Amber warning banner + disabled "Add" button when at plan limit, with mailto link to upgrade
-- Crown icon overlaid on avatar for company admins
-
-### Data Migration
-Existing accounts with `is_admin = true` (system flag) backfilled: `isCompanyAdmin = true`, `userType = "user"`, all permissions enabled.
-
-## E2E Test Results (2026-03-29)
-
-Full admin → inspector → mobile → report flow verified:
-
-| Step | Status |
-|---|---|
-| Admin creates project | ✅ |
-| Admin links templates to project | ✅ |
-| Admin books inspection + assigns inspector | ✅ |
-| Admin creates inspector account via "Add Team Member" (returns temp password in UI) | ✅ |
-| Mobile: Inspector logs in with credentials | ✅ |
-| Mobile: Inspector sees assigned inspection in Inspections tab | ✅ |
-| Mobile: Inspector views inspection detail (type, project, assigned inspector) | ✅ |
-| Mobile: Inspector marks inspection Complete | ✅ |
-| Desktop: Admin sees inspection as Completed | ✅ |
-| Desktop: Admin generates Inspection Certificate PDF | ✅ (`Inspection_Certificate_Frame_Stage_UI_Fix_Test_Project.pdf`) |
-
-**Bug fixed this session:** Inspector-role users were blocked from seeing their assigned inspections on mobile because the `GET /api/inspections` route applied a project-owner access filter before the inspector filter. Fixed by reordering: inspector users now bypass the project filter and only see inspections where `inspectorId === req.authUser.id`.
-
-## Global Template Library (Seed)
-
-All checklist templates and report templates are seeded automatically on server startup if the database is empty. This covers:
-
-**Checklist Templates (80 total across 8 disciplines):**
-- Building Surveyor: Class 1a, 1b, 2, 3, 5, 6, 7a, 10a, 10b (41 templates, 347 items)
-- Structural Engineer: Footing, Slab, Frame, Steel Frame, Retaining Wall, Final (6 templates)
-- Plumbing Officer: Rough-In, Sanitary Drainage, Hot & Cold Water, Gas, Stormwater, Fire Services, Completion (7 templates)
-- Builder / QC: Pre-Slab, Frame Stage, Lock-Up, Defect, Practical Completion, Handover, Concrete Pour (7 templates)
-- Site Supervisor: Daily, Subcontractor Pre-Start, Concrete Pour Sign-Off, Defect Walkthrough, Pre-Handover Walk (5 templates)
-- WHS Officer: Site Safety Audit, Plant & Equipment, Hazardous Materials, Incident Investigation, Emergency Procedures (5 templates)
-- Pre-Purchase Inspector: Building, Pest & Termite, Strata/Unit, Commercial (4 templates)
-- Fire Safety Engineer: Fire Safety Systems, Emergency Lighting, Hydrant & Hose Reel, Smoke Alarms, AFSS (5 templates)
-
-**Report Templates (7 global):** Inspection Certificate, Defect Notice, Compliance Report, Non-Compliance Notice, Safety Inspection Report, Pre-Purchase Building Report, Quality Control Report
-
-**Seed files:** `lib/db/src/seeds/bs-templates.ts`, `lib/db/src/seeds/global-templates.ts`
-**Triggered by:** `ensureGlobalTemplatesSeed()` called from `artifacts/api-server/src/index.ts` at startup — only runs when DB is empty
-
-## Production Integrations
-
-| Integration | Config |
-|---|---|
-| **Database** | Supabase PostgreSQL (`SUPABASE_DATABASE_URL`) — Session Pooler, ap-southeast-2 |
-| **File Storage** | Replit Object Storage (`PRIVATE_OBJECT_DIR` env var, GCS bucket `replit-objstore-97d074d9-8576-42de-97b0-9bf4a2a327c8`); Supabase Storage optional when `SUPABASE_SERVICE_ROLE_KEY` + `SUPABASE_URL` set |
-| **Email** | Office365 SMTP via nodemailer (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) |
-| **Stripe** | Replit Stripe connector (dev) / `STRIPE_SECRET_KEY` env var (prod) |
-
-Storage auto-detection: presence of `SUPABASE_SERVICE_ROLE_KEY` env var enables Supabase Storage; otherwise uses Replit Object Storage.
-
-**Storage architecture notes (Replit Object Storage):**
-- Upload: `POST /api/storage/uploads/request-url` → returns signed PUT URL (client uploads directly to GCS) OR `POST /api/storage/uploads/file` (server-side upload).
-- Download: `GET /api/storage/objects/uploads/{uuid}` → 302 redirect to GCS JSON API URL with short-lived OAuth token (token exchanged via sidecar `/token` endpoint). Note: Express `{*path}` wildcard returns an array — always use `Array.isArray(rawPath) ? rawPath.join("/") : rawPath` to avoid Array.toString() joining with commas.
-- The Replit sidecar (`http://127.0.0.1:1106`) provides: `/credential` (subject token), `/token` (token exchange for real OAuth), `/object-storage/signed-object-url` (PUT signed URLs only — GET signed URLs produce incorrect comma-separated paths).
-- Reports PDF generation: uses `fetchObjectBuffer(objectPath)` to download signature images and checklist photos via the OAuth token approach.
-
-## Users (Supabase)
-
-| Email | Name | Plan | Admin |
-|---|---|---|---|
-| contact@inspectproof.com.au | Contact Admin | Enterprise | Yes |
-| jake@jtcertifications.com.au | Jake Turner | Enterprise | Yes |
-| brock@projectcomply.com.au | Brock Gregg | Enterprise | Yes |
-| jakely_turner12345@hotmail.com | Nia Turner | Free Trial | No |
-
-## Seed Data
-
-Plan configs (4 tiers: free_trial, starter, professional, enterprise) and admin user seeded via `scripts/supabase/seed.sql` — run once in Supabase SQL Editor.
-
-Local dev: 6 Australian projects (Sydney, Melbourne, Brisbane, Perth, Adelaide), 8 inspections, 5 users, 7 open issues (3 critical), checklist results, documents, notes, reports, activity logs
-
-## Stack
-
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
-
-## Structure
-
-```text
-artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
-```
-
-## TypeScript & Composite Projects
-
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
-
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
-
-## Root Scripts
-
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
-
-## Packages
-
-### `artifacts/api-server` (`@workspace/api-server`)
-
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
-
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
-
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+-   **Database:** Supabase PostgreSQL (`SUPABASE_DATABASE_URL`) - utilized for robust and scalable data storage.
+-   **File Storage:**
+    -   Replit Object Storage (using `PRIVATE_OBJECT_DIR` env var and GCS bucket `replit-objstore-97d074d9-8576-42de-97b0-9bf4a2a327c8`) is the primary storage.
+    -   Supabase Storage is an optional alternative if `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_URL` are configured.
+-   **Email:** Office365 SMTP via nodemailer (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) for sending platform-generated emails.
+-   **Stripe:** Integrated for payment processing, using Replit Stripe connector in development and `STRIPE_SECRET_KEY` in production.

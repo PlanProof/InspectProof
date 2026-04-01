@@ -131,6 +131,11 @@ export default function PhotoMarkupScreen() {
       ? currentItems.find((i: any) => i.id === parseInt(itemId))
       : null;
     const existingUrls: string[] = item?.photoUrls ?? [];
+    // Guard: skip if this path was already saved (prevents duplicates on double-mount)
+    if (existingUrls.includes(objectPath)) {
+      queryClient.invalidateQueries({ queryKey: ["inspection-checklist", inspectionId] });
+      return;
+    }
     await fetchWithAuth(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
