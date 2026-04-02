@@ -27,6 +27,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { InspectionCard } from "@/components/InspectionCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/context/AuthContext";
+import { useNotifications } from "@/context/NotificationsContext";
 import { PROJECT_STAGES } from "@/constants/api";
 
 const REPORT_TYPES: Record<string, string> = {
@@ -54,6 +55,7 @@ export default function ProjectDetailScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useTabBarHeight();
   const { token, user: authUser } = useAuth();
+  const { openAddressInMaps } = useNotifications();
   const userDiscipline = authUser?.profession ?? null;
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
@@ -196,12 +198,7 @@ export default function ProjectDetailScreen() {
 
         <Pressable
           style={styles.metaRow}
-          onPress={() => {
-            const addr = encodeURIComponent(`${project.siteAddress}, ${project.suburb} ${project.state} ${project.postcode}`);
-            Linking.openURL(`https://maps.apple.com/?q=${addr}`).catch(() =>
-              Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${addr}`)
-            );
-          }}
+          onPress={() => openAddressInMaps(project.siteAddress, project.suburb)}
           hitSlop={8}
         >
           <Feather name="map-pin" size={14} color={Colors.secondary} />
