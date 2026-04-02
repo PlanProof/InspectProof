@@ -889,6 +889,7 @@ export default function ConductInspectionScreen() {
             addingUnlinkedPhoto={addingUnlinkedPhoto}
             onAddUnlinkedPhoto={addUnlinkedPhoto}
             onDeleteUnlinkedPhoto={deleteUnlinkedPhoto}
+            tabBarHeight={tabBarHeight}
           />
         </View>
 
@@ -1801,6 +1802,7 @@ function PhotosPanel({
   addingUnlinkedPhoto,
   onAddUnlinkedPhoto,
   onDeleteUnlinkedPhoto,
+  tabBarHeight,
 }: {
   items: ChecklistItem[];
   baseUrl: string;
@@ -1811,6 +1813,7 @@ function PhotosPanel({
   addingUnlinkedPhoto: boolean;
   onAddUnlinkedPhoto: (source: "camera" | "library") => void;
   onDeleteUnlinkedPhoto: (path: string) => void;
+  tabBarHeight: number;
 }) {
   const { width: screenW, height: screenH } = useWindowDimensions();
   const COLS = 3;
@@ -1982,7 +1985,7 @@ function PhotosPanel({
   const addPhotoSheet = addPhotoSheetVisible ? (
     <View style={galleryStyles.actionSheetOverlay}>
       <Pressable style={StyleSheet.absoluteFill} onPress={() => setAddPhotoSheetVisible(false)} />
-      <View style={[galleryStyles.actionSheet, { paddingBottom: insets.bottom + 8 }]}>
+      <View style={[galleryStyles.actionSheet, { paddingBottom: tabBarHeight + insets.bottom + 8 }]}>
         <Text style={galleryStyles.actionSheetTitle}>Add Photo</Text>
         <Text style={galleryStyles.actionSheetNote}>These photos won't be linked to an inspection item.</Text>
         <Pressable
