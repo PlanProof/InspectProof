@@ -3201,7 +3201,7 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
     setLocalTrades(prev => ({ ...prev, [issue.id]: value }));
     if (issue.checklistResultId) {
       try {
-        await apiFetch(`/api/inspections/${inspectionId}/results/${issue.checklistResultId}`, {
+        await apiFetch(`/api/inspections/${inspectionId}/checklist/${issue.checklistResultId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ tradeAllocated: value || null }),
