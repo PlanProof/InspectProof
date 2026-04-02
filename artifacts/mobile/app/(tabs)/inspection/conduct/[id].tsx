@@ -1581,112 +1581,6 @@ function ItemModal({
               </Text>
             )}
 
-            {/* Trade picker modal */}
-            <Modal visible={tradePickerOpen} animationType="slide" transparent presentationStyle="overFullScreen">
-              <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
-                <View style={{ backgroundColor: Colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: screenH * 0.80 }}>
-                  {/* Header */}
-                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
-                    <Text style={{ fontSize: 16, fontWeight: "700", color: Colors.text }}>Assign Trade / Person</Text>
-                    <Pressable onPress={() => setTradePickerOpen(false)} style={{ padding: 4 }}>
-                      <Text style={{ fontSize: 18, color: Colors.textSecondary }}>✕</Text>
-                    </Pressable>
-                  </View>
-
-                  {/* List */}
-                  <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 12 }} keyboardShouldPersistTaps="handled">
-                    {contractors.length > 0 && (
-                      <>
-                        <Text style={{ fontSize: 11, fontWeight: "700", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.6, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 6 }}>
-                          Project Contractors
-                        </Text>
-                        {contractors.map(c => {
-                          const selected = pendingTrades.includes(c.name);
-                          return (
-                            <Pressable
-                              key={c.id}
-                              onPress={() => setPendingTrades(prev => selected ? prev.filter(n => n !== c.name) : [...prev, c.name])}
-                              style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 13, backgroundColor: pressed ? Colors.backgroundSecondary : "transparent" })}
-                            >
-                              <View style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 2, borderColor: selected ? "#1d4ed8" : Colors.border, backgroundColor: selected ? "#1d4ed8" : "transparent", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
-                                {selected && <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>✓</Text>}
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.text }}>{c.name}</Text>
-                                {c.trade ? <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 1 }}>{c.trade}</Text> : null}
-                              </View>
-                            </Pressable>
-                          );
-                        })}
-                      </>
-                    )}
-                    {internalStaff.length > 0 && (
-                      <>
-                        <Text style={{ fontSize: 11, fontWeight: "700", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.6, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 6 }}>
-                          Internal Staff
-                        </Text>
-                        {internalStaff.map(s => {
-                          const selected = pendingTrades.includes(s.name);
-                          return (
-                            <Pressable
-                              key={s.id}
-                              onPress={() => setPendingTrades(prev => selected ? prev.filter(n => n !== s.name) : [...prev, s.name])}
-                              style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 13, backgroundColor: pressed ? Colors.backgroundSecondary : "transparent" })}
-                            >
-                              <View style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 2, borderColor: selected ? "#d97706" : Colors.border, backgroundColor: selected ? "#d97706" : "transparent", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
-                                {selected && <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>✓</Text>}
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.text }}>{s.name}</Text>
-                                {s.role ? <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 1 }}>{s.role}</Text> : null}
-                              </View>
-                            </Pressable>
-                          );
-                        })}
-                      </>
-                    )}
-                    {contractors.length === 0 && internalStaff.length === 0 && (
-                      <View style={{ paddingHorizontal: 18, paddingTop: 20, paddingBottom: 8 }}>
-                        <Text style={{ fontSize: 13, color: Colors.textSecondary, marginBottom: 12 }}>
-                          No contractors or staff linked to this project yet. Type a trade name below:
-                        </Text>
-                      </View>
-                    )}
-                    {/* Manual text entry fallback */}
-                    <View style={{ paddingHorizontal: 18, paddingTop: 10, paddingBottom: 4 }}>
-                      <Text style={{ fontSize: 11, fontWeight: "700", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>
-                        Or type manually
-                      </Text>
-                      <TextInput
-                        style={{ borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.text, backgroundColor: Colors.background }}
-                        value={pendingTrades.join(", ")}
-                        onChangeText={text => setPendingTrades(text.split(",").map(s => s.trim()).filter(Boolean))}
-                        placeholder="e.g. Plumber, Electrician"
-                        placeholderTextColor={Colors.textTertiary}
-                      />
-                    </View>
-                  </ScrollView>
-
-                  {/* Footer actions */}
-                  <View style={{ flexDirection: "row", gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: Colors.border }}>
-                    <Pressable
-                      onPress={() => { onTradeAllocatedChange(""); setTradePickerOpen(false); }}
-                      style={{ flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, alignItems: "center" }}
-                    >
-                      <Text style={{ fontSize: 14, color: Colors.textSecondary, fontWeight: "600" }}>Clear</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => { onTradeAllocatedChange(pendingTrades.join(", ")); setTradePickerOpen(false); }}
-                      style={{ flex: 2, paddingVertical: 12, borderRadius: 8, backgroundColor: Colors.primary, alignItems: "center" }}
-                    >
-                      <Text style={{ fontSize: 14, color: "#fff", fontWeight: "700" }}>
-                        {pendingTrades.length > 0 ? `Confirm (${pendingTrades.length} selected)` : "Confirm"}
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
-            </Modal>
 
             {/* Recommended Action */}
             <Text style={[modalStyles.sectionLabel, { marginTop: 12 }]}>Recommended Action</Text>
@@ -1723,34 +1617,6 @@ function ItemModal({
                   Suggestions ({suggestions.length})
                 </Text>
               </Pressable>
-              <Modal visible={suggestionsModalOpen} animationType="slide" transparent presentationStyle="overFullScreen">
-                <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
-                  <View style={{ backgroundColor: Colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: screenH * 0.75 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
-                      <Text style={{ fontSize: 16, fontWeight: "700", color: Colors.text }}>Note Suggestions</Text>
-                      <Pressable onPress={() => setSuggestionsModalOpen(false)} style={{ padding: 4 }}>
-                        <Text style={{ fontSize: 18, color: Colors.textSecondary }}>✕</Text>
-                      </Pressable>
-                    </View>
-                    <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-                      {suggestions.map((s, i) => (
-                        <Pressable
-                          key={i}
-                          onPress={() => { applySuggestion(s); setSuggestionsModalOpen(false); }}
-                          style={({ pressed }) => ({
-                            paddingHorizontal: 18, paddingVertical: 14,
-                            borderBottomWidth: i < suggestions.length - 1 ? 1 : 0,
-                            borderBottomColor: Colors.border,
-                            backgroundColor: pressed ? Colors.backgroundSecondary : "transparent",
-                          })}
-                        >
-                          <Text style={{ fontSize: 14, color: Colors.text, lineHeight: 20 }}>{s}</Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </View>
-                </View>
-              </Modal>
             </>
           )}
           <TextInput
@@ -1910,6 +1776,130 @@ function ItemModal({
           </View>
         )}
       </ScrollView>
+
+      {/* ── Trade Picker Overlay (not a nested Modal — avoids iOS sheet clipping) ── */}
+      {tradePickerOpen && (
+        <>
+          <Pressable
+            style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.45)", zIndex: 100 }]}
+            onPress={() => setTradePickerOpen(false)}
+          />
+          <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 101, backgroundColor: Colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: screenH * 0.80 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+              <Text style={{ fontSize: 16, fontWeight: "700", color: Colors.text }}>Assign Trade / Person</Text>
+              <Pressable onPress={() => setTradePickerOpen(false)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 18, color: Colors.textSecondary }}>✕</Text>
+              </Pressable>
+            </View>
+            <ScrollView style={{ maxHeight: screenH * 0.55 }} contentContainerStyle={{ paddingBottom: 12 }} keyboardShouldPersistTaps="handled">
+              {contractors.length > 0 && (
+                <>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.6, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 6 }}>
+                    Project Contractors
+                  </Text>
+                  {contractors.map(c => {
+                    const sel = pendingTrades.includes(c.name);
+                    return (
+                      <Pressable key={c.id} onPress={() => setPendingTrades(prev => sel ? prev.filter(n => n !== c.name) : [...prev, c.name])}
+                        style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 13, backgroundColor: pressed ? Colors.backgroundSecondary : "transparent" })}>
+                        <View style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 2, borderColor: sel ? "#1d4ed8" : Colors.border, backgroundColor: sel ? "#1d4ed8" : "transparent", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+                          {sel && <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>✓</Text>}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.text }}>{c.name}</Text>
+                          {c.trade ? <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 1 }}>{c.trade}</Text> : null}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </>
+              )}
+              {internalStaff.length > 0 && (
+                <>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.6, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 6 }}>
+                    Internal Staff
+                  </Text>
+                  {internalStaff.map(s => {
+                    const sel = pendingTrades.includes(s.name);
+                    return (
+                      <Pressable key={s.id} onPress={() => setPendingTrades(prev => sel ? prev.filter(n => n !== s.name) : [...prev, s.name])}
+                        style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 13, backgroundColor: pressed ? Colors.backgroundSecondary : "transparent" })}>
+                        <View style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 2, borderColor: sel ? "#d97706" : Colors.border, backgroundColor: sel ? "#d97706" : "transparent", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+                          {sel && <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>✓</Text>}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.text }}>{s.name}</Text>
+                          {s.role ? <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 1 }}>{s.role}</Text> : null}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </>
+              )}
+              {contractors.length === 0 && internalStaff.length === 0 && (
+                <View style={{ paddingHorizontal: 18, paddingTop: 20, paddingBottom: 8 }}>
+                  <Text style={{ fontSize: 13, color: Colors.textSecondary, marginBottom: 12 }}>
+                    No contractors or staff linked to this project yet. Type a trade name below:
+                  </Text>
+                </View>
+              )}
+              <View style={{ paddingHorizontal: 18, paddingTop: 10, paddingBottom: 4 }}>
+                <Text style={{ fontSize: 11, fontWeight: "700", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Or type manually</Text>
+                <TextInput
+                  style={{ borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.text, backgroundColor: Colors.background }}
+                  value={pendingTrades.join(", ")}
+                  onChangeText={text => setPendingTrades(text.split(",").map(t => t.trim()).filter(Boolean))}
+                  placeholder="e.g. Plumber, Electrician"
+                  placeholderTextColor={Colors.textTertiary}
+                />
+              </View>
+            </ScrollView>
+            <View style={{ flexDirection: "row", gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: Colors.border }}>
+              <Pressable onPress={() => { onTradeAllocatedChange(""); setTradePickerOpen(false); }}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, alignItems: "center" }}>
+                <Text style={{ fontSize: 14, color: Colors.textSecondary, fontWeight: "600" }}>Clear</Text>
+              </Pressable>
+              <Pressable onPress={() => { onTradeAllocatedChange(pendingTrades.join(", ")); setTradePickerOpen(false); }}
+                style={{ flex: 2, paddingVertical: 12, borderRadius: 8, backgroundColor: Colors.primary, alignItems: "center" }}>
+                <Text style={{ fontSize: 14, color: "#fff", fontWeight: "700" }}>
+                  {pendingTrades.length > 0 ? `Confirm (${pendingTrades.length} selected)` : "Confirm"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </>
+      )}
+
+      {/* ── Suggestions Overlay ── */}
+      {suggestionsModalOpen && (
+        <>
+          <Pressable
+            style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.45)", zIndex: 100 }]}
+            onPress={() => setSuggestionsModalOpen(false)}
+          />
+          <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 101, backgroundColor: Colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: screenH * 0.75 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+              <Text style={{ fontSize: 16, fontWeight: "700", color: Colors.text }}>Note Suggestions</Text>
+              <Pressable onPress={() => setSuggestionsModalOpen(false)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 18, color: Colors.textSecondary }}>✕</Text>
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 8 }}>
+              {suggestions.map((s, i) => (
+                <Pressable key={i} onPress={() => { applySuggestion(s); setSuggestionsModalOpen(false); }}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: 18, paddingVertical: 14,
+                    borderBottomWidth: i < suggestions.length - 1 ? 1 : 0,
+                    borderBottomColor: Colors.border,
+                    backgroundColor: pressed ? Colors.backgroundSecondary : "transparent",
+                  })}>
+                  <Text style={{ fontSize: 14, color: Colors.text, lineHeight: 20 }}>{s}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </>
+      )}
     </View>
   );
 }
