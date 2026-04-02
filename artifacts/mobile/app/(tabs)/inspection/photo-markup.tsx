@@ -150,6 +150,24 @@ export default function PhotoMarkupScreen() {
     queryClient.invalidateQueries({ queryKey: ["inspection-checklist", inspectionId] });
   }, [fetchWithAuth, inspectionId, itemId, queryClient]);
 
+  // Load existing strokes when editing an already-saved photo
+  useEffect(() => {
+    if (!isExistingPhoto || !existingObjectPath) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await fetchWithAuth(`/api/inspections/${inspectionId}/checklist`);
+        if (cancelled) return;
+        const it = Array.isArray(items) ? items.find((i: any) => i.id === parseInt(itemId)) : null;
+        const existing: MarkupData | undefined = it?.photoMarkups?.[existingObjectPath];
+        if (existing && existing.strokes?.length > 0 && !cancelled) {
+          setStrokes(existing.strokes);
+        }
+      } catch { /* silent — user can still draw fresh markup */ }
+    })();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     // Skip upload entirely when we're editing markup on an already-saved photo
     if (isExistingPhoto) return;
@@ -411,6 +429,27 @@ export default function PhotoMarkupScreen() {
           <Image source={{ uri: currentPhotoUri }} style={StyleSheet.absoluteFill} resizeMode="contain" />
         ) : (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: "#111" }]} />
+        )}
+        {strokes.length > 0 && (
+          <Svg
+            style={StyleSheet.absoluteFill}
+            width={drawAreaW}
+            height={drawAreaH}
+            viewBox={`0 0 ${drawAreaW} ${drawAreaH}`}
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {strokes.map((stroke, i) => (
+              <Path
+                key={i}
+                d={stroke.points.map((p, pi) => `${pi === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ")}
+                stroke={stroke.color}
+                strokeWidth={stroke.width}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            ))}
+          </Svg>
         )}
       </View>
 

@@ -196,12 +196,21 @@ export default function ProjectDetailScreen() {
 
         <Text style={styles.projectName}>{project.name}</Text>
 
-        <View style={styles.metaRow}>
-          <Feather name="map-pin" size={14} color={Colors.textTertiary} />
-          <Text style={styles.metaText}>
+        <Pressable
+          style={styles.metaRow}
+          onPress={() => {
+            const addr = encodeURIComponent(`${project.siteAddress}, ${project.suburb} ${project.state} ${project.postcode}`);
+            Linking.openURL(`https://maps.apple.com/?q=${addr}`).catch(() =>
+              Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${addr}`)
+            );
+          }}
+          hitSlop={8}
+        >
+          <Feather name="map-pin" size={14} color={Colors.secondary} />
+          <Text style={[styles.metaText, { color: Colors.secondary, textDecorationLine: "underline" }]}>
             {project.siteAddress}, {project.suburb} {project.state} {project.postcode}
           </Text>
-        </View>
+        </Pressable>
 
         <View style={styles.metaRow}>
           <Feather name="user" size={14} color={Colors.textTertiary} />
