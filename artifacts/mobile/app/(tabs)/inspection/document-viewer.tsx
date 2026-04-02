@@ -4,6 +4,7 @@ import {
   useWindowDimensions, Platform, Modal, TextInput,
   KeyboardAvoidingView, Image, ScrollView,
 } from "react-native";
+import * as Sharing from "expo-sharing";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useSharedValue, useAnimatedStyle, runOnJS,
@@ -729,6 +730,31 @@ export default function DocumentViewerScreen() {
           )}
         </View>
         <View style={styles.headerActions}>
+          {/* Download offline button — visible on native when doc is ready */}
+          {Platform.OS !== "web" && isReady && localUri && !drawing && (
+            <Pressable
+              hitSlop={10}
+              onPress={async () => {
+                try {
+                  const canShare = await Sharing.isAvailableAsync();
+                  if (canShare) {
+                    await Sharing.shareAsync(localUri, {
+                      mimeType: mimeType || "application/octet-stream",
+                      dialogTitle: name || "Document",
+                      UTI: isPdf ? "com.adobe.pdf" : "public.data",
+                    });
+                  } else {
+                    Alert.alert("Not available", "Sharing is not supported on this device.");
+                  }
+                } catch {
+                  Alert.alert("Error", "Could not open the share sheet.");
+                }
+              }}
+              style={styles.iconBtn}
+            >
+              <Feather name="download" size={20} color="rgba(255,255,255,0.85)" />
+            </Pressable>
+          )}
           {(inspectionId || projectId) && isReady && (
             <Pressable
               disabled={uploading}
@@ -1169,7 +1195,19 @@ export default function DocumentViewerScreen() {
               domStorageEnabled
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
-              scalesPageToFit={Platform.OS === "android"}
+              scalesPageToFit
+              injectedJavaScript={`
+                (function() {
+                  var meta = document.querySelector('meta[name="viewport"]');
+                  if (!meta) {
+                    meta = document.createElement('meta');
+                    meta.name = 'viewport';
+                    document.head && document.head.appendChild(meta);
+                  }
+                  meta.content = 'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=0.5, maximum-scale=10.0';
+                })();
+                true;
+              `}
             />
           )}
 
