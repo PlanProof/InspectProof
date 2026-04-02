@@ -239,19 +239,19 @@ export default function ConductInspectionScreen() {
     setAddingUnlinkedPhoto(true);
     try {
       const uri = picked.assets[0].uri;
-      const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: `inspection-photo-${Date.now()}.jpg`, size: 0, contentType: "image/jpeg" }),
-      });
       const blob = await (await fetch(uri)).blob();
-      const uploadResp = await fetch(urlRes.uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": blob.type || "image/jpeg" },
+      const uploadRes = await fetch(`${baseUrl}/api/storage/uploads/file`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "image/jpeg",
+          "X-File-Content-Type": "image/jpeg",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: blob,
       });
-      if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
-      const newPaths = [...unlinkedPhotos, urlRes.objectPath as string];
+      if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
+      const { objectPath } = await uploadRes.json();
+      const newPaths = [...unlinkedPhotos, objectPath as string];
       setUnlinkedPhotos(newPaths);
       await persistUnlinked(newPaths);
     } catch {
@@ -259,7 +259,7 @@ export default function ConductInspectionScreen() {
     } finally {
       setAddingUnlinkedPhoto(false);
     }
-  }, [addingUnlinkedPhoto, fetchWithAuth, unlinkedPhotos, persistUnlinked]);
+  }, [addingUnlinkedPhoto, baseUrl, token, unlinkedPhotos, persistUnlinked]);
 
   const deleteUnlinkedPhoto = useCallback(async (path: string) => {
     const newPaths = unlinkedPhotos.filter(p => p !== path);

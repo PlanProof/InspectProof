@@ -111,24 +111,20 @@ export default function PhotoMarkupScreen() {
   // ── Auto-upload on mount ──────────────────────────────────────────────────
 
   const uploadPhoto = useCallback(async (photoUri: string): Promise<string> => {
-    const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: `inspection-photo-${Date.now()}.jpg`,
-        size: 0,
-        contentType: "image/jpeg",
-      }),
-    });
     const blob = await (await fetch(photoUri)).blob();
-    const uploadResp = await fetch(urlRes.uploadURL, {
-      method: "PUT",
-      headers: { "Content-Type": blob.type || "image/jpeg" },
+    const uploadRes = await fetch(`${baseUrl}/api/storage/uploads/file`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "image/jpeg",
+        "X-File-Content-Type": "image/jpeg",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: blob,
     });
-    if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
-    return urlRes.objectPath as string;
-  }, [fetchWithAuth]);
+    if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
+    const { objectPath } = await uploadRes.json();
+    return objectPath as string;
+  }, [baseUrl, token]);
 
   const appendPhotoToChecklist = useCallback(async (objectPath: string) => {
     const currentItems = await fetchWithAuth(`/api/inspections/${inspectionId}/checklist`);
