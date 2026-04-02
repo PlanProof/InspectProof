@@ -309,6 +309,30 @@ export default function ConductInspectionScreen() {
     }
   };
 
+  const quickNAAll = async (items: ChecklistItem[]) => {
+    const allNA = items.every(i => i.result === "na");
+    const next = allNA ? "pending" : "na";
+    const prevResults = Object.fromEntries(items.map(i => [i.id, i.result]));
+    queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+      (old ?? []).map(i => items.find(x => x.id === i.id) ? { ...i, result: next } : i)
+    );
+    try {
+      await Promise.all(items.map(item =>
+        fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ result: next, notes: item.notes || null }),
+        })
+      ));
+      refetchChecklist();
+    } catch {
+      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+        (old ?? []).map(i => prevResults[i.id] !== undefined ? { ...i, result: prevResults[i.id] } : i)
+      );
+      Alert.alert("Error", "Failed to update items. Please try again.");
+    }
+  };
+
   const quickNA = async (item: ChecklistItem) => {
     const next = item.result === "na" ? "pending" : "na";
     // Optimistic update
@@ -688,29 +712,12 @@ export default function ConductInspectionScreen() {
             ) : (
               Object.entries(grouped).map(([category, items]) => (
                 <View key={category} style={styles.category}>
-                  <View style={styles.categoryHeader}>
-                    <Text style={styles.categoryTitle}>{category}</Text>
-                    <View style={styles.categoryRight}>
-                      <Text style={styles.categoryCount}>
-                        {items.filter(i => i.result !== "pending").length}/{items.length}
-                      </Text>
-                      <Pressable
-                        onPress={() => quickPassAll(items)}
-                        hitSlop={10}
-                        style={({ pressed }) => [
-                          styles.masterTick,
-                          items.every(i => i.result === "pass") && styles.masterTickActive,
-                          pressed && { opacity: 0.7 },
-                        ]}
-                      >
-                        <Feather
-                          name="check"
-                          size={14}
-                          color={items.every(i => i.result === "pass") ? "#22c55e" : Colors.textTertiary}
-                        />
-                      </Pressable>
-                    </View>
-                  </View>
+                  <CategoryHeader
+                    category={category}
+                    items={items}
+                    onQuickPassAll={() => quickPassAll(items)}
+                    onQuickNAAll={() => quickNAAll(items)}
+                  />
                   {items.map(item => (
                     <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} onQuickNA={() => quickNA(item)} />
                   ))}
@@ -938,6 +945,64 @@ export default function ConductInspectionScreen() {
       </Modal>
 
     </View>
+  );
+}
+
+function CategoryHeader({ category, items, onQuickPassAll, onQuickNAAll }: {
+  category: string;
+  items: ChecklistItem[];
+  onQuickPassAll: () => void;
+  onQuickNAAll: () => void;
+}) {
+  const swipeRef = useRef<Swipeable>(null);
+  const allNA = items.every(i => i.result === "na");
+
+  const renderRightActions = (_progress: any, dragX: any) => {
+    const scale = dragX.interpolate({ inputRange: [-90, 0], outputRange: [1, 0.75], extrapolate: "clamp" });
+    return (
+      <Animated.View style={[styles.naAllAction, { transform: [{ scale }] }]}>
+        <Feather name="minus-circle" size={16} color="#fff" />
+        <Text style={styles.naAllActionText}>{allNA ? "Restore" : "All N/A"}</Text>
+      </Animated.View>
+    );
+  };
+
+  return (
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={renderRightActions}
+      rightThreshold={72}
+      friction={2}
+      overshootRight={false}
+      onSwipeableOpen={() => {
+        swipeRef.current?.close();
+        onQuickNAAll();
+      }}
+    >
+      <View style={styles.categoryHeader}>
+        <Text style={styles.categoryTitle}>{category}</Text>
+        <View style={styles.categoryRight}>
+          <Text style={styles.categoryCount}>
+            {items.filter(i => i.result !== "pending").length}/{items.length}
+          </Text>
+          <Pressable
+            onPress={onQuickPassAll}
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.masterTick,
+              items.every(i => i.result === "pass") && styles.masterTickActive,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Feather
+              name="check"
+              size={14}
+              color={items.every(i => i.result === "pass") ? "#22c55e" : Colors.textTertiary}
+            />
+          </Pressable>
+        </View>
+      </View>
+    </Swipeable>
   );
 }
 
@@ -2163,6 +2228,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   naActionText: { color: "#fff", fontSize: 13, fontFamily: "PlusJakartaSans_700Bold" },
+  naAllAction: {
+    backgroundColor: "#64748b",
+    justifyContent: "center",
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginBottom: 2,
+  },
+  naAllActionText: { color: "#fff", fontSize: 13, fontFamily: "PlusJakartaSans_700Bold" },
   restoreAction: {
     backgroundColor: "#16a34a",
     justifyContent: "center",
