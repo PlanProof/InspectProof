@@ -5,17 +5,17 @@ import { requireAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
 
+function scopeKey(authUser: { companyName?: string | null; id: number }): string {
+  return authUser.companyName?.trim() || `user:${authUser.id}`;
+}
+
 router.get("/", requireAuth, async (req, res) => {
-  const companyName = req.authUser!.companyName;
-  if (!companyName) {
-    res.json([]);
-    return;
-  }
+  const scope = scopeKey(req.authUser!);
   try {
     const staff = await db
       .select()
       .from(internalStaffTable)
-      .where(eq(internalStaffTable.companyName, companyName))
+      .where(eq(internalStaffTable.companyName, scope))
       .orderBy(internalStaffTable.name);
     res.json(staff);
   } catch (err) {
@@ -25,11 +25,7 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 router.post("/", requireAuth, async (req, res) => {
-  const companyName = req.authUser!.companyName;
-  if (!companyName) {
-    res.status(400).json({ error: "bad_request", message: "No company associated with your account" });
-    return;
-  }
+  const scope = scopeKey(req.authUser!);
   const { name, role, email } = req.body as { name?: string; role?: string; email?: string };
   if (!name?.trim()) {
     res.status(400).json({ error: "bad_request", message: "name is required" });
@@ -38,7 +34,7 @@ router.post("/", requireAuth, async (req, res) => {
   try {
     const [created] = await db
       .insert(internalStaffTable)
-      .values({ companyName, name: name.trim(), role: (role ?? "").trim(), email: email?.trim() || null })
+      .values({ companyName: scope, name: name.trim(), role: (role ?? "").trim(), email: email?.trim() || null })
       .returning();
     res.status(201).json(created);
   } catch (err) {
@@ -48,14 +44,10 @@ router.post("/", requireAuth, async (req, res) => {
 });
 
 router.patch("/:id", requireAuth, async (req, res) => {
-  const companyName = req.authUser!.companyName;
+  const scope = scopeKey(req.authUser!);
   const staffId = parseInt(req.params.id, 10);
   if (isNaN(staffId)) {
     res.status(400).json({ error: "bad_request", message: "Invalid staff id" });
-    return;
-  }
-  if (!companyName) {
-    res.status(400).json({ error: "bad_request", message: "No company associated with your account" });
     return;
   }
   const { name, role, email } = req.body as { name?: string; role?: string; email?: string };
@@ -71,7 +63,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
     const [updated] = await db
       .update(internalStaffTable)
       .set(updates)
-      .where(and(eq(internalStaffTable.id, staffId), eq(internalStaffTable.companyName, companyName)))
+      .where(and(eq(internalStaffTable.id, staffId), eq(internalStaffTable.companyName, scope)))
       .returning();
     if (!updated) {
       res.status(404).json({ error: "not_found" });
@@ -85,20 +77,16 @@ router.patch("/:id", requireAuth, async (req, res) => {
 });
 
 router.delete("/:id", requireAuth, async (req, res) => {
-  const companyName = req.authUser!.companyName;
+  const scope = scopeKey(req.authUser!);
   const staffId = parseInt(req.params.id, 10);
   if (isNaN(staffId)) {
     res.status(400).json({ error: "bad_request", message: "Invalid staff id" });
     return;
   }
-  if (!companyName) {
-    res.status(400).json({ error: "bad_request", message: "No company associated with your account" });
-    return;
-  }
   try {
     const [deleted] = await db
       .delete(internalStaffTable)
-      .where(and(eq(internalStaffTable.id, staffId), eq(internalStaffTable.companyName, companyName)))
+      .where(and(eq(internalStaffTable.id, staffId), eq(internalStaffTable.companyName, scope)))
       .returning();
     if (!deleted) {
       res.status(404).json({ error: "not_found" });
