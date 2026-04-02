@@ -410,7 +410,7 @@ export default function InspectionDetail() {
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>([]);
   const [project, setProject] = useState<any>(null);
   const [docTemplates, setDocTemplates] = useState<DocTemplate[]>([]);
-  const [internalStaff, setInternalStaff] = useState<{ id: number; name: string; role: string }[]>([]);
+  const [internalStaff, setInternalStaff] = useState<{ id: number; name: string; role: string; email: string | null }[]>([]);
   const [contractors, setContractors] = useState<{ id: number; name: string; trade: string; email: string | null }[]>([]);
 
   const openReportDialog = useCallback((inspection: Inspection) => {
@@ -3163,7 +3163,7 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
   projectId: number;
   onReload: () => void;
   contractors: { id: number; name: string; trade: string; email: string | null }[];
-  internalStaff: { id: number; name: string; role: string }[];
+  internalStaff: { id: number; name: string; role: string; email: string | null }[];
 }) {
   const [expandedCorrection, setExpandedCorrection] = useState<number | null>(null);
   const [localTrades, setLocalTrades] = useState<Record<number, string>>(() => {
@@ -3211,24 +3211,39 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
     }
   }
 
-  async function handleSend(contractorName: string) {
-    const contractor = contractors.find(c => c.name.toLowerCase() === contractorName.toLowerCase());
-    if (!contractor) return;
-    setSendingTo(contractor.id);
-    setSendResult(prev => { const n = { ...prev }; delete n[contractor.id]; return n; });
+  async function handleSend(tradeName: string) {
+    const contractor = contractors.find(c => c.name.toLowerCase() === tradeName.toLowerCase());
+    const staff = !contractor ? internalStaff.find(s => s.name.toLowerCase() === tradeName.toLowerCase()) : null;
+    const target = contractor ?? staff;
+    if (!target) return;
+    const key = `${contractor ? "c" : "s"}:${target.id}`;
+    setSendingTo(target.id);
+    setSendResult(prev => { const n = { ...prev }; delete n[key as any]; return n; });
     try {
-      const res = await apiFetch(`/api/projects/${projectId}/contractors/${contractor.id}/send-defect-report`, {
+      const url = contractor
+        ? `/api/projects/${projectId}/contractors/${contractor.id}/send-defect-report`
+        : `/api/projects/${projectId}/staff/${staff!.id}/send-defect-report`;
+      const res = await apiFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inspectionId }),
       });
       const data = await res.json();
-      setSendResult(prev => ({ ...prev, [contractor.id]: { ok: res.ok, msg: data.message ?? (res.ok ? "Report sent" : "Failed to send") } }));
+      setSendResult(prev => ({ ...prev, [key as any]: { ok: res.ok, msg: data.message ?? (res.ok ? "Sent" : "Failed to send") } }));
     } catch {
-      setSendResult(prev => ({ ...prev, [contractor.id ?? 0]: { ok: false, msg: "Failed to send" } }));
+      setSendResult(prev => ({ ...prev, [key as any]: { ok: false, msg: "Failed to send" } }));
     } finally {
       setSendingTo(null);
     }
+  }
+
+  // Helper: given a trade name resolve the matching person and their send key
+  function resolveTradeTarget(tradeName: string) {
+    const contractor = contractors.find(c => c.name.toLowerCase() === tradeName.toLowerCase());
+    if (contractor) return { type: "contractor" as const, person: contractor, key: `c:${contractor.id}`, email: contractor.email, label: contractor.trade };
+    const staff = internalStaff.find(s => s.name.toLowerCase() === tradeName.toLowerCase());
+    if (staff) return { type: "staff" as const, person: staff, key: `s:${staff.id}`, email: staff.email, label: staff.role || "Internal Staff" };
+    return null;
   }
 
   const tradeNames = Object.keys(issuesByTrade);
@@ -3286,38 +3301,53 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
         <div className="border border-sidebar/20 rounded-xl overflow-hidden">
           <div className="bg-sidebar px-5 py-3 flex items-center gap-2">
             <Send className="h-4 w-4 text-accent" />
-            <span className="text-sm font-semibold text-white">Send Defect Reports to Contractors</span>
+            <span className="text-sm font-semibold text-white">Send Action Items</span>
             <span className="ml-auto text-xs text-sidebar-foreground/60">{tradeNames.length} trade{tradeNames.length !== 1 ? "s" : ""} assigned</span>
           </div>
           <div className="divide-y divide-muted/40">
             {tradeNames.map(tradeName => {
               const tradeIssues = issuesByTrade[tradeName];
-              const contractor = contractors.find(c => c.name.toLowerCase() === tradeName.toLowerCase());
-              const result = contractor ? sendResult[contractor.id] : undefined;
-              const isSending = contractor ? sendingTo === contractor.id : false;
+              const resolved = resolveTradeTarget(tradeName);
+              const result = resolved ? sendResult[resolved.key as any] : undefined;
+              const isSending = resolved ? sendingTo === resolved.person.id : false;
+              const canSend = !!resolved?.email;
               return (
                 <div key={tradeName} className="flex items-center gap-4 px-5 py-3 bg-card">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-sidebar">{tradeName}</span>
-                      {contractor?.trade && (
-                        <span className="text-xs text-muted-foreground border border-muted/50 rounded px-1.5 py-0.5">{contractor.trade}</span>
+                      {resolved ? (
+                        <>
+                          {resolved.label && (
+                            <span className="text-xs text-muted-foreground border border-muted/50 rounded px-1.5 py-0.5">{resolved.label}</span>
+                          )}
+                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${resolved.type === "staff" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-sidebar/5 text-sidebar border-sidebar/20"}`}>
+                            {resolved.type === "staff" ? "Internal Staff" : "Contractor"}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-xs text-amber-600 border border-amber-200 rounded px-1.5 py-0.5">Not found in system</span>
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      {tradeIssues.length} defect{tradeIssues.length !== 1 ? "s" : ""} assigned
-                      {contractor?.email ? <span className="ml-2">· {contractor.email}</span> : !contractor ? <span className="ml-2 text-amber-600">· Not in project contractors</span> : <span className="ml-2 text-amber-600">· No email on file</span>}
+                      {tradeIssues.length} action item{tradeIssues.length !== 1 ? "s" : ""} assigned
+                      {resolved?.email
+                        ? <span className="ml-2">· {resolved.email}</span>
+                        : resolved
+                          ? <span className="ml-2 text-amber-600">· No email on file — add one in Settings</span>
+                          : null
+                      }
                     </div>
                     {result && (
                       <p className={`text-xs mt-1 font-medium ${result.ok ? "text-green-600" : "text-red-600"}`}>{result.msg}</p>
                     )}
                   </div>
                   <button
-                    disabled={!contractor || !contractor.email || isSending}
+                    disabled={!canSend || isSending}
                     onClick={() => handleSend(tradeName)}
                     className={cn(
                       "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
-                      !contractor || !contractor.email
+                      !canSend
                         ? "opacity-40 cursor-not-allowed border-muted text-muted-foreground"
                         : "bg-sidebar text-white border-sidebar hover:bg-sidebar/90"
                     )}

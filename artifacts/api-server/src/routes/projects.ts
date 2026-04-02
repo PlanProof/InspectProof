@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
-import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable } from "@workspace/db";
+import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable, internalStaffTable } from "@workspace/db";
 import { sendContractorDefectReportEmail } from "../lib/email";
 import { checkProjectQuota } from "../lib/quota";
 import { optionalAuth } from "../middleware/auth";
@@ -777,6 +777,78 @@ router.post("/:id/contractors/:contractorId/send-defect-report", async (req, res
   } catch (err) {
     req.log.error({ err }, "Send defect report error");
     res.status(500).json({ error: "internal_error", message: "Failed to send defect report" });
+  }
+});
+
+router.post("/:id/staff/:staffId/send-defect-report", async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  const staffId = parseInt(req.params.staffId);
+  if (isNaN(projectId) || isNaN(staffId)) return res.status(400).json({ error: "bad_request" });
+
+  const { inspectionId } = req.body as { inspectionId?: number };
+  if (!inspectionId) return res.status(400).json({ error: "bad_request", message: "inspectionId is required" });
+
+  try {
+    const [staff] = await db.select().from(internalStaffTable).where(eq(internalStaffTable.id, staffId));
+    if (!staff) return res.status(404).json({ error: "not_found", message: "Staff member not found" });
+    if (!staff.email) return res.status(400).json({ error: "bad_request", message: "Staff member has no email address" });
+
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+    const [inspection] = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, inspectionId));
+    if (!inspection) return res.status(404).json({ error: "not_found", message: "Inspection not found" });
+
+    const results = await db.select().from(checklistResultsTable)
+      .where(eq(checklistResultsTable.inspectionId, inspectionId));
+
+    const itemIds = results.map(r => r.checklistItemId).filter(Boolean) as number[];
+    const items = itemIds.length > 0
+      ? await db.select().from(checklistItemsTable).where(inArray(checklistItemsTable.id, itemIds))
+      : [];
+    const itemNameMap: Record<number, string> = {};
+    for (const item of items) itemNameMap[item.id] = item.label ?? item.description ?? "Unknown Item";
+
+    // Filter checklist results assigned to this staff member
+    const staffResults = results.filter(r => {
+      const trade = (r.tradeAllocated ?? "").toLowerCase();
+      const name = staff.name.toLowerCase();
+      return trade.includes(name) && (r.result === "fail" || r.defectStatus === "open" || r.defectStatus === "in_progress");
+    });
+
+    if (staffResults.length === 0) {
+      return res.status(400).json({ error: "no_defects", message: "No defects are currently assigned to this staff member" });
+    }
+
+    const senderId = getUserIdFromRequest(req);
+    let senderName = "InspectProof";
+    if (senderId) {
+      const [sender] = await db.select().from(usersTable).where(eq(usersTable.id, senderId));
+      if (sender) senderName = `${sender.firstName} ${sender.lastName}`.trim();
+    }
+
+    const defects = staffResults.map(r => ({
+      itemName: r.checklistItemId ? (itemNameMap[r.checklistItemId] ?? "Unknown Item") : "Unknown Item",
+      severity: r.severity,
+      location: r.location,
+      recommendedAction: r.recommendedAction,
+      notes: r.notes,
+    }));
+
+    await sendContractorDefectReportEmail({
+      toEmail: staff.email,
+      contractorName: staff.name,
+      trade: staff.role ?? "Internal Staff",
+      projectName: project?.name ?? "Unknown Project",
+      inspectionName: inspection.name ?? "Inspection",
+      inspectionDate: inspection.scheduledDate ? String(inspection.scheduledDate) : null,
+      senderName,
+      defects,
+    }, req.log);
+
+    req.log.info({ staffId, projectId, inspectionId, defects: defects.length }, "Staff defect report sent");
+    res.json({ success: true, message: `Action items sent to ${staff.email} (${defects.length} item${defects.length !== 1 ? "s" : ""})` });
+  } catch (err) {
+    req.log.error({ err }, "Send staff defect report error");
+    res.status(500).json({ error: "internal_error", message: "Failed to send action items" });
   }
 });
 
