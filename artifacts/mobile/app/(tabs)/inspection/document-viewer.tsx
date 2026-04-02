@@ -430,24 +430,26 @@ export default function DocumentViewerScreen() {
     `);
   }, [isPdf]);
 
-  // When drawing mode is entered, auto-detect which page the WebView is showing
+  // When drawing mode is entered the markup toolbar appears (+56 px), which shrinks
+  // bodyH, causing the WebView to reflow and scroll back to the top.  We capture the
+  // current page BEFORE the reflow (currentPageRef is always up-to-date) and then
+  // restore the scroll position once the layout has settled.
   useEffect(() => {
-    if (drawing && isPdf && Platform.OS !== "web") {
-      pageNavScrollPending.current = false;
-      const t = setTimeout(() => injectDetectPage(), 200);
-      return () => clearTimeout(t);
-    }
+    if (!drawing || !isPdf || Platform.OS === "web") return;
+    const savedPage = currentPageRef.current;
+    pageNavScrollPending.current = false;
+    // Give the WebView layout reflow time to settle, then scroll back.
+    const t = setTimeout(() => {
+      injectScrollToPage(savedPage);
+      pageNavScrollPending.current = true;
+    }, 300);
+    return () => clearTimeout(t);
   }, [drawing]);
 
   // When currentPage changes via ◀/▶ while in markup mode, scroll WebView to match
   useEffect(() => {
     if (!drawing || !isPdf || Platform.OS === "web") return;
-    if (!pageNavScrollPending.current) {
-      // First fire after entering markup — this is the auto-detected page coming back;
-      // mark the system as ready for real nav scrolls from now on
-      pageNavScrollPending.current = true;
-      return;
-    }
+    if (!pageNavScrollPending.current) return; // still restoring position on entry
     injectScrollToPage(currentPage);
   }, [currentPage]);
 
