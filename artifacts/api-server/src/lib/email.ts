@@ -429,6 +429,7 @@ export interface ContractorDefectReportOpts {
   inspectionName: string;
   inspectionDate?: string | null;
   senderName: string;
+  senderCompany?: string;
   defects: Array<{
     itemName: string;
     severity?: string | null;
@@ -511,9 +512,14 @@ export async function sendContractorDefectReportEmail(
 ): Promise<void> {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping defect report email"); return; }
   const subject = `Defect Report — ${opts.projectName} (${opts.defects.length} item${opts.defects.length !== 1 ? "s" : ""})`;
+  // Use the sender's company name as the display name if available, otherwise fall back to default
+  const fromAddress = SMTP_FROM.match(/<(.+)>/)?.[1] ?? "noreply@inspectproof.com.au";
+  const fromField = opts.senderCompany
+    ? `${opts.senderCompany} <${fromAddress}>`
+    : SMTP_FROM;
   try {
     const { error } = await getResend().emails.send({
-      from: SMTP_FROM,
+      from: fromField,
       to: opts.toEmail,
       subject,
       html: defectReportHtml(opts),

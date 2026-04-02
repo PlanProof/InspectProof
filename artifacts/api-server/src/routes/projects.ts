@@ -937,9 +937,13 @@ router.post("/:id/inspections/:inspectionId/send-all-defects", async (req, res) 
     // Resolve sender
     const senderId = getUserIdFromRequest(req);
     let senderName = "InspectProof";
+    let senderCompany: string | null = null;
     if (senderId) {
       const [sender] = await db.select().from(usersTable).where(eq(usersTable.id, senderId));
-      if (sender) senderName = `${sender.firstName} ${sender.lastName}`.trim();
+      if (sender) {
+        senderName = `${sender.firstName} ${sender.lastName}`.trim();
+        senderCompany = sender.companyName ?? null;
+      }
     }
 
     // Fire one email per unique person
@@ -956,6 +960,7 @@ router.post("/:id/inspections/:inspectionId/send-all-defects", async (req, res) 
           inspectionName: inspection.name ?? "Inspection",
           inspectionDate: inspection.scheduledDate ? String(inspection.scheduledDate) : null,
           senderName,
+          senderCompany: senderCompany ?? undefined,
           defects: person.defects,
         }, req.log);
         sent.push({ name: person.name, email: person.email, trade: person.trade, count: person.defects.length });
