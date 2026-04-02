@@ -30,6 +30,7 @@ function formatUser(u: any) {
     isCompanyAdmin: u.isCompanyAdmin ?? false,
     userType: u.userType ?? "inspector",
     permissions: parsePermissions(u.permissions),
+    mobileOnly: u.mobileOnly ?? false,
     createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : u.createdAt,
   };
 }

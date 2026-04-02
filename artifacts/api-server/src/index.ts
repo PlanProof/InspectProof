@@ -76,6 +76,27 @@ async function runSchemaMigrations() {
     await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS recommended_action text`);
     await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS updated_at timestamp NOT NULL DEFAULT now()`);
 
+    // token-based team invitations (Task #7)
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mobile_only boolean NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_user_id text`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS invitations (
+        id serial PRIMARY KEY,
+        token text NOT NULL UNIQUE,
+        email text NOT NULL,
+        company_name text,
+        invited_by_id text,
+        role text NOT NULL DEFAULT 'inspector',
+        permissions text,
+        expires_at timestamp NOT NULL,
+        used_at timestamp,
+        created_at timestamp NOT NULL DEFAULT now()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS invitations_token_idx ON invitations(token)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS invitations_email_idx ON invitations(email)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS invitations_company_name_idx ON invitations(company_name)`);
+
     logger.info("Schema migrations applied");
   } catch (err) {
     logger.error({ err }, "Schema migration failed — continuing");

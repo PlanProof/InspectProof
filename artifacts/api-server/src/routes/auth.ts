@@ -54,6 +54,7 @@ router.post("/login", async (req, res) => {
         userType: user.userType ?? "inspector",
         permissions: user.permissions ? JSON.parse(user.permissions) : null,
         isActive: user.isActive,
+        mobileOnly: user.mobileOnly ?? false,
         createdAt: user.createdAt.toISOString(),
       },
     });
@@ -83,6 +84,18 @@ router.post("/register", async (req, res) => {
     const existing = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim()));
     if (existing.length > 0) {
       res.status(409).json({ error: "conflict", message: "An account with this email already exists." });
+      return;
+    }
+
+    // Prevent self-attachment to an existing organisation by name — only invite tokens may do that.
+    const existingOrg = await db.select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.companyName, organization.trim()));
+    if (existingOrg.length > 0) {
+      res.status(409).json({
+        error: "org_name_taken",
+        message: "An organisation with that name already exists. If you were invited to join, please use the link in your invitation email.",
+      });
       return;
     }
 
@@ -182,6 +195,7 @@ router.get("/me", async (req, res) => {
       userType: user.userType ?? "inspector",
       permissions: user.permissions ? JSON.parse(user.permissions) : null,
       plan: user.plan,
+      mobileOnly: user.mobileOnly ?? false,
       createdAt: user.createdAt.toISOString(),
     });
   } catch (err) {

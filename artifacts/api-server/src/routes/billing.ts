@@ -206,7 +206,12 @@ export async function syncPlanFromStripe(userId: number): Promise<{ plan: string
   });
 
   if (!subscriptions.data.length) {
-    return { plan: user.plan ?? 'free_trial', subscriptionId: null };
+    // No active subscription — downgrade to free_trial and persist the change
+    await db.update(usersTable).set({
+      plan: 'free_trial',
+      stripeSubscriptionId: null,
+    }).where(eq(usersTable.id, userId));
+    return { plan: 'free_trial', subscriptionId: null };
   }
 
   const sub = subscriptions.data[0];
@@ -230,10 +235,23 @@ export async function syncPlanFromStripe(userId: number): Promise<{ plan: string
 }
 
 // Sync via customer ID (used in webhook where we have customerId but not userId)
+// Also propagates mobileOnly to all team members when the admin's plan changes.
 export async function syncPlanFromStripeByCustomerId(customerId: string): Promise<void> {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.stripeCustomerId, customerId));
   if (!user) return;
   await syncPlanFromStripe(user.id);
+  await syncTeamMembersMobileOnly(user.id);
+}
+
+// Update mobile_only flag for all team members of an org admin based on their plan
+export async function syncTeamMembersMobileOnly(adminUserId: number): Promise<void> {
+  const [admin] = await db.select().from(usersTable).where(eq(usersTable.id, adminUserId));
+  if (!admin) return;
+  const isMobileOnly = (admin.plan ?? "free_trial") === "free_trial";
+  // Update all team members whose adminUserId matches
+  await db.update(usersTable)
+    .set({ mobileOnly: isMobileOnly, updatedAt: new Date() })
+    .where(eq(usersTable.adminUserId, String(adminUserId)));
 }
 
 router.post('/billing/sync-plan', async (req: any, res) => {
@@ -241,6 +259,7 @@ router.post('/billing/sync-plan', async (req: any, res) => {
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const result = await syncPlanFromStripe(userId);
+    await syncTeamMembersMobileOnly(userId);
     return res.json(result);
   } catch (err: any) {
     console.error('sync-plan error:', err.message);

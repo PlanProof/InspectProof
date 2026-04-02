@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Modal,
+  Linking,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -147,29 +148,30 @@ export default function RegisterScreen() {
     setStep("plan");
   };
 
-  const handleSubmitInvited = async () => {
-    const err = validateProfile();
-    if (err) { setError(err); return; }
-    setSubmitting(true);
-    setError("");
-    const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
-    try {
-      const res = await fetch(`${baseUrl}/api/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, email, password, organization, profession, plan: "free_trial" }),
-      });
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.message || "Registration failed.");
-      }
-      await login(email.trim(), password);
-      router.replace("/(tabs)");
-    } catch (e: any) {
-      setError(e.message || "Registration failed. Please try again.");
-    } finally {
-      setSubmitting(false);
+  const [showInviteFlow, setShowInviteFlow] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState("");
+  const [inviteUrlError, setInviteUrlError] = useState("");
+
+  const handleSubmitInvited = () => {
+    setInviteUrl("");
+    setInviteUrlError("");
+    setShowInviteFlow(true);
+  };
+
+  const handleOpenInviteUrl = async () => {
+    const trimmed = inviteUrl.trim();
+    if (!trimmed) {
+      setInviteUrlError("Please paste your invitation link.");
+      return;
     }
+    const isValidLink = trimmed.includes("/join?token=") || trimmed.includes("join?token=");
+    if (!isValidLink) {
+      setInviteUrlError("This doesn't look like a valid invitation link. It should contain /join?token=");
+      return;
+    }
+    setInviteUrlError("");
+    setShowInviteFlow(false);
+    await Linking.openURL(trimmed);
   };
 
   const handleSubmit = async () => {
@@ -198,6 +200,57 @@ export default function RegisterScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      {/* Invite token flow modal */}
+      <Modal visible={showInviteFlow} transparent animationType="fade" onRequestClose={() => setShowInviteFlow(false)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 }}>
+          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 24, width: "100%", maxWidth: 380, gap: 14 }}>
+            <Text style={{ fontSize: 18, fontFamily: "PlusJakartaSans_700Bold", color: "#0B1933" }}>Join via Invitation Link</Text>
+            <Text style={{ fontSize: 14, fontFamily: "PlusJakartaSans_400Regular", color: "#4b5563", lineHeight: 22 }}>
+              Paste the invitation link from your email below to open the secure sign-up page in your browser.
+            </Text>
+            <TextInput
+              value={inviteUrl}
+              onChangeText={t => { setInviteUrl(t); setInviteUrlError(""); }}
+              placeholder="https://...inspectproof.com.au/join?token=..."
+              placeholderTextColor="#9ca3af"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              style={{
+                borderWidth: 1,
+                borderColor: inviteUrlError ? "#ef4444" : "#d1d5db",
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 13,
+                fontFamily: "PlusJakartaSans_400Regular",
+                color: "#0B1933",
+                backgroundColor: "#f8fafc",
+              }}
+            />
+            {inviteUrlError ? (
+              <Text style={{ fontSize: 12, fontFamily: "PlusJakartaSans_400Regular", color: "#ef4444" }}>{inviteUrlError}</Text>
+            ) : null}
+            <Text style={{ fontSize: 12, fontFamily: "PlusJakartaSans_400Regular", color: "#9ca3af", lineHeight: 18 }}>
+              Don't have a link yet? Ask your admin to invite you from the Team Members screen in InspectProof.
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Pressable
+                onPress={() => setShowInviteFlow(false)}
+                style={{ flex: 1, borderWidth: 1, borderColor: "#d1d5db", borderRadius: 10, padding: 12, alignItems: "center" }}
+              >
+                <Text style={{ color: "#6b7280", fontFamily: "PlusJakartaSans_600SemiBold", fontSize: 14 }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleOpenInviteUrl}
+                style={{ flex: 2, backgroundColor: "#0B1933", borderRadius: 10, padding: 12, alignItems: "center" }}
+              >
+                <Text style={{ color: "#fff", fontFamily: "PlusJakartaSans_600SemiBold", fontSize: 14 }}>Open Invite Link</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView
         contentContainerStyle={[
           styles.container,

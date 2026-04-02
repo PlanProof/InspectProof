@@ -31,8 +31,6 @@ function fmt(cents: number) {
 export default function Login() {
   const params = new URLSearchParams(window.location.search);
   const urlMode = params.get("mode");
-  const urlCompany = params.get("company") || undefined;
-  const urlInvitedBy = params.get("invitedBy") || undefined;
   const [mode, setMode] = useState<"signin" | "signup">(urlMode === "signup" ? "signup" : "signin");
 
   return (
@@ -103,7 +101,7 @@ export default function Login() {
             </button>
           </div>
 
-          {mode === "signin" ? <SignInForm /> : <SignUpFlow prefillCompany={urlCompany} prefillInvitedBy={urlInvitedBy} />}
+          {mode === "signin" ? <SignInForm /> : <SignUpFlow />}
         </div>
         <p className="mt-8 text-xs text-muted-foreground/60 text-center">
           InspectProof &mdash; a product of PlanProof Technologies Pty Ltd
@@ -204,7 +202,7 @@ type AccountDetails = {
   organization: string;
 };
 
-function SignUpFlow({ prefillCompany, prefillInvitedBy }: { prefillCompany?: string; prefillInvitedBy?: string }) {
+function SignUpFlow() {
   const [step, setStep] = useState<1 | 2>(1);
   const [account, setAccount] = useState<AccountDetails>({
     firstName: "",
@@ -212,11 +210,11 @@ function SignUpFlow({ prefillCompany, prefillInvitedBy }: { prefillCompany?: str
     email: "",
     password: "",
     confirmPassword: "",
-    organization: prefillCompany || "",
+    organization: "",
   });
 
   return step === 1 ? (
-    <AccountStep account={account} setAccount={setAccount} onNext={() => setStep(2)} prefillInvitedBy={prefillInvitedBy} />
+    <AccountStep account={account} setAccount={setAccount} onNext={() => setStep(2)} />
   ) : (
     <PlanStep account={account} onBack={() => setStep(1)} />
   );
@@ -227,12 +225,10 @@ function AccountStep({
   account,
   setAccount,
   onNext,
-  prefillInvitedBy,
 }: {
   account: AccountDetails;
   setAccount: React.Dispatch<React.SetStateAction<AccountDetails>>;
   onNext: () => void;
-  prefillInvitedBy?: string;
 }) {
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -265,12 +261,10 @@ function AccountStep({
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="space-y-4">
-          {prefillInvitedBy && (
-            <div className="p-3 rounded-lg bg-[#0B1933]/8 border border-[#466DB5]/30 text-sm text-[#0B1933] flex items-start gap-2">
-              <Check className="h-4 w-4 shrink-0 text-[#466DB5] mt-0.5" />
-              <span>You've been invited by <strong>{prefillInvitedBy}</strong>. Your company has been pre-filled below.</span>
-            </div>
-          )}
+          <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800 flex items-start gap-2">
+            <Check className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
+            <span>This creates a new organisation account. If you were invited to join an existing team, use the link in your invitation email instead.</span>
+          </div>
           {error && (
             <div className="p-3 rounded bg-destructive/10 text-destructive text-sm flex items-center gap-2 border border-destructive/20">
               <AlertTriangle className="h-4 w-4 shrink-0" />

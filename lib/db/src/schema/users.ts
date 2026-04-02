@@ -27,8 +27,23 @@ export const usersTable = pgTable("users", {
   isCompanyAdmin: boolean("is_company_admin").notNull().default(false),
   userType: text("user_type").notNull().default("inspector"),
   permissions: text("permissions"),
+  mobileOnly: boolean("mobile_only").notNull().default(false),
+  adminUserId: text("admin_user_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const invitationsTable = pgTable("invitations", {
+  id: serial("id").primaryKey(),
+  token: text("token").notNull().unique(),
+  email: text("email").notNull(),
+  companyName: text("company_name"),
+  invitedById: text("invited_by_id").notNull(),
+  role: text("role").notNull().default("inspector"),
+  permissions: text("permissions"),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });

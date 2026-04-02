@@ -21,6 +21,8 @@ import Admin from "@/pages/admin";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import DeleteAccount from "@/pages/delete-account";
+import Join from "@/pages/join";
+import MobileOnly from "@/pages/mobile-only";
 import NotFound from "@/pages/not-found";
 
 // Global fetch interceptor for auth
@@ -76,6 +78,8 @@ function Router() {
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/delete-account" component={DeleteAccount} />
+      <Route path="/join" component={Join} />
+      <Route path="/mobile-only" component={MobileOnly} />
       <Route component={NotFound} />
     </Switch>
   );

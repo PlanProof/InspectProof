@@ -13,6 +13,7 @@ interface CurrentUser {
   profession: string | null;
   licenceNumber: string | null;
   companyName: string | null;
+  mobileOnly?: boolean;
 }
 
 let cachedUser: CurrentUser | null = null;
@@ -80,7 +81,11 @@ export function useAuth() {
       cachedUser = u as CurrentUser | null;
       setUser(u as CurrentUser | null);
       notifyListeners();
-      setLocation("/dashboard");
+      if ((u as CurrentUser | null)?.mobileOnly) {
+        setLocation("/mobile-only");
+      } else {
+        setLocation("/dashboard");
+      }
     });
   };
 

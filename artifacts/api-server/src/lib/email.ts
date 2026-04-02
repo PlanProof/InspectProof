@@ -374,6 +374,53 @@ export async function sendAppInviteEmail(
   }
 }
 
+/* ── Token Invite Email ────────────────────────────────────── */
+
+export interface TokenInviteEmailOpts {
+  toEmail: string;
+  inviteeName: string | null;
+  inviterName: string;
+  companyName: string | null;
+  token: string;
+}
+
+export async function sendTokenInviteEmail(
+  opts: TokenInviteEmailOpts,
+  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+): Promise<void> {
+  if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping token invite email"); return; }
+  const joinUrl = `${APP_BASE_URL}/join?token=${opts.token}`;
+  const firstName = opts.inviteeName ? opts.inviteeName.split(" ")[0] : null;
+  const displayOrg = opts.companyName || opts.inviterName;
+  const subject = opts.companyName
+    ? `${opts.companyName} has invited you to InspectProof`
+    : `${opts.inviterName} has invited you to InspectProof`;
+
+  const content = `
+    ${greeting(firstName ?? "there")}
+    ${sectionTitle("You've Been Invited to InspectProof")}
+    ${bodyText(`You have been invited by <strong>${displayOrg}</strong> to join their team on InspectProof — Australia's built environment inspection and compliance platform.`)}
+    ${bodyText("Click the button below to set up your account. Your email has been pre-filled and your account will be automatically linked to your team.")}
+    ${ctaButton(joinUrl, "Accept Invitation & Create Account →")}
+    <p style="margin:0 0 8px;font-size:13px;color:#6b7280;font-family:${BASE_FONT};">This invitation link expires in 7 days. If you weren't expecting this, you can safely ignore this email.</p>
+    <p style="margin:0;font-size:12px;color:#9ca3af;word-break:break-all;font-family:${BASE_FONT};">Or copy this link: ${joinUrl}</p>`;
+
+  const html = emailWrapper({
+    title: "You've been invited to InspectProof",
+    tag: "Team Invitation",
+    content,
+    footer: "InspectProof — a product of PlanProof Technologies Pty Ltd<br/>If you weren't expecting this invitation, you can safely ignore this email.",
+  });
+
+  try {
+    const { error } = await getResend().emails.send({ from: SMTP_FROM, to: opts.toEmail, subject, html });
+    if (error) throw new Error(error.message);
+    log?.info({ to: opts.toEmail }, "Token invite email sent");
+  } catch (err) {
+    log?.error({ err, to: opts.toEmail }, "Failed to send token invite email");
+  }
+}
+
 /* ── Welcome with Credentials Email ───────────────────────── */
 
 export interface WelcomeWithCredentialsOpts {

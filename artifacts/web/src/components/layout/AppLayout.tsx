@@ -4,10 +4,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   if (!isAuthenticated) {
     return <Redirect to="/login" />;
+  }
+
+  if (user?.mobileOnly) {
+    return <Redirect to="/mobile-only" />;
   }
 
   return (
