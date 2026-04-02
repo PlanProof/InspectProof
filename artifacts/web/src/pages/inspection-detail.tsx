@@ -2890,6 +2890,38 @@ function DocumentsTab({
   const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── In-app document preview ─────────────────────────────────────────────────
+  type PreviewDoc = { name: string; mimeType?: string; fileUrl: string };
+  const [previewDoc, setPreviewDoc] = useState<PreviewDoc | null>(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const openPreview = async (doc: PreviewDoc) => {
+    setPreviewDoc(doc);
+    setPreviewBlobUrl(null);
+    setPreviewLoading(true);
+    try {
+      const token = localStorage.getItem("inspectproof_token") || "";
+      const res = await fetch(`${apiBase()}/api/storage${doc.fileUrl}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      setPreviewBlobUrl(URL.createObjectURL(blob));
+    } catch {
+      setPreviewBlobUrl(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
+    setPreviewDoc(null);
+    setPreviewBlobUrl(null);
+    setPreviewLoading(false);
+  };
+
   const uploadDocument = async (file: File) => {
     setUploadError("");
     setUploading(true);
@@ -2934,8 +2966,63 @@ function DocumentsTab({
     byFolder[folder].push(doc);
   }
 
+  const isImageMime = (mime?: string) => !!mime?.startsWith("image/");
+
   return (
     <div className="space-y-6">
+      {/* ── In-app document preview dialog ── */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/80 backdrop-blur-sm" onClick={closePreview}>
+          <div className="flex items-center justify-between px-4 py-3 bg-[#0B1933] shrink-0" onClick={e => e.stopPropagation()}>
+            <span className="text-white font-semibold text-sm truncate max-w-xs">{previewDoc.name}</span>
+            <div className="flex items-center gap-2">
+              <a
+                href={`${apiBase()}/api/storage${previewDoc.fileUrl}`}
+                download={previewDoc.name}
+                onClick={e => e.stopPropagation()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white/80 border border-white/20 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <Download className="h-3.5 w-3.5" /> Download
+              </a>
+              <button
+                onClick={closePreview}
+                className="p-1.5 text-white/70 hover:text-white transition-colors rounded-lg hover:bg-white/10"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 flex items-center justify-center" onClick={e => e.stopPropagation()}>
+            {previewLoading ? (
+              <div className="flex flex-col items-center gap-3 text-white/60">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <span className="text-sm">Loading document…</span>
+              </div>
+            ) : previewBlobUrl ? (
+              isImageMime(previewDoc.mimeType) ? (
+                <img
+                  src={previewBlobUrl}
+                  alt={previewDoc.name}
+                  className="max-w-full max-h-full object-contain"
+                />
+              ) : (
+                <iframe
+                  src={previewBlobUrl}
+                  title={previewDoc.name}
+                  className="w-full h-full border-0"
+                  style={{ flex: 1 }}
+                />
+              )
+            ) : (
+              <div className="text-white/60 text-center">
+                <FileText className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                <p className="text-sm">Could not load document preview.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Upload bar */}
       <div className="flex items-center justify-between">
         <div>
@@ -3002,14 +3089,12 @@ function DocumentsTab({
                       </div>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <a
-                        href={`${apiBase()}/api/storage${doc.fileUrl}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        onClick={() => openPreview(doc)}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-secondary border border-secondary/30 rounded-lg hover:bg-secondary/8 transition-colors"
                       >
                         <Eye className="h-3.5 w-3.5" /> View
-                      </a>
+                      </button>
                       <a
                         href={`${apiBase()}/api/storage${doc.fileUrl}`}
                         download={doc.name}

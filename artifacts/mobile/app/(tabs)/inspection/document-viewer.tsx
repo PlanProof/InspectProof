@@ -488,6 +488,42 @@ export default function DocumentViewerScreen() {
     setTextInputValue("");
   };
 
+  // ── Web-only: capture annotation layer as PNG via Canvas API ────────────────
+  const captureAnnotationsOnWeb = useCallback(
+    async (pageNumber: number): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        try {
+          // @ts-ignore — document is available on web
+          const canvas = document.createElement("canvas");
+          canvas.width = screenW;
+          canvas.height = bodyH;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { reject(new Error("No 2D context")); return; }
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          const pageStrokes = strokes.filter((s) => s.pageNumber === pageNumber);
+          for (const stroke of pageStrokes) {
+            if (stroke.points.length < 2) continue;
+            ctx.strokeStyle = stroke.color;
+            ctx.lineWidth = stroke.width;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.beginPath();
+            stroke.points.forEach((p, i) => {
+              if (i === 0) ctx.moveTo(p.x, p.y);
+              else ctx.lineTo(p.x, p.y);
+            });
+            ctx.stroke();
+          }
+          const dataUrl = canvas.toDataURL("image/png");
+          resolve(dataUrl.split(",")[1]);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    },
+    [strokes, screenW, bodyH]
+  );
+
   // ── Save markup ──────────────────────────────────────────────────────────────
 
   const fetchWithAuth = useCallback(
@@ -560,11 +596,16 @@ export default function DocumentViewerScreen() {
 
           setCapturing(true);
           await new Promise<void>((r) => setTimeout(r, 60));
-          const uri = await captureRef(drawLayerRef, {
-            format: "png",
-            quality: 1,
-            result: "base64",
-          });
+          let uri: string;
+          if (Platform.OS === "web") {
+            uri = await captureAnnotationsOnWeb(pageNum);
+          } else {
+            uri = await captureRef(drawLayerRef, {
+              format: "png",
+              quality: 1,
+              result: "base64",
+            });
+          }
           setCapturing(false);
 
           annotatedPages.push({ pageNumber: pageNum, pngBase64: uri });
@@ -593,6 +634,11 @@ export default function DocumentViewerScreen() {
         return; // navigation handled by alert callback
       } else {
         // ── Image / non-PDF path: capture the full container (image + annotations)
+        if (Platform.OS === "web") {
+          Alert.alert("Mobile only", "Image markup saving is only supported in the mobile app. Download InspectProof on iOS or Android to save annotated images.");
+          setUploading(false);
+          return;
+        }
         // Use containerRef so the underlying image is included in the composite.
         // captureRef works on native Image components without the WKWebView black issue.
         setCapturing(true);
@@ -1147,6 +1193,7 @@ export default function DocumentViewerScreen() {
                 border: "none",
                 flex: 1,
                 backgroundColor: "#fff",
+                pointerEvents: drawing ? "none" : "auto",
               },
               onLoad: () => setWebLoading(false),
               onError: () => {
@@ -1259,11 +1306,13 @@ export default function DocumentViewerScreen() {
             </View>
           )}
 
-          {/* ── Drawing layer — native only ── */}
+          {/* ── Drawing layer ── */}
           {/* Always rendered when there are annotations or when drawing, so strokes
               remain visible after toggling out of markup mode. Non-interactive when
-              not actively drawing so scroll/zoom gestures pass through. */}
-          {Platform.OS !== "web" && (drawing || hasMarkup) && (
+              not actively drawing so scroll/zoom gestures pass through.
+              On web the iframe has pointer-events:none when drawing so events
+              reach this overlay. */}
+          {(drawing || hasMarkup) && (
             <View
               ref={drawLayerRef}
               style={StyleSheet.absoluteFill}
@@ -1343,6 +1392,33 @@ export default function DocumentViewerScreen() {
                   <View style={StyleSheet.absoluteFill} />
                 </GestureDetector>
               )}
+            </View>
+          )}
+
+          {/* ── Persistent PDF page navigation — always visible, outside drawing mode ── */}
+          {isPdf && !drawing && !webLoading && (
+            <View style={styles.pageNavBar} pointerEvents="box-none">
+              <View style={styles.pageNavBarInner}>
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  style={[styles.pageNavBarBtn, currentPage <= 1 && { opacity: 0.35 }]}
+                >
+                  <Feather name="chevron-left" size={16} color="#fff" />
+                </Pressable>
+                <Text style={styles.pageNavBarLabel}>
+                  Page {currentPage}
+                  {annotatedPageNumbers.includes(currentPage) ? " ●" : ""}
+                </Text>
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => setCurrentPage((p) => p + 1)}
+                  style={styles.pageNavBarBtn}
+                >
+                  <Feather name="chevron-right" size={16} color="#fff" />
+                </Pressable>
+              </View>
             </View>
           )}
 
@@ -1608,6 +1684,36 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   drawHintText: { color: "#fff", fontSize: 13, fontWeight: "500" },
+
+  pageNavBar: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "flex-end",
+    alignItems: "center",
+    paddingBottom: 18,
+  },
+  pageNavBarInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    borderRadius: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+  },
+  pageNavBarBtn: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pageNavBarLabel: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    paddingHorizontal: 8,
+    minWidth: 60,
+    textAlign: "center",
+  },
 
   imageContainer: {
     flexGrow: 1,
