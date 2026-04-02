@@ -602,6 +602,26 @@ function SecurityTab() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
+  const { logout } = useAuth();
+  const [, navigate] = useLocation();
+  const [deleteStep, setDeleteStep] = useState<0 | 1>(0);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await apiFetch("/api/auth/account", { method: "DELETE" });
+      logout();
+      navigate("/");
+    } catch {
+      setDeleteError("Failed to delete account. Please try again or contact support@inspectproof.com.au.");
+      setDeleting(false);
+      setDeleteStep(0);
+    }
+  };
+
   const save = async () => {
     setError("");
     if (next.length < 8) { setError("Password must be at least 8 characters."); return; }
@@ -676,6 +696,57 @@ function SecurityTab() {
           </Button>
         </SettingRow>
       </SectionCard>
+
+      <div className="rounded-xl border border-red-200 bg-red-50/40 p-5 space-y-4">
+        <div className="flex items-start gap-3">
+          <Trash2 className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+          <div>
+            <h3 className="text-sm font-semibold text-red-700">Delete Account</h3>
+            <p className="text-sm text-red-600/80 mt-0.5">
+              Permanently delete your account and all associated data. This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        {deleteError && (
+          <p className="text-sm text-red-600 bg-red-100 rounded-lg px-3 py-2">{deleteError}</p>
+        )}
+
+        {deleteStep === 0 ? (
+          <Button
+            variant="danger"
+            onClick={() => setDeleteStep(1)}
+            className="flex items-center gap-2"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete My Account
+          </Button>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-red-700">
+              Are you sure? This will permanently erase your profile, projects, and all inspection data linked only to you.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="danger"
+                onClick={handleDeleteAccount}
+                disabled={deleting}
+                className="flex items-center gap-2"
+              >
+                {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {deleting ? "Deleting…" : "Yes, Delete Permanently"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => { setDeleteStep(0); setDeleteError(""); }}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </>
   );
 }
