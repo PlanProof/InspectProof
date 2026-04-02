@@ -958,7 +958,7 @@ router.post("/:id/inspections/:inspectionId/send-all-defects", async (req, res) 
           senderName,
           defects: person.defects,
         }, req.log);
-        sent.push({ name: person.name, email: person.email, count: person.defects.length });
+        sent.push({ name: person.name, email: person.email, trade: person.trade, count: person.defects.length });
       } catch (err) {
         req.log.error({ err, email: person.email }, "Defect email send failed");
         failed.push(person.name);

@@ -109,6 +109,8 @@ export default function ConductInspectionScreen() {
   const [addItemDesc, setAddItemDesc] = useState("");
   const [addingItem, setAddingItem] = useState(false);
   const [sendingDefects, setSendingDefects] = useState(false);
+  type SentEntry = { name: string; email: string; trade: string; count: number };
+  const [defectsSentData, setDefectsSentData] = useState<SentEntry[] | null>(null);
   const pageScrollRef = useRef<ScrollView>(null);
   // In edit mode, suppress auto-completion — user is intentionally modifying a finished inspection
   const autoCompletedRef = useRef(isEditMode);
@@ -360,13 +362,7 @@ export default function ConductInspectionScreen() {
       if (data.sent?.length === 0) {
         Alert.alert("Nothing Sent", data.message || "No defect emails were sent.");
       } else {
-        const lines = (data.sent as { name: string; count: number }[])
-          .map(s => `• ${s.name} — ${s.count} item${s.count !== 1 ? "s" : ""}`)
-          .join("\n");
-        const failNote = data.failed?.length > 0
-          ? `\n\nFailed to send to: ${(data.failed as string[]).join(", ")}`
-          : "";
-        Alert.alert("Defect Reports Sent", `${lines}${failNote}`);
+        setDefectsSentData(data.sent);
       }
     } catch (err: any) {
       const msg = err?.message || "";
@@ -855,6 +851,67 @@ export default function ConductInspectionScreen() {
             inspectionId={id}
           />
         )}
+      </Modal>
+
+      {/* ── Defects Sent Confirmation Modal ── */}
+      <Modal
+        visible={!!defectsSentData}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setDefectsSentData(null)}
+      >
+        <View style={[styles.sentModal, { paddingBottom: insets.bottom + 24 }]}>
+          {/* Top section */}
+          <View style={styles.sentModalTop}>
+            <View style={styles.sentSuccessCircle}>
+              <Feather name="check" size={44} color={Colors.primary} />
+            </View>
+            <Text style={styles.sentModalTitle}>Defects Sent!</Text>
+            <Text style={styles.sentModalSub}>
+              The following people have been emailed their defect items to fix up.
+            </Text>
+          </View>
+
+          {/* Recipient cards */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.sentCardList}
+            showsVerticalScrollIndicator={false}
+          >
+            {(defectsSentData || []).map((entry, i) => (
+              <View key={i} style={styles.sentCard}>
+                <View style={styles.sentCardAvatar}>
+                  <Text style={styles.sentCardAvatarText}>
+                    {entry.name.trim().charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.sentCardBody}>
+                  <Text style={styles.sentCardName}>{entry.name}</Text>
+                  <Text style={styles.sentCardTrade}>{entry.trade}</Text>
+                  <View style={styles.sentCardEmailRow}>
+                    <Feather name="mail" size={12} color="rgba(255,255,255,0.45)" />
+                    <Text style={styles.sentCardEmail}>{entry.email}</Text>
+                  </View>
+                </View>
+                <View style={styles.sentCardBadge}>
+                  <Text style={styles.sentCardBadgeNum}>{entry.count}</Text>
+                  <Text style={styles.sentCardBadgeLabel}>
+                    {entry.count === 1 ? "item" : "items"}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* Done button */}
+          <Pressable
+            style={({ pressed }) => [styles.sentDoneBtn, pressed && { opacity: 0.88 }]}
+            onPress={() => setDefectsSentData(null)}
+          >
+            <Feather name="thumbs-up" size={20} color={Colors.primary} />
+            <Text style={styles.sentDoneBtnText}>Got it, done!</Text>
+          </Pressable>
+        </View>
       </Modal>
 
       {/* Add Manual Item Modal */}
@@ -2220,6 +2277,133 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: "#fff",
+  },
+
+  // ── Defects Sent Confirmation Modal ─────────────────────────────────────────
+  sentModal: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+  },
+  sentModalTop: {
+    alignItems: "center",
+    paddingHorizontal: 28,
+    paddingTop: 48,
+    paddingBottom: 28,
+  },
+  sentSuccessCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: Colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+    shadowColor: Colors.accent,
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  sentModalTitle: {
+    fontSize: 34,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: "#fff",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  sentModalSub: {
+    fontSize: 16,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: "rgba(255,255,255,0.6)",
+    textAlign: "center",
+    lineHeight: 24,
+  },
+  sentCardList: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  sentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.09)",
+    borderRadius: 18,
+    padding: 18,
+    gap: 14,
+  },
+  sentCardAvatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sentCardAvatarText: {
+    fontSize: 22,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: "#fff",
+  },
+  sentCardBody: {
+    flex: 1,
+    gap: 3,
+  },
+  sentCardName: {
+    fontSize: 17,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: "#fff",
+  },
+  sentCardTrade: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.accent,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sentCardEmailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 2,
+  },
+  sentCardEmail: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: "rgba(255,255,255,0.45)",
+  },
+  sentCardBadge: {
+    alignItems: "center",
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minWidth: 58,
+  },
+  sentCardBadgeNum: {
+    fontSize: 26,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: Colors.primary,
+    lineHeight: 30,
+  },
+  sentCardBadgeLabel: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.primary,
+  },
+  sentDoneBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginHorizontal: 20,
+    marginTop: 16,
+    backgroundColor: Colors.accent,
+    borderRadius: 18,
+    paddingVertical: 20,
+  },
+  sentDoneBtnText: {
+    fontSize: 18,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: Colors.primary,
   },
   cameraBtn: {
     position: "relative",
