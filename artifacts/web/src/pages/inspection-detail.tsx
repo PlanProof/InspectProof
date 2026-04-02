@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useParams, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -812,7 +812,7 @@ export default function InspectionDetail() {
         />
       )}
       {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults ?? []} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} inspection={inspection} internalStaff={internalStaff} contractors={contractors} />}
-      {tab === "Issues" && <IssuesTab issues={inspection.issues} inspectionId={inspection.id} projectId={inspection.projectId} onReload={load} />}
+      {tab === "Issues" && <IssuesTab issues={inspection.issues} inspectionId={inspection.id} projectId={inspection.projectId} onReload={load} contractors={contractors} internalStaff={internalStaff} />}
       {tab === "Documents" && (
         <DocumentsTab
           documents={projectDocuments}
@@ -3157,13 +3157,81 @@ function DefectCorrectionPanel({ issue, inspectionId, projectId, onDone }: {
 
 // ── Issues Tab ────────────────────────────────────────────────────────────────
 
-function IssuesTab({ issues, inspectionId, projectId, onReload }: {
+function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, internalStaff }: {
   issues: Issue[];
   inspectionId: number;
   projectId: number;
   onReload: () => void;
+  contractors: { id: number; name: string; trade: string; email: string | null }[];
+  internalStaff: { id: number; name: string; role: string }[];
 }) {
   const [expandedCorrection, setExpandedCorrection] = useState<number | null>(null);
+  const [localTrades, setLocalTrades] = useState<Record<number, string>>(() => {
+    const map: Record<number, string> = {};
+    for (const issue of issues) map[issue.id] = issue.responsibleParty ?? "";
+    return map;
+  });
+  const [sendingTo, setSendingTo] = useState<number | null>(null);
+  const [sendResult, setSendResult] = useState<Record<number, { ok: boolean; msg: string }>>({});
+
+  // Re-sync when issues list changes (e.g. after reload)
+  useEffect(() => {
+    setLocalTrades(prev => {
+      const map = { ...prev };
+      for (const issue of issues) {
+        if (!(issue.id in map)) map[issue.id] = issue.responsibleParty ?? "";
+      }
+      return map;
+    });
+  }, [issues]);
+
+  // Group issues by their currently assigned trade
+  const issuesByTrade = useMemo(() => {
+    const map: Record<string, Issue[]> = {};
+    for (const issue of issues) {
+      const t = (localTrades[issue.id] ?? "").trim();
+      if (!t) continue;
+      if (!map[t]) map[t] = [];
+      map[t].push(issue);
+    }
+    return map;
+  }, [issues, localTrades]);
+
+  async function handleTradeChange(issue: Issue, value: string) {
+    setLocalTrades(prev => ({ ...prev, [issue.id]: value }));
+    if (issue.checklistResultId) {
+      try {
+        await apiFetch(`/api/inspections/${inspectionId}/results/${issue.checklistResultId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tradeAllocated: value || null }),
+        });
+        onReload();
+      } catch { /* ignore */ }
+    }
+  }
+
+  async function handleSend(contractorName: string) {
+    const contractor = contractors.find(c => c.name.toLowerCase() === contractorName.toLowerCase());
+    if (!contractor) return;
+    setSendingTo(contractor.id);
+    setSendResult(prev => { const n = { ...prev }; delete n[contractor.id]; return n; });
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/contractors/${contractor.id}/send-defect-report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inspectionId }),
+      });
+      const data = await res.json();
+      setSendResult(prev => ({ ...prev, [contractor.id]: { ok: res.ok, msg: data.message ?? (res.ok ? "Report sent" : "Failed to send") } }));
+    } catch {
+      setSendResult(prev => ({ ...prev, [contractor.id ?? 0]: { ok: false, msg: "Failed to send" } }));
+    } finally {
+      setSendingTo(null);
+    }
+  }
+
+  const tradeNames = Object.keys(issuesByTrade);
 
   if (issues.length === 0) {
     return (
@@ -3178,8 +3246,92 @@ function IssuesTab({ issues, inspectionId, projectId, onReload }: {
   const checklistIssues = issues.filter(i => i.source === "checklist");
   const manualIssues = issues.filter(i => i.source !== "checklist");
 
+  // ── Trade dropdown shared across both issue types ──
+  function TradeDropdown({ issue }: { issue: Issue }) {
+    const currentVal = localTrades[issue.id] ?? "";
+    return (
+      <div className="mt-3 pt-3 border-t border-muted/40 flex items-center gap-2">
+        <UserCheck className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs text-muted-foreground font-medium shrink-0">Assign trade:</span>
+        <select
+          value={currentVal}
+          onChange={e => handleTradeChange(issue, e.target.value)}
+          className="flex-1 text-xs rounded border border-input bg-background px-2 py-1 text-sidebar focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          <option value="">— Unassigned —</option>
+          {contractors.length > 0 && (
+            <optgroup label="Contractors">
+              {contractors.map(c => (
+                <option key={c.id} value={c.name}>{c.name}{c.trade ? ` (${c.trade})` : ""}</option>
+              ))}
+            </optgroup>
+          )}
+          {internalStaff.length > 0 && (
+            <optgroup label="Internal Staff">
+              {internalStaff.map(s => (
+                <option key={s.id} value={s.name}>{s.name}{s.role ? ` — ${s.role}` : ""}</option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+
+      {/* ── Send to Contractors panel ── */}
+      {tradeNames.length > 0 && (
+        <div className="border border-sidebar/20 rounded-xl overflow-hidden">
+          <div className="bg-sidebar px-5 py-3 flex items-center gap-2">
+            <Send className="h-4 w-4 text-accent" />
+            <span className="text-sm font-semibold text-white">Send Defect Reports to Contractors</span>
+            <span className="ml-auto text-xs text-sidebar-foreground/60">{tradeNames.length} trade{tradeNames.length !== 1 ? "s" : ""} assigned</span>
+          </div>
+          <div className="divide-y divide-muted/40">
+            {tradeNames.map(tradeName => {
+              const tradeIssues = issuesByTrade[tradeName];
+              const contractor = contractors.find(c => c.name.toLowerCase() === tradeName.toLowerCase());
+              const result = contractor ? sendResult[contractor.id] : undefined;
+              const isSending = contractor ? sendingTo === contractor.id : false;
+              return (
+                <div key={tradeName} className="flex items-center gap-4 px-5 py-3 bg-card">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-sidebar">{tradeName}</span>
+                      {contractor?.trade && (
+                        <span className="text-xs text-muted-foreground border border-muted/50 rounded px-1.5 py-0.5">{contractor.trade}</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {tradeIssues.length} defect{tradeIssues.length !== 1 ? "s" : ""} assigned
+                      {contractor?.email ? <span className="ml-2">· {contractor.email}</span> : !contractor ? <span className="ml-2 text-amber-600">· Not in project contractors</span> : <span className="ml-2 text-amber-600">· No email on file</span>}
+                    </div>
+                    {result && (
+                      <p className={`text-xs mt-1 font-medium ${result.ok ? "text-green-600" : "text-red-600"}`}>{result.msg}</p>
+                    )}
+                  </div>
+                  <button
+                    disabled={!contractor || !contractor.email || isSending}
+                    onClick={() => handleSend(tradeName)}
+                    className={cn(
+                      "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
+                      !contractor || !contractor.email
+                        ? "opacity-40 cursor-not-allowed border-muted text-muted-foreground"
+                        : "bg-sidebar text-white border-sidebar hover:bg-sidebar/90"
+                    )}
+                  >
+                    {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    {isSending ? "Sending…" : "Send Report"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Checklist defects */}
       {checklistIssues.length > 0 && (
         <div>
@@ -3265,8 +3417,9 @@ function IssuesTab({ issues, inspectionId, projectId, onReload }: {
                   <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
                     {issue.location && <span><span className="font-medium">Location:</span> {issue.location}</span>}
                     {issue.codeReference && <span><span className="font-medium">Code ref:</span> {issue.codeReference}</span>}
-                    {issue.responsibleParty && <span><span className="font-medium">Trade:</span> {issue.responsibleParty}</span>}
                   </div>
+
+                  <TradeDropdown issue={issue} />
 
                   {/* Inline correction form */}
                   {isExpanded && !isResolved && (
@@ -3320,8 +3473,8 @@ function IssuesTab({ issues, inspectionId, projectId, onReload }: {
                 <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
                   {issue.location && <span><span className="font-medium">Location:</span> {issue.location}</span>}
                   {issue.codeReference && <span><span className="font-medium">Code ref:</span> {issue.codeReference}</span>}
-                  {issue.responsibleParty && <span><span className="font-medium">Responsible:</span> {issue.responsibleParty}</span>}
                 </div>
+                <TradeDropdown issue={issue} />
               </div>
             ))}
           </div>
