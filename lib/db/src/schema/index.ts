@@ -11,3 +11,4 @@ export * from "./plan_configs";
 export * from "./docTemplates";
 export * from "./feedbacks";
 export * from "./internalStaff";
+export * from "./projectContractors";

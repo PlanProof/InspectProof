@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
-import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable } from "@workspace/db";
+import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable } from "@workspace/db";
+import { sendContractorDefectReportEmail } from "../lib/email";
 import { checkProjectQuota } from "../lib/quota";
 import { optionalAuth } from "../middleware/auth";
 
@@ -625,6 +626,157 @@ router.get("/:id/documents-with-links", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "List docs with links error");
     res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── Project Contractors ───────────────────────────────────────
+
+router.get("/:id/contractors", async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  if (isNaN(projectId)) return res.status(400).json({ error: "bad_request" });
+  try {
+    const rows = await db.select().from(projectContractorsTable)
+      .where(eq(projectContractorsTable.projectId, projectId))
+      .orderBy(projectContractorsTable.name);
+    res.json(rows);
+  } catch (err) {
+    req.log.error({ err }, "List contractors error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.post("/:id/contractors", async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  if (isNaN(projectId)) return res.status(400).json({ error: "bad_request" });
+  const { name, trade, email, company } = req.body as { name?: string; trade?: string; email?: string; company?: string };
+  if (!name?.trim()) return res.status(400).json({ error: "bad_request", message: "name is required" });
+  try {
+    const [created] = await db.insert(projectContractorsTable).values({
+      projectId,
+      name: name.trim(),
+      trade: (trade ?? "").trim(),
+      email: email?.trim() || null,
+      company: company?.trim() || null,
+    }).returning();
+    res.status(201).json(created);
+  } catch (err) {
+    req.log.error({ err }, "Create contractor error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.patch("/:id/contractors/:contractorId", async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  const contractorId = parseInt(req.params.contractorId);
+  if (isNaN(projectId) || isNaN(contractorId)) return res.status(400).json({ error: "bad_request" });
+  const { name, trade, email, company } = req.body as { name?: string; trade?: string; email?: string; company?: string };
+  if (name !== undefined && !name.trim()) return res.status(400).json({ error: "bad_request", message: "name cannot be empty" });
+  const updates: Partial<{ name: string; trade: string; email: string | null; company: string | null; updatedAt: Date }> = { updatedAt: new Date() };
+  if (name !== undefined) updates.name = name.trim();
+  if (trade !== undefined) updates.trade = trade.trim();
+  if (email !== undefined) updates.email = email.trim() || null;
+  if (company !== undefined) updates.company = company.trim() || null;
+  try {
+    const [updated] = await db.update(projectContractorsTable).set(updates)
+      .where(and(eq(projectContractorsTable.id, contractorId), eq(projectContractorsTable.projectId, projectId)))
+      .returning();
+    if (!updated) return res.status(404).json({ error: "not_found" });
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Update contractor error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.delete("/:id/contractors/:contractorId", async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  const contractorId = parseInt(req.params.contractorId);
+  if (isNaN(projectId) || isNaN(contractorId)) return res.status(400).json({ error: "bad_request" });
+  try {
+    const [deleted] = await db.delete(projectContractorsTable)
+      .where(and(eq(projectContractorsTable.id, contractorId), eq(projectContractorsTable.projectId, projectId)))
+      .returning();
+    if (!deleted) return res.status(404).json({ error: "not_found" });
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Delete contractor error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.post("/:id/contractors/:contractorId/send-defect-report", async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  const contractorId = parseInt(req.params.contractorId);
+  if (isNaN(projectId) || isNaN(contractorId)) return res.status(400).json({ error: "bad_request" });
+
+  const { inspectionId } = req.body as { inspectionId?: number };
+  if (!inspectionId) return res.status(400).json({ error: "bad_request", message: "inspectionId is required" });
+
+  try {
+    const [contractor] = await db.select().from(projectContractorsTable)
+      .where(and(eq(projectContractorsTable.id, contractorId), eq(projectContractorsTable.projectId, projectId)));
+    if (!contractor) return res.status(404).json({ error: "not_found", message: "Contractor not found" });
+    if (!contractor.email) return res.status(400).json({ error: "bad_request", message: "Contractor has no email address" });
+
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+    const [inspection] = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, inspectionId));
+    if (!inspection) return res.status(404).json({ error: "not_found", message: "Inspection not found" });
+
+    // Get all checklist results for this inspection where tradeAllocated matches this contractor
+    const results = await db.select().from(checklistResultsTable)
+      .where(eq(checklistResultsTable.inspectionId, inspectionId));
+
+    // Get the checklist items for their names
+    const itemIds = results.map(r => r.checklistItemId).filter(Boolean) as number[];
+    const items = itemIds.length > 0
+      ? await db.select().from(checklistItemsTable).where(inArray(checklistItemsTable.id, itemIds))
+      : [];
+    const itemNameMap: Record<number, string> = {};
+    for (const item of items) itemNameMap[item.id] = item.label ?? item.description ?? "Unknown Item";
+
+    // Filter to defects assigned to this contractor (tradeAllocated contains contractor name)
+    const contractorResults = results.filter(r => {
+      const trade = (r.tradeAllocated ?? "").toLowerCase();
+      const name = contractor.name.toLowerCase();
+      return trade.includes(name) && (r.result === "fail" || r.defectStatus === "open" || r.defectStatus === "in_progress");
+    });
+
+    if (contractorResults.length === 0) {
+      return res.status(400).json({ error: "no_defects", message: "No defects are currently assigned to this contractor" });
+    }
+
+    // Resolve sender name from auth
+    const senderId = getUserIdFromRequest(req);
+    let senderName = "InspectProof";
+    if (senderId) {
+      const [sender] = await db.select().from(usersTable).where(eq(usersTable.id, senderId));
+      if (sender) senderName = `${sender.firstName} ${sender.lastName}`.trim();
+    }
+
+    const defects = contractorResults.map(r => ({
+      itemName: r.checklistItemId ? (itemNameMap[r.checklistItemId] ?? "Unknown Item") : "Unknown Item",
+      severity: r.severity,
+      location: r.location,
+      recommendedAction: r.recommendedAction,
+      notes: r.notes,
+    }));
+
+    await sendContractorDefectReportEmail({
+      toEmail: contractor.email,
+      contractorName: contractor.name,
+      trade: contractor.trade,
+      projectName: project?.name ?? "Unknown Project",
+      inspectionName: inspection.name ?? "Inspection",
+      inspectionDate: inspection.scheduledDate ? String(inspection.scheduledDate) : null,
+      senderName,
+      defects,
+    }, req.log);
+
+    req.log.info({ contractorId, projectId, inspectionId, defects: defects.length }, "Defect report sent");
+    res.json({ success: true, message: `Defect report sent to ${contractor.email} (${defects.length} item${defects.length !== 1 ? "s" : ""})` });
+  } catch (err) {
+    req.log.error({ err }, "Send defect report error");
+    res.status(500).json({ error: "internal_error", message: "Failed to send defect report" });
   }
 });
 

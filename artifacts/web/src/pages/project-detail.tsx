@@ -123,7 +123,7 @@ function inspectionStatusBadge(status: string) {
   );
 }
 
-const TABS = ["Overview", "Documents", "Inspections", "Inspection Types", "Reports"] as const;
+const TABS = ["Overview", "Contractors", "Documents", "Inspections", "Inspection Types", "Reports"] as const;
 type Tab = typeof TABS[number];
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -265,6 +265,7 @@ export default function ProjectDetail() {
 
       {/* Tab Content */}
       {tab === "Overview" && <OverviewTab project={project} onRefresh={loadProject} />}
+      {tab === "Contractors" && <ContractorsTab projectId={projectId} projectName={project.name} />}
       {tab === "Documents" && <DocumentsTab projectId={projectId} />}
       {tab === "Inspections" && <InspectionsTab project={project} onRefresh={loadProject} />}
       {tab === "Inspection Types" && <InspectionTypesTab projectId={projectId} />}
@@ -2107,6 +2108,273 @@ const REPORT_TYPE_LABELS: Record<string, string> = {
   annual_fire_safety: "Annual Fire Safety Statement",
   fire_inspection_report: "Fire Safety Inspection Report",
 };
+
+// ── Contractors Tab ───────────────────────────────────────────
+
+interface ProjectContractor {
+  id: number;
+  projectId: number;
+  name: string;
+  trade: string;
+  email: string | null;
+  company: string | null;
+}
+
+function ContractorsTab({ projectId, projectName }: { projectId: number; projectName: string }) {
+  const [contractors, setContractors] = useState<ProjectContractor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newTrade, setNewTrade] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newCompany, setNewCompany] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTrade, setEditTrade] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editCompany, setEditCompany] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [error, setError] = useState("");
+  const [sendingId, setSendingId] = useState<number | null>(null);
+  const [sendResult, setSendResult] = useState<Record<number, { ok: boolean; msg: string }>>({});
+  const [inspections, setInspections] = useState<{ id: number; name: string }[]>([]);
+  const [selectedInspection, setSelectedInspection] = useState<Record<number, number>>({});
+
+  useEffect(() => {
+    apiFetch(`/api/projects/${projectId}/contractors`)
+      .then(setContractors)
+      .catch(() => setContractors([]))
+      .finally(() => setLoading(false));
+    apiFetch(`/api/inspections?projectId=${projectId}`)
+      .then((data: any[]) => {
+        if (Array.isArray(data)) setInspections(data.map((i: any) => ({ id: i.id, name: i.name || `Inspection #${i.id}` })));
+      })
+      .catch(() => setInspections([]));
+  }, [projectId]);
+
+  const addContractor = async () => {
+    if (!newName.trim()) { setError("Name is required."); return; }
+    setError(""); setSaving(true);
+    try {
+      const created = await apiFetch(`/api/projects/${projectId}/contractors`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim(), trade: newTrade.trim(), email: newEmail.trim() || null, company: newCompany.trim() || null }),
+      });
+      setContractors(c => [...c, created]);
+      setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); setAdding(false);
+    } catch { setError("Failed to add contractor."); }
+    finally { setSaving(false); }
+  };
+
+  const startEdit = (c: ProjectContractor) => {
+    setEditingId(c.id); setEditName(c.name); setEditTrade(c.trade); setEditEmail(c.email ?? ""); setEditCompany(c.company ?? ""); setError("");
+  };
+
+  const saveEdit = async () => {
+    if (!editName.trim()) { setError("Name is required."); return; }
+    setError(""); setSavingEdit(true);
+    try {
+      const updated = await apiFetch(`/api/projects/${projectId}/contractors/${editingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editName.trim(), trade: editTrade.trim(), email: editEmail.trim() || null, company: editCompany.trim() || null }),
+      });
+      setContractors(c => c.map(x => x.id === editingId ? updated : x));
+      setEditingId(null);
+    } catch { setError("Failed to update contractor."); }
+    finally { setSavingEdit(false); }
+  };
+
+  const remove = async (id: number) => {
+    try {
+      await apiFetch(`/api/projects/${projectId}/contractors/${id}`, { method: "DELETE" });
+      setContractors(c => c.filter(x => x.id !== id));
+    } catch { setError("Failed to remove contractor."); }
+  };
+
+  const sendReport = async (contractor: ProjectContractor) => {
+    const inspId = selectedInspection[contractor.id];
+    if (!inspId) { setSendResult(r => ({ ...r, [contractor.id]: { ok: false, msg: "Please select an inspection first." } })); return; }
+    setSendingId(contractor.id);
+    setSendResult(r => ({ ...r, [contractor.id]: { ok: false, msg: "" } }));
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/contractors/${contractor.id}/send-defect-report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inspectionId: inspId }),
+      });
+      setSendResult(r => ({ ...r, [contractor.id]: { ok: true, msg: res.message || "Report sent!" } }));
+    } catch (err: any) {
+      let msg = "Failed to send report.";
+      try { const body = JSON.parse(err.message); if (body.message) msg = body.message; } catch {}
+      setSendResult(r => ({ ...r, [contractor.id]: { ok: false, msg } }));
+    } finally { setSendingId(null); }
+  };
+
+  if (loading) return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading contractors…
+    </div>
+  );
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-sidebar">Project Contractors</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Contractors assigned to this project. Use these when allocating defects during inspections.</p>
+        </div>
+        {!adding && (
+          <Button variant="outline" size="sm" onClick={() => { setAdding(true); setError(""); }}>
+            <Plus className="h-4 w-4" /> Add Contractor
+          </Button>
+        )}
+      </div>
+
+      {contractors.length === 0 && !adding && (
+        <div className="text-center py-10 border border-dashed rounded-lg text-muted-foreground text-sm">
+          No contractors added yet. Add your first contractor to this project.
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {contractors.map(c => (
+          <div key={c.id} className="rounded-lg border border-border bg-white">
+            {editingId === c.id ? (
+              <div className="p-4 space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium">Name *</label>
+                    <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Full name" autoFocus className="mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium">Trade / Discipline</label>
+                    <Input value={editTrade} onChange={e => setEditTrade(e.target.value)} placeholder="e.g. Plumber, Electrician" className="mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium">Email</label>
+                    <Input value={editEmail} onChange={e => setEditEmail(e.target.value)} placeholder="contractor@email.com" type="email" className="mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium">Company</label>
+                    <Input value={editCompany} onChange={e => setEditCompany(e.target.value)} placeholder="Company name" className="mt-1" />
+                  </div>
+                </div>
+                {error && <p className="text-xs text-red-500">{error}</p>}
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={saveEdit} disabled={savingEdit}>
+                    {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                    {savingEdit ? "Saving…" : "Save"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-9 w-9 rounded-full bg-secondary/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <User className="h-4 w-4 text-secondary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-sidebar">{c.name}</p>
+                      {c.trade && <span className="text-xs bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded font-medium">{c.trade}</span>}
+                      {c.company && <span className="text-xs text-muted-foreground">{c.company}</span>}
+                    </div>
+                    {c.email && (
+                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                        <Mail className="h-3 w-3" />{c.email}
+                      </p>
+                    )}
+                    {c.email && inspections.length > 0 && (
+                      <div className="mt-3 flex items-center gap-2 flex-wrap">
+                        <select
+                          value={selectedInspection[c.id] ?? ""}
+                          onChange={e => setSelectedInspection(s => ({ ...s, [c.id]: Number(e.target.value) }))}
+                          className="text-xs border border-border rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-secondary"
+                        >
+                          <option value="">Select inspection…</option>
+                          {inspections.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        </select>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => sendReport(c)}
+                          disabled={sendingId === c.id || !selectedInspection[c.id]}
+                          className="text-xs h-7 border-secondary/40 text-secondary hover:bg-secondary/10"
+                        >
+                          {sendingId === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                          {sendingId === c.id ? "Sending…" : "Send Defect Report"}
+                        </Button>
+                        {sendResult[c.id]?.msg && (
+                          <span className={`text-xs font-medium ${sendResult[c.id].ok ? "text-green-600" : "text-red-500"}`}>
+                            {sendResult[c.id].msg}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {c.email && inspections.length === 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">Add inspections to this project to send defect reports.</p>
+                    )}
+                    {!c.email && (
+                      <p className="text-xs text-muted-foreground mt-1 italic">No email — add an email address to send defect reports.</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => startEdit(c)} className="p-1.5 rounded text-muted-foreground hover:bg-muted/40 transition-colors" title="Edit">
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => remove(c.id)} className="p-1.5 rounded text-red-500 hover:bg-red-50 transition-colors" title="Remove">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {adding && (
+        <div className="p-4 rounded-lg border border-secondary/40 bg-secondary/5 space-y-3">
+          <p className="text-sm font-medium text-sidebar">New Contractor</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground font-medium">Name *</label>
+              <Input value={newName} onChange={e => { setNewName(e.target.value); setError(""); }} placeholder="Full name" autoFocus className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground font-medium">Trade / Discipline</label>
+              <Input value={newTrade} onChange={e => setNewTrade(e.target.value)} placeholder="e.g. Plumber, Electrician" className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground font-medium">Email</label>
+              <Input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="contractor@email.com" type="email" className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground font-medium">Company</label>
+              <Input value={newCompany} onChange={e => setNewCompany(e.target.value)} placeholder="Company name" className="mt-1" />
+            </div>
+          </div>
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <div className="flex items-center gap-2">
+            <Button onClick={addContractor} disabled={saving}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+              {saving ? "Adding…" : "Add Contractor"}
+            </Button>
+            <Button variant="outline" onClick={() => { setAdding(false); setError(""); setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); }}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {error && !adding && editingId === null && <p className="text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
 
 function ReportResultBadge({ result }: { result: string }) {
   if (result === "pass") return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 shrink-0">PASS</span>;

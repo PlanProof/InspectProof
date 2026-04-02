@@ -411,3 +411,123 @@ export async function sendWelcomeWithCredentialsEmail(
     log?.error({ err, to: opts.toEmail }, "Failed to send welcome with credentials email");
   }
 }
+
+/* ── Contractor Defect Report Email ─────────────────────────── */
+
+export interface ContractorDefectReportOpts {
+  toEmail: string;
+  contractorName: string;
+  trade: string;
+  projectName: string;
+  inspectionName: string;
+  inspectionDate?: string | null;
+  senderName: string;
+  defects: Array<{
+    itemName: string;
+    severity?: string | null;
+    location?: string | null;
+    recommendedAction?: string | null;
+    notes?: string | null;
+  }>;
+}
+
+function defectReportHtml(opts: ContractorDefectReportOpts): string {
+  const { contractorName, trade, projectName, inspectionName, inspectionDate, senderName, defects } = opts;
+  const dateStr = inspectionDate ? formatDateAU(inspectionDate) : "";
+  const severityColour = (s?: string | null) => {
+    if (!s) return "#6b7280";
+    const lower = s.toLowerCase();
+    if (lower === "critical") return "#dc2626";
+    if (lower === "major") return "#ea580c";
+    if (lower === "minor") return "#ca8a04";
+    return "#6b7280";
+  };
+  const defectRows = defects.map((d, i) => `
+    <tr style="background:${i % 2 === 0 ? "#f9fafb" : "#ffffff"};">
+      <td style="padding:12px 16px;font-size:14px;color:#111827;border-bottom:1px solid #e5e7eb;">${d.itemName}</td>
+      <td style="padding:12px 16px;font-size:13px;border-bottom:1px solid #e5e7eb;">
+        ${d.severity ? `<span style="color:${severityColour(d.severity)};font-weight:600;">${d.severity}</span>` : '<span style="color:#9ca3af;">—</span>'}
+      </td>
+      <td style="padding:12px 16px;font-size:13px;color:#374151;border-bottom:1px solid #e5e7eb;">${d.location || "—"}</td>
+      <td style="padding:12px 16px;font-size:13px;color:#374151;border-bottom:1px solid #e5e7eb;">${d.recommendedAction || d.notes || "—"}</td>
+    </tr>`).join("");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>Defect Report</title></head>
+<body style="margin:0;padding:0;background:#f4f6fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa;padding:32px 0;">
+    <tr><td align="center">
+      <table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr><td style="background:#0B1933;padding:28px 32px;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td><span style="font-size:20px;font-weight:700;color:#ffffff;">InspectProof</span></td>
+            <td align="right"><span style="font-size:12px;color:#C5D92D;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Defect Report</span></td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="padding:32px 32px 24px;">
+          <p style="margin:0 0 4px;font-size:14px;color:#6b7280;">Hi ${contractorName},</p>
+          <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0B1933;">Defect Items Assigned to You</h1>
+          <p style="margin:0 0 24px;font-size:15px;color:#4b5563;line-height:1.6;">
+            <strong>${senderName}</strong> has assigned the following defect items to you for rectification.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4ff;border-radius:8px;margin-bottom:28px;">
+            <tr>
+              <td style="padding:12px 20px;">
+                <p style="margin:0;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Project</p>
+                <p style="margin:4px 0 0;font-size:15px;font-weight:600;color:#0B1933;">${projectName}</p>
+              </td>
+              <td style="padding:12px 20px;">
+                <p style="margin:0;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Inspection</p>
+                <p style="margin:4px 0 0;font-size:15px;font-weight:600;color:#0B1933;">${inspectionName}${dateStr ? ` — ${dateStr}` : ""}</p>
+              </td>
+              <td style="padding:12px 20px;">
+                <p style="margin:0;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Trade</p>
+                <p style="margin:4px 0 0;font-size:15px;font-weight:600;color:#0B1933;">${trade || "—"}</p>
+              </td>
+            </tr>
+          </table>
+          <h2 style="margin:0 0 12px;font-size:16px;font-weight:700;color:#0B1933;">${defects.length} Defect${defects.length !== 1 ? "s" : ""} Requiring Attention</h2>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+            <tr style="background:#0B1933;">
+              <th style="padding:10px 16px;text-align:left;font-size:12px;font-weight:600;color:#C5D92D;text-transform:uppercase;letter-spacing:0.5px;">Item</th>
+              <th style="padding:10px 16px;text-align:left;font-size:12px;font-weight:600;color:#C5D92D;text-transform:uppercase;letter-spacing:0.5px;">Severity</th>
+              <th style="padding:10px 16px;text-align:left;font-size:12px;font-weight:600;color:#C5D92D;text-transform:uppercase;letter-spacing:0.5px;">Location</th>
+              <th style="padding:10px 16px;text-align:left;font-size:12px;font-weight:600;color:#C5D92D;text-transform:uppercase;letter-spacing:0.5px;">Action Required</th>
+            </tr>
+            ${defectRows}
+          </table>
+          <p style="margin:28px 0 0;font-size:14px;color:#6b7280;line-height:1.6;">
+            Please review the defects above and arrange rectification works. If you have any questions, contact <strong>${senderName}</strong> directly.
+          </p>
+        </td></tr>
+        <tr><td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;">
+          <p style="margin:0;font-size:12px;color:#9ca3af;">Sent via InspectProof — Australian Building Certification Platform</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendContractorDefectReportEmail(
+  opts: ContractorDefectReportOpts,
+  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+): Promise<void> {
+  if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping defect report email"); return; }
+  const subject = `Defect Report — ${opts.projectName} (${opts.defects.length} item${opts.defects.length !== 1 ? "s" : ""})`;
+  try {
+    const { error } = await getResend().emails.send({
+      from: SMTP_FROM,
+      to: opts.toEmail,
+      subject,
+      html: defectReportHtml(opts),
+    });
+    if (error) throw new Error(error.message);
+    log?.info({ to: opts.toEmail, project: opts.projectName }, "Contractor defect report email sent");
+  } catch (err) {
+    log?.error({ err, to: opts.toEmail }, "Failed to send contractor defect report email");
+    throw err;
+  }
+}
