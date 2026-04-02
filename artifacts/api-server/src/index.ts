@@ -1,10 +1,11 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureSupabaseBucket, isSupabaseStorageAvailable } from "./lib/supabaseStorage";
-import { db, pool, usersTable } from "@workspace/db";
+import { db, pool, usersTable, planConfigsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { ensureGlobalTemplatesSeed } from "../../../lib/db/src/seeds/global-templates";
+import { PLAN_LIMITS } from "./lib/planLimits";
 
 const rawPort = process.env["PORT"];
 
@@ -60,6 +61,75 @@ async function runSchemaMigrations() {
     logger.info("Schema migrations applied");
   } catch (err) {
     logger.error({ err }, "Schema migration failed — continuing");
+  }
+}
+
+async function ensurePlanConfigsSeed() {
+  try {
+    const planDefs = [
+      {
+        planKey: "free_trial",
+        sortOrder: "0",
+        label: PLAN_LIMITS.free_trial.label,
+        description: "Try InspectProof risk-free with no credit card required.",
+        features: JSON.stringify(["1 active project", "Up to 10 inspections", "Standard templates", "PDF reports"]),
+        maxProjects: String(PLAN_LIMITS.free_trial.maxProjects ?? ""),
+        maxInspectionsMonthly: null,
+        maxInspectionsTotal: String(PLAN_LIMITS.free_trial.maxInspectionsTotal ?? ""),
+        maxTeamMembers: String(PLAN_LIMITS.free_trial.maxTeamMembers ?? ""),
+        isPopular: false,
+        isBestValue: false,
+      },
+      {
+        planKey: "starter",
+        sortOrder: "1",
+        label: PLAN_LIMITS.starter.label,
+        description: "For sole traders and small practices managing multiple projects.",
+        features: JSON.stringify(["Up to 10 active projects", "50 inspections/month", "Up to 3 team members", "All report types", "Priority support"]),
+        maxProjects: String(PLAN_LIMITS.starter.maxProjects ?? ""),
+        maxInspectionsMonthly: String(PLAN_LIMITS.starter.maxInspectionsMonthly ?? ""),
+        maxInspectionsTotal: null,
+        maxTeamMembers: String(PLAN_LIMITS.starter.maxTeamMembers ?? ""),
+        isPopular: true,
+        isBestValue: false,
+      },
+      {
+        planKey: "professional",
+        sortOrder: "2",
+        label: PLAN_LIMITS.professional.label,
+        description: "For growing practices that need unlimited capacity and custom workflows.",
+        features: JSON.stringify(["Unlimited projects", "Unlimited inspections", "Up to 10 team members", "Custom templates", "All report types", "Priority support"]),
+        maxProjects: null,
+        maxInspectionsMonthly: null,
+        maxInspectionsTotal: null,
+        maxTeamMembers: String(PLAN_LIMITS.professional.maxTeamMembers ?? ""),
+        isPopular: false,
+        isBestValue: true,
+      },
+      {
+        planKey: "enterprise",
+        sortOrder: "3",
+        label: PLAN_LIMITS.enterprise.label,
+        description: "For large organisations needing custom limits, SLAs, and dedicated support.",
+        features: JSON.stringify(["Unlimited everything", "Unlimited team members", "Custom templates", "Dedicated account manager", "Custom SLA", "SSO / API access"]),
+        maxProjects: null,
+        maxInspectionsMonthly: null,
+        maxInspectionsTotal: null,
+        maxTeamMembers: null,
+        isPopular: false,
+        isBestValue: false,
+      },
+    ];
+
+    for (const plan of planDefs) {
+      await db
+        .insert(planConfigsTable)
+        .values({ ...plan, updatedAt: new Date() })
+        .onConflictDoNothing();
+    }
+    logger.info("Plan configs seeded");
+  } catch (err) {
+    logger.error({ err }, "Plan config seed failed — continuing");
   }
 }
 
@@ -156,6 +226,7 @@ async function runBackgroundTasks() {
 // Run fast critical setup before listening
 await runSchemaMigrations();
 await ensureAdminSeed();
+await ensurePlanConfigsSeed();
 
 // Start listening immediately so the port is open for deployment health checks
 app.listen(port, (err) => {
