@@ -155,6 +155,12 @@ export default function ConductInspectionScreen() {
     enabled: !!token,
   });
 
+  const { data: contractors = [] } = useQuery<{ id: number; name: string; trade: string; email: string | null }[]>({
+    queryKey: ["project-contractors", inspection?.projectId, token],
+    queryFn: () => fetchWithAuth(`/api/projects/${inspection!.projectId}/contractors`),
+    enabled: !!token && !!inspection?.projectId,
+  });
+
   useFocusEffect(
     useCallback(() => {
       refetchChecklist();
@@ -780,6 +786,7 @@ export default function ConductInspectionScreen() {
             baseUrl={baseUrl}
             documents={projectDocuments}
             internalStaff={internalStaff}
+            contractors={contractors}
             onResultChange={setEditResult}
             onNotesChange={setEditNotes}
             onSeverityChange={setEditSeverity}
@@ -1295,7 +1302,7 @@ function PhotosPanel({
 
 function ItemModal({
   item, result, notes, severity, location, tradeAllocated, recommendedAction,
-  baseUrl, documents, internalStaff, onResultChange, onNotesChange, onSeverityChange, onLocationChange,
+  baseUrl, documents, internalStaff, contractors, onResultChange, onNotesChange, onSeverityChange, onLocationChange,
   onTradeAllocatedChange, onRecommendedActionChange, onSave, onClose,
   onUploadPhoto, onTakePhoto, onRemovePhoto, onAnnotateDoc, saving, uploadingPhoto, insets,
   inspectionId,
@@ -1304,6 +1311,7 @@ function ItemModal({
   severity: string | null; location: string; tradeAllocated: string; recommendedAction: string;
   documents: ProjectDocument[];
   internalStaff: { id: number; name: string; role: string }[];
+  contractors: { id: number; name: string; trade: string; email: string | null }[];
   onResultChange: (r: ResultKey) => void; onNotesChange: (n: string) => void;
   onSeverityChange: (s: string | null) => void; onLocationChange: (l: string) => void;
   onTradeAllocatedChange: (t: string) => void; onRecommendedActionChange: (r: string) => void;
@@ -1525,30 +1533,62 @@ function ItemModal({
               style={modalStyles.defectInput}
               value={tradeAllocated}
               onChangeText={onTradeAllocatedChange}
-              placeholder="e.g. Plumber, Electrician, Builder"
+              placeholder="Select below or type a trade"
               placeholderTextColor={Colors.textTertiary}
             />
+            {contractors.length > 0 && (
+              <>
+                <Text style={{ fontSize: 11, color: Colors.textTertiary, fontWeight: "600", marginTop: 8, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Project Contractors
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled">
+                  {contractors.map(c => (
+                    <Pressable
+                      key={c.id}
+                      style={({ pressed }) => [{
+                        backgroundColor: pressed ? "#dbeafe" : tradeAllocated === c.name ? "#1d4ed8" : "#eff6ff",
+                        borderWidth: 1,
+                        borderColor: tradeAllocated === c.name ? "#1d4ed8" : "#93c5fd",
+                        borderRadius: 6,
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                      }]}
+                      onPress={() => onTradeAllocatedChange(tradeAllocated === c.name ? "" : c.name)}
+                    >
+                      <Text style={{ fontSize: 12, color: tradeAllocated === c.name ? "#ffffff" : "#1e40af", fontWeight: "500" }}>
+                        {c.name}{c.trade ? ` · ${c.trade}` : ""}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
+            )}
             {internalStaff.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingTop: 8 }} keyboardShouldPersistTaps="handled">
-                {internalStaff.map(s => (
-                  <Pressable
-                    key={s.id}
-                    style={({ pressed }) => [{
-                      backgroundColor: pressed ? "#fef3c7" : "#fffbeb",
-                      borderWidth: 1,
-                      borderColor: "#fbbf24",
-                      borderRadius: 6,
-                      paddingHorizontal: 10,
-                      paddingVertical: 4,
-                    }]}
-                    onPress={() => onTradeAllocatedChange(`Internal – ${s.name}`)}
-                  >
-                    <Text style={{ fontSize: 12, color: "#92400e", fontWeight: "500" }}>
-                      {s.name}{s.role ? ` (${s.role})` : ""}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
+              <>
+                <Text style={{ fontSize: 11, color: Colors.textTertiary, fontWeight: "600", marginTop: 8, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Internal Staff
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled">
+                  {internalStaff.map(s => (
+                    <Pressable
+                      key={s.id}
+                      style={({ pressed }) => [{
+                        backgroundColor: pressed ? "#fef3c7" : tradeAllocated === s.name ? "#d97706" : "#fffbeb",
+                        borderWidth: 1,
+                        borderColor: tradeAllocated === s.name ? "#d97706" : "#fbbf24",
+                        borderRadius: 6,
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                      }]}
+                      onPress={() => onTradeAllocatedChange(tradeAllocated === s.name ? "" : s.name)}
+                    >
+                      <Text style={{ fontSize: 12, color: tradeAllocated === s.name ? "#ffffff" : "#92400e", fontWeight: "500" }}>
+                        {s.name}{s.role ? ` · ${s.role}` : ""}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
             )}
 
             {/* Recommended Action */}
