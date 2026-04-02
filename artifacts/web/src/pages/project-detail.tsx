@@ -2136,21 +2136,12 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
   const [editCompany, setEditCompany] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [error, setError] = useState("");
-  const [sendingId, setSendingId] = useState<number | null>(null);
-  const [sendResult, setSendResult] = useState<Record<number, { ok: boolean; msg: string }>>({});
-  const [inspections, setInspections] = useState<{ id: number; name: string }[]>([]);
-  const [selectedInspection, setSelectedInspection] = useState<Record<number, number>>({});
 
   useEffect(() => {
     apiFetch(`/api/projects/${projectId}/contractors`)
       .then(setContractors)
       .catch(() => setContractors([]))
       .finally(() => setLoading(false));
-    apiFetch(`/api/inspections?projectId=${projectId}`)
-      .then((data: any[]) => {
-        if (Array.isArray(data)) setInspections(data.map((i: any) => ({ id: i.id, name: i.name || `Inspection #${i.id}` })));
-      })
-      .catch(() => setInspections([]));
   }, [projectId]);
 
   const addContractor = async () => {
@@ -2194,24 +2185,6 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
     } catch { setError("Failed to remove contractor."); }
   };
 
-  const sendReport = async (contractor: ProjectContractor) => {
-    const inspId = selectedInspection[contractor.id];
-    if (!inspId) { setSendResult(r => ({ ...r, [contractor.id]: { ok: false, msg: "Please select an inspection first." } })); return; }
-    setSendingId(contractor.id);
-    setSendResult(r => ({ ...r, [contractor.id]: { ok: false, msg: "" } }));
-    try {
-      const res = await apiFetch(`/api/projects/${projectId}/contractors/${contractor.id}/send-defect-report`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inspectionId: inspId }),
-      });
-      setSendResult(r => ({ ...r, [contractor.id]: { ok: true, msg: res.message || "Report sent!" } }));
-    } catch (err: any) {
-      let msg = "Failed to send report.";
-      try { const body = JSON.parse(err.message); if (body.message) msg = body.message; } catch {}
-      setSendResult(r => ({ ...r, [contractor.id]: { ok: false, msg } }));
-    } finally { setSendingId(null); }
-  };
 
   if (loading) return (
     <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
@@ -2288,38 +2261,8 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
                         <Mail className="h-3 w-3" />{c.email}
                       </p>
                     )}
-                    {c.email && inspections.length > 0 && (
-                      <div className="mt-3 flex items-center gap-2 flex-wrap">
-                        <select
-                          value={selectedInspection[c.id] ?? ""}
-                          onChange={e => setSelectedInspection(s => ({ ...s, [c.id]: Number(e.target.value) }))}
-                          className="text-xs border border-border rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-secondary"
-                        >
-                          <option value="">Select inspection…</option>
-                          {inspections.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                        </select>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => sendReport(c)}
-                          disabled={sendingId === c.id || !selectedInspection[c.id]}
-                          className="text-xs h-7 border-secondary/40 text-secondary hover:bg-secondary/10"
-                        >
-                          {sendingId === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                          {sendingId === c.id ? "Sending…" : "Send Defect Report"}
-                        </Button>
-                        {sendResult[c.id]?.msg && (
-                          <span className={`text-xs font-medium ${sendResult[c.id].ok ? "text-green-600" : "text-red-500"}`}>
-                            {sendResult[c.id].msg}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {c.email && inspections.length === 0 && (
-                      <p className="text-xs text-muted-foreground mt-1">Add inspections to this project to send defect reports.</p>
-                    )}
                     {!c.email && (
-                      <p className="text-xs text-muted-foreground mt-1 italic">No email — add an email address to send defect reports.</p>
+                      <p className="text-xs text-amber-600 mt-1 italic">No email address — add one to enable defect report sending.</p>
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
