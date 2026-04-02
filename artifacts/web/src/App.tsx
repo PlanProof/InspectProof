@@ -16,6 +16,7 @@ import Templates from "@/pages/templates";
 import DocTemplates from "@/pages/doc-templates";
 import Inspectors from "@/pages/inspectors";
 import Settings from "@/pages/settings";
+import Reports from "@/pages/reports";
 import Billing from "@/pages/billing";
 import Admin from "@/pages/admin";
 import Terms from "@/pages/terms";
@@ -69,6 +70,7 @@ function Router() {
       <Route path="/templates" component={Templates} />
       <Route path="/doc-templates" component={DocTemplates} />
       <Route path="/inspectors" component={Inspectors} />
+      <Route path="/reports" component={Reports} />
       <Route path="/settings" component={Settings} />
       <Route path="/billing" component={Billing} />
       <Route path="/admin" component={Admin} />
