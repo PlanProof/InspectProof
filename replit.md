@@ -35,16 +35,17 @@ pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vi
 
 ## Routes (Web App)
 
-`/`, `/login`, `/dashboard`, `/projects`, `/projects/:id`, `/inspections`, `/inspections/:id`, `/reports`, `/analytics`, `/templates`, `/doc-templates`, `/inspectors`, `/settings`, `/billing`, `/admin`, `/terms`, `/privacy`
+`/`, `/login`, `/dashboard`, `/projects`, `/projects/:id`, `/inspections`, `/inspections/:id`, `/analytics`, `/templates`, `/doc-templates`, `/inspectors`, `/settings`, `/billing`, `/admin`, `/terms`, `/privacy`
 
-**Reports:** Standalone `/reports` page lists all reports across all projects (grouped by project, searchable, filterable by status). Reports also accessible per-project via the "Reports" tab inside `/projects/:id`.
+**Reports:** Accessed via the "Reports" tab inside each project's detail page (`/projects/:id`) — no standalone `/reports` route.
+
+**Contractors:** Managed per-project via the "Contractors" tab inside `/projects/:id` — linked specifically to that project.
 
 ## Recent Feature Additions
 
 - **Project Contractors**: `project_contractors` table, full CRUD API at `/api/projects/:id/contractors`, "Contractors" tab in project detail with add/edit/delete + Send Defect Report email per inspection
 - **Trade Allocated dropdown**: Inspection checklist items use a `<select>` populated from project contractors + internal staff (falls back to text input if none configured)
 - **Internal Staff email + invite**: `email` column on `internal_staff` table, Send Invite button in Settings
-- **Standalone Reports page**: `/reports` route + "Reports" sidebar link — shows all reports grouped by project with search, status filter, PDF viewer, download, approve, delete
 
 ## External Dependencies
 

@@ -12,7 +12,6 @@ import {
   FileText,
   ShieldCheck,
   Zap,
-  ClipboardList,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -20,7 +19,6 @@ const navigation = [
   { name: "Home",        href: "/dashboard",   icon: Home },
   { name: "Projects",    href: "/projects",    icon: FolderOpen },
   { name: "Inspections", href: "/inspections", icon: CheckSquare },
-  { name: "Reports",     href: "/reports",     icon: ClipboardList },
   { name: "Templates",   href: "/templates",   icon: FileText },
   { name: "Analytics",   href: "/analytics",   icon: BarChart3 },
   { name: "Team",        href: "/inspectors",  icon: UsersRound },
