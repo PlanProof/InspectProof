@@ -3223,15 +3223,16 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
       const url = contractor
         ? `/api/projects/${projectId}/contractors/${contractor.id}/send-defect-report`
         : `/api/projects/${projectId}/staff/${staff!.id}/send-defect-report`;
-      const res = await apiFetch(url, {
+      const data = await apiFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inspectionId }),
       });
-      const data = await res.json();
-      setSendResult(prev => ({ ...prev, [key as any]: { ok: res.ok, msg: data.message ?? (res.ok ? "Sent" : "Failed to send") } }));
-    } catch {
-      setSendResult(prev => ({ ...prev, [key as any]: { ok: false, msg: "Failed to send" } }));
+      setSendResult(prev => ({ ...prev, [key as any]: { ok: true, msg: data?.message ?? "Sent successfully" } }));
+    } catch (err: any) {
+      let msg = "Failed to send";
+      try { const body = JSON.parse(err.message); if (body.message) msg = body.message; } catch {}
+      setSendResult(prev => ({ ...prev, [key as any]: { ok: false, msg } }));
     } finally {
       setSendingTo(null);
     }
