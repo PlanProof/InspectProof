@@ -644,6 +644,15 @@ export default function ConductInspectionScreen() {
             <View style={styles.tabBadgeDot} />
           )}
         </Pressable>
+        <Pressable style={[styles.tab, activePage === 3 && styles.tabActive]} onPress={() => scrollToPage(3)}>
+          <Feather name="alert-triangle" size={13} color={activePage === 3 ? "#ef4444" : Colors.textTertiary} />
+          <Text style={[styles.tabText, activePage === 3 && { color: "#ef4444", fontFamily: "PlusJakartaSans_600SemiBold" }]}>
+            Defects{failCount > 0 ? ` (${failCount})` : ""}
+          </Text>
+          {failCount > 0 && activePage !== 3 && (
+            <View style={[styles.tabBadgeDot, { backgroundColor: "#ef4444" }]} />
+          )}
+        </Pressable>
       </View>
 
       {/* Horizontal paged content */}
@@ -798,6 +807,16 @@ export default function ConductInspectionScreen() {
             onDeletePhoto={removePhotoFromItem}
           />
         </View>
+
+        {/* ── Page 3: Defects ── */}
+        <View style={{ width: screenW, flex: 1 }}>
+          <DefectsPanel
+            items={checklistItems.filter(i => i.result === "fail")}
+            insets={insets}
+            tabBarHeight={tabBarHeight}
+            onPress={openItemModal}
+          />
+        </View>
       </ScrollView>
 
       {/* Item Detail Modal */}
@@ -947,6 +966,361 @@ export default function ConductInspectionScreen() {
     </View>
   );
 }
+
+// ─── Defects Panel ───────────────────────────────────────────────────────────
+
+const SEVERITY_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
+  critical: { label: "Critical", bg: "#fee2e2", color: "#dc2626" },
+  major:    { label: "Major",    bg: "#ffedd5", color: "#ea580c" },
+  minor:    { label: "Minor",    bg: "#fef9c3", color: "#ca8a04" },
+};
+
+const DEFECT_STATUS_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
+  open:        { label: "Open",        bg: "#fee2e2", color: "#dc2626" },
+  in_progress: { label: "In Progress", bg: "#fef3c7", color: "#d97706" },
+  resolved:    { label: "Resolved",    bg: "#dcfce7", color: "#16a34a" },
+};
+
+function DefectsPanel({ items, insets, tabBarHeight, onPress }: {
+  items: ChecklistItem[];
+  insets: { bottom: number; top: number };
+  tabBarHeight: number;
+  onPress: (item: ChecklistItem) => void;
+}) {
+  if (items.length === 0) {
+    return (
+      <View style={defectStyles.emptyWrap}>
+        <View style={defectStyles.emptyIconCircle}>
+          <Feather name="check-circle" size={36} color="#22c55e" />
+        </View>
+        <Text style={defectStyles.emptyTitle}>No Defects Found</Text>
+        <Text style={defectStyles.emptySub}>All checklist items passed. Great work!</Text>
+      </View>
+    );
+  }
+
+  // Group by trade
+  const unallocated: ChecklistItem[] = [];
+  const byTrade: Record<string, ChecklistItem[]> = {};
+  for (const item of items) {
+    const trades = item.tradeAllocated
+      ? item.tradeAllocated.split(",").map(t => t.trim()).filter(Boolean)
+      : [];
+    if (trades.length === 0) {
+      unallocated.push(item);
+    } else {
+      for (const t of trades) {
+        if (!byTrade[t]) byTrade[t] = [];
+        byTrade[t].push(item);
+      }
+    }
+  }
+
+  const sections: { title: string; data: ChecklistItem[] }[] = [
+    ...Object.entries(byTrade).map(([title, data]) => ({ title, data })),
+    ...(unallocated.length > 0 ? [{ title: "Unallocated", data: unallocated }] : []),
+  ];
+
+  return (
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={[defectStyles.list, { paddingBottom: tabBarHeight + 24 }]}
+      showsVerticalScrollIndicator={false}
+    >
+      {sections.map(section => (
+        <View key={section.title} style={defectStyles.section}>
+          {/* Trade header */}
+          <View style={defectStyles.tradeHeader}>
+            <View style={defectStyles.tradeAvatarSmall}>
+              <Text style={defectStyles.tradeAvatarText}>{section.title.charAt(0).toUpperCase()}</Text>
+            </View>
+            <Text style={defectStyles.tradeName}>{section.title}</Text>
+            <View style={defectStyles.tradeCountBadge}>
+              <Text style={defectStyles.tradeCountText}>{section.data.length}</Text>
+            </View>
+          </View>
+
+          {/* Defect cards */}
+          {section.data.map((item, idx) => {
+            const sev = item.severity ? SEVERITY_CONFIG[item.severity] : null;
+            const ds = DEFECT_STATUS_CONFIG[item.defectStatus ?? "open"] ?? DEFECT_STATUS_CONFIG.open;
+            const photoCount = item.photoUrls?.length ?? 0;
+
+            return (
+              <Pressable
+                key={item.id}
+                style={({ pressed }) => [
+                  defectStyles.card,
+                  idx === section.data.length - 1 && defectStyles.cardLast,
+                  pressed && { opacity: 0.82 },
+                ]}
+                onPress={() => onPress(item)}
+              >
+                {/* Left accent bar */}
+                <View style={[defectStyles.cardAccent, { backgroundColor: sev?.color ?? "#ef4444" }]} />
+
+                <View style={defectStyles.cardBody}>
+                  {/* Category + status row */}
+                  <View style={defectStyles.cardTopRow}>
+                    <View style={defectStyles.categoryPill}>
+                      <Text style={defectStyles.categoryPillText}>{item.category}</Text>
+                    </View>
+                    <View style={[defectStyles.statusPill, { backgroundColor: ds.bg }]}>
+                      <Text style={[defectStyles.statusPillText, { color: ds.color }]}>{ds.label}</Text>
+                    </View>
+                  </View>
+
+                  {/* Description */}
+                  <Text style={defectStyles.cardDesc} numberOfLines={3}>{item.description}</Text>
+
+                  {/* Code reference */}
+                  {!!item.codeReference && (
+                    <Text style={defectStyles.cardCode}>{item.codeReference}</Text>
+                  )}
+
+                  {/* Notes preview */}
+                  {!!item.notes && (
+                    <View style={defectStyles.notesRow}>
+                      <Feather name="file-text" size={12} color={Colors.textTertiary} />
+                      <Text style={defectStyles.notesText} numberOfLines={2}>{item.notes}</Text>
+                    </View>
+                  )}
+
+                  {/* Bottom meta row */}
+                  <View style={defectStyles.cardMeta}>
+                    {sev && (
+                      <View style={[defectStyles.sevPill, { backgroundColor: sev.bg }]}>
+                        <Text style={[defectStyles.sevPillText, { color: sev.color }]}>{sev.label}</Text>
+                      </View>
+                    )}
+                    {photoCount > 0 && (
+                      <View style={defectStyles.photoBadge}>
+                        <Feather name="camera" size={11} color={Colors.textTertiary} />
+                        <Text style={defectStyles.photoBadgeText}>{photoCount}</Text>
+                      </View>
+                    )}
+                    <View style={defectStyles.editHint}>
+                      <Feather name="edit-2" size={11} color={Colors.textTertiary} />
+                      <Text style={defectStyles.editHintText}>Tap to edit</Text>
+                    </View>
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+const defectStyles = StyleSheet.create({
+  emptyWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 40,
+    gap: 14,
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#dcfce7",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: Colors.text,
+    textAlign: "center",
+  },
+  emptySub: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 21,
+  },
+  list: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 20,
+  },
+  section: {
+    gap: 0,
+  },
+  tradeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 4,
+    paddingBottom: 10,
+  },
+  tradeAvatarSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tradeAvatarText: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: "#fff",
+  },
+  tradeName: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: Colors.text,
+  },
+  tradeCountBadge: {
+    backgroundColor: "#fee2e2",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  tradeCountText: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: "#dc2626",
+  },
+  card: {
+    flexDirection: "row",
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    marginBottom: 8,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cardLast: {
+    marginBottom: 0,
+  },
+  cardAccent: {
+    width: 5,
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+  },
+  cardBody: {
+    flex: 1,
+    padding: 14,
+    gap: 7,
+  },
+  cardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  categoryPill: {
+    backgroundColor: Colors.background,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  categoryPillText: {
+    fontSize: 10,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  statusPill: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontFamily: "PlusJakartaSans_700Bold",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  cardDesc: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+    lineHeight: 20,
+  },
+  cardCode: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_500Medium",
+    color: Colors.secondary,
+    letterSpacing: 0.3,
+  },
+  notesRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+    padding: 8,
+  },
+  notesText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.textSecondary,
+    lineHeight: 17,
+  },
+  cardMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 2,
+    flexWrap: "wrap",
+  },
+  sevPill: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  sevPillText: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_700Bold",
+  },
+  photoBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.background,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  photoBadgeText: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textSecondary,
+  },
+  editHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: "auto" as any,
+  },
+  editHintText: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.textTertiary,
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function CategoryHeader({ category, items, onQuickPassAll, onQuickNAAll }: {
   category: string;
