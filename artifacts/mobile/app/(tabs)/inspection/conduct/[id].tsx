@@ -22,6 +22,7 @@ import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context"
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { getSuggestionsForItem } from "@/constants/noteSuggestions";
@@ -194,6 +195,77 @@ export default function ConductInspectionScreen() {
   const scored = passCount + failCount;
   const passRate = scored > 0 ? passCount / scored : null;
   const totalPhotoCount = checklistItems.reduce((sum, item) => sum + (item.photoUrls?.length ?? 0), 0);
+
+  // ── Unlinked photos (not tied to any checklist item) ──────────────────────
+  const unlinkedKey = id ? `unlinked_photos_${id}` : null;
+  const [unlinkedPhotos, setUnlinkedPhotos] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!unlinkedKey) return;
+    AsyncStorage.getItem(unlinkedKey).then(raw => {
+      if (raw) setUnlinkedPhotos(JSON.parse(raw));
+    }).catch(() => {});
+  }, [unlinkedKey]);
+
+  const persistUnlinked = useCallback(async (paths: string[]) => {
+    if (!unlinkedKey) return;
+    await AsyncStorage.setItem(unlinkedKey, JSON.stringify(paths));
+  }, [unlinkedKey]);
+
+  const [addingUnlinkedPhoto, setAddingUnlinkedPhoto] = useState(false);
+
+  const addUnlinkedPhoto = useCallback(async (sourceType: "camera" | "library") => {
+    if (addingUnlinkedPhoto) return;
+    let picked: ImagePicker.ImagePickerResult;
+    if (sourceType === "camera") {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Please allow camera access.");
+        return;
+      }
+      picked = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Please allow photo library access.");
+        return;
+      }
+      picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+    }
+    if (picked.canceled || !picked.assets[0]) return;
+    setAddingUnlinkedPhoto(true);
+    try {
+      const uri = picked.assets[0].uri;
+      const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: `inspection-photo-${Date.now()}.jpg`, size: 0, contentType: "image/jpeg" }),
+      });
+      const blob = await (await fetch(uri)).blob();
+      const uploadResp = await fetch(urlRes.uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": blob.type || "image/jpeg" },
+        body: blob,
+      });
+      if (!uploadResp.ok) throw new Error(`Upload failed: ${uploadResp.status}`);
+      const newPaths = [...unlinkedPhotos, urlRes.objectPath as string];
+      setUnlinkedPhotos(newPaths);
+      await persistUnlinked(newPaths);
+    } catch {
+      Alert.alert("Upload failed", "Could not save the photo. Please try again.");
+    } finally {
+      setAddingUnlinkedPhoto(false);
+    }
+  }, [addingUnlinkedPhoto, fetchWithAuth, unlinkedPhotos, persistUnlinked]);
+
+  const deleteUnlinkedPhoto = useCallback(async (path: string) => {
+    const newPaths = unlinkedPhotos.filter(p => p !== path);
+    setUnlinkedPhotos(newPaths);
+    await persistUnlinked(newPaths);
+  }, [unlinkedPhotos, persistUnlinked]);
 
   // Auto-set to in_progress when inspection is first opened
   const startedRef = useRef(false);
@@ -813,6 +885,10 @@ export default function ConductInspectionScreen() {
             insets={insets}
             inspectionName={inspection?.inspectionType?.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) || "Inspection"}
             onDeletePhoto={removePhotoFromItem}
+            unlinkedPhotos={unlinkedPhotos}
+            addingUnlinkedPhoto={addingUnlinkedPhoto}
+            onAddUnlinkedPhoto={addUnlinkedPhoto}
+            onDeleteUnlinkedPhoto={deleteUnlinkedPhoto}
           />
         </View>
 
@@ -1721,18 +1797,28 @@ function PhotosPanel({
   insets,
   inspectionName,
   onDeletePhoto,
+  unlinkedPhotos,
+  addingUnlinkedPhoto,
+  onAddUnlinkedPhoto,
+  onDeleteUnlinkedPhoto,
 }: {
   items: ChecklistItem[];
   baseUrl: string;
   insets: any;
   inspectionName: string;
   onDeletePhoto: (itemId: number, photoPath: string) => void;
+  unlinkedPhotos: string[];
+  addingUnlinkedPhoto: boolean;
+  onAddUnlinkedPhoto: (source: "camera" | "library") => void;
+  onDeleteUnlinkedPhoto: (path: string) => void;
 }) {
   const { width: screenW, height: screenH } = useWindowDimensions();
   const COLS = 3;
   const THUMB = Math.floor((screenW - 32 - (COLS - 1) * 4) / COLS);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [unlinkedLightboxIndex, setUnlinkedLightboxIndex] = useState<number | null>(null);
+  const [addPhotoSheetVisible, setAddPhotoSheetVisible] = useState(false);
 
   const allPhotos: AllPhotoEntry[] = items.flatMap(item =>
     (item.photoUrls || []).map(path => ({
@@ -1745,6 +1831,68 @@ function PhotosPanel({
   );
 
   const itemsWithPhotos = items.filter(i => (i.photoUrls?.length ?? 0) > 0);
+
+  // ── Unlinked photo lightbox ────────────────────────────────────────────────
+  if (unlinkedLightboxIndex !== null && unlinkedPhotos.length > 0) {
+    const path = unlinkedPhotos[unlinkedLightboxIndex];
+    return (
+      <View style={[galleryStyles.lightboxScreen, { paddingTop: insets.top }]}>
+        <View style={galleryStyles.lightboxHeader}>
+          <Pressable onPress={() => setUnlinkedLightboxIndex(null)} hitSlop={12} style={galleryStyles.lightboxBtn}>
+            <Feather name="arrow-left" size={22} color="#fff" />
+          </Pressable>
+          <View style={{ flex: 1, paddingHorizontal: 8 }}>
+            <Text style={galleryStyles.lightboxTitle} numberOfLines={1}>General Photo</Text>
+            <Text style={galleryStyles.lightboxSub}>{inspectionName} · {unlinkedLightboxIndex + 1} of {unlinkedPhotos.length}</Text>
+          </View>
+          <Pressable
+            onPress={() =>
+              Alert.alert("Delete photo?", "Remove this photo from the inspection?", [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete", style: "destructive",
+                  onPress: () => {
+                    onDeleteUnlinkedPhoto(path);
+                    if (unlinkedPhotos.length <= 1) setUnlinkedLightboxIndex(null);
+                    else setUnlinkedLightboxIndex(i => Math.min(i ?? 0, unlinkedPhotos.length - 2));
+                  },
+                },
+              ])
+            }
+            hitSlop={12}
+            style={galleryStyles.lightboxBtn}
+          >
+            <Feather name="trash-2" size={20} color={Colors.danger} />
+          </Pressable>
+        </View>
+        <View style={{ flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" }}>
+          <Image
+            source={{ uri: `${baseUrl}/api/storage${path}` }}
+            style={{ width: screenW, height: screenH * 0.72 }}
+            resizeMode="contain"
+          />
+        </View>
+        <View style={[galleryStyles.lightboxNav, { paddingBottom: insets.bottom + 16 }]}>
+          <Pressable
+            onPress={() => setUnlinkedLightboxIndex(i => (i !== null && i > 0 ? i - 1 : i))}
+            disabled={unlinkedLightboxIndex === 0}
+            style={[lightboxStyles.navBtn, unlinkedLightboxIndex === 0 && { opacity: 0.3 }]}
+          >
+            <Feather name="chevron-left" size={22} color="#fff" />
+            <Text style={lightboxStyles.navBtnText}>Previous</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setUnlinkedLightboxIndex(i => (i !== null && i < unlinkedPhotos.length - 1 ? i + 1 : i))}
+            disabled={unlinkedLightboxIndex === unlinkedPhotos.length - 1}
+            style={[lightboxStyles.navBtn, unlinkedLightboxIndex === unlinkedPhotos.length - 1 && { opacity: 0.3 }]}
+          >
+            <Text style={lightboxStyles.navBtnText}>Next</Text>
+            <Feather name="chevron-right" size={22} color="#fff" />
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   if (lightboxIndex !== null && allPhotos.length > 0) {
     const photo = allPhotos[lightboxIndex];
@@ -1828,28 +1976,132 @@ function PhotosPanel({
     );
   }
 
-  if (allPhotos.length === 0) {
+  const totalPhotoCount = allPhotos.length + unlinkedPhotos.length;
+
+  // ── Add photo action sheet ─────────────────────────────────────────────────
+  const addPhotoSheet = addPhotoSheetVisible ? (
+    <View style={galleryStyles.actionSheetOverlay}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => setAddPhotoSheetVisible(false)} />
+      <View style={[galleryStyles.actionSheet, { paddingBottom: insets.bottom + 8 }]}>
+        <Text style={galleryStyles.actionSheetTitle}>Add Photo</Text>
+        <Text style={galleryStyles.actionSheetNote}>These photos won't be linked to an inspection item.</Text>
+        <Pressable
+          style={galleryStyles.actionSheetRow}
+          onPress={() => { setAddPhotoSheetVisible(false); onAddUnlinkedPhoto("camera"); }}
+        >
+          <Feather name="camera" size={18} color={Colors.primary} />
+          <Text style={galleryStyles.actionSheetRowText}>Take Photo</Text>
+        </Pressable>
+        <Pressable
+          style={galleryStyles.actionSheetRow}
+          onPress={() => { setAddPhotoSheetVisible(false); onAddUnlinkedPhoto("library"); }}
+        >
+          <Feather name="image" size={18} color={Colors.primary} />
+          <Text style={galleryStyles.actionSheetRowText}>Choose from Library</Text>
+        </Pressable>
+        <Pressable
+          style={[galleryStyles.actionSheetRow, { marginTop: 4, borderTopWidth: 1, borderTopColor: Colors.border }]}
+          onPress={() => setAddPhotoSheetVisible(false)}
+        >
+          <Text style={[galleryStyles.actionSheetRowText, { color: Colors.textSecondary }]}>Cancel</Text>
+        </Pressable>
+      </View>
+    </View>
+  ) : null;
+
+  if (totalPhotoCount === 0) {
     return (
-      <View style={galleryStyles.empty}>
-        <Feather name="camera" size={48} color={Colors.textTertiary} />
-        <Text style={galleryStyles.emptyTitle}>No photos yet</Text>
-        <Text style={galleryStyles.emptySub}>Open a checklist item and take a photo — it will appear here.</Text>
+      <View style={{ flex: 1 }}>
+        {addPhotoSheet}
+        <View style={galleryStyles.empty}>
+          <Feather name="camera" size={48} color={Colors.textTertiary} />
+          <Text style={galleryStyles.emptyTitle}>No photos yet</Text>
+          <Text style={galleryStyles.emptySub}>Open a checklist item and take a photo, or add a general photo below.</Text>
+          <Pressable
+            style={galleryStyles.addPhotoBtn}
+            onPress={() => setAddPhotoSheetVisible(true)}
+            disabled={addingUnlinkedPhoto}
+          >
+            {addingUnlinkedPhoto
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Feather name="plus" size={16} color="#fff" />}
+            <Text style={galleryStyles.addPhotoBtnText}>{addingUnlinkedPhoto ? "Uploading…" : "Add Photo"}</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
   return (
+    <View style={{ flex: 1 }}>
+      {addPhotoSheet}
     <ScrollView
       style={{ flex: 1 }}
       contentContainerStyle={[galleryStyles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
       showsVerticalScrollIndicator={false}
     >
-      {/* Inspection name banner */}
+      {/* Inspection name banner + Add Photo button */}
       <View style={galleryStyles.inspectionBanner}>
         <Feather name="clipboard" size={13} color={Colors.secondary} />
         <Text style={galleryStyles.inspectionBannerText}>{inspectionName}</Text>
-        <Text style={galleryStyles.inspectionBannerCount}>{allPhotos.length} photo{allPhotos.length !== 1 ? "s" : ""}</Text>
+        <Text style={galleryStyles.inspectionBannerCount}>{totalPhotoCount} photo{totalPhotoCount !== 1 ? "s" : ""}</Text>
+        <View style={{ flex: 1 }} />
+        <Pressable
+          style={galleryStyles.addPhotoBtnSmall}
+          onPress={() => setAddPhotoSheetVisible(true)}
+          disabled={addingUnlinkedPhoto}
+        >
+          {addingUnlinkedPhoto
+            ? <ActivityIndicator size="small" color="#fff" style={{ width: 14, height: 14 }} />
+            : <Feather name="plus" size={14} color="#fff" />}
+          <Text style={galleryStyles.addPhotoBtnSmallText}>{addingUnlinkedPhoto ? "Uploading…" : "Add Photo"}</Text>
+        </Pressable>
       </View>
+
+      {/* Unlinked general photos section */}
+      {unlinkedPhotos.length > 0 && (
+        <View style={galleryStyles.group}>
+          <View style={galleryStyles.groupHeader}>
+            <Text style={galleryStyles.groupTitle}>General Photos</Text>
+            <Text style={galleryStyles.groupMeta}>{unlinkedPhotos.length} photo{unlinkedPhotos.length !== 1 ? "s" : ""} · not linked to a checklist item</Text>
+          </View>
+          <View style={galleryStyles.grid}>
+            {unlinkedPhotos.map((path, idx) => (
+              <Pressable
+                key={path}
+                style={[galleryStyles.thumb, { width: THUMB, height: THUMB }]}
+                onPress={() => setUnlinkedLightboxIndex(idx)}
+              >
+                <Image
+                  source={{ uri: `${baseUrl}/api/storage${path}` }}
+                  style={{ width: THUMB, height: THUMB }}
+                  resizeMode="cover"
+                />
+                <View style={galleryStyles.thumbExpand}>
+                  <Feather name="maximize-2" size={11} color="#fff" />
+                </View>
+                <Pressable
+                  style={galleryStyles.thumbDelete}
+                  hitSlop={4}
+                  onPress={e => {
+                    e.stopPropagation?.();
+                    Alert.alert(
+                      "Delete photo?",
+                      "Remove this general photo from the inspection?",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Delete", style: "destructive", onPress: () => onDeleteUnlinkedPhoto(path) },
+                      ]
+                    );
+                  }}
+                >
+                  <Feather name="trash-2" size={11} color="#fff" />
+                </Pressable>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
 
       {itemsWithPhotos.map(item => {
         const photos = item.photoUrls || [];
@@ -1923,6 +2175,7 @@ function PhotosPanel({
         );
       })}
     </ScrollView>
+    </View>
   );
 }
 
@@ -3470,5 +3723,75 @@ const galleryStyles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.6)",
     borderRadius: 4,
     padding: 4,
+  },
+  addPhotoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    marginTop: 4,
+  },
+  addPhotoBtnText: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#fff",
+  },
+  addPhotoBtnSmall: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.primary,
+    borderRadius: 7,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  addPhotoBtnSmallText: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#fff",
+  },
+  actionSheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  actionSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  actionSheetTitle: {
+    fontSize: 16,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  actionSheetNote: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.textSecondary,
+    marginBottom: 12,
+  },
+  actionSheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+  },
+  actionSheetRowText: {
+    fontSize: 15,
+    fontFamily: "PlusJakartaSans_500Medium",
+    color: Colors.text,
   },
 });
