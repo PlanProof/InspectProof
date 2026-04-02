@@ -17,7 +17,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import PdfViewerModal from "@/components/PdfViewerModal";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
@@ -631,7 +630,6 @@ export default function GenerateReportScreen() {
   const [report, setReport] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sending, setSending] = useState(false);
-  const [pdfModal, setPdfModal] = useState<{ url: string; title: string } | null>(null);
   const [clientEmail, setClientEmail] = useState("");
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [includeMarkup, setIncludeMarkup] = useState(false);
@@ -796,9 +794,14 @@ export default function GenerateReportScreen() {
   const viewPDF = () => {
     if (!report || !token) return;
     const markupParam = includeMarkup && markupCount > 0 ? "&includeMarkup=true" : "";
-    const pdfUrl = `${baseUrl}/api/reports/${report.id}/pdf?_token=${encodeURIComponent(token)}${markupParam}`;
-    const label = templateName || report.reportType || "Report";
-    setPdfModal({ url: pdfUrl, title: label });
+    router.push({
+      pathname: "/inspection/document-viewer" as any,
+      params: {
+        url: `${baseUrl}/api/reports/${report.id}/pdf?_token=${encodeURIComponent(token)}${markupParam}`,
+        name: templateName || report.reportType || "Report",
+        mimeType: "application/pdf",
+      },
+    });
   };
 
   const selectedTypeMeta = reportTypes.find(rt => rt.key === selectedReportType);
@@ -1151,14 +1154,6 @@ export default function GenerateReportScreen() {
         </View>
       </Modal>
 
-      {pdfModal && (
-        <PdfViewerModal
-          visible
-          url={pdfModal.url}
-          title={pdfModal.title}
-          onClose={() => setPdfModal(null)}
-        />
-      )}
     </View>
   );
 }
