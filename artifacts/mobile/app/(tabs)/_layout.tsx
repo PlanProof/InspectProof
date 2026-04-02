@@ -178,7 +178,7 @@ function ClassicTabLayout() {
       <Tabs.Screen name="inspection/create"             options={{ href: null }} />
       <Tabs.Screen name="inspection/conduct/[id]"       options={{ href: null }} />
       <Tabs.Screen name="inspection/generate-report"    options={{ href: null }} />
-      <Tabs.Screen name="inspection/photo-markup"       options={{ href: null }} />
+      <Tabs.Screen name="inspection/photo-markup"       options={{ href: null, tabBarStyle: { display: "none" } }} />
       <Tabs.Screen name="inspection/document-viewer"    options={{ href: null }} />
       <Tabs.Screen name="feedback"                      options={{ href: null }} />
       <Tabs.Screen name="profile"                       options={{ href: null }} />

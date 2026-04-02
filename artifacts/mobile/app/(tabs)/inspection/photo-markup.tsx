@@ -47,10 +47,11 @@ function pointsToPath(points: { x: number; y: number }[]): string {
 }
 
 export default function PhotoMarkupScreen() {
-  const { photoUri: initialPhotoUri, inspectionId, itemId } = useLocalSearchParams<{
+  const { photoUri: initialPhotoUri, inspectionId, itemId, objectPath: existingObjectPath } = useLocalSearchParams<{
     photoUri: string;
     inspectionId: string;
     itemId: string;
+    objectPath?: string;  // set when editing markup on an already-saved photo
   }>();
 
   const insets = useSafeAreaInsets();
@@ -58,10 +59,13 @@ export default function PhotoMarkupScreen() {
   const queryClient = useQueryClient();
   const { width: screenW, height: screenH } = useWindowDimensions();
 
+  // When editing an existing photo, start in "saved" state with the known path
+  const isExistingPhoto = !!existingObjectPath;
+
   const [phase, setPhase] = useState<Phase>("preview");
   const [currentPhotoUri, setCurrentPhotoUri] = useState(initialPhotoUri);
-  const [uploadState, setUploadState] = useState<UploadState>("uploading");
-  const [savedObjectPath, setSavedObjectPath] = useState<string | null>(null);
+  const [uploadState, setUploadState] = useState<UploadState>(isExistingPhoto ? "saved" : "uploading");
+  const [savedObjectPath, setSavedObjectPath] = useState<string | null>(isExistingPhoto ? existingObjectPath : null);
 
   // Markup state
   const [strokes, setStrokes] = useState<Stroke[]>([]);
@@ -77,7 +81,8 @@ export default function PhotoMarkupScreen() {
   useEffect(() => { selectedWidthRef.current = selectedWidth; }, [selectedWidth]);
 
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
-  const drawAreaH = screenH - insets.top - insets.bottom - 56 - 120;
+  // Toolbar sits below canvas; reserve header (56) + toolbar (~130) + safe area
+  const drawAreaH = screenH - insets.top - insets.bottom - 56 - 134;
   const drawAreaW = screenW;
 
   const fetchWithAuth = useCallback(async (url: string, opts?: RequestInit) => {
@@ -146,6 +151,8 @@ export default function PhotoMarkupScreen() {
   }, [fetchWithAuth, inspectionId, itemId, queryClient]);
 
   useEffect(() => {
+    // Skip upload entirely when we're editing markup on an already-saved photo
+    if (isExistingPhoto) return;
     if (!currentPhotoUri) return;
     let cancelled = false;
     setUploadState("uploading");
@@ -407,7 +414,7 @@ export default function PhotoMarkupScreen() {
         )}
       </View>
 
-      <View style={[styles.previewActions, { paddingBottom: insets.bottom + 12 }]}>
+      <View style={[styles.previewActions, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}>
         {/* Primary action — take another photo immediately */}
         <Pressable
           style={[styles.btnPrimary, !isSaved && { opacity: 0.45 }]}

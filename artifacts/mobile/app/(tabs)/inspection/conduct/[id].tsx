@@ -1396,23 +1396,44 @@ function ItemModal({
           </View>
         </View>
 
-        <View style={[{ flexDirection: "row", paddingHorizontal: 24, paddingBottom: insets.bottom + 16, paddingTop: 12, gap: 12, backgroundColor: "#111" }]}>
+        <View style={{ backgroundColor: "#111", paddingHorizontal: 24, paddingBottom: Math.max(insets.bottom, 16) + 8, paddingTop: 12, gap: 10 }}>
+          {/* Markup button — full width */}
           <Pressable
-            onPress={goPrev}
-            disabled={lightboxIndex === 0}
-            style={[lightboxStyles.navBtn, lightboxIndex === 0 && { opacity: 0.3 }]}
+            onPress={() => router.push({
+              pathname: "/inspection/photo-markup" as any,
+              params: {
+                photoUri: `${baseUrl}/api/storage${photoPath}`,
+                objectPath: photoPath,
+                inspectionId: inspectionId ?? "",
+                itemId: String(item.id),
+              },
+            })}
+            style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#466DB5", paddingVertical: 12, borderRadius: 10 }}
           >
-            <Feather name="chevron-left" size={22} color="#fff" />
-            <Text style={lightboxStyles.navBtnText}>Previous</Text>
+            <Feather name="edit-2" size={16} color="#fff" />
+            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>
+              {markup && markup.strokes.length > 0 ? "Edit Markup" : "Add Markup"}
+            </Text>
           </Pressable>
-          <Pressable
-            onPress={goNext}
-            disabled={lightboxIndex === photoUrls.length - 1}
-            style={[lightboxStyles.navBtn, lightboxIndex === photoUrls.length - 1 && { opacity: 0.3 }]}
-          >
-            <Text style={lightboxStyles.navBtnText}>Next</Text>
-            <Feather name="chevron-right" size={22} color="#fff" />
-          </Pressable>
+          {/* Previous / Next nav */}
+          <View style={{ flexDirection: "row", gap: 12 }}>
+            <Pressable
+              onPress={goPrev}
+              disabled={lightboxIndex === 0}
+              style={[lightboxStyles.navBtn, lightboxIndex === 0 && { opacity: 0.3 }]}
+            >
+              <Feather name="chevron-left" size={22} color="#fff" />
+              <Text style={lightboxStyles.navBtnText}>Previous</Text>
+            </Pressable>
+            <Pressable
+              onPress={goNext}
+              disabled={lightboxIndex === photoUrls.length - 1}
+              style={[lightboxStyles.navBtn, lightboxIndex === photoUrls.length - 1 && { opacity: 0.3 }]}
+            >
+              <Text style={lightboxStyles.navBtnText}>Next</Text>
+              <Feather name="chevron-right" size={22} color="#fff" />
+            </Pressable>
+          </View>
         </View>
       </View>
     );
