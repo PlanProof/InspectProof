@@ -149,6 +149,12 @@ export default function ConductInspectionScreen() {
     select: (docs: ProjectDocument[]) => docs.filter(d => d.includedInInspection),
   });
 
+  const { data: internalStaff = [] } = useQuery<{ id: number; name: string; role: string }[]>({
+    queryKey: ["internal-staff", token],
+    queryFn: () => fetchWithAuth("/api/internal-staff"),
+    enabled: !!token,
+  });
+
   useFocusEffect(
     useCallback(() => {
       refetchChecklist();
@@ -773,6 +779,7 @@ export default function ConductInspectionScreen() {
             recommendedAction={editRecommendedAction}
             baseUrl={baseUrl}
             documents={projectDocuments}
+            internalStaff={internalStaff}
             onResultChange={setEditResult}
             onNotesChange={setEditNotes}
             onSeverityChange={setEditSeverity}
@@ -1288,7 +1295,7 @@ function PhotosPanel({
 
 function ItemModal({
   item, result, notes, severity, location, tradeAllocated, recommendedAction,
-  baseUrl, documents, onResultChange, onNotesChange, onSeverityChange, onLocationChange,
+  baseUrl, documents, internalStaff, onResultChange, onNotesChange, onSeverityChange, onLocationChange,
   onTradeAllocatedChange, onRecommendedActionChange, onSave, onClose,
   onUploadPhoto, onTakePhoto, onRemovePhoto, onAnnotateDoc, saving, uploadingPhoto, insets,
   inspectionId,
@@ -1296,6 +1303,7 @@ function ItemModal({
   item: ChecklistItem; result: ResultKey; notes: string; baseUrl: string;
   severity: string | null; location: string; tradeAllocated: string; recommendedAction: string;
   documents: ProjectDocument[];
+  internalStaff: { id: number; name: string; role: string }[];
   onResultChange: (r: ResultKey) => void; onNotesChange: (n: string) => void;
   onSeverityChange: (s: string | null) => void; onLocationChange: (l: string) => void;
   onTradeAllocatedChange: (t: string) => void; onRecommendedActionChange: (r: string) => void;
@@ -1520,6 +1528,28 @@ function ItemModal({
               placeholder="e.g. Plumber, Electrician, Builder"
               placeholderTextColor={Colors.textTertiary}
             />
+            {internalStaff.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingTop: 8 }} keyboardShouldPersistTaps="handled">
+                {internalStaff.map(s => (
+                  <Pressable
+                    key={s.id}
+                    style={({ pressed }) => [{
+                      backgroundColor: pressed ? "#fef3c7" : "#fffbeb",
+                      borderWidth: 1,
+                      borderColor: "#fbbf24",
+                      borderRadius: 6,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                    }]}
+                    onPress={() => onTradeAllocatedChange(`Internal – ${s.name}`)}
+                  >
+                    <Text style={{ fontSize: 12, color: "#92400e", fontWeight: "500" }}>
+                      {s.name}{s.role ? ` (${s.role})` : ""}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
 
             {/* Recommended Action */}
             <Text style={[modalStyles.sectionLabel, { marginTop: 12 }]}>Recommended Action</Text>

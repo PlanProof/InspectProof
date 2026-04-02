@@ -410,6 +410,7 @@ export default function InspectionDetail() {
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>([]);
   const [project, setProject] = useState<any>(null);
   const [docTemplates, setDocTemplates] = useState<DocTemplate[]>([]);
+  const [internalStaff, setInternalStaff] = useState<{ id: number; name: string; role: string }[]>([]);
 
   const openReportDialog = useCallback((inspection: Inspection) => {
     const suggested = getSuggestedReportType(inspection);
@@ -426,7 +427,7 @@ export default function InspectionDetail() {
       setInspection(data);
 
       // Parallel loads
-      const [docsWithLinks, reports, users, tmpls, projDocs, proj, docTmpls] = await Promise.all([
+      const [docsWithLinks, reports, users, tmpls, projDocs, proj, docTmpls, staffList] = await Promise.all([
         data.projectId ? apiFetch(`/api/projects/${data.projectId}/documents-with-links`).catch(() => []) : Promise.resolve([]),
         apiFetch(`/api/reports?inspectionId=${inspId}`).catch(() => []),
         apiFetch("/api/users").catch(() => []),
@@ -434,6 +435,7 @@ export default function InspectionDetail() {
         data.projectId ? apiFetch(`/api/projects/${data.projectId}/documents`).catch(() => []) : Promise.resolve([]),
         data.projectId ? apiFetch(`/api/projects/${data.projectId}`).catch(() => null) : Promise.resolve(null),
         apiFetch("/api/doc-templates").catch(() => []),
+        apiFetch("/api/internal-staff").catch(() => []),
       ]);
 
       // Build docsByItem map
@@ -451,6 +453,7 @@ export default function InspectionDetail() {
       setProjectDocuments(projDocs);
       setProject(proj);
       setDocTemplates(Array.isArray(docTmpls) ? docTmpls : []);
+      setInternalStaff(Array.isArray(staffList) ? staffList : []);
     } catch {
       setError("Failed to load inspection");
     } finally {
@@ -805,7 +808,7 @@ export default function InspectionDetail() {
           onReload={load}
         />
       )}
-      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults ?? []} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} inspection={inspection} />}
+      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults ?? []} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} inspection={inspection} internalStaff={internalStaff} />}
       {tab === "Issues" && <IssuesTab issues={inspection.issues} inspectionId={inspection.id} projectId={inspection.projectId} onReload={load} />}
       {tab === "Documents" && (
         <DocumentsTab
@@ -2247,12 +2250,14 @@ function ChecklistTab({
   inspectionId,
   onReload,
   inspection,
+  internalStaff,
 }: {
   results: ChecklistResult[];
   docsByItem: Record<number, { id: number; name: string; mimeType?: string }[]>;
   inspectionId: number;
   onReload: () => void;
   inspection: Inspection;
+  internalStaff: { id: number; name: string; role: string }[];
 }) {
   const [localResults, setLocalResults] = useState<ChecklistResult[]>(initialResults);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -2760,11 +2765,35 @@ ${checklistRows}
                         <label className="text-xs text-muted-foreground font-medium block mb-1">Trade Allocated</label>
                         <input
                           type="text"
+                          list={`staff-list-${item.id}`}
                           value={draft.tradeAllocated}
                           onChange={e => updateDraft(item.id, { tradeAllocated: e.target.value })}
                           placeholder="e.g. Plumber, Electrician, Builder"
                           className="w-full text-sm border border-amber-200 rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
                         />
+                        {internalStaff.length > 0 && (
+                          <datalist id={`staff-list-${item.id}`}>
+                            {internalStaff.map(s => (
+                              <option key={s.id} value={`Internal – ${s.name}`}>
+                                {s.role ? `${s.name} (${s.role})` : s.name}
+                              </option>
+                            ))}
+                          </datalist>
+                        )}
+                        {internalStaff.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {internalStaff.map(s => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => updateDraft(item.id, { tradeAllocated: `Internal – ${s.name}` })}
+                                className="text-xs px-2 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
+                              >
+                                {s.name}{s.role ? ` (${s.role})` : ""}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       {/* Recommended action */}

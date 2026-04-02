@@ -5,7 +5,7 @@ import {
   User, Lock, Bell, Building2, Palette, Loader2,
   CheckCircle2, ChevronRight, Shield, Database, Download,
   ToggleLeft, Upload, Trash2, PenLine, CreditCard, Zap, BarChart3,
-  ArrowRight, Eye, EyeOff,
+  ArrowRight, Eye, EyeOff, Plus, X, Edit2, Check,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -793,6 +793,196 @@ const ORG_DEFAULTS = {
   accredNum:  "",
 };
 
+interface StaffMember {
+  id: number;
+  name: string;
+  role: string;
+}
+
+function InternalStaffSection() {
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newRole, setNewRole] = useState("");
+  const [savingNew, setSavingNew] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editRole, setEditRole] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch("/api/internal-staff")
+      .then(setStaff)
+      .catch(() => setStaff([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const addStaff = async () => {
+    if (!newName.trim()) { setError("Name is required."); return; }
+    setError("");
+    setSavingNew(true);
+    try {
+      const created = await apiFetch("/api/internal-staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim(), role: newRole.trim() }),
+      });
+      setStaff(s => [...s, created]);
+      setNewName("");
+      setNewRole("");
+      setAdding(false);
+    } catch {
+      setError("Failed to add staff member. Please try again.");
+    } finally {
+      setSavingNew(false);
+    }
+  };
+
+  const startEdit = (member: StaffMember) => {
+    setEditingId(member.id);
+    setEditName(member.name);
+    setEditRole(member.role);
+    setError("");
+  };
+
+  const saveEdit = async () => {
+    if (!editName.trim()) { setError("Name is required."); return; }
+    setError("");
+    setSavingEdit(true);
+    try {
+      const updated = await apiFetch(`/api/internal-staff/${editingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editName.trim(), role: editRole.trim() }),
+      });
+      setStaff(s => s.map(m => m.id === editingId ? updated : m));
+      setEditingId(null);
+    } catch {
+      setError("Failed to update staff member. Please try again.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const removeStaff = async (id: number) => {
+    try {
+      await apiFetch(`/api/internal-staff/${id}`, { method: "DELETE" });
+      setStaff(s => s.filter(m => m.id !== id));
+    } catch {
+      setError("Failed to remove staff member.");
+    }
+  };
+
+  if (loading) return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading staff…
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      {staff.length === 0 && !adding && (
+        <p className="text-sm text-muted-foreground py-1">No internal staff added yet. Add your first team member below.</p>
+      )}
+
+      {staff.map(member => (
+        <div key={member.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/10">
+          {editingId === member.id ? (
+            <>
+              <div className="flex-1 grid grid-cols-2 gap-2">
+                <Input
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  placeholder="Full name"
+                  autoFocus
+                />
+                <Input
+                  value={editRole}
+                  onChange={e => setEditRole(e.target.value)}
+                  placeholder="Trade / Role"
+                />
+              </div>
+              <button
+                onClick={saveEdit}
+                disabled={savingEdit}
+                className="shrink-0 p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
+                title="Save"
+              >
+                {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              </button>
+              <button
+                onClick={() => setEditingId(null)}
+                className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors"
+                title="Cancel"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-sidebar">{member.name}</p>
+                {member.role && <p className="text-xs text-muted-foreground mt-0.5">{member.role}</p>}
+              </div>
+              <button
+                onClick={() => startEdit(member)}
+                className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors"
+                title="Edit"
+              >
+                <Edit2 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => removeStaff(member.id)}
+                className="shrink-0 p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+                title="Remove"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </>
+          )}
+        </div>
+      ))}
+
+      {adding ? (
+        <div className="p-3 rounded-lg border border-secondary/40 bg-secondary/5 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              value={newName}
+              onChange={e => { setNewName(e.target.value); setError(""); }}
+              placeholder="Full name *"
+              autoFocus
+            />
+            <Input
+              value={newRole}
+              onChange={e => setNewRole(e.target.value)}
+              placeholder="Trade / Role (e.g. Plumber)"
+            />
+          </div>
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <div className="flex items-center gap-2">
+            <Button onClick={addStaff} disabled={savingNew}>
+              {savingNew ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              {savingNew ? "Saving…" : "Add Staff Member"}
+            </Button>
+            <Button variant="outline" onClick={() => { setAdding(false); setError(""); setNewName(""); setNewRole(""); }}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button variant="outline" onClick={() => { setAdding(true); setError(""); }}>
+          <Plus className="h-4 w-4" />
+          Add Staff Member
+        </Button>
+      )}
+
+      {error && !adding && <p className="text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
 function OrganisationTab() {
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState(() => {
@@ -888,6 +1078,13 @@ function OrganisationTab() {
             <Input value={form.accredNum} onChange={set("accredNum")} placeholder="e.g. BPB0001234" />
           </FormField>
         </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Internal Staff"
+        description="Your organisation's employees who can be assigned as responsible parties on defects. They appear alongside contractors in the trade allocation picker."
+      >
+        <InternalStaffSection />
       </SectionCard>
 
       <div className="flex justify-end">
