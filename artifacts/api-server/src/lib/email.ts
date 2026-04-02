@@ -38,7 +38,14 @@ function emailHeader(tag: string): string {
         <tr><td style="background:#0B1933;padding:24px 32px;">
           <table width="100%" cellpadding="0" cellspacing="0"><tr>
             <td style="vertical-align:middle;">
-              <img src="${LOGO_URL}" alt="InspectProof" height="38" style="display:block;height:38px;border:0;outline:none;" />
+              <table cellpadding="0" cellspacing="0"><tr>
+                <td style="vertical-align:middle;padding-right:10px;">
+                  <img src="${LOGO_URL}" alt="" width="36" height="36" style="display:block;width:36px;height:36px;border:0;outline:none;" />
+                </td>
+                <td style="vertical-align:middle;">
+                  <span style="font-size:19px;font-weight:700;color:#ffffff;font-family:${BASE_FONT};letter-spacing:-0.2px;line-height:1;">InspectProof</span>
+                </td>
+              </tr></table>
             </td>
             <td align="right" style="vertical-align:middle;">
               <span style="font-size:11px;color:#C5D92D;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;font-family:${BASE_FONT};">${tag}</span>
