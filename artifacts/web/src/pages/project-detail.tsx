@@ -123,7 +123,7 @@ function inspectionStatusBadge(status: string) {
   );
 }
 
-const TABS = ["Overview", "Contractors", "Documents", "Inspections", "Inspection Types", "Reports"] as const;
+const TABS = ["Overview", "Documents", "Inspections", "Inspection Types", "Reports", "Contractors"] as const;
 type Tab = typeof TABS[number];
 
 // ── Main Component ────────────────────────────────────────────────────────────
