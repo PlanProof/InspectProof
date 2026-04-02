@@ -48,6 +48,9 @@ async function runSchemaMigrations() {
     await pool.query(`ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS recommended_action text`);
     await pool.query(`ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS include_in_report boolean NOT NULL DEFAULT true`);
 
+    // internal_staff table additions
+    await pool.query(`ALTER TABLE internal_staff ADD COLUMN IF NOT EXISTS email text`);
+
     // checklist_results table additions
     await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS photo_markups text`);
     await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS severity text`);

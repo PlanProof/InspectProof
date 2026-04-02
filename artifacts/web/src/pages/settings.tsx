@@ -5,7 +5,7 @@ import {
   User, Lock, Bell, Building2, Palette, Loader2,
   CheckCircle2, ChevronRight, Shield, Database, Download,
   ToggleLeft, Upload, Trash2, PenLine, CreditCard, Zap, BarChart3,
-  ArrowRight, Eye, EyeOff, Plus, X, Edit2, Check,
+  ArrowRight, Eye, EyeOff, Plus, X, Edit2, Check, Mail,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -797,6 +797,7 @@ interface StaffMember {
   id: number;
   name: string;
   role: string;
+  email: string | null;
 }
 
 function InternalStaffSection() {
@@ -805,12 +806,16 @@ function InternalStaffSection() {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newRole, setNewRole] = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const [savingNew, setSavingNew] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [error, setError] = useState("");
+  const [inviteSentIds, setInviteSentIds] = useState<Set<number>>(new Set());
+  const [invitingId, setInvitingId] = useState<number | null>(null);
 
   useEffect(() => {
     apiFetch("/api/internal-staff")
@@ -827,11 +832,12 @@ function InternalStaffSection() {
       const created = await apiFetch("/api/internal-staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), role: newRole.trim() }),
+        body: JSON.stringify({ name: newName.trim(), role: newRole.trim(), email: newEmail.trim() || null }),
       });
       setStaff(s => [...s, created]);
       setNewName("");
       setNewRole("");
+      setNewEmail("");
       setAdding(false);
     } catch {
       setError("Failed to add staff member. Please try again.");
@@ -844,6 +850,7 @@ function InternalStaffSection() {
     setEditingId(member.id);
     setEditName(member.name);
     setEditRole(member.role);
+    setEditEmail(member.email ?? "");
     setError("");
   };
 
@@ -855,7 +862,7 @@ function InternalStaffSection() {
       const updated = await apiFetch(`/api/internal-staff/${editingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editName.trim(), role: editRole.trim() }),
+        body: JSON.stringify({ name: editName.trim(), role: editRole.trim(), email: editEmail.trim() || null }),
       });
       setStaff(s => s.map(m => m.id === editingId ? updated : m));
       setEditingId(null);
@@ -875,6 +882,23 @@ function InternalStaffSection() {
     }
   };
 
+  const sendInvite = async (member: StaffMember) => {
+    if (!member.email) return;
+    setInvitingId(member.id);
+    try {
+      await apiFetch("/api/app-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: member.email, name: member.name }),
+      });
+      setInviteSentIds(s => new Set([...s, member.id]));
+    } catch {
+      setError(`Failed to send invite to ${member.email}. Please try again.`);
+    } finally {
+      setInvitingId(null);
+    }
+  };
+
   if (loading) return (
     <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
       <Loader2 className="h-4 w-4 animate-spin" /> Loading staff…
@@ -888,10 +912,10 @@ function InternalStaffSection() {
       )}
 
       {staff.map(member => (
-        <div key={member.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/10">
+        <div key={member.id} className="flex items-start gap-3 p-3 rounded-lg border border-border bg-muted/10">
           {editingId === member.id ? (
             <>
-              <div className="flex-1 grid grid-cols-2 gap-2">
+              <div className="flex-1 grid grid-cols-3 gap-2">
                 <Input
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
@@ -902,6 +926,12 @@ function InternalStaffSection() {
                   value={editRole}
                   onChange={e => setEditRole(e.target.value)}
                   placeholder="Trade / Role"
+                />
+                <Input
+                  value={editEmail}
+                  onChange={e => setEditEmail(e.target.value)}
+                  placeholder="Email address"
+                  type="email"
                 />
               </div>
               <button
@@ -925,7 +955,34 @@ function InternalStaffSection() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-sidebar">{member.name}</p>
                 {member.role && <p className="text-xs text-muted-foreground mt-0.5">{member.role}</p>}
+                {member.email && (
+                  <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                    <Mail className="h-3 w-3 shrink-0" />
+                    {member.email}
+                  </p>
+                )}
               </div>
+              {member.email && (
+                inviteSentIds.has(member.id) ? (
+                  <span className="shrink-0 flex items-center gap-1 text-xs text-green-600 font-medium px-2 py-1 rounded-lg bg-green-50 border border-green-200">
+                    <Check className="h-3 w-3" /> Invite Sent
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => sendInvite(member)}
+                    disabled={invitingId === member.id}
+                    className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-secondary/40 text-secondary hover:bg-secondary/10 transition-colors disabled:opacity-50"
+                    title={`Send invite to ${member.email}`}
+                  >
+                    {invitingId === member.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Mail className="h-3 w-3" />
+                    )}
+                    Send Invite
+                  </button>
+                )
+              )}
               <button
                 onClick={() => startEdit(member)}
                 className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors"
@@ -947,7 +1004,7 @@ function InternalStaffSection() {
 
       {adding ? (
         <div className="p-3 rounded-lg border border-secondary/40 bg-secondary/5 space-y-2">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Input
               value={newName}
               onChange={e => { setNewName(e.target.value); setError(""); }}
@@ -959,6 +1016,12 @@ function InternalStaffSection() {
               onChange={e => setNewRole(e.target.value)}
               placeholder="Trade / Role (e.g. Plumber)"
             />
+            <Input
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              placeholder="Email address (optional)"
+              type="email"
+            />
           </div>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex items-center gap-2">
@@ -966,7 +1029,7 @@ function InternalStaffSection() {
               {savingNew ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
               {savingNew ? "Saving…" : "Add Staff Member"}
             </Button>
-            <Button variant="outline" onClick={() => { setAdding(false); setError(""); setNewName(""); setNewRole(""); }}>
+            <Button variant="outline" onClick={() => { setAdding(false); setError(""); setNewName(""); setNewRole(""); setNewEmail(""); }}>
               Cancel
             </Button>
           </div>

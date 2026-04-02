@@ -30,7 +30,7 @@ router.post("/", requireAuth, async (req, res) => {
     res.status(400).json({ error: "bad_request", message: "No company associated with your account" });
     return;
   }
-  const { name, role } = req.body as { name?: string; role?: string };
+  const { name, role, email } = req.body as { name?: string; role?: string; email?: string };
   if (!name?.trim()) {
     res.status(400).json({ error: "bad_request", message: "name is required" });
     return;
@@ -38,7 +38,7 @@ router.post("/", requireAuth, async (req, res) => {
   try {
     const [created] = await db
       .insert(internalStaffTable)
-      .values({ companyName, name: name.trim(), role: (role ?? "").trim() })
+      .values({ companyName, name: name.trim(), role: (role ?? "").trim(), email: email?.trim() || null })
       .returning();
     res.status(201).json(created);
   } catch (err) {
@@ -58,14 +58,15 @@ router.patch("/:id", requireAuth, async (req, res) => {
     res.status(400).json({ error: "bad_request", message: "No company associated with your account" });
     return;
   }
-  const { name, role } = req.body as { name?: string; role?: string };
+  const { name, role, email } = req.body as { name?: string; role?: string; email?: string };
   if (name !== undefined && !name.trim()) {
     res.status(400).json({ error: "bad_request", message: "name cannot be empty" });
     return;
   }
-  const updates: Partial<{ name: string; role: string; updatedAt: Date }> = { updatedAt: new Date() };
+  const updates: Partial<{ name: string; role: string; email: string | null; updatedAt: Date }> = { updatedAt: new Date() };
   if (name !== undefined) updates.name = name.trim();
   if (role !== undefined) updates.role = role.trim();
+  if (email !== undefined) updates.email = email.trim() || null;
   try {
     const [updated] = await db
       .update(internalStaffTable)

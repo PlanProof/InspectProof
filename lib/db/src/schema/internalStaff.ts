@@ -7,6 +7,7 @@ export const internalStaffTable = pgTable("internal_staff", {
   companyName: text("company_name").notNull(),
   name: text("name").notNull(),
   role: text("role").notNull().default(""),
+  email: text("email"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
