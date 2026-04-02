@@ -693,6 +693,27 @@ router.patch("/:id/checklist/:resultId", async (req, res) => {
       return;
     }
 
+    // Auto-complete: if all results for this inspection are no longer pending, update status
+    if (result !== undefined) {
+      const allResults = await db.select().from(checklistResultsTable)
+        .where(eq(checklistResultsTable.inspectionId, updated.inspectionId));
+
+      const allDone = allResults.length > 0 && allResults.every(r => r.result !== "pending");
+      if (allDone) {
+        const [insp] = await db.select().from(inspectionsTable)
+          .where(eq(inspectionsTable.id, updated.inspectionId));
+        if (insp && insp.status === "in_progress") {
+          const hasFails = allResults.some(r => r.result === "fail");
+          const hasMonitor = allResults.some(r => r.result === "monitor");
+          const autoStatus = hasFails || hasMonitor ? "follow_up_required" : "completed";
+          await db.update(inspectionsTable)
+            .set({ status: autoStatus, completedDate: new Date() })
+            .where(eq(inspectionsTable.id, updated.inspectionId));
+          req.log.info({ inspectionId: updated.inspectionId, autoStatus }, "Inspection auto-completed");
+        }
+      }
+    }
+
     const item = await db.select().from(checklistItemsTable)
       .where(eq(checklistItemsTable.id, updated.checklistItemId));
 

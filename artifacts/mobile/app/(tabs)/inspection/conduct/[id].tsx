@@ -729,30 +729,10 @@ export default function ConductInspectionScreen() {
           {/* Bottom action bar — shown when 100% complete */}
           {progress === 1 && total > 0 && (
             <View style={[styles.generateBar, { paddingBottom: 12, bottom: tabBarHeight }]}>
-              {/* Row 1: Mark Complete toggle */}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.markCompleteRow,
-                  isCompleted && styles.markCompleteRowActive,
-                  pressed && { opacity: 0.75 },
-                ]}
-                onPress={toggleMarkComplete}
-              >
-                <Feather
-                  name={isCompleted ? "check-circle" : "circle"}
-                  size={17}
-                  color={Colors.primary}
-                />
-                <Text style={[styles.markCompleteLabel, isCompleted && styles.markCompleteLabelActive]}>
-                  {isCompleted ? "Inspection Marked Complete" : "Mark Complete"}
-                </Text>
-              </Pressable>
-
-              {/* Row 2: Generate Report */}
+              {/* Generate Report */}
               <Pressable
                 style={({ pressed }) => [styles.generateBtn, pressed && { opacity: 0.85 }]}
-                onPress={async () => {
-                  if (!isCompleted) await toggleMarkComplete();
+                onPress={() => {
                   const autoType = failCount > 0 ? "defect_notice" : "inspection_certificate";
                   router.push(`/inspection/generate-report?id=${id}&autoType=${autoType}` as any);
                 }}
