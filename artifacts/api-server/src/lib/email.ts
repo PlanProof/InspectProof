@@ -15,8 +15,17 @@ const ANDROID_APP_URL = process.env.ANDROID_APP_URL || "https://play.google.com/
 const LOGO_URL = `${APP_BASE_URL}/logo-light.png`;
 
 const BASE_FONT = `'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif`;
+const BRAND_FONT = `'OddliniUX', 'Plus Jakarta Sans', 'Inter', Helvetica, Arial, sans-serif`;
 
-const FONT_IMPORT = `<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap" rel="stylesheet" />`;
+const FONT_IMPORT = `<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap" rel="stylesheet" />
+<style>
+  @font-face {
+    font-family: 'OddliniUX';
+    src: url('${APP_BASE_URL}/fonts/oddlini-medium-ultra-expanded.otf') format('opentype');
+    font-weight: 500;
+    font-style: normal;
+  }
+</style>`;
 
 function isConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
@@ -43,7 +52,7 @@ function emailHeader(tag: string): string {
                   <img src="${LOGO_URL}" alt="" width="36" height="36" style="display:block;width:36px;height:36px;border:0;outline:none;" />
                 </td>
                 <td style="vertical-align:middle;">
-                  <span style="font-size:19px;font-weight:700;color:#ffffff;font-family:${BASE_FONT};letter-spacing:-0.2px;line-height:1;">InspectProof</span>
+                  <span style="font-size:20px;font-weight:500;color:#ffffff;font-family:${BRAND_FONT};letter-spacing:0.02em;line-height:1;">InspectProof</span>
                 </td>
               </tr></table>
             </td>
