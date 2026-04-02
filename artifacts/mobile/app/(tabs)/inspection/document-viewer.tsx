@@ -257,11 +257,13 @@ export default function DocumentViewerScreen() {
 
   const containerRef = useRef<View>(null);
   const drawLayerRef = useRef<View>(null);
+  const webviewRef = useRef<WebView>(null);
   const currentPoints = useRef<{ x: number; y: number }[]>([]);
   const selectedColorRef = useRef(selectedColor);
   const selectedWidthRef = useRef(selectedWidth);
   const activeToolRef = useRef<Tool>("pen");
   const currentPageRef = useRef(1);
+  const pageNavScrollPending = useRef(false);
 
   useEffect(() => { selectedColorRef.current = selectedColor; }, [selectedColor]);
   useEffect(() => { selectedWidthRef.current = selectedWidth; }, [selectedWidth]);
@@ -382,6 +384,82 @@ export default function DocumentViewerScreen() {
   const isImage =
     mimeType?.startsWith("image/") ||
     /\.(jpe?g|png|gif|webp|bmp)$/i.test(name ?? "");
+
+  // ── WebView scroll ↔ currentPage sync (native PDF only) ───────────────────────
+  // When markup mode is entered we inject JS to read the WebView's scroll position
+  // and derive which page the user is looking at, then update currentPage to match.
+  // When the user taps ◀/▶ during markup we scroll the WebView to that page.
+
+  const injectDetectPage = useCallback(() => {
+    if (Platform.OS === "web" || !isPdf) return;
+    webviewRef.current?.injectJavaScript(`
+      (function() {
+        try {
+          var y = window.pageYOffset
+            || (document.documentElement && document.documentElement.scrollTop)
+            || 0;
+          var vh = window.innerHeight
+            || (document.documentElement && document.documentElement.clientHeight)
+            || 1;
+          var page = Math.max(1, Math.floor(y / vh) + 1);
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({ type: 'pageDetect', page: page })
+          );
+        } catch(e) {
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({ type: 'pageDetect', page: 1 })
+          );
+        }
+      })();
+      true;
+    `);
+  }, [isPdf]);
+
+  const injectScrollToPage = useCallback((page: number) => {
+    if (Platform.OS === "web" || !isPdf) return;
+    webviewRef.current?.injectJavaScript(`
+      (function() {
+        try {
+          var vh = window.innerHeight
+            || (document.documentElement && document.documentElement.clientHeight)
+            || window.screen.height;
+          window.scrollTo({ top: (${page} - 1) * vh, behavior: 'instant' });
+        } catch(e) {}
+      })();
+      true;
+    `);
+  }, [isPdf]);
+
+  // When drawing mode is entered, auto-detect which page the WebView is showing
+  useEffect(() => {
+    if (drawing && isPdf && Platform.OS !== "web") {
+      pageNavScrollPending.current = false;
+      const t = setTimeout(() => injectDetectPage(), 200);
+      return () => clearTimeout(t);
+    }
+  }, [drawing]);
+
+  // When currentPage changes via ◀/▶ while in markup mode, scroll WebView to match
+  useEffect(() => {
+    if (!drawing || !isPdf || Platform.OS === "web") return;
+    if (!pageNavScrollPending.current) {
+      // First fire after entering markup — this is the auto-detected page coming back;
+      // mark the system as ready for real nav scrolls from now on
+      pageNavScrollPending.current = true;
+      return;
+    }
+    injectScrollToPage(currentPage);
+  }, [currentPage]);
+
+  const onWebViewMessage = useCallback((event: { nativeEvent: { data: string } }) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === "pageDetect" && typeof data.page === "number") {
+        setCurrentPage(data.page);
+        currentPageRef.current = data.page;
+      }
+    } catch {}
+  }, []);
 
   // ── Drawing gesture (pen mode) — GestureHandler for new-arch compatibility ──
 
@@ -1224,6 +1302,7 @@ export default function DocumentViewerScreen() {
             </ScrollView>
           ) : (
             <WebView
+              ref={webviewRef}
               source={{ uri: webviewUri }}
               style={styles.webview}
               onLoadStart={() => setWebLoading(true)}
@@ -1232,6 +1311,7 @@ export default function DocumentViewerScreen() {
                 setWebLoading(false);
                 setWebError(true);
               }}
+              onMessage={onWebViewMessage}
               scrollEnabled={!drawing}
               bounces={!drawing}
               originWhitelist={["*", "file://*"]}
