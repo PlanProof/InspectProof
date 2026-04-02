@@ -3185,14 +3185,19 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
     });
   }, [issues]);
 
-  // Group issues by their currently assigned trade
+  // Group issues by their currently assigned trade(s).
+  // tradeAllocated may be comma-separated (e.g. "Jake Turner, Brock Gregg")
+  // so each named person gets their own row in the Send panel.
   const issuesByTrade = useMemo(() => {
     const map: Record<string, Issue[]> = {};
     for (const issue of issues) {
-      const t = (localTrades[issue.id] ?? "").trim();
-      if (!t) continue;
-      if (!map[t]) map[t] = [];
-      map[t].push(issue);
+      const raw = (localTrades[issue.id] ?? "").trim();
+      if (!raw) continue;
+      const names = raw.split(",").map(n => n.trim()).filter(Boolean);
+      for (const name of names) {
+        if (!map[name]) map[name] = [];
+        map[name].push(issue);
+      }
     }
     return map;
   }, [issues, localTrades]);

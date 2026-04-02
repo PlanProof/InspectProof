@@ -1325,6 +1325,13 @@ function ItemModal({
   const suggestions = getSuggestionsForItem(item.category, item.description);
   const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [tradePickerOpen, setTradePickerOpen] = useState(false);
+  const [pendingTrades, setPendingTrades] = useState<string[]>(() =>
+    tradeAllocated ? tradeAllocated.split(",").map(s => s.trim()).filter(Boolean) : []
+  );
+  useEffect(() => {
+    setPendingTrades(tradeAllocated ? tradeAllocated.split(",").map(s => s.trim()).filter(Boolean) : []);
+  }, [tradeAllocated]);
   const { width: screenW, height: screenH } = useWindowDimensions();
   const photoUrls: string[] = item.photoUrls ?? [];
 
@@ -1529,66 +1536,127 @@ function ItemModal({
 
             {/* Trade Allocated */}
             <Text style={[modalStyles.sectionLabel, { marginTop: 12 }]}>Trade Allocated</Text>
-            <TextInput
-              style={modalStyles.defectInput}
-              value={tradeAllocated}
-              onChangeText={onTradeAllocatedChange}
-              placeholder="Select below or type a trade"
-              placeholderTextColor={Colors.textTertiary}
-            />
-            {contractors.length > 0 && (
+            {(contractors.length > 0 || internalStaff.length > 0) ? (
               <>
-                <Text style={{ fontSize: 11, color: Colors.textTertiary, fontWeight: "600", marginTop: 8, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                  Project Contractors
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled">
-                  {contractors.map(c => (
-                    <Pressable
-                      key={c.id}
-                      style={({ pressed }) => [{
-                        backgroundColor: pressed ? "#dbeafe" : tradeAllocated === c.name ? "#1d4ed8" : "#eff6ff",
-                        borderWidth: 1,
-                        borderColor: tradeAllocated === c.name ? "#1d4ed8" : "#93c5fd",
-                        borderRadius: 6,
-                        paddingHorizontal: 10,
-                        paddingVertical: 4,
-                      }]}
-                      onPress={() => onTradeAllocatedChange(tradeAllocated === c.name ? "" : c.name)}
-                    >
-                      <Text style={{ fontSize: 12, color: tradeAllocated === c.name ? "#ffffff" : "#1e40af", fontWeight: "500" }}>
-                        {c.name}{c.trade ? ` · ${c.trade}` : ""}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
+                {/* Dropdown trigger */}
+                <Pressable
+                  onPress={() => { setPendingTrades(tradeAllocated ? tradeAllocated.split(",").map(s => s.trim()).filter(Boolean) : []); setTradePickerOpen(true); }}
+                  style={({ pressed }) => ({
+                    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                    borderWidth: 1, borderColor: Colors.border, borderRadius: 8,
+                    paddingHorizontal: 12, paddingVertical: 10,
+                    backgroundColor: pressed ? Colors.backgroundSecondary : Colors.background,
+                  })}
+                >
+                  <Text style={{ fontSize: 14, color: tradeAllocated ? Colors.text : Colors.textTertiary, flex: 1, marginRight: 8 }} numberOfLines={1}>
+                    {tradeAllocated
+                      ? tradeAllocated.split(",").map(s => s.trim()).filter(Boolean).join(", ")
+                      : "Select trade(s)…"}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: Colors.textSecondary }}>▼</Text>
+                </Pressable>
+                {/* Show selected count badge if multiple */}
+                {tradeAllocated && tradeAllocated.split(",").filter(s => s.trim()).length > 1 && (
+                  <Text style={{ fontSize: 11, color: Colors.textSecondary, marginTop: 4 }}>
+                    {tradeAllocated.split(",").filter(s => s.trim()).length} trades assigned
+                  </Text>
+                )}
+
+                {/* Trade picker modal */}
+                <Modal visible={tradePickerOpen} animationType="slide" transparent presentationStyle="overFullScreen">
+                  <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
+                    <View style={{ backgroundColor: Colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: screenH * 0.72 }}>
+                      {/* Header */}
+                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+                        <Text style={{ fontSize: 16, fontWeight: "700", color: Colors.text }}>Select Trades</Text>
+                        <Pressable onPress={() => setTradePickerOpen(false)} style={{ padding: 4 }}>
+                          <Text style={{ fontSize: 18, color: Colors.textSecondary }}>✕</Text>
+                        </Pressable>
+                      </View>
+
+                      {/* List */}
+                      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 12 }}>
+                        {contractors.length > 0 && (
+                          <>
+                            <Text style={{ fontSize: 11, fontWeight: "700", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.6, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 6 }}>
+                              Project Contractors
+                            </Text>
+                            {contractors.map(c => {
+                              const selected = pendingTrades.includes(c.name);
+                              return (
+                                <Pressable
+                                  key={c.id}
+                                  onPress={() => setPendingTrades(prev => selected ? prev.filter(n => n !== c.name) : [...prev, c.name])}
+                                  style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 13, backgroundColor: pressed ? Colors.backgroundSecondary : "transparent" })}
+                                >
+                                  <View style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 2, borderColor: selected ? "#1d4ed8" : Colors.border, backgroundColor: selected ? "#1d4ed8" : "transparent", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+                                    {selected && <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>✓</Text>}
+                                  </View>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.text }}>{c.name}</Text>
+                                    {c.trade ? <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 1 }}>{c.trade}</Text> : null}
+                                  </View>
+                                </Pressable>
+                              );
+                            })}
+                          </>
+                        )}
+                        {internalStaff.length > 0 && (
+                          <>
+                            <Text style={{ fontSize: 11, fontWeight: "700", color: Colors.textTertiary, textTransform: "uppercase", letterSpacing: 0.6, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 6 }}>
+                              Internal Staff
+                            </Text>
+                            {internalStaff.map(s => {
+                              const selected = pendingTrades.includes(s.name);
+                              return (
+                                <Pressable
+                                  key={s.id}
+                                  onPress={() => setPendingTrades(prev => selected ? prev.filter(n => n !== s.name) : [...prev, s.name])}
+                                  style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 13, backgroundColor: pressed ? Colors.backgroundSecondary : "transparent" })}
+                                >
+                                  <View style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 2, borderColor: selected ? "#d97706" : Colors.border, backgroundColor: selected ? "#d97706" : "transparent", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+                                    {selected && <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>✓</Text>}
+                                  </View>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.text }}>{s.name}</Text>
+                                    {s.role ? <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 1 }}>{s.role}</Text> : null}
+                                  </View>
+                                </Pressable>
+                              );
+                            })}
+                          </>
+                        )}
+                      </ScrollView>
+
+                      {/* Footer actions */}
+                      <View style={{ flexDirection: "row", gap: 10, padding: 16, borderTopWidth: 1, borderTopColor: Colors.border }}>
+                        <Pressable
+                          onPress={() => { onTradeAllocatedChange(""); setTradePickerOpen(false); }}
+                          style={{ flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, alignItems: "center" }}
+                        >
+                          <Text style={{ fontSize: 14, color: Colors.textSecondary, fontWeight: "600" }}>Clear</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => { onTradeAllocatedChange(pendingTrades.join(", ")); setTradePickerOpen(false); }}
+                          style={{ flex: 2, paddingVertical: 12, borderRadius: 8, backgroundColor: Colors.primary, alignItems: "center" }}
+                        >
+                          <Text style={{ fontSize: 14, color: "#fff", fontWeight: "700" }}>
+                            {pendingTrades.length > 0 ? `Confirm (${pendingTrades.length} selected)` : "Confirm"}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                </Modal>
               </>
-            )}
-            {internalStaff.length > 0 && (
-              <>
-                <Text style={{ fontSize: 11, color: Colors.textTertiary, fontWeight: "600", marginTop: 8, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                  Internal Staff
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled">
-                  {internalStaff.map(s => (
-                    <Pressable
-                      key={s.id}
-                      style={({ pressed }) => [{
-                        backgroundColor: pressed ? "#fef3c7" : tradeAllocated === s.name ? "#d97706" : "#fffbeb",
-                        borderWidth: 1,
-                        borderColor: tradeAllocated === s.name ? "#d97706" : "#fbbf24",
-                        borderRadius: 6,
-                        paddingHorizontal: 10,
-                        paddingVertical: 4,
-                      }]}
-                      onPress={() => onTradeAllocatedChange(tradeAllocated === s.name ? "" : s.name)}
-                    >
-                      <Text style={{ fontSize: 12, color: tradeAllocated === s.name ? "#ffffff" : "#92400e", fontWeight: "500" }}>
-                        {s.name}{s.role ? ` · ${s.role}` : ""}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </>
+            ) : (
+              <TextInput
+                style={modalStyles.defectInput}
+                value={tradeAllocated}
+                onChangeText={onTradeAllocatedChange}
+                placeholder="e.g. Plumber, Electrician, Builder"
+                placeholderTextColor={Colors.textTertiary}
+              />
             )}
 
             {/* Recommended Action */}
