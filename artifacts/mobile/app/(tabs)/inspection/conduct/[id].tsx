@@ -15,6 +15,7 @@ import {
   Animated,
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/Swipeable";
+import * as FileSystem from "expo-file-system/legacy";
 import Svg, { Path } from "react-native-svg";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets, SafeAreaView } from "react-native-safe-area-context";
@@ -25,6 +26,11 @@ import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { getSuggestionsForItem } from "@/constants/noteSuggestions";
 import { useTabBarHeight } from "@/hooks/useTabBarHeight";
+
+const DOC_CACHE_DIR =
+  Platform.OS !== "web"
+    ? (FileSystem.cacheDirectory ?? "") + "inspectproof-docs/"
+    : "";
 
 const RESULT_OPTS = [
   { key: "pass", label: "Pass", icon: "check-circle", color: "#22c55e", bg: "#f0fdf4" },
@@ -1496,7 +1502,62 @@ function DocumentsPanel({
   projectId?: string;
   activeItemId?: number;
 }) {
+  const { token } = useAuth();
   const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
+  const [offlineState, setOfflineState] = useState<"idle" | "downloading" | "done">("idle");
+  const [offlineProgress, setOfflineProgress] = useState({ done: 0, total: 0 });
+  const [cachedIds, setCachedIds] = useState<Set<number>>(new Set());
+
+  // Check which docs are already cached on mount
+  useEffect(() => {
+    if (Platform.OS === "web" || documents.length === 0) return;
+    (async () => {
+      const cached = new Set<number>();
+      for (const doc of documents) {
+        if (!doc.fileUrl) continue;
+        const dest = DOC_CACHE_DIR + `doc_${doc.id}`;
+        const info = await FileSystem.getInfoAsync(dest).catch(() => ({ exists: false }));
+        if (info.exists) cached.add(doc.id);
+      }
+      setCachedIds(cached);
+      if (cached.size === documents.filter(d => !!d.fileUrl).length && cached.size > 0) {
+        setOfflineState("done");
+      }
+    })();
+  }, [documents]);
+
+  const downloadAllOffline = async () => {
+    if (Platform.OS === "web" || documents.length === 0) return;
+    const docsWithFiles = documents.filter(d => !!d.fileUrl);
+    setOfflineState("downloading");
+    setOfflineProgress({ done: 0, total: docsWithFiles.length });
+    try {
+      await FileSystem.makeDirectoryAsync(DOC_CACHE_DIR, { intermediates: true });
+      let done = 0;
+      const newCached = new Set(cachedIds);
+      for (const doc of docsWithFiles) {
+        const dest = DOC_CACHE_DIR + `doc_${doc.id}`;
+        const info = await FileSystem.getInfoAsync(dest).catch(() => ({ exists: false }));
+        if (!info.exists) {
+          const docUrl = `${baseUrl}/api/storage${doc.fileUrl}`;
+          const dl = FileSystem.createDownloadResumable(
+            docUrl, dest,
+            { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+          );
+          await dl.downloadAsync();
+        }
+        newCached.add(doc.id);
+        done++;
+        setOfflineProgress({ done, total: docsWithFiles.length });
+      }
+      setCachedIds(newCached);
+      setOfflineState("done");
+    } catch {
+      setOfflineState("idle");
+      Alert.alert("Download failed", "Could not cache all documents. Check your connection and try again.");
+    }
+  };
+
   const grouped = documents.reduce<Record<string, ProjectDocument[]>>((acc, doc) => {
     const folder = doc.folder || "General";
     (acc[folder] = acc[folder] || []).push(doc);
@@ -1561,6 +1622,43 @@ function DocumentsPanel({
         </View>
       ) : (
         <>
+          {/* ── Offline download bar ── */}
+          {Platform.OS !== "web" && (
+            <Pressable
+              style={({ pressed }) => [
+                panelStyles.offlineBar,
+                offlineState === "done" && panelStyles.offlineBarDone,
+                offlineState === "downloading" && panelStyles.offlineBarActive,
+                pressed && { opacity: 0.85 },
+              ]}
+              onPress={offlineState === "idle" ? downloadAllOffline : undefined}
+              disabled={offlineState === "downloading"}
+            >
+              {offlineState === "downloading" ? (
+                <>
+                  <ActivityIndicator size="small" color={Colors.secondary} />
+                  <Text style={panelStyles.offlineBarText}>
+                    Downloading {offlineProgress.done}/{offlineProgress.total}…
+                  </Text>
+                </>
+              ) : offlineState === "done" ? (
+                <>
+                  <Feather name="wifi-off" size={14} color="#16a34a" />
+                  <Text style={[panelStyles.offlineBarText, { color: "#16a34a" }]}>
+                    All {documents.length} documents available offline
+                  </Text>
+                  <Feather name="check-circle" size={14} color="#16a34a" style={{ marginLeft: "auto" as any }} />
+                </>
+              ) : (
+                <>
+                  <Feather name="download-cloud" size={14} color={Colors.secondary} />
+                  <Text style={panelStyles.offlineBarText}>Download all for offline use</Text>
+                  <Feather name="chevron-right" size={14} color={Colors.textTertiary} style={{ marginLeft: "auto" as any }} />
+                </>
+              )}
+            </Pressable>
+          )}
+
           <ScrollView
             style={panelStyles.scroll}
             contentContainerStyle={[panelStyles.content, { paddingBottom: insets.bottom + 32 }]}
@@ -3197,6 +3295,29 @@ const panelStyles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   panelHintText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary, lineHeight: 16 },
+  offlineBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  offlineBarActive: {
+    backgroundColor: "#eff6ff",
+  },
+  offlineBarDone: {
+    backgroundColor: "#f0fdf4",
+    borderBottomColor: "#bbf7d0",
+  },
+  offlineBarText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+  },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 16 },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 32 },

@@ -1195,16 +1195,32 @@ export default function DocumentViewerScreen() {
               domStorageEnabled
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
-              scalesPageToFit
               injectedJavaScript={`
                 (function() {
-                  var meta = document.querySelector('meta[name="viewport"]');
-                  if (!meta) {
-                    meta = document.createElement('meta');
-                    meta.name = 'viewport';
-                    document.head && document.head.appendChild(meta);
+                  // Set viewport to allow free pinch-zoom
+                  function setZoomMeta() {
+                    var meta = document.querySelector('meta[name="viewport"]');
+                    if (!meta) {
+                      meta = document.createElement('meta');
+                      meta.name = 'viewport';
+                      (document.head || document.documentElement).appendChild(meta);
+                    }
+                    meta.content = 'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=0.25, maximum-scale=10.0';
                   }
-                  meta.content = 'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=0.5, maximum-scale=10.0';
+                  setZoomMeta();
+                  // Re-apply after any framework resets it
+                  var mo = new MutationObserver(setZoomMeta);
+                  var head = document.head || document.documentElement;
+                  if (head) mo.observe(head, { childList: true, subtree: true, attributes: true, attributeFilter: ['content'] });
+                })();
+                true;
+              `}
+              injectedJavaScriptBeforeContentLoaded={`
+                (function() {
+                  var meta = document.createElement('meta');
+                  meta.name = 'viewport';
+                  meta.content = 'width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=0.25, maximum-scale=10.0';
+                  (document.head || document.documentElement).appendChild(meta);
                 })();
                 true;
               `}
