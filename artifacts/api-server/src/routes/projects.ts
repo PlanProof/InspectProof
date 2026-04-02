@@ -852,4 +852,136 @@ router.post("/:id/staff/:staffId/send-defect-report", async (req, res) => {
   }
 });
 
+// Send defect reports to ALL allocated trades in one call — one email per person, all defects collated
+router.post("/:id/inspections/:inspectionId/send-all-defects", async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  const inspectionId = parseInt(req.params.inspectionId);
+  if (isNaN(projectId) || isNaN(inspectionId)) return res.status(400).json({ error: "bad_request" });
+
+  try {
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+    const [inspection] = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, inspectionId));
+    if (!inspection) return res.status(404).json({ error: "not_found", message: "Inspection not found" });
+
+    // All checklist results for this inspection that are defects
+    const results = await db.select().from(checklistResultsTable)
+      .where(eq(checklistResultsTable.inspectionId, inspectionId));
+    const defectResults = results.filter(r =>
+      r.result === "fail" || r.defectStatus === "open" || r.defectStatus === "in_progress"
+    );
+    if (defectResults.length === 0) {
+      return res.status(400).json({ error: "no_defects", message: "No defects found for this inspection" });
+    }
+
+    // Resolve item names
+    const itemIds = defectResults.map(r => r.checklistItemId).filter(Boolean) as number[];
+    const items = itemIds.length > 0
+      ? await db.select().from(checklistItemsTable).where(inArray(checklistItemsTable.id, itemIds))
+      : [];
+    const itemNameMap: Record<number, string> = {};
+    for (const item of items) itemNameMap[item.id] = item.label ?? item.description ?? "Unknown Item";
+
+    // All potential recipients: contractors for this project + internal staff
+    const [contractors, allStaff] = await Promise.all([
+      db.select().from(projectContractorsTable).where(eq(projectContractorsTable.projectId, projectId)),
+      db.select().from(internalStaffTable),
+    ]);
+
+    type PersonEntry = {
+      email: string;
+      name: string;
+      trade: string;
+      defects: { itemName: string; severity: string | null; location: string | null; recommendedAction: string | null; notes: string | null }[];
+    };
+
+    // Build map keyed by email so each person only gets ONE email no matter how many items they're on
+    const personMap = new Map<string, PersonEntry>();
+
+    for (const result of defectResults) {
+      const tradeField = (result.tradeAllocated ?? "").toLowerCase();
+      if (!tradeField) continue;
+
+      const defect = {
+        itemName: result.checklistItemId ? (itemNameMap[result.checklistItemId] ?? "Unknown Item") : "Unknown Item",
+        severity: result.severity ?? null,
+        location: result.location ?? null,
+        recommendedAction: result.recommendedAction ?? null,
+        notes: result.notes ?? null,
+      };
+
+      for (const c of contractors) {
+        if (!c.email) continue;
+        if (tradeField.includes(c.name.toLowerCase())) {
+          const entry = personMap.get(c.email);
+          if (entry) { entry.defects.push(defect); }
+          else { personMap.set(c.email, { email: c.email, name: c.name, trade: c.trade ?? "Trade", defects: [defect] }); }
+        }
+      }
+      for (const s of allStaff) {
+        if (!s.email) continue;
+        if (tradeField.includes(s.name.toLowerCase())) {
+          const entry = personMap.get(s.email);
+          if (entry) { entry.defects.push(defect); }
+          else { personMap.set(s.email, { email: s.email, name: s.name, trade: s.role ?? "Internal Staff", defects: [defect] }); }
+        }
+      }
+    }
+
+    if (personMap.size === 0) {
+      return res.status(400).json({
+        error: "no_recipients",
+        message: "No recipients found — make sure defect items have trades allocated with matching email addresses.",
+      });
+    }
+
+    // Resolve sender
+    const senderId = getUserIdFromRequest(req);
+    let senderName = "InspectProof";
+    if (senderId) {
+      const [sender] = await db.select().from(usersTable).where(eq(usersTable.id, senderId));
+      if (sender) senderName = `${sender.firstName} ${sender.lastName}`.trim();
+    }
+
+    // Fire one email per unique person
+    const sent: { name: string; email: string; count: number }[] = [];
+    const failed: string[] = [];
+
+    for (const person of personMap.values()) {
+      try {
+        await sendContractorDefectReportEmail({
+          toEmail: person.email,
+          contractorName: person.name,
+          trade: person.trade,
+          projectName: project?.name ?? "Unknown Project",
+          inspectionName: inspection.name ?? "Inspection",
+          inspectionDate: inspection.scheduledDate ? String(inspection.scheduledDate) : null,
+          senderName,
+          defects: person.defects,
+        }, req.log);
+        sent.push({ name: person.name, email: person.email, count: person.defects.length });
+      } catch (err) {
+        req.log.error({ err, email: person.email }, "Defect email send failed");
+        failed.push(person.name);
+      }
+    }
+
+    req.log.info({ projectId, inspectionId, sent: sent.length, failed: failed.length }, "Bulk defect emails done");
+
+    const msgParts = sent.map(s => `${s.name} (${s.count} item${s.count !== 1 ? "s" : ""})`);
+    res.json({
+      success: true,
+      sent,
+      failed,
+      message: sent.length === 0
+        ? "No emails were sent."
+        : sent.length === 1
+          ? `Defect report sent to ${msgParts[0]}`
+          : `Defect reports sent to ${sent.length} people: ${msgParts.join(", ")}`,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Send all defects error");
+    res.status(500).json({ error: "internal_error", message: "Failed to send defect reports" });
+  }
+});
+
 export default router;

@@ -108,6 +108,7 @@ export default function ConductInspectionScreen() {
   const [addItemModal, setAddItemModal] = useState<{ visible: boolean; category: string }>({ visible: false, category: "" });
   const [addItemDesc, setAddItemDesc] = useState("");
   const [addingItem, setAddingItem] = useState(false);
+  const [sendingDefects, setSendingDefects] = useState(false);
   const pageScrollRef = useRef<ScrollView>(null);
   // In edit mode, suppress auto-completion — user is intentionally modifying a finished inspection
   const autoCompletedRef = useRef(isEditMode);
@@ -345,6 +346,37 @@ export default function ConductInspectionScreen() {
       queryClient.invalidateQueries({ queryKey: ["inspection", id] });
     } catch {
       Alert.alert("Error", "Could not update status. Try again.");
+    }
+  };
+
+  const sendDefects = async () => {
+    if (!inspection?.projectId) return;
+    setSendingDefects(true);
+    try {
+      const data = await fetchWithAuth(
+        `/api/projects/${inspection.projectId}/inspections/${id}/send-all-defects`,
+        { method: "POST", headers: { "Content-Type": "application/json" } }
+      );
+      if (data.sent?.length === 0) {
+        Alert.alert("Nothing Sent", data.message || "No defect emails were sent.");
+      } else {
+        const lines = (data.sent as { name: string; count: number }[])
+          .map(s => `• ${s.name} — ${s.count} item${s.count !== 1 ? "s" : ""}`)
+          .join("\n");
+        const failNote = data.failed?.length > 0
+          ? `\n\nFailed to send to: ${(data.failed as string[]).join(", ")}`
+          : "";
+        Alert.alert("Defect Reports Sent", `${lines}${failNote}`);
+      }
+    } catch (err: any) {
+      const msg = err?.message || "";
+      if (msg.includes("no_defects") || msg.includes("no_recipients")) {
+        Alert.alert("Nothing to Send", "No defect items with allocated trades and email addresses were found.");
+      } else {
+        Alert.alert("Send Failed", "Could not send defect reports. Check trade allocations and email addresses.");
+      }
+    } finally {
+      setSendingDefects(false);
     }
   };
 
@@ -732,6 +764,24 @@ export default function ConductInspectionScreen() {
                 <Feather name="file-text" size={17} color={Colors.primary} />
                 <Text style={styles.generateBtnText}>Generate Report</Text>
               </Pressable>
+
+              {/* Row 3: Send Defect Items — only shown when there are fails */}
+              {failCount > 0 && (
+                <Pressable
+                  style={({ pressed }) => [styles.sendDefectsBtn, pressed && { opacity: 0.85 }, sendingDefects && { opacity: 0.6 }]}
+                  onPress={sendDefects}
+                  disabled={sendingDefects}
+                >
+                  {sendingDefects ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Feather name="send" size={17} color="#fff" />
+                  )}
+                  <Text style={styles.sendDefectsBtnText}>
+                    {sendingDefects ? "Sending…" : `Send Defect Items (${failCount})`}
+                  </Text>
+                </Pressable>
+              )}
             </View>
           )}
         </View>
@@ -2155,6 +2205,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.primary,
+  },
+  sendDefectsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.secondary,
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  sendDefectsBtnText: {
+    fontSize: 15,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#fff",
   },
   cameraBtn: {
     position: "relative",
