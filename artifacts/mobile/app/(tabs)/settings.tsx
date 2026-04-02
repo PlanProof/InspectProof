@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, Pressable,
-  Platform, Switch, Image,
+  Platform, Switch, Image, Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,6 +10,7 @@ import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { useNotifications, MapApp } from "@/context/NotificationsContext";
 import { useTabBarHeight } from "@/hooks/useTabBarHeight";
+import { getApiUrl } from "@/constants/api";
 
 const WEB_TOP = 0;
 
@@ -76,12 +77,30 @@ function SettingRow({
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useTabBarHeight();
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const { prefs, updatePrefs } = useNotifications();
 
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [confirmClearCache, setConfirmClearCache] = useState(false);
   const [cacheCleared, setCacheCleared] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    try {
+      const res = await fetch(getApiUrl("/api/auth/account"), {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Request failed");
+      await logout();
+    } catch {
+      Alert.alert("Error", "Failed to delete account. Please try again or contact support@inspectproof.com.au.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const initials = `${(user?.firstName ?? "?")[0]}${(user?.lastName ?? "?")[0]}`.toUpperCase();
 
@@ -265,6 +284,41 @@ export default function SettingsScreen() {
                     style={({ pressed }) => [styles.confirmBtn, styles.confirmBtnDanger, pressed && { opacity: 0.8 }]}
                   >
                     <Text style={styles.confirmBtnDangerText}>Sign Out</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Delete Account */}
+        <View style={styles.section}>
+          <View style={styles.group}>
+            <SettingRow
+              icon="trash-2"
+              label="Delete Account"
+              sublabel="Permanently remove your profile and personal data"
+              onPress={() => { setConfirmDelete(true); setConfirmSignOut(false); }}
+              danger
+            />
+            {confirmDelete && (
+              <View style={styles.confirmRow}>
+                <Text style={styles.confirmText}>
+                  This will permanently delete your name, email, phone, and all personal data from InspectProof. Inspection and company records will be retained as required by Australian building law. This cannot be undone.
+                </Text>
+                <View style={styles.confirmActions}>
+                  <Pressable
+                    onPress={() => setConfirmDelete(false)}
+                    style={({ pressed }) => [styles.confirmBtn, styles.confirmBtnGhost, pressed && { opacity: 0.7 }]}
+                  >
+                    <Text style={styles.confirmBtnGhostText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleDeleteAccount}
+                    disabled={deleting}
+                    style={({ pressed }) => [styles.confirmBtn, styles.confirmBtnDanger, (pressed || deleting) && { opacity: 0.7 }]}
+                  >
+                    <Text style={styles.confirmBtnDangerText}>{deleting ? "Deleting…" : "Delete Account"}</Text>
                   </Pressable>
                 </View>
               </View>

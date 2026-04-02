@@ -299,4 +299,52 @@ router.post("/change-password", async (req, res) => {
   }
 });
 
+// ── Delete account ─────────────────────────────────────────────────────────────
+
+router.delete("/account", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      res.status(401).json({ error: "unauthorized", message: "No token" });
+      return;
+    }
+    const token = authHeader.slice(7);
+    const decoded = Buffer.from(token, "base64").toString("utf-8");
+    const [userIdStr] = decoded.split(":");
+    const userId = parseInt(userIdStr);
+    if (isNaN(userId)) {
+      res.status(401).json({ error: "unauthorized", message: "Invalid token" });
+      return;
+    }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) {
+      res.status(404).json({ error: "not_found", message: "User not found" });
+      return;
+    }
+
+    // Anonymise all personal data — keep the row so company/inspection FK refs don't break
+    const anonymisedEmail = `deleted_${userId}_${Date.now()}@deleted.invalid`;
+    const randomHash = await bcrypt.hash(`${userId}-${Date.now()}-deleted`, 12);
+
+    await db.update(usersTable).set({
+      email: anonymisedEmail,
+      firstName: "Deleted",
+      lastName: "User",
+      phone: null,
+      avatar: null,
+      signatureUrl: null,
+      passwordHash: randomHash,
+      isActive: false,
+      updatedAt: new Date(),
+    }).where(eq(usersTable.id, userId));
+
+    req.log.info({ userId }, "Account deleted and anonymised");
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Delete account error");
+    res.status(500).json({ error: "internal_error", message: "Server error" });
+  }
+});
+
 export default router;

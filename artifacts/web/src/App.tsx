@@ -20,6 +20,7 @@ import Billing from "@/pages/billing";
 import Admin from "@/pages/admin";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
+import DeleteAccount from "@/pages/delete-account";
 import NotFound from "@/pages/not-found";
 
 // Global fetch interceptor for auth
@@ -74,6 +75,7 @@ function Router() {
       <Route path="/admin" component={Admin} />
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
+      <Route path="/delete-account" component={DeleteAccount} />
       <Route component={NotFound} />
     </Switch>
   );
