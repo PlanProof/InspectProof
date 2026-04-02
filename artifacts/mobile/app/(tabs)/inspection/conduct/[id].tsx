@@ -650,15 +650,17 @@ export default function ConductInspectionScreen() {
             <View style={styles.tabBadgeDot} />
           )}
         </Pressable>
-        <Pressable style={[styles.tab, activePage === 3 && styles.tabActive]} onPress={() => scrollToPage(3)}>
-          <Feather name="alert-triangle" size={13} color={activePage === 3 ? "#ef4444" : Colors.textTertiary} />
-          <Text style={[styles.tabText, activePage === 3 && { color: "#ef4444", fontFamily: "PlusJakartaSans_600SemiBold" }]}>
-            Defects{failCount > 0 ? ` (${failCount})` : ""}
-          </Text>
-          {failCount > 0 && activePage !== 3 && (
-            <View style={[styles.tabBadgeDot, { backgroundColor: "#ef4444" }]} />
-          )}
-        </Pressable>
+        {failCount > 0 && (
+          <Pressable style={[styles.tab, activePage === 3 && styles.tabActive]} onPress={() => scrollToPage(3)}>
+            <Feather name="alert-triangle" size={13} color={activePage === 3 ? "#ef4444" : Colors.textTertiary} />
+            <Text style={[styles.tabText, activePage === 3 && { color: "#ef4444", fontFamily: "PlusJakartaSans_600SemiBold" }]}>
+              Defects ({failCount})
+            </Text>
+            {activePage !== 3 && (
+              <View style={[styles.tabBadgeDot, { backgroundColor: "#ef4444" }]} />
+            )}
+          </Pressable>
+        )}
       </View>
 
       {/* Horizontal paged content */}
