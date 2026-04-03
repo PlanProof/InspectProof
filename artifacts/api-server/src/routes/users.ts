@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, count } from "drizzle-orm";
+import { eq, and, or, count } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, usersTable } from "@workspace/db";
 import { sendWelcomeWithCredentialsEmail } from "../lib/email";
@@ -37,17 +37,29 @@ function formatUser(u: any) {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
+    const caller = req.authUser!;
     let users;
-    if (req.authUser!.isAdmin && !req.authUser!.companyName) {
-      users = await db.select().from(usersTable).orderBy(usersTable.firstName);
-    } else if (req.authUser!.companyName) {
+
+    if (caller.isCompanyAdmin) {
+      // Organisation admin: see themselves + every team member they invited
+      // (linked via adminUserId = String(caller.id))
       users = await db.select().from(usersTable)
-        .where(eq(usersTable.companyName, req.authUser!.companyName))
+        .where(
+          or(
+            eq(usersTable.id, caller.id),
+            eq(usersTable.adminUserId, String(caller.id))
+          )
+        )
         .orderBy(usersTable.firstName);
+    } else if (caller.isAdmin) {
+      // Platform super-admin (isAdmin but not isCompanyAdmin): see all users
+      users = await db.select().from(usersTable).orderBy(usersTable.firstName);
     } else {
+      // Regular team member or standalone user: see only themselves
       users = await db.select().from(usersTable)
-        .where(eq(usersTable.id, req.authUser!.id));
+        .where(eq(usersTable.id, caller.id));
     }
+
     res.json(users.map(formatUser));
   } catch (err) {
     req.log.error({ err }, "List users error");

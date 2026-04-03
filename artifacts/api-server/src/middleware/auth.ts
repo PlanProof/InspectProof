@@ -7,7 +7,10 @@ export interface AuthUser {
   email: string;
   role: string;
   isAdmin: boolean;
+  isCompanyAdmin: boolean;
   companyName: string | null;
+  adminUserId: string | null;
+  plan: string;
 }
 
 declare global {
@@ -41,7 +44,10 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
             email: users[0].email,
             role: users[0].role,
             isAdmin: users[0].isAdmin ?? false,
+            isCompanyAdmin: users[0].isCompanyAdmin ?? false,
             companyName: users[0].companyName ?? null,
+            adminUserId: users[0].adminUserId ?? null,
+            plan: users[0].plan ?? "free_trial",
           };
         }
       }

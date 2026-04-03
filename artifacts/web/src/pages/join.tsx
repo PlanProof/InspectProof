@@ -79,7 +79,10 @@ export default function JoinPage() {
       }
       setMobileOnly(body.mobileOnly ?? false);
       setStatus("done");
-      if (!body.mobileOnly && body.token) {
+      // Only auto-login if there is no existing session — otherwise we'd hijack
+      // the current user's session (e.g. the admin testing their own invite link).
+      const alreadyLoggedIn = !!localStorage.getItem("inspectproof_token");
+      if (!body.mobileOnly && body.token && !alreadyLoggedIn) {
         login(body.token);
       }
     } catch {
@@ -196,8 +199,20 @@ export default function JoinPage() {
                       </a>
                     </div>
                   </div>
+                ) : !!localStorage.getItem("inspectproof_token") ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      The new account has been created. Sign in with the invitation email and password to access the dashboard.
+                    </p>
+                    <a
+                      href="/login"
+                      className="w-full flex items-center justify-center h-11 bg-[#0B1933] text-white rounded-xl text-base font-semibold hover:bg-[#0B1933]/90 transition-colors"
+                    >
+                      Sign in to new account
+                    </a>
+                  </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Redirecting you to your dashboard...</p>
+                  <p className="text-sm text-muted-foreground">Redirecting you to your dashboard…</p>
                 )}
               </CardContent>
             </Card>
