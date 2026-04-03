@@ -41,8 +41,6 @@ router.get("/", requireAuth, async (req, res) => {
     let users;
 
     if (caller.isCompanyAdmin) {
-      // Organisation admin: see themselves + every team member they invited
-      // (linked via adminUserId = String(caller.id))
       users = await db.select().from(usersTable)
         .where(
           or(
@@ -52,10 +50,8 @@ router.get("/", requireAuth, async (req, res) => {
         )
         .orderBy(usersTable.firstName);
     } else if (caller.isAdmin) {
-      // Platform super-admin (isAdmin but not isCompanyAdmin): see all users
       users = await db.select().from(usersTable).orderBy(usersTable.firstName);
     } else {
-      // Regular team member or standalone user: see only themselves
       users = await db.select().from(usersTable)
         .where(eq(usersTable.id, caller.id));
     }
@@ -69,33 +65,38 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.post("/", requireAuth, async (req, res) => {
   try {
+    const creator = req.authUser!;
+
+    // Only company admins or platform admins may create team members
+    if (!creator.isCompanyAdmin && !creator.isAdmin) {
+      res.status(403).json({ error: "forbidden", message: "Only organisation admins can add team members." });
+      return;
+    }
+
     const data = req.body;
     if (!data.email || !data.firstName || !data.lastName) {
       res.status(400).json({ error: "bad_request", message: "First name, last name, and email are required" });
       return;
     }
 
-    const creator = req.authUser!;
+    // ── Team member quota check ──────────────────────────────────────────────
+    // Count existing team members linked to this admin via adminUserId
+    const limits = getLimits(creator.plan ?? "free_trial");
+    if (limits.maxTeamMembers !== null) {
+      const [{ value: currentCount }] = await db
+        .select({ value: count() })
+        .from(usersTable)
+        .where(eq(usersTable.adminUserId, String(creator.id)));
 
-    // ── Team member quota check ─────────────────────────────────────────────
-    if (creator.companyName) {
-      const limits = getLimits(creator.plan ?? "free_trial");
-      if (limits.maxTeamMembers !== null) {
-        const [{ value: currentCount }] = await db
-          .select({ value: count() })
-          .from(usersTable)
-          .where(eq(usersTable.companyName, creator.companyName));
-
-        if (currentCount >= limits.maxTeamMembers) {
-          res.status(402).json({
-            error: "team_limit_reached",
-            message: `Your ${limits.label} plan allows up to ${limits.maxTeamMembers} team member${limits.maxTeamMembers === 1 ? "" : "s"}. Upgrade your plan or contact contact@inspectproof.com.au to add more.`,
-            plan: creator.plan,
-            limit: limits.maxTeamMembers,
-            current: currentCount,
-          });
-          return;
-        }
+      if (currentCount >= limits.maxTeamMembers) {
+        res.status(402).json({
+          error: "team_limit_reached",
+          message: `Your ${limits.label} plan allows up to ${limits.maxTeamMembers} team member${limits.maxTeamMembers === 1 ? "" : "s"}. Upgrade your plan or contact contact@inspectproof.com.au to add more.`,
+          plan: creator.plan,
+          limit: limits.maxTeamMembers,
+          current: currentCount,
+        });
+        return;
       }
     }
 
@@ -112,7 +113,6 @@ router.post("/", requireAuth, async (req, res) => {
 
     const inheritedCompany = creator.companyName ?? data.companyName ?? null;
 
-    // Parse permissions — defaults depend on whether admin explicitly set them
     const userType: string = data.userType ?? "inspector";
     const defaultPerms = { editTemplates: false, addInspectors: false, createProjects: false };
     const permissions = data.permissions
@@ -121,6 +121,14 @@ router.post("/", requireAuth, async (req, res) => {
 
     // "inspector" userType = mobile app only → restrict from web portal
     const mobileOnly = userType === "inspector";
+
+    // Determine the admin this member belongs to:
+    // - If the creator is a company admin, they ARE the admin → adminUserId = creator.id
+    // - If the creator is a platform super-admin acting on behalf of an org, preserve any
+    //   adminUserId supplied in the request body; otherwise fall back to creator.id
+    const resolvedAdminUserId = creator.isCompanyAdmin
+      ? String(creator.id)
+      : (data.adminUserId ? String(data.adminUserId) : String(creator.id));
 
     const [user] = await db.insert(usersTable).values({
       email: normalizedEmail,
@@ -136,6 +144,7 @@ router.post("/", requireAuth, async (req, res) => {
       mobileOnly,
       permissions,
       requiresPasswordChange: true,
+      adminUserId: resolvedAdminUserId,
     }).returning();
 
     res.status(201).json({ ...formatUser(user), temporaryPassword });
@@ -197,8 +206,32 @@ router.patch("/me/notification-prefs", requireAuth, async (req, res) => {
 router.patch("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    const caller = req.authUser!;
+
+    // ── Authorization check ──────────────────────────────────────────────────
+    // Allowed if any of:
+    //   1. The caller is the target user (updating their own profile)
+    //   2. The caller is a company admin and the target is one of their team members
+    //      (adminUserId === String(caller.id))
+    //   3. The caller is a platform super-admin (isAdmin)
+    if (caller.id !== id && !caller.isAdmin) {
+      if (!caller.isCompanyAdmin) {
+        res.status(403).json({ error: "forbidden", message: "You do not have permission to modify this user." });
+        return;
+      }
+      // Verify the target user belongs to this company admin
+      const [target] = await db.select({ adminUserId: usersTable.adminUserId })
+        .from(usersTable)
+        .where(eq(usersTable.id, id));
+
+      if (!target || target.adminUserId !== String(caller.id)) {
+        res.status(403).json({ error: "forbidden", message: "You do not have permission to modify this user." });
+        return;
+      }
+    }
+
     const { phone, firstName, lastName, role, signatureUrl, profession, licenceNumber,
-            companyName, isActive, isCompanyAdmin, userType, permissions } = req.body;
+            companyName, isActive, userType, permissions } = req.body;
 
     const updateData: Record<string, any> = { updatedAt: new Date() };
     if (phone !== undefined) updateData.phone = phone;
@@ -208,11 +241,24 @@ router.patch("/:id", requireAuth, async (req, res) => {
     if (signatureUrl !== undefined) updateData.signatureUrl = signatureUrl;
     if (profession !== undefined) updateData.profession = profession;
     if (licenceNumber !== undefined) updateData.licenceNumber = licenceNumber;
-    if (companyName !== undefined) updateData.companyName = companyName;
+    if (companyName !== undefined && caller.isAdmin) updateData.companyName = companyName;
     if (isActive !== undefined) updateData.isActive = isActive;
-    if (typeof isCompanyAdmin === "boolean") updateData.isCompanyAdmin = isCompanyAdmin;
-    if (userType !== undefined) updateData.userType = userType;
+    if (userType !== undefined) {
+      updateData.userType = userType;
+      updateData.mobileOnly = userType === "inspector";
+    }
     if (permissions !== undefined) updateData.permissions = JSON.stringify(permissions);
+
+    // isCompanyAdmin:
+    //   - Platform super-admin: can set on anyone
+    //   - Company admin: can promote/demote their own team members only
+    //     (target's adminUserId must be their own id — already verified above)
+    //   - Regular team members: blocked
+    if (typeof req.body.isCompanyAdmin === "boolean") {
+      if (caller.isAdmin || caller.isCompanyAdmin) {
+        updateData.isCompanyAdmin = req.body.isCompanyAdmin;
+      }
+    }
 
     const [updated] = await db.update(usersTable)
       .set(updateData)
