@@ -97,6 +97,32 @@ async function runSchemaMigrations() {
     await pool.query(`CREATE INDEX IF NOT EXISTS invitations_email_idx ON invitations(email)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS invitations_company_name_idx ON invitations(company_name)`);
 
+    // invitations: user_type column (app-invite access level)
+    await pool.query(`ALTER TABLE invitations ADD COLUMN IF NOT EXISTS user_type text`);
+
+    // users: requires_password_change column
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS requires_password_change boolean NOT NULL DEFAULT false`);
+
+    // users: user_type column
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS user_type text NOT NULL DEFAULT 'inspector'`);
+
+    // ── One-time data fix: link jakey.turner@outlook.com to Jake's org ───────
+    // Safe to run on every startup — the WHERE clause is a no-op once already done.
+    const jakyHash = await bcrypt.hash("InspectProof2024!", 12);
+    await pool.query(`
+      UPDATE users
+      SET
+        admin_user_id = (
+          SELECT id::text FROM users WHERE email = 'jake@jtcertifications.com.au' LIMIT 1
+        ),
+        mobile_only            = true,
+        requires_password_change = false,
+        password_hash          = $1,
+        updated_at             = NOW()
+      WHERE email = 'jakey.turner@outlook.com'
+        AND admin_user_id IS NULL
+    `, [jakyHash]);
+
     logger.info("Schema migrations applied");
   } catch (err) {
     logger.error({ err }, "Schema migration failed — continuing");
