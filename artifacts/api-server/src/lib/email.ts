@@ -609,8 +609,8 @@ function reportEmailHtml(opts: {
 }): string {
   const { recipientName, reportTitle, reportType, projectName, projectAddress, senderName, senderCompany, reportId } = opts;
   const typeLabel = reportType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  const pdfLink = `${APP_BASE_URL}/reports/${reportId}/pdf`;
-  const viewLink = `${APP_BASE_URL}/reports/${reportId}`;
+  const pdfLink = `${APP_BASE_URL}/api/reports/${reportId}/pdf`;
+  const viewLink = `${APP_BASE_URL}/api/reports/${reportId}/pdf`;
   const senderLine = senderCompany ? `${senderName}, ${senderCompany}` : senderName;
   const greeting_line = recipientName ? `Hi ${recipientName},` : "Hello,";
 

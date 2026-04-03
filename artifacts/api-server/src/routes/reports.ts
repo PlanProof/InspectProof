@@ -997,7 +997,41 @@ router.post("/:id/send", requireAuth, async (req, res) => {
     // Generate PDF buffer (without photos for email attachment)
     let pdfBuffer: Buffer | undefined;
     try {
-      const formatted = await formatReport(report);
+      let formatted = await formatReport(report);
+
+      // If the stored content is HTML, regenerate as plain text for pdfkit
+      if (isHtmlContent(formatted.content || "") && report.inspectionId) {
+        try {
+          const inspRows = await db.select().from(inspectionsTable)
+            .where(eq(inspectionsTable.id, report.inspectionId));
+          const insp = inspRows[0] ?? null;
+          if (insp) {
+            const clRows = await db.select({ result: checklistResultsTable, item: checklistItemsTable })
+              .from(checklistResultsTable)
+              .innerJoin(checklistItemsTable, eq(checklistResultsTable.checklistItemId, checklistItemsTable.id))
+              .where(eq(checklistResultsTable.inspectionId, insp.id));
+            const clResults = clRows.map(r => ({
+              result: r.result.result, notes: r.result.notes, severity: r.result.severity,
+              location: r.result.location, tradeAllocated: r.result.tradeAllocated,
+              recommendedAction: r.result.recommendedAction, photoCount: 0,
+              category: r.item.category, description: r.item.description,
+              codeReference: r.item.codeReference, riskLevel: r.item.riskLevel,
+              orderIndex: r.item.orderIndex,
+            }));
+            let inspectorForPdf: any = null;
+            if (insp.inspectorId) {
+              const uRows = await db.select().from(usersTable).where(eq(usersTable.id, insp.inspectorId));
+              inspectorForPdf = uRows[0] ?? null;
+            }
+            const issRows = await db.select().from(issuesTable).where(eq(issuesTable.inspectionId, insp.id));
+            const plainText = await generateReportContent(report.reportType || "summary", project ?? null, insp, clResults, issRows, inspectorForPdf);
+            formatted = { ...formatted, content: plainText };
+          }
+        } catch (convErr) {
+          req.log.warn({ convErr }, "Could not convert HTML report to plain text for PDF — using stored content");
+        }
+      }
+
       const doc = buildPdf(formatted, project ?? null);
       pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
         const chunks: Buffer[] = [];
