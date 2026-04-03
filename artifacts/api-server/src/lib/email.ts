@@ -632,6 +632,34 @@ function reportEmailHtml(opts: {
   return emailWrapper({ title: `InspectProof Report: ${reportTitle}`, tag: "Report Delivery", content });
 }
 
+export async function sendPasswordResetEmail(
+  opts: { toEmail: string; firstName: string; resetUrl: string },
+  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+): Promise<void> {
+  if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping password reset email"); return; }
+  const { toEmail, firstName, resetUrl } = opts;
+  const content = `
+    ${greeting(firstName)}
+    ${sectionTitle("Reset your InspectProof password")}
+    ${bodyText("We received a request to reset your password. Click the button below to choose a new one. This link is valid for 1 hour.")}
+    ${ctaButton(resetUrl, "Reset My Password →")}
+    ${bodyText(`If you didn't request a password reset, you can safely ignore this email — your password won't change.`, "font-size:13px;color:#6b7280;")}
+    <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;font-family:${BASE_FONT};">For security, this link expires in 1 hour. To get a new link, visit the <a href="${APP_BASE_URL}/login" style="color:#466DB5;text-decoration:underline;">InspectProof login page</a> and click "Forgot password?" again.</p>`;
+  const html = emailWrapper({ title: "Reset your InspectProof password", tag: "Security", content });
+  try {
+    const { error } = await getResend().emails.send({
+      from: SMTP_FROM,
+      to: toEmail,
+      subject: "Reset your InspectProof password",
+      html,
+    });
+    if (error) throw new Error(error.message);
+    log?.info({ to: toEmail }, "Password reset email sent");
+  } catch (err) {
+    log?.error({ err, to: toEmail }, "Failed to send password reset email");
+  }
+}
+
 export async function sendReportEmail(opts: {
   to: string;
   recipientName?: string;

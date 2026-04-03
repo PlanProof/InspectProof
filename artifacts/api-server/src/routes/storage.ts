@@ -5,6 +5,7 @@ import {
   getSupabaseSignedDownloadURL,
 } from "../lib/supabaseStorage";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import { requireAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
 const replitStorage = new ObjectStorageService();
@@ -15,6 +16,7 @@ function isSupabasePath(objectPath: string): boolean {
 
 router.post(
   "/storage/uploads/file",
+  requireAuth,
   express.raw({ type: "*/*", limit: "200mb" }),
   async (req: Request, res: Response) => {
     try {
@@ -34,7 +36,7 @@ router.post(
 );
 
 
-router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
+router.post("/storage/uploads/request-url", requireAuth, async (req: Request, res: Response) => {
   try {
     if (isSupabaseStorageAvailable()) {
       const { uploadURL, objectPath } = await getSupabaseSignedUploadURL();

@@ -2,9 +2,23 @@ import { Router, type IRouter } from "express";
 import { eq, sql, ilike } from "drizzle-orm";
 import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable, reportsTable } from "@workspace/db";
 import { checkInspectionQuota } from "../lib/quota";
-import { optionalAuth, isInspectorOnly } from "../middleware/auth";
+import { optionalAuth, requireAuth, isInspectorOnly, type AuthUser } from "../middleware/auth";
+
 import { sendInspectionAssignedEmail } from "../lib/email";
 import { sendExpoPush } from "../lib/expoPush";
+
+/** Returns true if the authenticated user may access the inspection (via its project). */
+async function canAccessInspection(inspection: { projectId: number | null; inspectorId?: number | null }, user: AuthUser): Promise<boolean> {
+  if (user.isAdmin) return true;
+  if (isInspectorOnly(user)) return inspection.inspectorId === user.id;
+  if (!inspection.projectId) return false;
+  const [project] = await db.select({ createdById: projectsTable.createdById }).from(projectsTable).where(eq(projectsTable.id, inspection.projectId));
+  if (!project) return false;
+  const adminId = user.isCompanyAdmin ? user.id : (user.adminUserId ? parseInt(user.adminUserId) : user.id);
+  if (project.createdById === user.id || project.createdById === adminId) return true;
+  const [creator] = await db.select({ adminUserId: usersTable.adminUserId }).from(usersTable).where(eq(usersTable.id, project.createdById));
+  return !!(creator?.adminUserId && parseInt(creator.adminUserId) === adminId);
+}
 
 const router: IRouter = Router();
 
@@ -205,7 +219,7 @@ router.post("/", checkInspectionQuota, async (req, res) => {
   }
 });
 
-router.post("/run-sheet/send", async (req, res) => {
+router.post("/run-sheet/send", requireAuth, async (req, res) => {
   try {
     const { date, inspectorIds, inspectorNames } = req.body;
     if (!date || !inspectorNames?.length) {
@@ -226,7 +240,7 @@ router.post("/run-sheet/send", async (req, res) => {
   }
 });
 
-router.get("/:id", optionalAuth, async (req, res) => {
+router.get("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(String(req.params.id));
     const inspections = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, id));
@@ -236,9 +250,8 @@ router.get("/:id", optionalAuth, async (req, res) => {
       return;
     }
 
-    // Inspector-role users can only view their own assigned inspections
-    if (req.authUser && isInspectorOnly(req.authUser) && inspection.inspectorId !== req.authUser.id) {
-      res.status(403).json({ error: "forbidden", message: "You can only view inspections assigned to you." });
+    if (!await canAccessInspection(inspection, req.authUser!)) {
+      res.status(403).json({ error: "forbidden", message: "You can only view inspections in your organisation." });
       return;
     }
 
@@ -381,7 +394,7 @@ router.get("/:id", optionalAuth, async (req, res) => {
   }
 });
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const data = req.body;
@@ -391,6 +404,9 @@ router.put("/:id", async (req, res) => {
     if (!before) {
       res.status(404).json({ error: "not_found" });
       return;
+    }
+    if (!await canAccessInspection(before, req.authUser!)) {
+      res.status(403).json({ error: "forbidden" }); return;
     }
     const prevInspectorId = before.inspectorId;
 
@@ -456,7 +472,7 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-router.get("/:id/checklist", async (req, res) => {
+router.get("/:id/checklist", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     let results = await db.select({
@@ -515,7 +531,7 @@ router.get("/:id/checklist", async (req, res) => {
   }
 });
 
-router.post("/:id/checklist", async (req, res) => {
+router.post("/:id/checklist", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { results } = req.body;
@@ -555,7 +571,7 @@ router.post("/:id/checklist", async (req, res) => {
 });
 
 // Reset all checklist results to "pending" (used by Re-Do Inspection)
-router.post("/:id/reset-checklist", async (req, res) => {
+router.post("/:id/reset-checklist", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     await db.update(checklistResultsTable)
@@ -580,7 +596,7 @@ router.post("/:id/reset-checklist", async (req, res) => {
 });
 
 // Apply a checklist template to an inspection (replaces pending items)
-router.post("/:id/apply-checklist", async (req, res) => {
+router.post("/:id/apply-checklist", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { templateId } = req.body;
@@ -657,7 +673,7 @@ router.post("/:id/apply-checklist", async (req, res) => {
   }
 });
 
-router.patch("/:id/checklist/:resultId", async (req, res) => {
+router.patch("/:id/checklist/:resultId", requireAuth, async (req, res) => {
   try {
     const resultId = parseInt(req.params.resultId);
     const { result, notes, photoUrls, photoMarkups, severity, location, tradeAllocated, defectStatus, clientVisible, recommendedAction } = req.body;
@@ -746,7 +762,7 @@ router.patch("/:id/checklist/:resultId", async (req, res) => {
   }
 });
 
-router.post("/:id/manual-item", async (req, res) => {
+router.post("/:id/manual-item", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { description, category } = req.body;
@@ -813,7 +829,7 @@ router.post("/:id/manual-item", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const [inspection] = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, id));

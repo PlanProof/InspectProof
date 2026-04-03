@@ -1,7 +1,40 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { db, usersTable } from "@workspace/db";
+import { sendPasswordResetEmail } from "../lib/email";
+
+const RESET_SECRET = process.env.APP_SECRET || "inspectproof-pw-reset-salt-2024";
+
+function createResetToken(userId: number): string {
+  const expiry = Math.floor(Date.now() / 1000) + 3600;
+  const data = `${userId}:${expiry}`;
+  const sig = crypto.createHmac("sha256", RESET_SECRET).update(data).digest("hex");
+  return Buffer.from(`${data}:${sig}`).toString("base64url");
+}
+
+function verifyResetToken(token: string): { userId: number; valid: boolean; expired: boolean } {
+  try {
+    const raw = Buffer.from(token, "base64url").toString("utf-8");
+    const lastColon = raw.lastIndexOf(":");
+    if (lastColon === -1) return { userId: 0, valid: false, expired: false };
+    const sig = raw.slice(lastColon + 1);
+    const data = raw.slice(0, lastColon);
+    const parts = data.split(":");
+    if (parts.length !== 2) return { userId: 0, valid: false, expired: false };
+    const userId = parseInt(parts[0], 10);
+    const expiry = parseInt(parts[1], 10);
+    if (isNaN(userId) || isNaN(expiry)) return { userId: 0, valid: false, expired: false };
+    const now = Math.floor(Date.now() / 1000);
+    const expected = crypto.createHmac("sha256", RESET_SECRET).update(data).digest("hex");
+    if (expected !== sig) return { userId: 0, valid: false, expired: false };
+    if (now > expiry) return { userId, valid: false, expired: true };
+    return { userId, valid: true, expired: false };
+  } catch {
+    return { userId: 0, valid: false, expired: false };
+  }
+}
 
 const router: IRouter = Router();
 
@@ -466,6 +499,75 @@ router.post("/set-password", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Set password error");
+    res.status(500).json({ error: "internal_error", message: "Server error" });
+  }
+});
+
+// ── Forgot password ────────────────────────────────────────────────────────────
+
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ error: "bad_request", message: "Email is required" });
+      return;
+    }
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase().trim()));
+    // Always return success to prevent email enumeration attacks
+    if (!user || !user.isActive) {
+      res.json({ success: true });
+      return;
+    }
+    const token = createResetToken(user.id);
+    const baseUrl = process.env.APP_BASE_URL || "https://inspectproof.com.au";
+    const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+    await sendPasswordResetEmail(
+      { toEmail: user.email, firstName: user.firstName || "there", resetUrl },
+      req.log,
+    );
+    req.log.info({ userId: user.id }, "Password reset email sent");
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Forgot password error");
+    res.status(500).json({ error: "internal_error", message: "Server error" });
+  }
+});
+
+// ── Reset password (from email link) ──────────────────────────────────────────
+
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      res.status(400).json({ error: "bad_request", message: "Token and new password are required" });
+      return;
+    }
+    if (newPassword.length < 8) {
+      res.status(400).json({ error: "bad_request", message: "Password must be at least 8 characters" });
+      return;
+    }
+    const { userId, valid, expired } = verifyResetToken(token);
+    if (expired) {
+      res.status(400).json({ error: "token_expired", message: "This reset link has expired. Please request a new one." });
+      return;
+    }
+    if (!valid) {
+      res.status(400).json({ error: "invalid_token", message: "This reset link is invalid. Please request a new one." });
+      return;
+    }
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user || !user.isActive) {
+      res.status(404).json({ error: "not_found", message: "User not found" });
+      return;
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await db.update(usersTable)
+      .set({ passwordHash, requiresPasswordChange: false, updatedAt: new Date() })
+      .where(eq(usersTable.id, userId));
+    req.log.info({ userId }, "Password reset via email link");
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Reset password error");
     res.status(500).json({ error: "internal_error", message: "Server error" });
   }
 });

@@ -16,7 +16,13 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.planproof.inspectproof",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "InspectProof uses your camera to photograph site conditions, defects, and inspection evidence for your reports.",
+        "NSPhotoLibraryUsageDescription": "InspectProof accesses your photo library to attach existing photos to inspection reports and defect records.",
+        "NSPhotoLibraryAddUsageDescription": "InspectProof saves annotated inspection photos to your photo library.",
+        "NSLocationWhenInUseUsageDescription": "InspectProof uses your location to record the site coordinates of inspections."
+      }
     },
     "android": {
       "package": "com.planproof.inspectproof",
@@ -24,7 +30,14 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#0B1933"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -38,8 +51,29 @@
       ],
       "expo-font",
       "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "InspectProof accesses your photo library to attach photos to inspection records and reports.",
+          "cameraPermission": "InspectProof uses your camera to photograph site conditions and defects for inspection reports."
+        }
+      ],
       "@react-native-community/datetimepicker",
-      "expo-screen-orientation"
+      "expo-screen-orientation",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "InspectProof uses your location to record the site coordinates of inspections."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#0B1933",
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

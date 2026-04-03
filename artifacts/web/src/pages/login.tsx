@@ -116,6 +116,10 @@ function SignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotStatus, setForgotStatus] = useState<"idle" | "loading" | "sent" | "error">("idle");
+  const [forgotError, setForgotError] = useState("");
   const { login } = useAuth();
 
   const loginMutation = useLogin({
@@ -126,6 +130,99 @@ function SignInForm() {
     e.preventDefault();
     loginMutation.mutate({ data: { email, password } });
   };
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError("");
+    setForgotStatus("loading");
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      if (res.ok) {
+        setForgotStatus("sent");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setForgotError(data.message || "Something went wrong. Please try again.");
+        setForgotStatus("error");
+      }
+    } catch {
+      setForgotError("Something went wrong. Please try again.");
+      setForgotStatus("error");
+    }
+  };
+
+  if (forgotMode) {
+    return (
+      <Card className="border-0 shadow-2xl shadow-black/5">
+        <CardHeader className="space-y-1 pb-6">
+          <CardTitle className="text-2xl font-bold">Reset your password</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Enter your email address and we'll send you a link to set a new password.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {forgotStatus === "sent" ? (
+            <div className="text-center py-4">
+              <div className="flex justify-center mb-4">
+                <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
+                  <Check className="h-6 w-6 text-green-600" />
+                </div>
+              </div>
+              <p className="text-sm text-foreground font-medium mb-1">Check your email</p>
+              <p className="text-sm text-muted-foreground mb-6">
+                If an account exists for <strong>{forgotEmail}</strong>, you'll receive a reset link shortly. Check your spam folder if it doesn't arrive within a few minutes.
+              </p>
+              <button
+                onClick={() => { setForgotMode(false); setForgotStatus("idle"); setForgotEmail(""); }}
+                className="text-sm text-secondary hover:text-secondary/80 font-medium"
+              >
+                Back to sign in
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleForgotSubmit} className="space-y-4">
+              {forgotStatus === "error" && forgotError && (
+                <div className="p-3 rounded bg-destructive/10 text-destructive text-sm flex items-center gap-2 border border-destructive/20">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  {forgotError}
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="forgot-email">Email address</Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  required
+                  autoFocus
+                  className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary"
+                  placeholder="you@example.com"
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full mt-6 h-11 text-base shadow-lg shadow-primary/25 hover:-translate-y-0.5 transition-all"
+                disabled={forgotStatus === "loading"}
+              >
+                {forgotStatus === "loading" ? "Sending…" : "Send reset link"}
+              </Button>
+              <button
+                type="button"
+                onClick={() => { setForgotMode(false); setForgotStatus("idle"); }}
+                className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors text-center"
+              >
+                Back to sign in
+              </button>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="border-0 shadow-2xl shadow-black/5">
@@ -155,9 +252,13 @@ function SignInForm() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
-              <a href="#" className="text-xs text-secondary hover:text-secondary/80 font-medium">
+              <button
+                type="button"
+                onClick={() => { setForgotMode(true); setForgotEmail(email); }}
+                className="text-xs text-secondary hover:text-secondary/80 font-medium"
+              >
                 Forgot password?
-              </a>
+              </button>
             </div>
             <div className="relative">
               <Input

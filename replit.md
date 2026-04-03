@@ -62,6 +62,33 @@ pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vi
 - **Report Email Sending Fixed**: `POST /api/reports/:id/send` now generates a PDF buffer and sends it via Resend with the PDF as email attachment. `sendReportEmail()` added to `lib/email.ts`. Returns `email_failed` error if email delivery fails.
 - **Org data in PDF footer**: PDF reports show company name, ABN, and address in the navy footer bar (instead of generic "InspectProof · Confidential"). Org data fetched from the inspector's user record at PDF generation time.
 
+## Security Architecture
+
+### API Route Auth Model
+- **`requireAuth`**: Middleware that validates Bearer token and populates `req.authUser`. Returns 401 if missing/invalid.
+- **`optionalAuth`**: Sets `req.authUser` if token present, but does not reject unauthenticated requests.
+- **Org Isolation**: Every resource route (project, inspection, report detail/update/delete) now checks that the requester belongs to the same org as the resource creator. Isolation helper pattern: `canAccessProject(createdById, req.authUser)` checks direct ownership OR cross-team (team member with same adminUserId).
+- **Upload routes**: Both `POST /api/storage/uploads/file` and `POST /api/storage/uploads/request-url` require auth. `GET /api/storage/objects/*` is public (needed for email image links).
+- **Reports PDF**: `GET /api/reports/:id/pdf` is intentionally public to support `?_token=` email link access.
+
+### Org Boundary
+- Company admin (`isCompanyAdmin=true`): owns their org. `adminUserId` is null in DB.
+- Team member: `adminUserId` in DB points to their company admin's `id`.
+- Effective admin ID for access checks: `user.isCompanyAdmin ? user.id : parseInt(user.adminUserId)`.
+- Cross-team access (colleague A sees colleague B's projects): resolved via one extra DB lookup of `creator.adminUserId`.
+
+## Pre-Launch Audit Completed (A001–A011)
+
+### Security Fixes Applied
+- **A005**: All project, inspection, and report CRUD routes now enforce `requireAuth` + org isolation
+- **A005**: Removed unauthenticated "Test Project" leak from `GET /api/projects`
+- **A005**: `POST /storage/uploads/*` now requires auth
+- **A005**: `getUserIdFromRequest(req) ?? 1` anti-pattern removed from main CRUD routes
+- **A001**: Forgot-password flow built end-to-end (HMAC-signed stateless tokens, Resend email, web + mobile UI)
+- **A007**: Mobile demo credentials removed, `expo-location` + `expo-notifications` added to app.json plugins
+- **A003**: Email templates verified production-ready (Australian English, proper branding, no TODO text)
+- **A002**: Stripe webhook handler verified (signature verification, `STRIPE_WEBHOOK_SECRET` required)
+
 ## External Dependencies
 
 - **Database:** PostgreSQL via `SUPABASE_DATABASE_URL`

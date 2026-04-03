@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { getApiUrl } from "@/constants/api";
 
 const WEB_TOP = 0;
 
@@ -26,6 +27,11 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotStatus, setForgotStatus] = useState<"idle" | "loading" | "sent" | "error">("idle");
+  const [forgotError, setForgotError] = useState("");
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -57,6 +63,125 @@ export default function LoginScreen() {
       setSubmitting(false);
     }
   };
+
+  const handleForgotSubmit = async () => {
+    if (!forgotEmail.trim()) {
+      setForgotError("Please enter your email address.");
+      return;
+    }
+    setForgotError("");
+    setForgotStatus("loading");
+    try {
+      const res = await fetch(getApiUrl("/auth/forgot-password"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail.trim() }),
+      });
+      if (res.ok) {
+        setForgotStatus("sent");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setForgotError(data.message || "Something went wrong. Please try again.");
+        setForgotStatus("error");
+      }
+    } catch {
+      setForgotError("Something went wrong. Please try again.");
+      setForgotStatus("error");
+    }
+  };
+
+  if (forgotMode) {
+    return (
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.container,
+            { paddingTop: insets.top + WEB_TOP + 24, paddingBottom: insets.bottom + 32 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Pressable onPress={() => { setForgotMode(false); setForgotStatus("idle"); setForgotError(""); }} style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}>
+            <Feather name="arrow-left" size={20} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.backText}>Back to sign in</Text>
+          </Pressable>
+
+          <View style={styles.header}>
+            <View style={styles.logoBadge}>
+              <Feather name="lock" size={22} color="#F2F3F4" />
+            </View>
+            <Text style={styles.title}>Reset password</Text>
+            <Text style={styles.subtitle}>Enter your email to receive a reset link</Text>
+          </View>
+
+          <View style={styles.card}>
+            {forgotStatus === "sent" ? (
+              <View style={{ alignItems: "center", gap: 12, paddingVertical: 8 }}>
+                <View style={styles.successBadge}>
+                  <Feather name="check-circle" size={28} color={Colors.accent} />
+                </View>
+                <Text style={styles.successTitle}>Check your email</Text>
+                <Text style={styles.successBody}>
+                  If an account exists for {forgotEmail}, you'll receive a reset link shortly. Check your spam folder if it doesn't arrive.
+                </Text>
+                <Pressable
+                  onPress={() => { setForgotMode(false); setForgotStatus("idle"); setForgotEmail(""); }}
+                  style={({ pressed }) => [styles.loginButton, pressed && { opacity: 0.85 }, { marginTop: 8 }]}
+                >
+                  <Text style={styles.loginButtonText}>Back to Sign In</Text>
+                  <Feather name="arrow-right" size={16} color={Colors.primary} />
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                {forgotStatus === "error" && forgotError ? (
+                  <View style={styles.errorBox}>
+                    <Feather name="alert-circle" size={14} color={Colors.danger} />
+                    <Text style={styles.errorText}>{forgotError}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.field}>
+                  <Text style={styles.label}>Email Address</Text>
+                  <View style={styles.inputWrapper}>
+                    <Feather name="mail" size={16} color={Colors.textTertiary} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      value={forgotEmail}
+                      onChangeText={setForgotEmail}
+                      placeholder="you@example.com.au"
+                      placeholderTextColor={Colors.textTertiary}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoFocus
+                    />
+                  </View>
+                </View>
+                <Pressable
+                  onPress={handleForgotSubmit}
+                  disabled={forgotStatus === "loading"}
+                  style={({ pressed }) => [
+                    styles.loginButton,
+                    pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+                    forgotStatus === "loading" && { opacity: 0.7 },
+                  ]}
+                >
+                  {forgotStatus === "loading" ? (
+                    <ActivityIndicator size="small" color={Colors.primary} />
+                  ) : (
+                    <>
+                      <Text style={styles.loginButtonText}>Send reset link</Text>
+                      <Feather name="send" size={16} color={Colors.primary} />
+                    </>
+                  )}
+                </Pressable>
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -110,7 +235,12 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Text style={styles.label}>Password</Text>
+              <Pressable onPress={() => { setForgotEmail(email); setForgotMode(true); }}>
+                <Text style={styles.forgotLink}>Forgot password?</Text>
+              </Pressable>
+            </View>
             <View style={styles.inputWrapper}>
               <Feather name="lock" size={16} color={Colors.textTertiary} style={styles.inputIcon} />
               <TextInput
@@ -166,12 +296,6 @@ export default function LoginScreen() {
             <Text style={styles.inviteHintText}>Received an invitation? Tap above to set up your account.</Text>
           </View>
         </View>
-
-        {/* Demo hint */}
-        <View style={styles.demoNote}>
-          <Feather name="info" size={12} color="rgba(255,255,255,0.3)" />
-          <Text style={styles.demoText}>Demo: admin@inspectproof.com.au / password123</Text>
-        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -208,6 +332,7 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.danger, flex: 1 },
   field: { gap: 6 },
   label: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  forgotLink: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
   inputWrapper: {
     flexDirection: "row", alignItems: "center",
     borderWidth: 1.5, borderColor: Colors.border, borderRadius: 10,
@@ -234,6 +359,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   inviteHintText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.35)", textAlign: "center", flex: 1 },
-  demoNote: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
-  demoText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: "rgba(255,255,255,0.25)" },
+  successBadge: { width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(197,217,45,0.15)", alignItems: "center", justifyContent: "center" },
+  successTitle: { fontSize: 18, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  successBody: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, textAlign: "center", lineHeight: 20 },
 });

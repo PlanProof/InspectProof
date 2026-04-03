@@ -3,9 +3,31 @@ import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
 import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable, internalStaffTable } from "@workspace/db";
 import { sendContractorDefectReportEmail } from "../lib/email";
 import { checkProjectQuota } from "../lib/quota";
-import { optionalAuth } from "../middleware/auth";
+import { optionalAuth, requireAuth, type AuthUser } from "../middleware/auth";
 
 const router: IRouter = Router();
+
+/** Returns the "root org admin" ID for the requesting user. */
+function effectiveAdminId(user: AuthUser): number {
+  if (user.isAdmin || user.isCompanyAdmin) return user.id;
+  return user.adminUserId ? parseInt(user.adminUserId) : user.id;
+}
+
+/**
+ * Returns true if the requesting user may access a resource created by createdById.
+ * Platform admins bypass all checks. Company/team members are scoped to their org.
+ */
+async function canAccessProject(createdById: number, user: AuthUser): Promise<boolean> {
+  if (user.isAdmin) return true;
+  const adminId = effectiveAdminId(user);
+  if (createdById === user.id || createdById === adminId) return true;
+  // Check cross-member: was the resource created by a colleague (same org)?
+  const [creator] = await db
+    .select({ adminUserId: usersTable.adminUserId })
+    .from(usersTable)
+    .where(eq(usersTable.id, createdById));
+  return !!(creator?.adminUserId && parseInt(creator.adminUserId) === adminId);
+}
 
 function getUserIdFromRequest(req: any): number | null {
   const auth = req.headers?.authorization;
@@ -76,17 +98,19 @@ router.get("/", optionalAuth, async (req, res) => {
     const { status, search } = req.query;
     let projects = await db.select().from(projectsTable).orderBy(sql`${projectsTable.updatedAt} DESC`);
 
-    // Scope projects to the requesting user and their organisation admin
+    // Scope projects to the requesting user and their organisation
     if (req.authUser) {
-      const adminId = req.authUser.adminUserId ? parseInt(req.authUser.adminUserId) : null;
-      projects = projects.filter(p =>
-        p.name === TEST_PROJECT_NAME ||
-        p.createdById === req.authUser!.id ||
-        (adminId !== null && p.createdById === adminId)
-      );
+      if (!req.authUser.isAdmin) {
+        const adminId = effectiveAdminId(req.authUser);
+        projects = projects.filter(p =>
+          p.createdById === req.authUser!.id ||
+          p.createdById === adminId
+        );
+      }
+      // Platform admins see all projects
     } else {
-      // Unauthenticated – only show the test project
-      projects = projects.filter(p => p.name === TEST_PROJECT_NAME);
+      // Unauthenticated — return nothing
+      projects = [];
     }
 
     if (status) {
@@ -158,13 +182,17 @@ router.post("/", checkProjectQuota, async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const projects = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
     const project = projects[0];
     if (!project) {
       res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (!await canAccessProject(project.createdById, req.authUser!)) {
+      res.status(403).json({ error: "forbidden" });
       return;
     }
 
@@ -232,11 +260,15 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const data = req.body;
-    const requestingUserId = getUserIdFromRequest(req);
+    const [existing] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+    if (!existing) { res.status(404).json({ error: "not_found" }); return; }
+    if (!await canAccessProject(existing.createdById, req.authUser!)) {
+      res.status(403).json({ error: "forbidden" }); return;
+    }
     const [project] = await db.update(projectsTable)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(projectsTable.id, id))
@@ -252,7 +284,7 @@ router.put("/:id", async (req, res) => {
       entityId: project.id,
       action: "updated",
       description: `Project "${project.name}" updated`,
-      userId: requestingUserId ?? 1,
+      userId: req.authUser!.id,
     });
 
     res.json(formatProject(project, 0, 0));
@@ -262,9 +294,14 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+    if (!existing) { res.status(404).json({ error: "not_found" }); return; }
+    if (!await canAccessProject(existing.createdById, req.authUser!)) {
+      res.status(403).json({ error: "forbidden" }); return;
+    }
     const allowed = ["status", "name", "siteAddress", "suburb", "state", "postcode", "client", "builder",
       "designer", "stage", "projectType", "daNumber", "certificationNumber", "buildingClassification",
       "startDate", "expectedCompletion"];
@@ -291,15 +328,18 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
 
-    // Confirm project exists
+    // Confirm project exists and caller has access
     const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
     if (!project) {
       res.status(404).json({ error: "not_found" });
       return;
+    }
+    if (!await canAccessProject(project.createdById, req.authUser!)) {
+      res.status(403).json({ error: "forbidden" }); return;
     }
 
     // Get all inspection IDs for this project
@@ -337,7 +377,7 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-router.get("/:id/activity", async (req, res) => {
+router.get("/:id/activity", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const logs = await db.select().from(activityLogsTable)
@@ -363,7 +403,7 @@ router.get("/:id/activity", async (req, res) => {
 
 // ── Documents ────────────────────────────────────────────────────────────────
 
-router.get("/:id/documents", async (req, res) => {
+router.get("/:id/documents", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const docs = await db.select().from(documentsTable)
@@ -376,7 +416,7 @@ router.get("/:id/documents", async (req, res) => {
   }
 });
 
-router.post("/:id/documents", async (req, res) => {
+router.post("/:id/documents", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { name, fileName, fileSize, mimeType, fileUrl, folder, includedInInspection, inspectionId } = req.body;
@@ -400,7 +440,7 @@ router.post("/:id/documents", async (req, res) => {
   }
 });
 
-router.patch("/:id/documents/:docId", async (req, res) => {
+router.patch("/:id/documents/:docId", requireAuth, async (req, res) => {
   try {
     const docId = parseInt(req.params.docId);
     const updates: any = { updatedAt: new Date() };
@@ -424,7 +464,7 @@ router.patch("/:id/documents/:docId", async (req, res) => {
   }
 });
 
-router.delete("/:id/documents/:docId", async (req, res) => {
+router.delete("/:id/documents/:docId", requireAuth, async (req, res) => {
   try {
     const docId = parseInt(req.params.docId);
     await db.delete(documentsTable).where(eq(documentsTable.id, docId));
@@ -435,7 +475,7 @@ router.delete("/:id/documents/:docId", async (req, res) => {
   }
 });
 
-router.post("/:id/documents/folders", async (req, res) => {
+router.post("/:id/documents/folders", requireAuth, async (req, res) => {
   try {
     const { folderName } = req.body;
     if (!folderName?.trim()) {
@@ -449,7 +489,7 @@ router.post("/:id/documents/folders", async (req, res) => {
   }
 });
 
-router.patch("/:id/documents/folders/:folderName", async (req, res) => {
+router.patch("/:id/documents/folders/:folderName", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const oldName = decodeURIComponent(req.params.folderName);
@@ -470,7 +510,7 @@ router.patch("/:id/documents/folders/:folderName", async (req, res) => {
 
 // ── Inspection Types ─────────────────────────────────────────────────────────
 
-router.get("/:id/inspection-types", async (req, res) => {
+router.get("/:id/inspection-types", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const disciplineFilter = req.query.discipline as string | undefined;
@@ -508,7 +548,7 @@ router.get("/:id/inspection-types", async (req, res) => {
   }
 });
 
-router.put("/:id/inspection-types", async (req, res) => {
+router.put("/:id/inspection-types", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { selectedTemplateIds } = req.body as { selectedTemplateIds: number[] };
@@ -537,7 +577,7 @@ router.put("/:id/inspection-types", async (req, res) => {
 
 // ── Checklist Items (for linking to documents) ────────────────────────────────
 
-router.get("/:id/checklist-items", async (req, res) => {
+router.get("/:id/checklist-items", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const selected = await db.select().from(projectInspectionTypesTable)
@@ -569,7 +609,7 @@ router.get("/:id/checklist-items", async (req, res) => {
 
 // ── Document ↔ Checklist Item Links ──────────────────────────────────────────
 
-router.get("/:id/documents/:docId/checklist-links", async (req, res) => {
+router.get("/:id/documents/:docId/checklist-links", requireAuth, async (req, res) => {
   try {
     const docId = parseInt(req.params.docId);
     const links = await db.select().from(documentChecklistLinksTable)
@@ -581,7 +621,7 @@ router.get("/:id/documents/:docId/checklist-links", async (req, res) => {
   }
 });
 
-router.put("/:id/documents/:docId/checklist-links", async (req, res) => {
+router.put("/:id/documents/:docId/checklist-links", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const docId = parseInt(req.params.docId);
@@ -605,7 +645,7 @@ router.put("/:id/documents/:docId/checklist-links", async (req, res) => {
 
 // ── Documents with linked checklist item ids (enriched list) ─────────────────
 
-router.get("/:id/documents-with-links", async (req, res) => {
+router.get("/:id/documents-with-links", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const docs = await db.select().from(documentsTable)
@@ -633,7 +673,7 @@ router.get("/:id/documents-with-links", async (req, res) => {
 
 // ── Project Contractors ───────────────────────────────────────
 
-router.get("/:id/contractors", async (req, res) => {
+router.get("/:id/contractors", requireAuth, async (req, res) => {
   const projectId = parseInt(req.params.id);
   if (isNaN(projectId)) return res.status(400).json({ error: "bad_request" });
   try {
@@ -647,7 +687,7 @@ router.get("/:id/contractors", async (req, res) => {
   }
 });
 
-router.post("/:id/contractors", async (req, res) => {
+router.post("/:id/contractors", requireAuth, async (req, res) => {
   const projectId = parseInt(req.params.id);
   if (isNaN(projectId)) return res.status(400).json({ error: "bad_request" });
   const { name, trade, email, company } = req.body as { name?: string; trade?: string; email?: string; company?: string };
@@ -667,7 +707,7 @@ router.post("/:id/contractors", async (req, res) => {
   }
 });
 
-router.patch("/:id/contractors/:contractorId", async (req, res) => {
+router.patch("/:id/contractors/:contractorId", requireAuth, async (req, res) => {
   const projectId = parseInt(req.params.id);
   const contractorId = parseInt(req.params.contractorId);
   if (isNaN(projectId) || isNaN(contractorId)) return res.status(400).json({ error: "bad_request" });
@@ -690,7 +730,7 @@ router.patch("/:id/contractors/:contractorId", async (req, res) => {
   }
 });
 
-router.delete("/:id/contractors/:contractorId", async (req, res) => {
+router.delete("/:id/contractors/:contractorId", requireAuth, async (req, res) => {
   const projectId = parseInt(req.params.id);
   const contractorId = parseInt(req.params.contractorId);
   if (isNaN(projectId) || isNaN(contractorId)) return res.status(400).json({ error: "bad_request" });
@@ -706,7 +746,7 @@ router.delete("/:id/contractors/:contractorId", async (req, res) => {
   }
 });
 
-router.post("/:id/contractors/:contractorId/send-defect-report", async (req, res) => {
+router.post("/:id/contractors/:contractorId/send-defect-report", requireAuth, async (req, res) => {
   const projectId = parseInt(req.params.id);
   const contractorId = parseInt(req.params.contractorId);
   if (isNaN(projectId) || isNaN(contractorId)) return res.status(400).json({ error: "bad_request" });
@@ -782,7 +822,7 @@ router.post("/:id/contractors/:contractorId/send-defect-report", async (req, res
   }
 });
 
-router.post("/:id/staff/:staffId/send-defect-report", async (req, res) => {
+router.post("/:id/staff/:staffId/send-defect-report", requireAuth, async (req, res) => {
   const projectId = parseInt(req.params.id);
   const staffId = parseInt(req.params.staffId);
   if (isNaN(projectId) || isNaN(staffId)) return res.status(400).json({ error: "bad_request" });
@@ -855,7 +895,7 @@ router.post("/:id/staff/:staffId/send-defect-report", async (req, res) => {
 });
 
 // Send defect reports to ALL allocated trades in one call — one email per person, all defects collated
-router.post("/:id/inspections/:inspectionId/send-all-defects", async (req, res) => {
+router.post("/:id/inspections/:inspectionId/send-all-defects", requireAuth, async (req, res) => {
   const projectId = parseInt(req.params.id);
   const inspectionId = parseInt(req.params.inspectionId);
   if (isNaN(projectId) || isNaN(inspectionId)) return res.status(400).json({ error: "bad_request" });

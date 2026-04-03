@@ -12,8 +12,6 @@ export function getApiUrl(path: string): string {
   return `${base}/api${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-export const DEMO_EMAIL = "admin@inspectproof.com.au";
-export const DEMO_PASSWORD = "password123";
 
 export const INSPECTION_TYPES: Record<string, string> = {
   footing: "Footing", footings: "Footings",

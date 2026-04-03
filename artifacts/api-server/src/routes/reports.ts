@@ -20,7 +20,25 @@ import {
   db, reportsTable, projectsTable, inspectionsTable, issuesTable,
   usersTable, checklistResultsTable, checklistItemsTable, documentsTable,
 } from "@workspace/db";
-import { optionalAuth } from "../middleware/auth";
+import { optionalAuth, requireAuth, type AuthUser } from "../middleware/auth";
+
+/** Returns true if the authenticated user belongs to the same org as the project creator. */
+async function canAccessProjectByCreator(projectCreatedById: number, user: AuthUser): Promise<boolean> {
+  if (user.isAdmin) return true;
+  const adminId = (user.isAdmin || user.isCompanyAdmin) ? user.id : (user.adminUserId ? parseInt(user.adminUserId) : user.id);
+  if (projectCreatedById === user.id || projectCreatedById === adminId) return true;
+  const [creator] = await db.select({ adminUserId: usersTable.adminUserId }).from(usersTable).where(eq(usersTable.id, projectCreatedById));
+  return !!(creator?.adminUserId && parseInt(creator.adminUserId) === adminId);
+}
+
+/** Returns true if the authenticated user may access the given report (via its project). */
+async function canAccessReport(report: { projectId: number | null; generatedById?: number | null }, user: AuthUser): Promise<boolean> {
+  if (user.isAdmin) return true;
+  if (!report.projectId) return report.generatedById === user.id;
+  const [project] = await db.select({ createdById: projectsTable.createdById }).from(projectsTable).where(eq(projectsTable.id, report.projectId));
+  if (!project) return false;
+  return canAccessProjectByCreator(project.createdById, user);
+}
 
 // ── Primary colors ─────────────────────────────────────────────────────────
 const COLOR_NAVY  = "#0B1933";
@@ -753,7 +771,7 @@ router.get("/", optionalAuth, async (req, res) => {
 });
 
 // Generate report content from inspection data and save as draft
-router.post("/generate", async (req, res) => {
+router.post("/generate", requireAuth, async (req, res) => {
   try {
     const { inspectionId, reportType, userId } = req.body;
 
@@ -871,10 +889,10 @@ router.post("/generate", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", requireAuth, async (req, res) => {
   try {
     const data = req.body;
-    const generatedById = data.generatedById ?? data.userId ?? 1;
+    const generatedById = data.generatedById ?? data.userId ?? req.authUser!.id;
     const [report] = await db.insert(reportsTable).values({
       projectId: data.projectId,
       inspectionId: data.inspectionId,
@@ -892,12 +910,15 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const reports = await db.select().from(reportsTable).where(eq(reportsTable.id, id));
     const report = reports[0];
     if (!report) { res.status(404).json({ error: "not_found" }); return; }
+    if (!await canAccessReport(report, req.authUser!)) {
+      res.status(403).json({ error: "forbidden" }); return;
+    }
     res.json(await formatReport(report));
   } catch (err) {
     req.log.error({ err }, "Get report error");
@@ -906,9 +927,14 @@ router.get("/:id", async (req, res) => {
 });
 
 // Submit report for desktop review
-router.post("/:id/submit", async (req, res) => {
+router.post("/:id/submit", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    const [report] = await db.select().from(reportsTable).where(eq(reportsTable.id, id));
+    if (!report) { res.status(404).json({ error: "not_found" }); return; }
+    if (!await canAccessReport(report, req.authUser!)) {
+      res.status(403).json({ error: "forbidden" }); return;
+    }
     const [updated] = await db.update(reportsTable)
       .set({ status: "pending_review", submittedAt: new Date() })
       .where(eq(reportsTable.id, id))
@@ -922,9 +948,14 @@ router.post("/:id/submit", async (req, res) => {
 });
 
 // Approve report (certifier review complete)
-router.post("/:id/approve", async (req, res) => {
+router.post("/:id/approve", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    const [report] = await db.select().from(reportsTable).where(eq(reportsTable.id, id));
+    if (!report) { res.status(404).json({ error: "not_found" }); return; }
+    if (!await canAccessReport(report, req.authUser!)) {
+      res.status(403).json({ error: "forbidden" }); return;
+    }
     const [updated] = await db.update(reportsTable)
       .set({ status: "approved" })
       .where(eq(reportsTable.id, id))
@@ -938,7 +969,7 @@ router.post("/:id/approve", async (req, res) => {
 });
 
 // Send report directly to client
-router.post("/:id/send", async (req, res) => {
+router.post("/:id/send", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { sentTo, recipientName } = req.body;
@@ -946,22 +977,17 @@ router.post("/:id/send", async (req, res) => {
 
     const [report] = await db.select().from(reportsTable).where(eq(reportsTable.id, id));
     if (!report) { res.status(404).json({ error: "not_found" }); return; }
+    if (!await canAccessReport(report, req.authUser!)) {
+      res.status(403).json({ error: "forbidden" }); return;
+    }
 
     // Look up project and sender
     const [project] = report.projectId
       ? await db.select().from(projectsTable).where(eq(projectsTable.id, report.projectId))
       : [null];
 
-    // Try to find sender from auth header
-    let senderUser: any = null;
-    const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith("Bearer ")) {
-      const userId = parseInt(Buffer.from(authHeader.slice(7), "base64").toString().split(":")[0]);
-      if (!isNaN(userId)) {
-        const [u] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-        senderUser = u ?? null;
-      }
-    }
+    // Use authenticated user as sender
+    const [senderUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.authUser!.id));
 
     const senderName = senderUser
       ? `${senderUser.firstName ?? ""} ${senderUser.lastName ?? ""}`.trim() || senderUser.email
@@ -1795,7 +1821,7 @@ router.get("/:id/pdf", async (req, res) => {
 });
 
 // ── Delete report ──────────────────────────────────────────────────────────────
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) { res.status(400).json({ error: "invalid_id" }); return; }

@@ -29,6 +29,7 @@ import NotFound from "@/pages/not-found";
 import ActivityPage from "@/pages/activity";
 import ShareView from "@/pages/share-view";
 import Issues from "@/pages/issues";
+import ResetPassword from "@/pages/reset-password";
 
 // Global fetch interceptor for auth
 const originalFetch = window.fetch;
@@ -88,6 +89,7 @@ function Router() {
       <Route path="/issues" component={Issues} />
       <Route path="/activity" component={ActivityPage} />
       <Route path="/share/:token" component={ShareView} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route component={NotFound} />
     </Switch>
   );
