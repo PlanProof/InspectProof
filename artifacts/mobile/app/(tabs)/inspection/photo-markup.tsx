@@ -1,10 +1,9 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   View, Text, StyleSheet, Pressable, Alert, ActivityIndicator,
   useWindowDimensions, Image, ScrollView,
 } from "react-native";
 import { GestureDetector, Gesture, GestureHandlerRootView } from "react-native-gesture-handler";
-import { useSharedValue, runOnJS } from "react-native-reanimated";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -61,10 +60,9 @@ export default function PhotoMarkupScreen() {
   useEffect(() => { selectedColorRef.current = selectedColor; }, [selectedColor]);
   useEffect(() => { selectedWidthRef.current = selectedWidth; }, [selectedWidth]);
 
-  // In-flight points stored in shared value for worklet access
-  const inFlightPoints = useSharedValue<{ x: number; y: number }[]>([]);
-  // Track whether onEnd already committed so onFinalize doesn't double-commit
-  const didCommit = useSharedValue(false);
+  // In-flight points and commit guard stored as refs (JS thread, old-arch safe)
+  const inFlightRef = useRef<{ x: number; y: number }[]>([]);
+  const didCommitRef = useRef(false);
 
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
   const drawAreaH = screenH - insets.top - insets.bottom - 56 - 134;
@@ -230,65 +228,51 @@ export default function PhotoMarkupScreen() {
 
   // ── Markup canvas (GestureDetector) ──────────────────────────────────────
 
-  // JS-thread callbacks invoked via runOnJS from the gesture worklet
-  const onGestureBegin = useCallback((x: number, y: number) => {
-    setLiveStroke([{ x, y }]);
-  }, []);
-
-  const onGestureUpdate = useCallback((points: { x: number; y: number }[]) => {
-    setLiveStroke([...points]);
-  }, []);
-
-  const onGestureCommit = useCallback((points: { x: number; y: number }[]) => {
-    if (points.length >= 1) {
+  // Commit helper — called from both onEnd and onFinalize with a guard so it
+  // only fires once per stroke regardless of termination path.
+  const commitStroke = useCallback(() => {
+    if (didCommitRef.current) return;
+    didCommitRef.current = true;
+    const pts = inFlightRef.current;
+    inFlightRef.current = [];
+    if (pts.length >= 1) {
       setStrokes(prev => [...prev, {
-        points,
+        points: pts,
         color: selectedColorRef.current,
         width: selectedWidthRef.current,
       }]);
     }
     setLiveStroke([]);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const panGesture = Gesture.Pan()
-    .minDistance(0)
-    .onBegin((e) => {
-      "worklet";
-      didCommit.value = false;
-      const pt = { x: e.x, y: e.y };
-      inFlightPoints.value = [pt];
-      runOnJS(onGestureBegin)(e.x, e.y);
-    })
-    .onUpdate((e) => {
-      "worklet";
-      const updated = [...inFlightPoints.value, { x: e.x, y: e.y }];
-      inFlightPoints.value = updated;
-      runOnJS(onGestureUpdate)(updated);
-    })
-    .onEnd((_e, success) => {
-      "worklet";
-      // Fires on normal stroke completion (finger/stylus lifted cleanly, success=true)
-      // or when the gesture is recognised but cancelled before end (success=false).
-      if (!didCommit.value) {
-        didCommit.value = true;
-        const pts = inFlightPoints.value;
-        inFlightPoints.value = [];
-        runOnJS(onGestureCommit)(pts);
-      }
-    })
-    .onFinalize((_e, success) => {
-      "worklet";
-      // Fires on EVERY termination path including OS responder steal (stylus lift / system
-      // interrupt). When success=false the gesture failed; this is the "onFail" equivalent
-      // in the composable Gesture API — Gesture.Pan() has no separate onFail() method.
-      // The didCommit guard prevents double-commit when onEnd already ran (success=true path).
-      if (!didCommit.value) {
-        didCommit.value = true;
-        const pts = inFlightPoints.value;
-        inFlightPoints.value = [];
-        runOnJS(onGestureCommit)(pts);
-      }
-    });
+  // Gesture is created ONCE (useMemo with empty deps) so it never gets
+  // recreated on re-renders caused by setLiveStroke — recreation cancels
+  // any active gesture and causes strokes to vanish on lift.
+  // runOnJS(true) forces callbacks onto the JS thread (safe on old arch,
+  // and lets us call setState / refs directly without worklet boilerplate).
+  const panGesture = useMemo(() =>
+    Gesture.Pan()
+      .runOnJS(true)
+      .minDistance(0)
+      .onBegin((e) => {
+        didCommitRef.current = false;
+        inFlightRef.current = [{ x: e.x, y: e.y }];
+        setLiveStroke([{ x: e.x, y: e.y }]);
+      })
+      .onUpdate((e) => {
+        const updated = [...inFlightRef.current, { x: e.x, y: e.y }];
+        inFlightRef.current = updated;
+        setLiveStroke([...updated]);
+      })
+      .onEnd(() => {
+        commitStroke();
+      })
+      .onFinalize(() => {
+        // Covers OS responder steal (stylus hover-exit, system interruption).
+        // Guard inside commitStroke prevents double-commit if onEnd already ran.
+        commitStroke();
+      }),
+  [commitStroke]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveMarkup = async () => {
     if (!savedObjectPath) return;
