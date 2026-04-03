@@ -1,8 +1,10 @@
-import React, { useRef, useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View, Text, StyleSheet, Pressable, Alert, ActivityIndicator,
-  PanResponder, useWindowDimensions, Image, ScrollView,
+  useWindowDimensions, Image, ScrollView,
 } from "react-native";
+import { GestureDetector, Gesture, GestureHandlerRootView } from "react-native-gesture-handler";
+import { useSharedValue, runOnJS } from "react-native-reanimated";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -11,18 +13,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { Colors } from "@/constants/colors";
-
-interface Stroke {
-  points: { x: number; y: number }[];
-  color: string;
-  width: number;
-}
-
-interface MarkupData {
-  w: number;
-  h: number;
-  strokes: Stroke[];
-}
+import { pointsToPath, scaleStrokes, type Stroke, type MarkupData } from "@/utils/markup-utils";
 
 type Phase = "preview" | "markup";
 type UploadState = "uploading" | "saved" | "error";
@@ -37,21 +28,12 @@ const PEN_COLORS = [
 ];
 const PEN_WIDTHS = [2, 4, 7];
 
-function pointsToPath(points: { x: number; y: number }[]): string {
-  if (points.length === 0) return "";
-  if (points.length === 1) {
-    const p = points[0];
-    return `M ${p.x.toFixed(1)} ${p.y.toFixed(1)} L ${(p.x + 0.1).toFixed(1)} ${p.y.toFixed(1)}`;
-  }
-  return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-}
-
 export default function PhotoMarkupScreen() {
   const { photoUri: initialPhotoUri, inspectionId, itemId, objectPath: existingObjectPath } = useLocalSearchParams<{
     photoUri: string;
     inspectionId: string;
     itemId: string;
-    objectPath?: string;  // set when editing markup on an already-saved photo
+    objectPath?: string;
   }>();
 
   const insets = useSafeAreaInsets();
@@ -59,7 +41,6 @@ export default function PhotoMarkupScreen() {
   const queryClient = useQueryClient();
   const { width: screenW, height: screenH } = useWindowDimensions();
 
-  // When editing an existing photo, start in "saved" state with the known path
   const isExistingPhoto = !!existingObjectPath;
 
   const [phase, setPhase] = useState<Phase>("preview");
@@ -74,14 +55,18 @@ export default function PhotoMarkupScreen() {
   const [selectedWidth, setSelectedWidth] = useState(4);
   const [savingMarkup, setSavingMarkup] = useState(false);
 
-  const currentPoints = useRef<{ x: number; y: number }[]>([]);
+  // Refs for stable access from gesture callbacks (which close over initial values)
   const selectedColorRef = useRef(selectedColor);
   const selectedWidthRef = useRef(selectedWidth);
   useEffect(() => { selectedColorRef.current = selectedColor; }, [selectedColor]);
   useEffect(() => { selectedWidthRef.current = selectedWidth; }, [selectedWidth]);
 
+  // In-flight points stored in shared value for worklet access
+  const inFlightPoints = useSharedValue<{ x: number; y: number }[]>([]);
+  // Track whether onEnd already committed so onFinalize doesn't double-commit
+  const didCommit = useSharedValue(false);
+
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
-  // Toolbar sits below canvas; reserve header (56) + toolbar (~130) + safe area
   const drawAreaH = screenH - insets.top - insets.bottom - 56 - 134;
   const drawAreaW = screenW;
 
@@ -132,7 +117,6 @@ export default function PhotoMarkupScreen() {
       ? currentItems.find((i: any) => i.id === parseInt(itemId))
       : null;
     const existingUrls: string[] = item?.photoUrls ?? [];
-    // Guard: skip if this path was already saved (prevents duplicates on double-mount)
     if (existingUrls.includes(objectPath)) {
       queryClient.invalidateQueries({ queryKey: ["inspection-checklist", inspectionId] });
       return;
@@ -142,11 +126,12 @@ export default function PhotoMarkupScreen() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ photoUrls: [...existingUrls, objectPath] }),
     });
-    // Invalidate so the conduct screen refreshes photos when user navigates back
     queryClient.invalidateQueries({ queryKey: ["inspection-checklist", inspectionId] });
   }, [fetchWithAuth, inspectionId, itemId, queryClient]);
 
-  // Load existing strokes when editing an already-saved photo
+  // Load existing strokes when editing an already-saved photo.
+  // Strokes are scaled from saved canvas dimensions to current drawAreaW/drawAreaH
+  // so they remain precisely aligned regardless of device size or orientation.
   useEffect(() => {
     if (!isExistingPhoto || !existingObjectPath) return;
     let cancelled = false;
@@ -157,7 +142,9 @@ export default function PhotoMarkupScreen() {
         const it = Array.isArray(items) ? items.find((i: any) => i.id === parseInt(itemId)) : null;
         const existing: MarkupData | undefined = it?.photoMarkups?.[existingObjectPath];
         if (existing && existing.strokes?.length > 0 && !cancelled) {
-          setStrokes(existing.strokes);
+          const savedW = existing.w || drawAreaW;
+          const savedH = existing.h || drawAreaH;
+          setStrokes(scaleStrokes(existing.strokes, savedW, savedH, drawAreaW, drawAreaH));
         }
       } catch { /* silent — user can still draw fresh markup */ }
     })();
@@ -165,7 +152,6 @@ export default function PhotoMarkupScreen() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    // Skip upload entirely when we're editing markup on an already-saved photo
     if (isExistingPhoto) return;
     if (!currentPhotoUri) return;
     let cancelled = false;
@@ -236,48 +222,73 @@ export default function PhotoMarkupScreen() {
     }
     const picked = await ImagePicker.launchCameraAsync({ quality: 0.8 });
     if (picked.canceled || !picked.assets[0]) return;
-    // Reset state and auto-upload the new photo
     setPhase("preview");
     setStrokes([]);
     setLiveStroke([]);
     setCurrentPhotoUri(picked.assets[0].uri);
   };
 
-  // ── Markup canvas ─────────────────────────────────────────────────────────
+  // ── Markup canvas (GestureDetector) ──────────────────────────────────────
 
-  const commitStroke = useCallback(() => {
-    if (currentPoints.current.length >= 1) {
+  // JS-thread callbacks invoked via runOnJS from the gesture worklet
+  const onGestureBegin = useCallback((x: number, y: number) => {
+    setLiveStroke([{ x, y }]);
+  }, []);
+
+  const onGestureUpdate = useCallback((points: { x: number; y: number }[]) => {
+    setLiveStroke([...points]);
+  }, []);
+
+  const onGestureCommit = useCallback((points: { x: number; y: number }[]) => {
+    if (points.length >= 1) {
       setStrokes(prev => [...prev, {
-        points: [...currentPoints.current],
+        points,
         color: selectedColorRef.current,
         width: selectedWidthRef.current,
       }]);
     }
-    currentPoints.current = [];
     setLiveStroke([]);
   }, []);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponderCapture: () => true,
-      onPanResponderGrant: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        currentPoints.current = [{ x: locationX, y: locationY }];
-        setLiveStroke([{ x: locationX, y: locationY }]);
-      },
-      onPanResponderMove: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        currentPoints.current.push({ x: locationX, y: locationY });
-        setLiveStroke([...currentPoints.current]);
-      },
-      onPanResponderRelease: () => { commitStroke(); },
-      onPanResponderTerminate: () => { commitStroke(); },
-      onShouldBlockNativeResponder: () => true,
+  const panGesture = Gesture.Pan()
+    .minDistance(0)
+    .onBegin((e) => {
+      "worklet";
+      didCommit.value = false;
+      const pt = { x: e.x, y: e.y };
+      inFlightPoints.value = [pt];
+      runOnJS(onGestureBegin)(e.x, e.y);
     })
-  ).current;
+    .onUpdate((e) => {
+      "worklet";
+      const updated = [...inFlightPoints.value, { x: e.x, y: e.y }];
+      inFlightPoints.value = updated;
+      runOnJS(onGestureUpdate)(updated);
+    })
+    .onEnd((_e, success) => {
+      "worklet";
+      // Fires on normal stroke completion (finger/stylus lifted cleanly, success=true)
+      // or when the gesture is recognised but cancelled before end (success=false).
+      if (!didCommit.value) {
+        didCommit.value = true;
+        const pts = inFlightPoints.value;
+        inFlightPoints.value = [];
+        runOnJS(onGestureCommit)(pts);
+      }
+    })
+    .onFinalize((_e, success) => {
+      "worklet";
+      // Fires on EVERY termination path including OS responder steal (stylus lift / system
+      // interrupt). When success=false the gesture failed; this is the "onFail" equivalent
+      // in the composable Gesture API — Gesture.Pan() has no separate onFail() method.
+      // The didCommit guard prevents double-commit when onEnd already ran (success=true path).
+      if (!didCommit.value) {
+        didCommit.value = true;
+        const pts = inFlightPoints.value;
+        inFlightPoints.value = [];
+        runOnJS(onGestureCommit)(pts);
+      }
+    });
 
   const saveMarkup = async () => {
     if (!savedObjectPath) return;
@@ -307,7 +318,7 @@ export default function PhotoMarkupScreen() {
 
   if (phase === "markup") {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <GestureHandlerRootView style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Pressable onPress={() => setPhase("preview")} hitSlop={12} style={styles.iconBtn}>
             <Feather name="arrow-left" size={22} color="#fff" />
@@ -324,33 +335,38 @@ export default function PhotoMarkupScreen() {
           </Pressable>
         </View>
 
-        <View
-          collapsable={false}
-          style={[styles.canvas, { width: drawAreaW, height: drawAreaH }]}
-          {...panResponder.panHandlers}
-        >
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Image source={{ uri: currentPhotoUri }} style={StyleSheet.absoluteFill} resizeMode="contain" />
-          </View>
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Svg width={drawAreaW} height={drawAreaH}>
-              {strokes.map((stroke, i) => (
-                <Path key={i} d={pointsToPath(stroke.points)} stroke={stroke.color}
-                  strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-              ))}
-              {liveStroke.length >= 1 && (
-                <Path d={pointsToPath(liveStroke)} stroke={selectedColor}
-                  strokeWidth={selectedWidth} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-              )}
-            </Svg>
-          </View>
-          {strokes.length === 0 && liveStroke.length === 0 && (
-            <View style={styles.hintBox} pointerEvents="none">
-              <Feather name="edit-2" size={20} color="rgba(255,255,255,0.6)" />
-              <Text style={styles.hintText}>Draw to annotate</Text>
+        <GestureDetector gesture={panGesture}>
+          <View
+            collapsable={false}
+            style={[styles.canvas, { width: drawAreaW, height: drawAreaH }]}
+          >
+            {/* Image layer — no pointer events */}
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <Image source={{ uri: currentPhotoUri }} style={StyleSheet.absoluteFill} resizeMode="contain" />
             </View>
-          )}
-        </View>
+
+            {/* SVG stroke layer — no pointer events so gesture passes through */}
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <Svg width={drawAreaW} height={drawAreaH}>
+                {strokes.map((stroke, i) => (
+                  <Path key={i} d={pointsToPath(stroke.points)} stroke={stroke.color}
+                    strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                ))}
+                {liveStroke.length >= 1 && (
+                  <Path d={pointsToPath(liveStroke)} stroke={selectedColor}
+                    strokeWidth={selectedWidth} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                )}
+              </Svg>
+            </View>
+
+            {strokes.length === 0 && liveStroke.length === 0 && (
+              <View style={styles.hintBox} pointerEvents="none">
+                <Feather name="edit-2" size={20} color="rgba(255,255,255,0.6)" />
+                <Text style={styles.hintText}>Draw to annotate</Text>
+              </View>
+            )}
+          </View>
+        </GestureDetector>
 
         <View style={[styles.toolbar, { paddingBottom: insets.bottom + 8 }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorRow}>
@@ -379,7 +395,7 @@ export default function PhotoMarkupScreen() {
             </Pressable>
           </View>
         </View>
-      </View>
+      </GestureHandlerRootView>
     );
   }
 
@@ -450,7 +466,6 @@ export default function PhotoMarkupScreen() {
       </View>
 
       <View style={[styles.previewActions, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}>
-        {/* Primary action — take another photo immediately */}
         <Pressable
           style={[styles.btnPrimary, !isSaved && { opacity: 0.45 }]}
           onPress={takeAnother}
