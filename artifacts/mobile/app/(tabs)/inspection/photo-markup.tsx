@@ -40,12 +40,10 @@ export default function PhotoMarkupScreen() {
   const queryClient = useQueryClient();
   const { width: screenW, height: screenH } = useWindowDimensions();
 
-  const isExistingPhoto = !!existingObjectPath;
-
   const [phase, setPhase] = useState<Phase>("preview");
   const [currentPhotoUri, setCurrentPhotoUri] = useState(initialPhotoUri);
-  const [uploadState, setUploadState] = useState<UploadState>(isExistingPhoto ? "saved" : "uploading");
-  const [savedObjectPath, setSavedObjectPath] = useState<string | null>(isExistingPhoto ? existingObjectPath : null);
+  const [uploadState, setUploadState] = useState<UploadState>(existingObjectPath ? "saved" : "uploading");
+  const [savedObjectPath, setSavedObjectPath] = useState<string | null>(existingObjectPath ?? null);
 
   // Markup state
   const [strokes, setStrokes] = useState<Stroke[]>([]);
@@ -63,6 +61,31 @@ export default function PhotoMarkupScreen() {
   // In-flight points and commit guard stored as refs (JS thread, old-arch safe)
   const inFlightRef = useRef<{ x: number; y: number }[]>([]);
   const didCommitRef = useRef(false);
+
+  // ── Sync state when navigation params change ──────────────────────────────
+  // useState() only initialises on first mount. When Expo Router reuses the
+  // screen (e.g. user takes a second photo), params update but state stays
+  // stale. This effect resets everything to match the new params.
+  const prevPhotoUriRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    // Skip the very first mount (useState already handled it).
+    if (prevPhotoUriRef.current === undefined) {
+      prevPhotoUriRef.current = initialPhotoUri;
+      return;
+    }
+    if (prevPhotoUriRef.current === initialPhotoUri) return;
+    prevPhotoUriRef.current = initialPhotoUri;
+
+    // Reset all per-photo state for the new photo.
+    setCurrentPhotoUri(initialPhotoUri);
+    setPhase("preview");
+    setStrokes([]);
+    setLiveStroke([]);
+    inFlightRef.current = [];
+    didCommitRef.current = false;
+    setSavedObjectPath(existingObjectPath ?? null);
+    setUploadState(existingObjectPath ? "saved" : "uploading");
+  }, [initialPhotoUri, existingObjectPath]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
   const drawAreaH = screenH - insets.top - insets.bottom - 56 - 134;
@@ -131,7 +154,7 @@ export default function PhotoMarkupScreen() {
   // Strokes are scaled from saved canvas dimensions to current drawAreaW/drawAreaH
   // so they remain precisely aligned regardless of device size or orientation.
   useEffect(() => {
-    if (!isExistingPhoto || !existingObjectPath) return;
+    if (!existingObjectPath) return;
     let cancelled = false;
     (async () => {
       try {
@@ -150,7 +173,7 @@ export default function PhotoMarkupScreen() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (isExistingPhoto) return;
+    if (existingObjectPath) return; // already uploaded — skip
     if (!currentPhotoUri) return;
     let cancelled = false;
     setUploadState("uploading");
