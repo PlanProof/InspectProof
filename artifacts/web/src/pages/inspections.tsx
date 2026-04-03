@@ -166,8 +166,9 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
     onClose();
   }
 
-  const INSPECTOR_ROLES = ["inspector", "building_inspector", "certifier", "admin"];
-  const inspectors = users?.filter((u: any) => INSPECTOR_ROLES.includes(u.role)) ?? [];
+  // Show all team members in the assignment dropdown — the API already scopes the
+  // user list to the admin's own organisation, so every returned user is a valid assignee.
+  const inspectors = users ?? [];
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>

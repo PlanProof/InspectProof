@@ -1566,7 +1566,6 @@ function BookInspectionDialog({
             >
               <option value="">— Unassigned —</option>
               {(users ?? [])
-                .filter((u: any) => ["inspector", "building_inspector", "certifier", "admin"].includes(u.role))
                 .map((u: any) => (
                   <option key={u.id} value={String(u.id)}>
                     {u.firstName} {u.lastName}
