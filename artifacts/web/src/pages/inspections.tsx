@@ -427,7 +427,11 @@ export default function Inspections() {
                   onClick={() => navigate(`/inspections/${insp.id}`)}
                 >
                   <TableCell className="font-medium text-sidebar group-hover:text-secondary transition-colors">{insp.projectName}</TableCell>
-                  <TableCell className="capitalize">{insp.inspectionType.replace(/_/g, ' ')}</TableCell>
+                  <TableCell className="capitalize">{
+                    (insp as { checklistTemplateName?: string }).checklistTemplateName
+                      ? cleanTypeName((insp as { checklistTemplateName?: string }).checklistTemplateName!)
+                      : insp.inspectionType.replace(/_/g, ' ')
+                  }</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5 text-sm">
                       <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />

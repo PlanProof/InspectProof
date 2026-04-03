@@ -106,6 +106,13 @@ async function runSchemaMigrations() {
     // users: user_type column
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS user_type text NOT NULL DEFAULT 'inspector'`);
 
+    // ── One-time data fix: rename se_footing_slab → bs_footing_slab in templates ──
+    await pool.query(`
+      UPDATE checklist_templates
+      SET inspection_type = 'bs_footing_slab'
+      WHERE inspection_type = 'se_footing_slab'
+    `);
+
     // ── One-time data fix: link jakey.turner@outlook.com to Jake's org ───────
     // Safe to run on every startup — the WHERE clause is a no-op once already done.
     const jakyHash = await bcrypt.hash("InspectProof2024!", 12);

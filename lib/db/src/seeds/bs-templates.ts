@@ -2581,7 +2581,7 @@ const SE_DESCRIPTION = "Comprehensive structural footing & slab inspection align
 const BS_SE_FOOTING_SLAB: BSTemplate[] = [
   {
     name: "Footing & Slab Inspection",
-    inspectionType: "se_footing_slab",
+    inspectionType: "bs_footing_slab",
     folder: "Dwelling 1 Storey (Class 1)",
     description: SE_DESCRIPTION,
     sortOrder: 8,
@@ -2589,7 +2589,7 @@ const BS_SE_FOOTING_SLAB: BSTemplate[] = [
   },
   {
     name: "Footing & Slab Inspection",
-    inspectionType: "se_footing_slab",
+    inspectionType: "bs_footing_slab",
     folder: "Dwelling 2 Storey (Class 1)",
     description: SE_DESCRIPTION,
     sortOrder: 8,
@@ -2597,7 +2597,7 @@ const BS_SE_FOOTING_SLAB: BSTemplate[] = [
   },
   {
     name: "Footing & Slab Inspection",
-    inspectionType: "se_footing_slab",
+    inspectionType: "bs_footing_slab",
     folder: "Shed Timber Framed (Class 10)",
     description: SE_DESCRIPTION,
     sortOrder: 6,
@@ -2605,7 +2605,7 @@ const BS_SE_FOOTING_SLAB: BSTemplate[] = [
   },
   {
     name: "Footing & Slab Inspection",
-    inspectionType: "se_footing_slab",
+    inspectionType: "bs_footing_slab",
     folder: "Shed Steel (Class 10)",
     description: SE_DESCRIPTION,
     sortOrder: 6,
@@ -2613,7 +2613,7 @@ const BS_SE_FOOTING_SLAB: BSTemplate[] = [
   },
   {
     name: "Footing & Slab Inspection",
-    inspectionType: "se_footing_slab",
+    inspectionType: "bs_footing_slab",
     folder: "Class 2-9",
     description: SE_DESCRIPTION,
     sortOrder: 7,
@@ -2621,7 +2621,7 @@ const BS_SE_FOOTING_SLAB: BSTemplate[] = [
   },
   {
     name: "Footing & Slab Inspection",
-    inspectionType: "se_footing_slab",
+    inspectionType: "bs_footing_slab",
     folder: "Swimming Pool / Spa (Class 10b)",
     description: SE_DESCRIPTION,
     sortOrder: 4,
