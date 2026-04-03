@@ -824,17 +824,6 @@ export default function GenerateReportScreen() {
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>{inspection?.projectName}</Text>
         </View>
-        {step === "select" && (
-          <Pressable
-            style={[styles.nextBtn, !selectedReportType && styles.nextBtnDisabled]}
-            onPress={generateReport}
-            disabled={!selectedReportType || generating}
-          >
-            {generating
-              ? <ActivityIndicator size="small" color={Colors.primary} />
-              : <Text style={styles.nextBtnText}>Generate</Text>}
-          </Pressable>
-        )}
       </View>
 
       {/* ── Step indicator ── */}
@@ -856,7 +845,7 @@ export default function GenerateReportScreen() {
       {step === "select" && (
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 16 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 100 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Existing reports */}
@@ -1012,6 +1001,28 @@ export default function GenerateReportScreen() {
             </View>
           )}
         </ScrollView>
+      )}
+
+      {/* ── Step 1: Sticky generate bar ── */}
+      {step === "select" && (
+        <View style={[styles.generateSelectBar, { paddingBottom: tabBarHeight + 12 }]}>
+          <Pressable
+            style={[styles.generateSelectBtn, !selectedReportType && styles.generateSelectBtnDisabled]}
+            onPress={generateReport}
+            disabled={!selectedReportType || generating}
+          >
+            {generating ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : (
+              <>
+                <Feather name="file-text" size={18} color={selectedReportType ? Colors.primary : Colors.textTertiary} />
+                <Text style={[styles.generateSelectBtnText, !selectedReportType && styles.generateSelectBtnTextDisabled]}>
+                  {selectedReportType ? "Generate Report" : "Select a report type above"}
+                </Text>
+              </>
+            )}
+          </Pressable>
+        </View>
       )}
 
       {/* ── Step 2: Report preview ── */}
@@ -1176,9 +1187,35 @@ const styles = StyleSheet.create({
   headerCenter: { flex: 1 },
   headerTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   headerSub: { fontSize: 12, fontFamily: "PlusJakartaSans_500Medium", color: Colors.textSecondary, marginTop: 1 },
-  nextBtn: { backgroundColor: Colors.accent, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  nextBtnDisabled: { opacity: 0.45 },
-  nextBtnText: { fontSize: 14, fontFamily: "PlusJakartaSans_700Bold", color: Colors.primary },
+  generateSelectBar: {
+    backgroundColor: Colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  generateSelectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.accent,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  generateSelectBtnDisabled: {
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  generateSelectBtnText: {
+    fontSize: 15,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: Colors.primary,
+  },
+  generateSelectBtnTextDisabled: {
+    color: Colors.textTertiary,
+  },
 
   stepRow: {
     flexDirection: "row",

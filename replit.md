@@ -61,6 +61,8 @@ pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vi
 - **Two-step onboarding**: `?onboarding=1` now shows Step 1 (Profile/Profession) → Step 2 (Organisation Details) with progress banner. "Save & Start Inspecting →" button and "Skip for now" link on Step 2.
 - **Report Email Sending Fixed**: `POST /api/reports/:id/send` now generates a PDF buffer and sends it via Resend with the PDF as email attachment. `sendReportEmail()` added to `lib/email.ts`. Returns `email_failed` error if email delivery fails.
 - **Org data in PDF footer**: PDF reports show company name, ABN, and address in the navy footer bar (instead of generic "InspectProof · Confidential"). Org data fetched from the inspector's user record at PDF generation time.
+- **Address Autocomplete (Web)**: `AddressAutocomplete` component in `artifacts/web/src/components/` uses free Nominatim OpenStreetMap API (no API key required). Searches Australian addresses, parses house/street/suburb/state/postcode fields. Used in the New Project dialog. Falls back to manual entry mode with unverified warning banner.
+- **Generate Report UX fix**: Removed the confusing "Generate" button from the `generate-report.tsx` header. Now shows a clear sticky footer CTA: grayed-out "Select a report type above" when no type selected, active "Generate Report" button once a type is selected.
 
 ## Security Architecture
 
