@@ -104,10 +104,8 @@ export default function PhotoMarkupScreen() {
   }, [baseUrl, token]);
 
   const goToInspection = useCallback(() => {
-    if (router.canGoBack()) {
-      router.back();
-    } else if (inspectionId) {
-      router.replace({
+    if (inspectionId) {
+      router.navigate({
         pathname: "/inspection/conduct/[id]" as any,
         params: { id: inspectionId },
       });
