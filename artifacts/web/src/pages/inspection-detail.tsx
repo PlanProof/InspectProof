@@ -1419,8 +1419,11 @@ function ReportsTab({
         const date = report.createdAt
           ? new Date(report.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" })
           : null;
-        const preview = typeof report.content === "string"
-          ? report.content.slice(0, 220).replace(/\n+/g, " ").trim()
+        const rawContent = typeof report.content === "string" ? report.content : null;
+        const preview = rawContent
+          ? (isHtmlContent(rawContent)
+            ? rawContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 220)
+            : rawContent.slice(0, 220).replace(/\n+/g, " ").trim())
           : null;
         const isFinalising = finalisingId === report.id;
         const isSendOpen   = sendingId === report.id;
@@ -1585,8 +1588,8 @@ function ReportsTab({
             {/* Content preview */}
             {preview && !isSendOpen && (
               <div className="px-5 pb-4">
-                <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 font-mono leading-relaxed line-clamp-3">
-                  {preview}{preview.length < (report.content?.length ?? 0) ? "…" : ""}
+                <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 leading-relaxed line-clamp-3">
+                  {preview}{preview.length < (rawContent?.length ?? 0) ? "…" : ""}
                 </div>
               </div>
             )}
