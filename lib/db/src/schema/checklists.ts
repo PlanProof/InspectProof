@@ -11,6 +11,8 @@ export const checklistTemplatesTable = pgTable("checklist_templates", {
   discipline: text("discipline").notNull().default("Building Surveyor"),
   sortOrder: integer("sort_order").notNull().default(0),
   isGlobal: boolean("is_global").notNull().default(false),
+  recurrenceType: text("recurrence_type"),
+  recurrenceInterval: integer("recurrence_interval"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

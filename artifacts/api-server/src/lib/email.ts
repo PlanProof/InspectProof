@@ -587,3 +587,10 @@ export async function sendContractorDefectReportEmail(
     throw err;
   }
 }
+
+export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
+  if (!isConfigured()) return;
+  const resend = getResend();
+  const { error } = await resend.emails.send({ from: SMTP_FROM, to, subject, html });
+  if (error) throw new Error(error.message);
+}

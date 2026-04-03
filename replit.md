@@ -35,17 +35,26 @@ pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vi
 
 ## Routes (Web App)
 
-`/`, `/login`, `/dashboard`, `/projects`, `/projects/:id`, `/inspections`, `/inspections/:id`, `/analytics`, `/templates`, `/doc-templates`, `/inspectors`, `/settings`, `/billing`, `/admin`, `/terms`, `/privacy`
+`/`, `/login`, `/dashboard`, `/projects`, `/projects/:id`, `/inspections`, `/inspections/:id`, `/issues`, `/activity`, `/share/:token`, `/analytics`, `/templates`, `/doc-templates`, `/inspectors`, `/settings`, `/billing`, `/admin`, `/terms`, `/privacy`
 
 **Reports:** Accessed via the "Reports" tab inside each project's detail page (`/projects/:id`) — no standalone `/reports` route.
 
 **Contractors:** Managed per-project via the "Contractors" tab inside `/projects/:id` — linked specifically to that project.
+
+**Public Share Portal:** `/share/:token` — public (no auth) client portal for sharing an inspection with clients. Generated via `POST /api/inspections/:id/share`.
 
 ## Recent Feature Additions
 
 - **Project Contractors**: `project_contractors` table, full CRUD API at `/api/projects/:id/contractors`, "Contractors" tab in project detail with add/edit/delete + Send Defect Report email per inspection
 - **Trade Allocated dropdown**: Inspection checklist items use a `<select>` populated from project contractors + internal staff (falls back to text input if none configured)
 - **Internal Staff email + invite**: `email` column on `internal_staff` table, Send Invite button in Settings
+- **Dashboard Defects + Upcoming stats**: Dashboard now shows 5 KPI cards: Active Projects, Inspections (Month), Reports Pending, Open Defects (links to /issues), Upcoming 7 Days
+- **Issues page** (`/issues`): Full issues listing with stat bar (Open/Overdue/Resolved), close-out dialog with evidence photo upload, overdue reminder email button
+- **Audit Trail** (`/activity`): Filterable audit log with entity type tabs and search. API: `GET /api/activity`
+- **Client Portal** (`/share/:token`): Public token-based inspection portal (no auth). Generated via `POST /api/inspections/:id/share`
+- **Digital Sign-off**: `POST /api/inspections/:id/sign-off` sets status=completed + signedOffAt. Sign Off + Share buttons in inspection detail header
+- **Recurring Templates**: `recurrence_type` + `recurrence_interval` fields on `checklist_templates`. Edit form + display badge in templates page
+- **Overdue Reminders**: `POST /api/issues/send-overdue-reminders` sends emails for all overdue open issues (admin/company-admin only)
 
 ## External Dependencies
 

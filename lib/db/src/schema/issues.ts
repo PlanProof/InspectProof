@@ -16,6 +16,8 @@ export const issuesTable = pgTable("issues", {
   dueDate: date("due_date"),
   resolvedDate: date("resolved_date"),
   assignedToId: integer("assigned_to_id"),
+  closeoutNotes: text("closeout_notes"),
+  closeoutPhotos: text("closeout_photos"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

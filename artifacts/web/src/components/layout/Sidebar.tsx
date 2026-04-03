@@ -12,6 +12,8 @@ import {
   FileText,
   ShieldCheck,
   Zap,
+  AlertTriangle,
+  Activity,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -19,8 +21,10 @@ const navigation = [
   { name: "Home",        href: "/dashboard",   icon: Home },
   { name: "Projects",    href: "/projects",    icon: FolderOpen },
   { name: "Inspections", href: "/inspections", icon: CheckSquare },
+  { name: "Issues",      href: "/issues",      icon: AlertTriangle },
   { name: "Templates",   href: "/templates",   icon: FileText },
   { name: "Analytics",   href: "/analytics",   icon: BarChart3 },
+  { name: "Activity",    href: "/activity",    icon: Activity },
   { name: "Team",        href: "/inspectors",  icon: UsersRound },
 ];
 
@@ -59,7 +63,7 @@ export function Sidebar() {
         <nav className="flex-1 space-y-1">
           {navigation.map((item) => {
             const isActive = location === item.href || location.startsWith(`${item.href}/`)
-            || (item.href === "/templates" && location === "/doc-templates");
+              || (item.href === "/templates" && location === "/doc-templates");
             return (
               <Link
                 key={item.name}

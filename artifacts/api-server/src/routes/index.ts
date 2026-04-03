@@ -19,6 +19,8 @@ import docTemplatesRouter from "./docTemplates";
 import feedbackRouter from "./feedback";
 import markupRouter from "./markup";
 import internalStaffRouter from "./internalStaff";
+import activityRouter from "./activity";
+import shareRouter from "./share";
 
 const router: IRouter = Router();
 
@@ -42,5 +44,7 @@ router.use("/doc-templates", docTemplatesRouter);
 router.use("/feedback", feedbackRouter);
 router.use(markupRouter);
 router.use("/internal-staff", internalStaffRouter);
+router.use("/activity", activityRouter);
+router.use(shareRouter);
 
 export default router;

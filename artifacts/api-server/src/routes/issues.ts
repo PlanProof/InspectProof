@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
-import { db, issuesTable, projectsTable, activityLogsTable } from "@workspace/db";
+import { eq, sql, lt, and, ne } from "drizzle-orm";
+import { db, issuesTable, projectsTable, activityLogsTable, usersTable } from "@workspace/db";
 import { optionalAuth } from "../middleware/auth";
+import { sendEmail } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -34,6 +35,8 @@ async function formatIssue(i: any) {
     dueDate: i.dueDate,
     resolvedDate: i.resolvedDate,
     assignedToId: i.assignedToId,
+    closeoutNotes: i.closeoutNotes ?? null,
+    closeoutPhotos: i.closeoutPhotos ?? null,
     projectName: pName,
     createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : i.createdAt,
     updatedAt: i.updatedAt instanceof Date ? i.updatedAt.toISOString() : i.updatedAt,
@@ -128,8 +131,15 @@ router.put("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const data = req.body;
+    const requestingUserId = getUserIdFromRequest(req);
+
+    const updateData: any = { ...data, updatedAt: new Date() };
+    if (data.status === "resolved" && !data.resolvedDate) {
+      updateData.resolvedDate = new Date().toISOString().slice(0, 10);
+    }
+
     const [issue] = await db.update(issuesTable)
-      .set({ ...data, updatedAt: new Date() })
+      .set(updateData)
       .where(eq(issuesTable.id, id))
       .returning();
 
@@ -138,17 +148,69 @@ router.put("/:id", async (req, res) => {
       return;
     }
 
+    const action = data.status === "resolved" ? "closed" : "updated";
+    const description = data.status === "resolved"
+      ? `Issue "${issue.title}" closed out${data.closeoutNotes ? " with notes" : ""}`
+      : `Issue "${issue.title}" updated to ${data.status || issue.status}`;
+
     await db.insert(activityLogsTable).values({
       entityType: "issue",
       entityId: id,
-      action: "updated",
-      description: `Issue "${issue.title}" updated to ${data.status || issue.status}`,
-      userId: 1,
+      action,
+      description,
+      userId: requestingUserId ?? 1,
     });
 
     res.json(await formatIssue(issue));
   } catch (err) {
     req.log.error({ err }, "Update issue error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.post("/send-overdue-reminders", optionalAuth, async (req, res) => {
+  try {
+    if (!req.authUser?.isAdmin && !req.authUser?.isCompanyAdmin) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const overdueIssues = await db.select().from(issuesTable)
+      .where(and(
+        lt(issuesTable.dueDate, today),
+        ne(issuesTable.status, "resolved"),
+      ));
+
+    let sent = 0;
+    for (const issue of overdueIssues) {
+      if (!issue.assignedToId) continue;
+      const users = await db.select().from(usersTable).where(eq(usersTable.id, issue.assignedToId));
+      const user = users[0];
+      if (!user?.email) continue;
+      try {
+        await sendEmail({
+          to: user.email,
+          subject: `Overdue Issue Reminder: ${issue.title}`,
+          html: `<p>Hi ${user.firstName},</p>
+<p>This is a reminder that the following issue is overdue:</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:8px;font-weight:bold">Issue</td><td style="padding:8px">${issue.title}</td></tr>
+  <tr><td style="padding:8px;font-weight:bold">Description</td><td style="padding:8px">${issue.description}</td></tr>
+  <tr><td style="padding:8px;font-weight:bold">Due Date</td><td style="padding:8px">${issue.dueDate}</td></tr>
+  <tr><td style="padding:8px;font-weight:bold">Severity</td><td style="padding:8px">${issue.severity}</td></tr>
+  ${issue.location ? `<tr><td style="padding:8px;font-weight:bold">Location</td><td style="padding:8px">${issue.location}</td></tr>` : ""}
+</table>
+<p>Please action this as soon as possible.</p>
+<p style="color:#888;font-size:12px">InspectProof – a product of PlanProof Technologies Pty Ltd</p>`,
+        });
+        sent++;
+      } catch {
+      }
+    }
+
+    res.json({ overdueCount: overdueIssues.length, remindersSent: sent });
+  } catch (err) {
+    req.log.error({ err }, "Overdue reminders error");
     res.status(500).json({ error: "internal_error" });
   }
 });

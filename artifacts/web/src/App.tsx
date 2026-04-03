@@ -24,6 +24,9 @@ import DeleteAccount from "@/pages/delete-account";
 import Join from "@/pages/join";
 import MobileOnly from "@/pages/mobile-only";
 import NotFound from "@/pages/not-found";
+import ActivityPage from "@/pages/activity";
+import ShareView from "@/pages/share-view";
+import Issues from "@/pages/issues";
 
 // Global fetch interceptor for auth
 const originalFetch = window.fetch;
@@ -80,6 +83,9 @@ function Router() {
       <Route path="/delete-account" component={DeleteAccount} />
       <Route path="/join" component={Join} />
       <Route path="/mobile-only" component={MobileOnly} />
+      <Route path="/issues" component={Issues} />
+      <Route path="/activity" component={ActivityPage} />
+      <Route path="/share/:token" component={ShareView} />
       <Route component={NotFound} />
     </Switch>
   );

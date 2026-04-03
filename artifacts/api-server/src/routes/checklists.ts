@@ -14,6 +14,8 @@ function formatTemplate(t: any, itemCount = 0) {
     discipline: t.discipline ?? "Building Surveyor",
     sortOrder: t.sortOrder ?? 0,
     itemCount,
+    recurrenceType: t.recurrenceType ?? null,
+    recurrenceInterval: t.recurrenceInterval ?? null,
     createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : t.createdAt,
   };
 }
@@ -173,7 +175,7 @@ router.get("/:id", async (req, res) => {
 router.patch("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { name, sortOrder, folder, discipline, description, inspectionType } = req.body;
+    const { name, sortOrder, folder, discipline, description, inspectionType, recurrenceType, recurrenceInterval } = req.body;
     const updates: any = {};
     if (name !== undefined) updates.name = name;
     if (sortOrder !== undefined) updates.sortOrder = sortOrder;
@@ -181,6 +183,8 @@ router.patch("/:id", async (req, res) => {
     if (discipline !== undefined) updates.discipline = discipline;
     if (description !== undefined) updates.description = description;
     if (inspectionType !== undefined) updates.inspectionType = inspectionType;
+    if (recurrenceType !== undefined) updates.recurrenceType = recurrenceType;
+    if (recurrenceInterval !== undefined) updates.recurrenceInterval = recurrenceInterval;
 
     const [template] = await db.update(checklistTemplatesTable)
       .set(updates)

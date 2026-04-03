@@ -15,6 +15,9 @@ export const inspectionsTable = pgTable("inspections", {
   notes: text("notes"),
   weatherConditions: text("weather_conditions"),
   checklistTemplateId: integer("checklist_template_id"),
+  shareToken: text("share_token"),
+  signedOffAt: timestamp("signed_off_at"),
+  signedOffById: integer("signed_off_by_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

@@ -103,6 +103,8 @@ function TemplateDetail({
   const [savedItems, setSavedItems] = useState<any[] | null>(null); // override after save
   const [templateName, setTemplateName] = useState("");
   const [templateDesc, setTemplateDesc] = useState("");
+  const [recurrenceType, setRecurrenceType] = useState<string>("none");
+  const [recurrenceInterval, setRecurrenceInterval] = useState<number>(1);
   const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
@@ -117,6 +119,8 @@ function TemplateDetail({
     const sourceItems = savedItems ?? data.items ?? [];
     setTemplateName(data.name);
     setTemplateDesc(data.description ?? "");
+    setRecurrenceType((data as any).recurrenceType ?? "none");
+    setRecurrenceInterval((data as any).recurrenceInterval ?? 1);
     setSavedItems(null); // clear override, will reload from sourceItems
     setLocalItems(
       sourceItems.map((i: any, idx: number) => ({
@@ -234,11 +238,20 @@ function TemplateDetail({
       }
 
       // Save template metadata if changed
-      if (templateName !== data?.name || templateDesc !== (data?.description ?? "")) {
+      const metaChanged = templateName !== data?.name
+        || templateDesc !== (data?.description ?? "")
+        || recurrenceType !== ((data as any)?.recurrenceType ?? "none")
+        || recurrenceInterval !== ((data as any)?.recurrenceInterval ?? 1);
+      if (metaChanged) {
         await apiFetch(`/api/checklist-templates/${templateId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: templateName, description: templateDesc }),
+          body: JSON.stringify({
+            name: templateName,
+            description: templateDesc,
+            recurrenceType: recurrenceType === "none" ? null : recurrenceType,
+            recurrenceInterval: recurrenceType !== "none" ? recurrenceInterval : null,
+          }),
         });
       }
 
@@ -361,11 +374,44 @@ function TemplateDetail({
                 className="w-full text-sm text-muted-foreground bg-transparent border-b border-muted/60 outline-none py-0.5"
                 placeholder="Description (optional)"
               />
+              <div className="flex items-center gap-3 pt-1.5 flex-wrap">
+                <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">Recurrence:</label>
+                <select
+                  value={recurrenceType}
+                  onChange={e => setRecurrenceType(e.target.value)}
+                  className="h-7 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="none">No recurrence</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="annually">Annually</option>
+                  <option value="custom">Custom interval</option>
+                </select>
+                {recurrenceType === "custom" && (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={recurrenceInterval}
+                      onChange={e => setRecurrenceInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="h-7 w-16 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                    <span className="text-xs text-muted-foreground">days</span>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <>
               <h2 className="text-xl font-bold text-sidebar">{data.name}</h2>
               {data.description && <p className="text-sm text-muted-foreground mt-1">{data.description}</p>}
+              {(data as any).recurrenceType && (data as any).recurrenceType !== "none" && (
+                <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 mt-1.5">
+                  Repeats {(data as any).recurrenceType}{(data as any).recurrenceInterval && (data as any).recurrenceType === "custom" ? ` every ${(data as any).recurrenceInterval} days` : ""}
+                </span>
+              )}
             </>
           )}
         </div>

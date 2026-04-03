@@ -12,6 +12,7 @@ import {
   UserCheck, ChevronDown, FolderOpen, Upload, File,
   FileImage, FileSpreadsheet, CheckSquare, PencilLine,
   RefreshCw, Eye, ShieldCheck, Flame, Home, ClipboardCheck, Trash2, Camera, Link2,
+  PenLine, Share2, Copy, ExternalLink,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -392,6 +393,11 @@ export default function InspectionDetail() {
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [markCompleteOpen, setMarkCompleteOpen] = useState(false);
   const [markCompleteNotes, setMarkCompleteNotes] = useState("");
+  const [signingOff, setSigningOff] = useState(false);
+  const [signOffDone, setSignOffDone] = useState(false);
+  const [sharingLink, setSharingLink] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [showShareDialog, setShowShareDialog] = useState(false);
   const [markingComplete, setMarkingComplete] = useState(false);
   const [viewingReport, setViewingReport] = useState<any | null>(null);
   const [pdfViewUrl, setPdfViewUrl] = useState<string | null>(null);
@@ -602,6 +608,35 @@ export default function InspectionDetail() {
     setViewingReport(null);
   };
 
+  const handleSignOff = async () => {
+    if (!inspection) return;
+    setSigningOff(true);
+    try {
+      await apiFetch(`/api/inspections/${inspection.id}/sign-off`, { method: "POST" });
+      setSignOffDone(true);
+      // Reload inspection to reflect signedOffAt
+      const updated = await apiFetch(`/api/inspections/${inspection.id}`);
+      setInspection(updated);
+    } catch {
+    } finally {
+      setSigningOff(false);
+    }
+  };
+
+  const handleShareLink = async () => {
+    if (!inspection) return;
+    setSharingLink(true);
+    try {
+      const res = await apiFetch(`/api/inspections/${inspection.id}/share`, { method: "POST" });
+      const base = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, "");
+      setShareUrl(`${base}/share/${res.shareToken}`);
+      setShowShareDialog(true);
+    } catch {
+    } finally {
+      setSharingLink(false);
+    }
+  };
+
   if (loading) {
     return (
       <AppLayout>
@@ -726,6 +761,39 @@ export default function InspectionDetail() {
                 Generate Report
               </Button>
             )}
+            {/* Sign Off */}
+            {inspection.status === "completed" && !(inspection as any).signedOffAt && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSignOff}
+                disabled={signingOff}
+                className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50"
+              >
+                {signingOff
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <PenLine className="h-3.5 w-3.5" />}
+                Sign Off
+              </Button>
+            )}
+            {(inspection as any).signedOffAt && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                <CheckCircle2 className="h-3 w-3" /> Signed Off
+              </span>
+            )}
+            {/* Share Link */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleShareLink}
+              disabled={sharingLink}
+              className="gap-1.5 text-muted-foreground hover:text-sidebar"
+            >
+              {sharingLink
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Share2 className="h-3.5 w-3.5" />}
+              Share
+            </Button>
           </div>
         </div>
       </div>
@@ -853,6 +921,47 @@ export default function InspectionDetail() {
           }}
         />
       )}
+
+      {/* ── Share Link Dialog ── */}
+      <Dialog open={showShareDialog} onOpenChange={o => { if (!o) { setShowShareDialog(false); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="h-5 w-5 text-secondary" />
+              Client Portal Link
+            </DialogTitle>
+            <DialogDescription>
+              Share this link with your client so they can view the inspection report without logging in.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3">
+            <div className="flex items-center gap-2 bg-muted/50 border rounded-lg px-3 py-2.5">
+              <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="text-sm font-mono text-sidebar flex-1 min-w-0 truncate">{shareUrl}</span>
+              <button
+                onClick={() => shareUrl && navigator.clipboard.writeText(shareUrl)}
+                className="shrink-0 text-muted-foreground hover:text-sidebar transition-colors"
+                title="Copy link"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              This link provides read-only access to the inspection report including issues and sign-off status.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 border-t pt-3">
+            <Button variant="outline" onClick={() => setShowShareDialog(false)}>Close</Button>
+            <Button
+              onClick={() => shareUrl && window.open(shareUrl, "_blank")}
+              className="gap-2"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open in new tab
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Mark as Complete Dialog ── */}
       <Dialog open={markCompleteOpen} onOpenChange={o => { if (!o) setMarkCompleteOpen(false); }}>

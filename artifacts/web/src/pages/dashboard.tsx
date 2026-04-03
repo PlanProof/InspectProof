@@ -619,10 +619,35 @@ export default function Dashboard() {
   const { data, isLoading } = useGetDashboardAnalytics();
   const [selectedDay, setSelectedDay] = useState<Date | null>(new Date());
 
+  const { data: issues } = useQuery({
+    queryKey: ["dashboard-issues"],
+    queryFn: async () => {
+      const token = localStorage.getItem("inspectproof_token") ?? "";
+      const r = await fetch(`${apiBase()}/api/issues`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) return [];
+      return r.json();
+    },
+    staleTime: 60_000,
+  });
+
   if (isLoading) return <AppLayout><div className="flex h-full items-center justify-center">Loading...</div></AppLayout>;
   if (!data) return <AppLayout><div>Error loading dashboard</div></AppLayout>;
 
   const allInspections = (data as any).allInspections ?? data.upcomingInspections ?? [];
+
+  const openDefects = (issues as any[] ?? []).filter(i => i.status !== "resolved").length;
+  const overdueDefects = (issues as any[] ?? []).filter(i => {
+    if (!i.dueDate || i.status === "resolved") return false;
+    return new Date(i.dueDate) < new Date();
+  }).length;
+  const today = new Date();
+  const sevenDaysOut = addDays(today, 7);
+  const upcomingCount = allInspections.filter((i: any) => {
+    try {
+      const d = parseISO(i.scheduledDate);
+      return d >= today && d <= sevenDaysOut;
+    } catch { return false; }
+  }).length;
 
   return (
     <AppLayout>
@@ -639,10 +664,25 @@ export default function Dashboard() {
       <UpgradeBanner />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 mb-8">
-        <StatCard title="Active Projects" value={data.activeProjects} icon={FolderOpen} trend="+2 from last month" />
-        <StatCard title="Inspections (Month)" value={data.inspectionsThisMonth} icon={CheckSquare} trend="12 completed" />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5 mb-8">
+        <StatCard title="Active Projects" value={data.activeProjects} icon={FolderOpen} trend="Projects in progress" />
+        <StatCard title="Inspections (Month)" value={data.inspectionsThisMonth} icon={CheckSquare} trend="This month" />
         <StatCard title="Reports Pending" value={data.reportsPending} icon={FileText} trend="Requires review" />
+        <StatCard
+          title="Open Defects"
+          value={openDefects}
+          icon={AlertTriangle}
+          trend={overdueDefects > 0 ? `${overdueDefects} overdue` : "All on track"}
+          isAlert={overdueDefects > 0}
+          href="/issues"
+        />
+        <StatCard
+          title="Upcoming (7 days)"
+          value={upcomingCount}
+          icon={CalendarDays}
+          trend="Inspections scheduled"
+          href="/inspections"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:h-[600px]">
@@ -689,22 +729,24 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ title, value, icon: Icon, trend, isAlert }: any) {
-  return (
-    <Card className="shadow-sm border-muted/60 hover:shadow-md transition-shadow relative overflow-hidden">
+function StatCard({ title, value, icon: Icon, trend, isAlert, href }: any) {
+  const inner = (
+    <Card className={`shadow-sm border-muted/60 hover:shadow-md transition-shadow relative overflow-hidden ${href ? "cursor-pointer" : ""}`}>
       <div className={`absolute top-0 left-0 w-1 h-full ${isAlert ? "bg-destructive" : "bg-primary"}`} />
-      <CardContent className="p-6">
+      <CardContent className="p-5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-3xl font-bold text-sidebar mt-2">{value}</p>
+            <p className="text-xs font-medium text-muted-foreground leading-none">{title}</p>
+            <p className="text-3xl font-bold text-sidebar mt-2">{value ?? "–"}</p>
           </div>
-          <div className={`p-3 rounded-xl ${isAlert ? "bg-destructive/10 text-destructive" : "bg-primary/20 text-sidebar"}`}>
-            <Icon className="h-6 w-6" />
+          <div className={`p-2.5 rounded-xl ${isAlert ? "bg-destructive/10 text-destructive" : "bg-primary/20 text-sidebar"}`}>
+            <Icon className="h-5 w-5" />
           </div>
         </div>
-        <p className="text-xs text-muted-foreground mt-4 font-medium">{trend}</p>
+        <p className={`text-xs mt-3 font-medium ${isAlert ? "text-destructive" : "text-muted-foreground"}`}>{trend}</p>
       </CardContent>
     </Card>
   );
+  if (href) return <Link href={href}>{inner}</Link>;
+  return inner;
 }
