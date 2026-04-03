@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { AddressAutocomplete, type AddressFields } from "@/components/AddressAutocomplete";
 import {
   Button, Badge, Input, Label, Dialog, DialogContent, DialogHeader, DialogTitle,
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -477,6 +478,12 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
   const [editingClasses, setEditingClasses] = useState<string[]>(
     project.buildingClassification ? project.buildingClassification.split(",").map(s => s.trim()).filter(Boolean) : []
   );
+  const [editingAddress, setEditingAddress] = useState<AddressFields>({
+    siteAddress: project.siteAddress,
+    suburb: project.suburb,
+    state: project.state,
+    postcode: project.postcode,
+  });
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -485,6 +492,10 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
     const data: any = {};
     fd.forEach((v, k) => { data[k] = v === "" ? null : v; });
     data.buildingClassification = editingClasses.join(", ");
+    data.siteAddress = editingAddress.siteAddress;
+    data.suburb = editingAddress.suburb;
+    data.state = editingAddress.state;
+    data.postcode = editingAddress.postcode;
     try {
       await apiFetch(`/api/projects/${project.id}`, {
         method: "PUT",
@@ -519,6 +530,7 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
           <Button size="sm" variant={editing ? "outline" : "default"} onClick={() => {
             if (editing) {
               setEditingClasses(project.buildingClassification ? project.buildingClassification.split(",").map(s => s.trim()).filter(Boolean) : []);
+              setEditingAddress({ siteAddress: project.siteAddress, suburb: project.suburb, state: project.state, postcode: project.postcode });
             }
             setEditing(!editing);
           }}>
@@ -576,9 +588,17 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
                 <p className="text-xs text-amber-600">Please select at least one classification.</p>
               )}
             </div>
+
+            {/* Address — full width autocomplete */}
+            <AddressAutocomplete
+              value={editingAddress}
+              onChange={setEditingAddress}
+              compact
+            />
+
             <div className="flex gap-2 pt-2">
               <Button type="submit" size="sm" disabled={saving}>{saving ? "Saving…" : "Save Changes"}</Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => { setEditing(false); setEditingClasses(project.buildingClassification ? project.buildingClassification.split(",").map(s => s.trim()).filter(Boolean) : []); }}>Cancel</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => { setEditing(false); setEditingClasses(project.buildingClassification ? project.buildingClassification.split(",").map(s => s.trim()).filter(Boolean) : []); setEditingAddress({ siteAddress: project.siteAddress, suburb: project.suburb, state: project.state, postcode: project.postcode }); }}>Cancel</Button>
             </div>
           </form>
         ) : (

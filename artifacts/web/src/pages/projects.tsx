@@ -6,6 +6,7 @@ import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, Tab
 import { Search, Plus, Building, ChevronDown, ChevronUp, ChevronsUpDown, X, AlertTriangle, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
+import { AddressAutocomplete, type AddressFields } from "@/components/AddressAutocomplete";
 
 // ── NCC Building Classifications ─────────────────────────────────────────────
 
@@ -540,6 +541,8 @@ function NewProjectDialog({
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [classError, setClassError] = useState(false);
   const [limitError, setLimitError] = useState<string | null>(null);
+  const [address, setAddress] = useState<AddressFields>({ siteAddress: "", suburb: "", state: "", postcode: "" });
+  const [addressError, setAddressError] = useState(false);
 
   const mutation = useCreateProject({
     mutation: {
@@ -549,6 +552,8 @@ function NewProjectDialog({
         setSelectedClasses([]);
         setClassError(false);
         setLimitError(null);
+        setAddressError(false);
+        setAddress({ siteAddress: "", suburb: "", state: "", postcode: "" });
       },
       onError: (err: any) => {
         const body = err?.data ?? err;
@@ -565,17 +570,22 @@ function NewProjectDialog({
       setClassError(true);
       return;
     }
+    if (!address.siteAddress.trim()) {
+      setAddressError(true);
+      return;
+    }
     setClassError(false);
+    setAddressError(false);
     setLimitError(null);
     const fd = new FormData(e.currentTarget);
     const daNumber = (fd.get('daNumber') as string)?.trim();
     mutation.mutate({
       data: {
         name: fd.get('name') as string,
-        siteAddress: fd.get('siteAddress') as string,
-        suburb: fd.get('suburb') as string,
-        state: fd.get('state') as string,
-        postcode: fd.get('postcode') as string,
+        siteAddress: address.siteAddress,
+        suburb: address.suburb,
+        state: address.state,
+        postcode: address.postcode,
         clientName: fd.get('clientName') as string,
         buildingClassification: selectedClasses.join(", "),
         projectType: fd.get('projectType') as any,
@@ -585,7 +595,7 @@ function NewProjectDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) { setSelectedClasses([]); setClassError(false); setLimitError(null); } }}>
+    <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) { setSelectedClasses([]); setClassError(false); setLimitError(null); setAddressError(false); setAddress({ siteAddress: "", suburb: "", state: "", postcode: "" }); } }}>
       <DialogContent
         className="max-w-2xl max-h-[90vh] overflow-y-auto"
         onInteractOutside={e => e.preventDefault()}
@@ -629,23 +639,14 @@ function NewProjectDialog({
               <Label>Client Name</Label>
               <Input name="clientName" required />
             </div>
-            <div className="col-span-2 space-y-2">
-              <Label>Site Address</Label>
-              <Input name="siteAddress" required />
-            </div>
-            <div className="space-y-2">
-              <Label>Suburb</Label>
-              <Input name="suburb" required />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-2">
-                <Label>State</Label>
-                <Input name="state" required defaultValue="NSW" />
-              </div>
-              <div className="space-y-2">
-                <Label>Postcode</Label>
-                <Input name="postcode" required />
-              </div>
+            <div className="col-span-2">
+              <AddressAutocomplete
+                value={address}
+                onChange={(f) => { setAddress(f); if (f.siteAddress.trim()) setAddressError(false); }}
+              />
+              {addressError && !address.siteAddress.trim() && (
+                <p className="text-xs text-red-500 mt-1">Please enter a site address.</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Description</Label>
