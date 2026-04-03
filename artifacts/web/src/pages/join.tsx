@@ -32,6 +32,7 @@ export default function JoinPage() {
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [mobileOnly, setMobileOnly] = useState(false);
+  const [wasAlreadyLoggedIn, setWasAlreadyLoggedIn] = useState(false);
 
   const { login } = useAuth();
 
@@ -78,10 +79,12 @@ export default function JoinPage() {
         return;
       }
       setMobileOnly(body.mobileOnly ?? false);
+      // Capture before login() sets localStorage, so "done" render is correct
+      const alreadyLoggedIn = !!localStorage.getItem("inspectproof_token");
+      setWasAlreadyLoggedIn(alreadyLoggedIn);
       setStatus("done");
       // Only auto-login if there is no existing session — otherwise we'd hijack
       // the current user's session (e.g. the admin testing their own invite link).
-      const alreadyLoggedIn = !!localStorage.getItem("inspectproof_token");
       if (!body.mobileOnly && body.token && !alreadyLoggedIn) {
         login(body.token);
       }
@@ -199,7 +202,7 @@ export default function JoinPage() {
                       </a>
                     </div>
                   </div>
-                ) : !!localStorage.getItem("inspectproof_token") ? (
+                ) : wasAlreadyLoggedIn ? (
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
                       The new account has been created. Sign in with the invitation email and password to access the dashboard.

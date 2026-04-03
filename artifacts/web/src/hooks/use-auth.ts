@@ -45,7 +45,12 @@ export function useAuth() {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    const onChange = () => setUser(cachedUser);
+    // When any useAuth instance calls login/logout, sync both user AND token
+    // across all hook instances so AppInner always has an up-to-date token.
+    const onChange = () => {
+      setUser(cachedUser);
+      setToken(localStorage.getItem("inspectproof_token"));
+    };
     listeners.add(onChange);
     return () => { listeners.delete(onChange); };
   }, []);
