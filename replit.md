@@ -55,6 +55,12 @@ pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vi
 - **Digital Sign-off**: `POST /api/inspections/:id/sign-off` sets status=completed + signedOffAt. Sign Off + Share buttons in inspection detail header
 - **Recurring Templates**: `recurrence_type` + `recurrence_interval` fields on `checklist_templates`. Edit form + display badge in templates page
 - **Overdue Reminders**: `POST /api/issues/send-overdue-reminders` sends emails for all overdue open issues (admin/company-admin only)
+- **Organisation settings → DB** (critical fix): Org fields (`abn`, `companyPhone`, `companyEmail`, `companyAddress`, `companySuburb`, `companyState`, `companyPostcode`, `companyWebsite`, `logoUrl`, `accreditationBody`, `accreditationNumber`) are now stored in the `users` table. API: `GET/PATCH /api/auth/organisation`. localStorage fallback for migration only.
+- **Company Logo Upload**: Upload button in Organisation tab → presigned URL → object storage → `logoUrl` saved to DB. Preview shown inline.
+- **Notification Preferences → DB**: `notificationPrefs` JSON column on `users` table. API: `GET/PATCH /api/auth/notification-prefs`. `inspectproof_notif_prefs` localStorage cleared on save.
+- **Two-step onboarding**: `?onboarding=1` now shows Step 1 (Profile/Profession) → Step 2 (Organisation Details) with progress banner. "Save & Start Inspecting →" button and "Skip for now" link on Step 2.
+- **Report Email Sending Fixed**: `POST /api/reports/:id/send` now generates a PDF buffer and sends it via Resend with the PDF as email attachment. `sendReportEmail()` added to `lib/email.ts`. Returns `email_failed` error if email delivery fails.
+- **Org data in PDF footer**: PDF reports show company name, ABN, and address in the navy footer bar (instead of generic "InspectProof · Confidential"). Org data fetched from the inspector's user record at PDF generation time.
 
 ## External Dependencies
 

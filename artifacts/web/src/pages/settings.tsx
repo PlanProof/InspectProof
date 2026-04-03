@@ -165,7 +165,10 @@ export default function Settings() {
   const { token } = useAuth();
   const [, setLocation] = useLocation();
   const isOnboarding = new URLSearchParams(window.location.search).get("onboarding") === "1";
-  const [activeTab, setActiveTab] = useState<Tab>(isOnboarding ? "profile" : "profile");
+  const [activeTab, setActiveTab] = useState<Tab>("profile");
+  const [onboardingStep, setOnboardingStep] = useState<"profile" | "organisation" | "done">(
+    isOnboarding ? "profile" : "done"
+  );
   const [user, setUser] = useState<any>(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
@@ -173,22 +176,44 @@ export default function Settings() {
     apiFetch("/api/auth/me").then(setUser).catch(() => {}).finally(() => setLoadingUser(false));
   }, [token]);
 
+  const handleProfileOnboardingComplete = () => {
+    setOnboardingStep("organisation");
+    setActiveTab("organisation");
+  };
+
+  const handleOrgOnboardingComplete = () => {
+    setOnboardingStep("done");
+    setLocation("/dashboard");
+  };
+
+  const onboardingBanner = isOnboarding && onboardingStep !== "done" ? (
+    <div className="mb-4 p-4 rounded-xl bg-secondary/10 border border-secondary/30 flex items-start gap-3">
+      <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+        {onboardingStep === "profile" ? <User className="h-4 w-4 text-white" /> : <Building2 className="h-4 w-4 text-white" />}
+      </div>
+      <div className="flex-1">
+        <div className="flex items-center gap-2 mb-0.5">
+          <h2 className="text-base font-bold text-sidebar">
+            {onboardingStep === "profile" ? "Step 1 of 2 — Your Profile" : "Step 2 of 2 — Organisation Setup"}
+          </h2>
+          <span className="text-xs text-muted-foreground px-2 py-0.5 rounded-full bg-muted">
+            {onboardingStep === "profile" ? "1/2" : "2/2"}
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {onboardingStep === "profile"
+            ? "Complete your profile below — your Profession is required so we can load the right inspection checklists for you."
+            : "Set up your organisation details. These appear on all compliance reports and defect notices you generate."
+          }
+        </p>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <AppLayout>
       <div className="mb-6">
-        {isOnboarding ? (
-          <div className="mb-4 p-4 rounded-xl bg-secondary/10 border border-secondary/30 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-0.5">
-              <User className="h-4 w-4 text-white" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-sidebar">Welcome to InspectProof!</h2>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Complete your profile below — your <strong>Profession</strong> is required so we can load the right inspection checklists for you.
-              </p>
-            </div>
-          </div>
-        ) : null}
+        {onboardingBanner}
         <h1 className="text-3xl font-bold text-sidebar tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">Manage your account, organisation, and platform preferences.</p>
       </div>
@@ -216,10 +241,10 @@ export default function Settings() {
 
         {/* Content */}
         <div className="flex-1 min-w-0 space-y-4">
-          {activeTab === "profile"       && <ProfileTab user={user} loading={loadingUser} isOnboarding={isOnboarding} onOnboardingComplete={() => setLocation("/dashboard")} />}
+          {activeTab === "profile"       && <ProfileTab user={user} loading={loadingUser} isOnboarding={isOnboarding && onboardingStep === "profile"} onOnboardingComplete={handleProfileOnboardingComplete} />}
           {activeTab === "security"      && <SecurityTab />}
           {activeTab === "notifications" && <NotificationsTab />}
-          {activeTab === "organisation"  && <OrganisationTab />}
+          {activeTab === "organisation"  && <OrganisationTab isOnboarding={isOnboarding && onboardingStep === "organisation"} onOnboardingComplete={handleOrgOnboardingComplete} />}
           {activeTab === "platform"      && <PlatformTab />}
           {activeTab === "billing"       && <BillingTab />}
         </div>
@@ -765,26 +790,51 @@ const NOTIF_DEFAULTS = {
 };
 
 function NotificationsTab() {
-  const [prefs, setPrefs] = useState(() => {
-    try {
-      const stored = localStorage.getItem("inspectproof_notif_prefs");
-      return stored ? { ...NOTIF_DEFAULTS, ...JSON.parse(stored) } : NOTIF_DEFAULTS;
-    } catch {
-      return NOTIF_DEFAULTS;
-    }
-  });
+  const [prefs, setPrefs] = useState(NOTIF_DEFAULTS);
+  const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    apiFetch("/api/auth/notification-prefs")
+      .then(data => setPrefs({ ...NOTIF_DEFAULTS, ...data }))
+      .catch(() => {
+        try {
+          const stored = localStorage.getItem("inspectproof_notif_prefs");
+          if (stored) setPrefs({ ...NOTIF_DEFAULTS, ...JSON.parse(stored) });
+        } catch {}
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const toggle = (key: keyof typeof prefs) => {
     setPrefs((p: typeof prefs) => ({ ...p, [key]: !p[key] }));
     setSaved(false);
   };
 
-  const save = () => {
-    localStorage.setItem("inspectproof_notif_prefs", JSON.stringify(prefs));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiFetch("/api/auth/notification-prefs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(prefs),
+      });
+      localStorage.removeItem("inspectproof_notif_prefs");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      alert("Failed to save notification preferences. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading preferences…
+    </div>
+  );
 
   return (
     <>
@@ -841,7 +891,10 @@ function NotificationsTab() {
       <div className="flex justify-end">
         <div className="flex items-center gap-3">
           <SaveBanner show={saved} />
-          <Button onClick={save}>Save Preferences</Button>
+          <Button onClick={save} disabled={saving} className="flex items-center gap-2">
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {saving ? "Saving…" : "Save Preferences"}
+          </Button>
         </div>
       </div>
     </>
@@ -1117,28 +1170,184 @@ function InternalStaffSection() {
   );
 }
 
-function OrganisationTab() {
+function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnboarding?: boolean; onOnboardingComplete?: () => void } = {}) {
   const [saved, setSaved] = useState(false);
-  const [form, setForm] = useState(() => {
-    try {
-      const stored = localStorage.getItem("inspectproof_org_details");
-      return stored ? { ...ORG_DEFAULTS, ...JSON.parse(stored) } : ORG_DEFAULTS;
-    } catch {
-      return ORG_DEFAULTS;
-    }
-  });
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(ORG_DEFAULTS);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    apiFetch("/api/auth/organisation")
+      .then(data => {
+        setForm({
+          name:       data.name       ?? ORG_DEFAULTS.name,
+          abn:        data.abn        ?? ORG_DEFAULTS.abn,
+          phone:      data.phone      ?? ORG_DEFAULTS.phone,
+          email:      data.email      ?? ORG_DEFAULTS.email,
+          address:    data.address    ?? ORG_DEFAULTS.address,
+          suburb:     data.suburb     ?? ORG_DEFAULTS.suburb,
+          state:      data.state      ?? ORG_DEFAULTS.state,
+          postcode:   data.postcode   ?? ORG_DEFAULTS.postcode,
+          website:    data.website    ?? ORG_DEFAULTS.website,
+          accredBody: data.accredBody ?? ORG_DEFAULTS.accredBody,
+          accredNum:  data.accredNum  ?? ORG_DEFAULTS.accredNum,
+        });
+        setLogoUrl(data.logoUrl ?? null);
+        // Migrate any local data if DB is empty
+        if (!data.name && !data.abn) {
+          try {
+            const stored = localStorage.getItem("inspectproof_org_details");
+            if (stored) {
+              const local = JSON.parse(stored);
+              setForm(f => ({ ...f, ...local }));
+            }
+          } catch {}
+        }
+      })
+      .catch(() => {
+        try {
+          const stored = localStorage.getItem("inspectproof_org_details");
+          if (stored) setForm(f => ({ ...f, ...JSON.parse(stored) }));
+        } catch {}
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f: typeof ORG_DEFAULTS) => ({ ...f, [k]: e.target.value }));
 
-  const save = () => {
-    localStorage.setItem("inspectproof_org_details", JSON.stringify(form));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    try {
+      const { uploadURL, objectPath } = await apiFetch("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type }),
+      });
+      await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      await apiFetch("/api/auth/organisation", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoUrl: objectPath }),
+      });
+      setLogoUrl(objectPath);
+    } catch {
+      alert("Logo upload failed. Please try again.");
+    } finally {
+      setLogoUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+    }
   };
+
+  const removeLogo = async () => {
+    try {
+      await apiFetch("/api/auth/organisation", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoUrl: null }),
+      });
+      setLogoUrl(null);
+    } catch {
+      alert("Failed to remove logo. Please try again.");
+    }
+  };
+
+  const save = async (skipToDashboard = false) => {
+    if (skipToDashboard && onOnboardingComplete) {
+      onOnboardingComplete();
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiFetch("/api/auth/organisation", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      localStorage.removeItem("inspectproof_org_details");
+      setSaved(true);
+      setTimeout(() => {
+        setSaved(false);
+        if (isOnboarding && onOnboardingComplete) onOnboardingComplete();
+      }, 1200);
+    } catch {
+      alert("Failed to save organisation details. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading organisation details…
+    </div>
+  );
 
   return (
     <>
+      <SectionCard title="Company Logo" description="Your logo appears on generated compliance reports and defect notices">
+        <div className="flex items-center gap-5">
+          <div className="relative h-20 w-40 rounded-lg border-2 border-dashed border-border bg-muted/30 flex items-center justify-center overflow-hidden shrink-0">
+            {logoUrl ? (
+              <img
+                src={`${apiBase()}/api/storage${logoUrl}`}
+                alt="Company logo"
+                className="h-full w-full object-contain p-2"
+              />
+            ) : (
+              <div className="text-center">
+                <Building2 className="h-6 w-6 text-muted-foreground mx-auto" />
+                <p className="text-xs text-muted-foreground mt-1">No logo</p>
+              </div>
+            )}
+            {logoUploading && (
+              <div className="absolute inset-0 bg-background/70 flex items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-secondary" />
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              className="hidden"
+              onChange={handleLogoUpload}
+            />
+            <Button
+              variant="outline"
+              onClick={() => logoInputRef.current?.click()}
+              disabled={logoUploading}
+              className="flex items-center gap-2"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              {logoUrl ? "Replace Logo" : "Upload Logo"}
+            </Button>
+            {logoUrl && (
+              <Button
+                variant="ghost"
+                onClick={removeLogo}
+                disabled={logoUploading}
+                className="flex items-center gap-2 text-red-500 hover:text-red-600 hover:bg-red-50 text-xs"
+              >
+                <Trash2 className="h-3 w-3" />
+                Remove
+              </Button>
+            )}
+            <p className="text-xs text-muted-foreground">PNG, JPG, SVG or WebP. Recommended: 400×120px.</p>
+          </div>
+        </div>
+      </SectionCard>
+
       <SectionCard title="Organisation Details" description="Details that appear on compliance reports and correspondence">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField label="Organisation Name">
@@ -1223,8 +1432,19 @@ function OrganisationTab() {
 
       <div className="flex justify-end">
         <div className="flex items-center gap-3">
+          {isOnboarding && (
+            <button
+              onClick={() => save(true)}
+              className="text-sm text-muted-foreground underline underline-offset-2 hover:text-sidebar transition-colors"
+            >
+              Skip for now →
+            </button>
+          )}
           <SaveBanner show={saved} />
-          <Button onClick={save}>Save Organisation</Button>
+          <Button onClick={() => save()} disabled={saving} className="flex items-center gap-2">
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {saving ? "Saving…" : isOnboarding ? "Save & Start Inspecting →" : "Save Organisation"}
+          </Button>
         </div>
       </div>
     </>

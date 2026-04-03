@@ -3,6 +3,7 @@ import { Router, type IRouter } from "express";
 import { eq, sql, and } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 import { ObjectStorageService } from "../lib/objectStorage";
+import { sendReportEmail } from "../lib/email";
 
 const FONT_DIR         = path.join(__dirname, "..", "fonts");
 const FONT_REGULAR     = path.join(FONT_DIR, "PlusJakartaSans-Regular.ttf");
@@ -940,12 +941,75 @@ router.post("/:id/approve", async (req, res) => {
 router.post("/:id/send", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { sentTo } = req.body;
+    const { sentTo, recipientName } = req.body;
+    if (!sentTo) { res.status(400).json({ error: "sentTo_required", message: "Recipient email is required" }); return; }
+
+    const [report] = await db.select().from(reportsTable).where(eq(reportsTable.id, id));
+    if (!report) { res.status(404).json({ error: "not_found" }); return; }
+
+    // Look up project and sender
+    const [project] = report.projectId
+      ? await db.select().from(projectsTable).where(eq(projectsTable.id, report.projectId))
+      : [null];
+
+    // Try to find sender from auth header
+    let senderUser: any = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith("Bearer ")) {
+      const userId = parseInt(Buffer.from(authHeader.slice(7), "base64").toString().split(":")[0]);
+      if (!isNaN(userId)) {
+        const [u] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+        senderUser = u ?? null;
+      }
+    }
+
+    const senderName = senderUser
+      ? `${senderUser.firstName ?? ""} ${senderUser.lastName ?? ""}`.trim() || senderUser.email
+      : "InspectProof";
+    const senderCompany = senderUser?.companyName || undefined;
+
+    // Generate PDF buffer (without photos for email attachment)
+    let pdfBuffer: Buffer | undefined;
+    try {
+      const formatted = await formatReport(report);
+      const doc = buildPdf(formatted, project ?? null);
+      pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        doc.on("data", (c: Buffer) => chunks.push(c));
+        doc.on("end", () => resolve(Buffer.concat(chunks)));
+        doc.on("error", reject);
+        doc.end();
+      });
+    } catch (pdfErr) {
+      req.log.warn({ pdfErr }, "Could not generate PDF for email attachment — sending without attachment");
+    }
+
+    // Send the email via Resend
+    try {
+      await sendReportEmail({
+        to: sentTo,
+        recipientName: recipientName || undefined,
+        reportTitle: report.title || "Inspection Report",
+        reportType: report.reportType || "summary",
+        projectName: project?.name || "Unknown Project",
+        projectAddress: project?.address || undefined,
+        senderName,
+        senderCompany,
+        reportId: id,
+        pdfBuffer,
+        log: req.log as any,
+      });
+    } catch (emailErr) {
+      req.log.error({ emailErr, to: sentTo }, "Failed to send report email");
+      res.status(500).json({ error: "email_failed", message: "Report status updated but email delivery failed. Please try again." });
+      return;
+    }
+
     const [updated] = await db.update(reportsTable)
-      .set({ status: "sent", sentAt: new Date(), sentTo: sentTo || null })
+      .set({ status: "sent", sentAt: new Date(), sentTo })
       .where(eq(reportsTable.id, id))
       .returning();
-    if (!updated) { res.status(404).json({ error: "not_found" }); return; }
+
     res.json(await formatReport(updated));
   } catch (err) {
     req.log.error({ err }, "Send report error");
@@ -1012,17 +1076,28 @@ function addPageHeader(doc: PDFKit.PDFDocument, typeLabel: string) {
   doc.y = CONTENT_TOP;
 }
 
-function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number) {
+function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number, orgInfo?: { companyName?: string; abn?: string; address?: string }) {
   const pageW = doc.page.width;
   const pageH = doc.page.height;
   doc.save();
   doc.rect(0, pageH - FOOTER_H, pageW, FOOTER_H).fill(COLOR_NAVY);
+
+  let footerLeft = "InspectProof · Confidential";
+  if (orgInfo?.companyName) {
+    footerLeft = orgInfo.companyName;
+    if (orgInfo.abn) footerLeft += `  ·  ABN ${orgInfo.abn}`;
+    if (orgInfo.address) footerLeft += `  ·  ${orgInfo.address}`;
+  }
+
+  const footerRight = `Page ${pageNum} of ${totalPages}`;
+  const footerY = pageH - FOOTER_H + 15;
+  const halfW = (pageW - MARGIN * 2) / 2 - 10;
+
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
-    .text(
-      `InspectProof  ·  Confidential  ·  Page ${pageNum} of ${totalPages}`,
-      MARGIN, pageH - FOOTER_H + 15,
-      { align: "center", width: pageW - MARGIN * 2 },
-    );
+    .text(footerLeft, MARGIN, footerY, { width: halfW * 1.6, lineBreak: false, ellipsis: true });
+  doc.fillColor("#9CA3AF").fontSize(7).font(F)
+    .text(footerRight, pageW - MARGIN - 60, footerY, { width: 60, align: "right", lineBreak: false });
+
   doc.restore();
 }
 
@@ -1040,6 +1115,7 @@ function buildPdf(
   photosByDesc?: Map<string, string[]>,        // description → [storagePath, ...]
   photoBuffers?: Map<string, Buffer>,          // storagePath → image buffer
   checklistPhotos?: ChecklistPhotoEntry[],     // ordered list for photo appendix
+  orgInfo?: { companyName?: string; abn?: string; address?: string },
 ): PDFKit.PDFDocument {
   const doc = new PDFDocument({
     size: "A4",
@@ -1426,7 +1502,7 @@ function buildPdf(
   const totalPages = range.count;
   for (let p = 0; p < totalPages; p++) {
     doc.switchToPage(range.start + p);
-    addPageFooter(doc, p + 1, totalPages);
+    addPageFooter(doc, p + 1, totalPages, orgInfo);
   }
 
   return doc;
@@ -1608,7 +1684,37 @@ router.get("/:id/pdf", async (req, res) => {
       }
     }
 
-    const doc = buildPdf(formatted, project, signatureBuffer, photosByDesc, photoBuffers, checklistPhotos);
+    // Fetch org info from the report's inspector for the PDF footer
+    let orgInfo: { companyName?: string; abn?: string; address?: string } | undefined;
+    try {
+      let inspectorId: number | null = null;
+      if (report.inspectionId) {
+        const [insp] = await db.select({ inspectorId: inspectionsTable.inspectorId })
+          .from(inspectionsTable).where(eq(inspectionsTable.id, report.inspectionId));
+        inspectorId = insp?.inspectorId ?? null;
+      }
+      if (inspectorId) {
+        const [orgUser] = await db.select({
+          companyName: usersTable.companyName,
+          abn: usersTable.abn,
+          companyAddress: usersTable.companyAddress,
+          companySuburb: usersTable.companySuburb,
+          companyState: usersTable.companyState,
+        }).from(usersTable).where(eq(usersTable.id, inspectorId));
+        if (orgUser?.companyName) {
+          const addrParts = [orgUser.companyAddress, orgUser.companySuburb, orgUser.companyState].filter(Boolean);
+          orgInfo = {
+            companyName: orgUser.companyName || undefined,
+            abn: orgUser.abn || undefined,
+            address: addrParts.length ? addrParts.join(", ") : undefined,
+          };
+        }
+      }
+    } catch (orgErr) {
+      req.log.warn({ orgErr }, "Could not load org info for PDF footer");
+    }
+
+    const doc = buildPdf(formatted, project, signatureBuffer, photosByDesc, photoBuffers, checklistPhotos, orgInfo);
 
     // ── Append markup pages at end of report ─────────────────────────────────
     if (markupBuffers.length > 0) {

@@ -594,3 +594,76 @@ export async function sendEmail({ to, subject, html }: { to: string; subject: st
   const { error } = await resend.emails.send({ from: SMTP_FROM, to, subject, html });
   if (error) throw new Error(error.message);
 }
+
+/* ── Report Email ──────────────────────────────────────────── */
+
+function reportEmailHtml(opts: {
+  recipientName?: string;
+  reportTitle: string;
+  reportType: string;
+  projectName: string;
+  projectAddress?: string;
+  senderName: string;
+  senderCompany?: string;
+  reportId: number;
+}): string {
+  const { recipientName, reportTitle, reportType, projectName, projectAddress, senderName, senderCompany, reportId } = opts;
+  const typeLabel = reportType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const pdfLink = `${APP_BASE_URL}/reports/${reportId}/pdf`;
+  const viewLink = `${APP_BASE_URL}/reports/${reportId}`;
+  const senderLine = senderCompany ? `${senderName}, ${senderCompany}` : senderName;
+  const greeting_line = recipientName ? `Hi ${recipientName},` : "Hello,";
+
+  const content = `
+    <p style="margin:0 0 4px;font-size:14px;color:#6b7280;font-family:${BASE_FONT};">${greeting_line}</p>
+    ${sectionTitle("You've received an InspectProof report")}
+    ${bodyText(`${senderLine} has shared a <strong>${typeLabel}</strong> with you. The report PDF is attached to this email and can also be downloaded below.`)}
+    ${infoTable([
+      { label: "Report Title", value: reportTitle, highlight: true },
+      { label: "Report Type", value: typeLabel },
+      { label: "Project", value: projectName },
+      ...(projectAddress ? [{ label: "Site Address", value: projectAddress }] : []),
+      { label: "Sent By", value: senderLine },
+    ])}
+    ${ctaButton(pdfLink, "Download PDF Report →")}
+    <p style="margin:0 0 8px;font-size:13px;color:#6b7280;line-height:1.7;font-family:${BASE_FONT};">You can also <a href="${viewLink}" style="color:#466DB5;text-decoration:underline;">view this report online</a>. If you have any questions, please contact ${senderLine} directly.</p>
+    <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;font-family:${BASE_FONT};">This report was generated using InspectProof — Australian building certification and compliance management platform.</p>`;
+
+  return emailWrapper({ title: `InspectProof Report: ${reportTitle}`, tag: "Report Delivery", content });
+}
+
+export async function sendReportEmail(opts: {
+  to: string;
+  recipientName?: string;
+  reportTitle: string;
+  reportType: string;
+  projectName: string;
+  projectAddress?: string;
+  senderName: string;
+  senderCompany?: string;
+  reportId: number;
+  pdfBuffer?: Buffer;
+  log?: { error: (obj: object, msg: string) => void; warn: (obj: object, msg: string) => void };
+}): Promise<void> {
+  const { to, pdfBuffer, log } = opts;
+  if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping report email"); return; }
+
+  const html = reportEmailHtml(opts);
+  const safeName = opts.reportTitle.replace(/[^a-z0-9\s\-_]/gi, "").replace(/\s+/g, "_").slice(0, 60) || "report";
+
+  const payload: any = {
+    from: SMTP_FROM,
+    to,
+    subject: `InspectProof Report: ${opts.reportTitle}`,
+    html,
+  };
+  if (pdfBuffer) {
+    payload.attachments = [{ filename: `${safeName}.pdf`, content: pdfBuffer.toString("base64") }];
+  }
+
+  const { error } = await getResend().emails.send(payload);
+  if (error) {
+    log?.error({ err: error, to }, "Failed to send report email");
+    throw new Error(error.message);
+  }
+}

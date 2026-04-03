@@ -261,6 +261,110 @@ router.patch("/profile", async (req, res) => {
   }
 });
 
+// ── Organisation settings ──────────────────────────────────────────────────────
+
+router.get("/organisation", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
+    const token = authHeader.slice(7);
+    const userId = parseInt(Buffer.from(token, "base64").toString().split(":")[0]);
+    if (isNaN(userId)) { res.status(401).json({ error: "unauthorized" }); return; }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) { res.status(404).json({ error: "not_found" }); return; }
+
+    res.json({
+      name: user.companyName ?? "",
+      abn: user.abn ?? "",
+      phone: user.companyPhone ?? "",
+      email: user.companyEmail ?? "",
+      address: user.companyAddress ?? "",
+      suburb: user.companySuburb ?? "",
+      state: user.companyState ?? "NSW",
+      postcode: user.companyPostcode ?? "",
+      website: user.companyWebsite ?? "",
+      logoUrl: user.logoUrl ?? null,
+      accredBody: user.accreditationBody ?? "BPB",
+      accredNum: user.accreditationNumber ?? "",
+    });
+  } catch (err) {
+    req.log.error({ err }, "Get organisation error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.patch("/organisation", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
+    const token = authHeader.slice(7);
+    const userId = parseInt(Buffer.from(token, "base64").toString().split(":")[0]);
+    if (isNaN(userId)) { res.status(401).json({ error: "unauthorized" }); return; }
+
+    const { name, abn, phone, email, address, suburb, state, postcode, website, logoUrl, accredBody, accredNum } = req.body;
+    const updates: Record<string, any> = { updatedAt: new Date() };
+    if (name !== undefined) updates.companyName = name?.trim() || null;
+    if (abn !== undefined) updates.abn = abn?.trim() || null;
+    if (phone !== undefined) updates.companyPhone = phone?.trim() || null;
+    if (email !== undefined) updates.companyEmail = email?.trim() || null;
+    if (address !== undefined) updates.companyAddress = address?.trim() || null;
+    if (suburb !== undefined) updates.companySuburb = suburb?.trim() || null;
+    if (state !== undefined) updates.companyState = state?.trim() || null;
+    if (postcode !== undefined) updates.companyPostcode = postcode?.trim() || null;
+    if (website !== undefined) updates.companyWebsite = website?.trim() || null;
+    if (logoUrl !== undefined) updates.logoUrl = logoUrl || null;
+    if (accredBody !== undefined) updates.accreditationBody = accredBody?.trim() || null;
+    if (accredNum !== undefined) updates.accreditationNumber = accredNum?.trim() || null;
+
+    const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, userId)).returning();
+    if (!updated) { res.status(404).json({ error: "not_found" }); return; }
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Update organisation error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── Notification preferences ────────────────────────────────────────────────────
+
+router.get("/notification-prefs", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
+    const userId = parseInt(Buffer.from(authHeader.slice(7), "base64").toString().split(":")[0]);
+    if (isNaN(userId)) { res.status(401).json({ error: "unauthorized" }); return; }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) { res.status(404).json({ error: "not_found" }); return; }
+
+    const defaults = { emailSummary: true, emailDefects: true, emailAssignments: false, pushCritical: true, pushCompletions: false, pushReminders: true, reportReady: true, weeklyDigest: false };
+    const prefs = user.notificationPrefs ? { ...defaults, ...JSON.parse(user.notificationPrefs) } : defaults;
+    res.json(prefs);
+  } catch (err) {
+    req.log.error({ err }, "Get notification prefs error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.patch("/notification-prefs", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
+    const userId = parseInt(Buffer.from(authHeader.slice(7), "base64").toString().split(":")[0]);
+    if (isNaN(userId)) { res.status(401).json({ error: "unauthorized" }); return; }
+
+    await db.update(usersTable)
+      .set({ notificationPrefs: JSON.stringify(req.body), updatedAt: new Date() })
+      .where(eq(usersTable.id, userId));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Update notification prefs error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 // ── Change password ────────────────────────────────────────────────────────────
 
 router.post("/change-password", async (req, res) => {
