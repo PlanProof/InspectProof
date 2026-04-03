@@ -3270,17 +3270,21 @@ function DefectCorrectionPanel({ issue, inspectionId, projectId, onDone }: {
         });
       }
 
-      await apiFetch(`/api/issues/${issue.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: "resolved",
-          resolvedDate: new Date().toISOString().slice(0, 10),
-          description: comment
-            ? `${issue.description || ""}\n\nCorrective action: ${comment}`.trim()
-            : issue.description,
-        }),
-      });
+      const isSynthetic = issue.id < 0;
+
+      if (!isSynthetic) {
+        await apiFetch(`/api/issues/${issue.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "resolved",
+            resolvedDate: new Date().toISOString().slice(0, 10),
+            description: comment
+              ? `${issue.description || ""}\n\nCorrective action: ${comment}`.trim()
+              : issue.description,
+          }),
+        });
+      }
 
       if (issue.checklistResultId) {
         await apiFetch(`/api/inspections/${inspectionId}/checklist/${issue.checklistResultId}`, {
@@ -3289,8 +3293,11 @@ function DefectCorrectionPanel({ issue, inspectionId, projectId, onDone }: {
           body: JSON.stringify({
             result: "pass",
             notes: comment || "Defect corrected",
+            defectStatus: "resolved",
           }),
         });
+      } else if (isSynthetic) {
+        throw new Error("Cannot resolve this item — no checklist link found. Please refresh and try again.");
       }
 
       onDone();
