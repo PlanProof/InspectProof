@@ -607,7 +607,7 @@ export default function Inspectors() {
       const res = await fetch(`${apiBase()}/api/invites/app-invite`, {
         method: "POST",
         headers: authHeader(),
-        body: JSON.stringify({ email: member.email }),
+        body: JSON.stringify({ email: member.email, userType: member.userType }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as any;

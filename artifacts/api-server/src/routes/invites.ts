@@ -18,7 +18,7 @@ function isMobileOnly(adminPlan: string): boolean {
 // ── Send invite (token-based) ──────────────────────────────────────────────────
 
 router.post("/app-invite", requireAuth, async (req, res) => {
-  const { email, name, role } = req.body as { email?: string; name?: string; role?: string };
+  const { email, name, role, userType } = req.body as { email?: string; name?: string; role?: string; userType?: string };
 
   if (!email) {
     res.status(400).json({ error: "bad_request", message: "email is required" });
@@ -75,12 +75,17 @@ router.post("/app-invite", requireAuth, async (req, res) => {
     const token = randomUUID();
     const expiresAt = new Date(Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
 
+    // Validate userType — default to "both" for new invites (inherit all access)
+    const validUserTypes = ["inspector", "user", "both"];
+    const inviteUserType = validUserTypes.includes(userType ?? "") ? (userType as string) : "both";
+
     await db.insert(invitationsTable).values({
       token,
       email: normalizedEmail,
       companyName,
       invitedById: String(inviter.id),
       role: role ?? "inspector",
+      userType: inviteUserType,
       permissions: JSON.stringify({ editTemplates: false, addInspectors: false, createProjects: false }),
       expiresAt,
     });
@@ -311,11 +316,18 @@ router.post("/accept", async (req, res) => {
       return;
     }
 
-    // Determine mobile_only based on admin's plan; also re-check seat limit
+    // Determine mobile_only based on invite's userType and admin's plan
+    // If admin is on free_trial plan, all team members are mobile-only regardless.
+    // Otherwise, respect the userType chosen when the invite was sent:
+    //   "inspector" = mobile app only → mobileOnly: true
+    //   "user"      = web only        → mobileOnly: false
+    //   "both"      = full access     → mobileOnly: false
     const adminRows = await db.select().from(usersTable).where(eq(usersTable.id, parseInt(invite.invitedById)));
     const adminUser = adminRows[0];
     const adminPlan = adminUser?.plan ?? "free_trial";
-    const mobileOnly = isMobileOnly(adminPlan);
+    const planForcesAppOnly = isMobileOnly(adminPlan);
+    const inviteUserType = invite.userType ?? "both";
+    const mobileOnly = planForcesAppOnly || inviteUserType === "inspector";
 
     // Re-check seat limit at accept time using adminUserId linkage (not companyName)
     if (adminUser) {
@@ -347,7 +359,7 @@ router.post("/accept", async (req, res) => {
       companyName: invite.companyName ?? null,
       isActive: true,
       isCompanyAdmin: false,
-      userType: mobileOnly ? "inspector" : "both",
+      userType: mobileOnly ? "inspector" : inviteUserType,
       permissions,
       mobileOnly,
       adminUserId: invite.invitedById,

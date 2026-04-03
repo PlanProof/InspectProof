@@ -119,6 +119,9 @@ router.post("/", requireAuth, async (req, res) => {
       ? JSON.stringify({ ...defaultPerms, ...data.permissions })
       : JSON.stringify(defaultPerms);
 
+    // "inspector" userType = mobile app only → restrict from web portal
+    const mobileOnly = userType === "inspector";
+
     const [user] = await db.insert(usersTable).values({
       email: normalizedEmail,
       passwordHash,
@@ -130,7 +133,9 @@ router.post("/", requireAuth, async (req, res) => {
       isActive: true,
       isCompanyAdmin: false,
       userType,
+      mobileOnly,
       permissions,
+      requiresPasswordChange: true,
     }).returning();
 
     res.status(201).json({ ...formatUser(user), temporaryPassword });

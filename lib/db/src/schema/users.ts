@@ -53,6 +53,7 @@ export const invitationsTable = pgTable("invitations", {
   companyName: text("company_name"),
   invitedById: text("invited_by_id").notNull(),
   role: text("role").notNull().default("inspector"),
+  userType: text("user_type").notNull().default("both"),
   permissions: text("permissions"),
   expiresAt: timestamp("expires_at").notNull(),
   usedAt: timestamp("used_at"),
