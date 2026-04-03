@@ -27,6 +27,7 @@ import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { getSuggestionsForItem } from "@/constants/noteSuggestions";
 import { useTabBarHeight } from "@/hooks/useTabBarHeight";
+import { INSPECTION_TYPES } from "@/constants/api";
 
 const DOC_CACHE_DIR =
   Platform.OS !== "web"
@@ -665,7 +666,7 @@ export default function ConductInspectionScreen() {
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, isEditMode && { color: Colors.secondary }]} numberOfLines={1}>
-            {isEditMode ? "Edit Inspection" : (inspection?.inspectionType?.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) || "Inspection")}
+            {isEditMode ? "Edit Inspection" : (inspection?.inspectionType ? (INSPECTION_TYPES[inspection.inspectionType] || inspection.inspectionType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())) : "Inspection")}
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>{inspection?.projectName}</Text>
         </View>
@@ -883,7 +884,7 @@ export default function ConductInspectionScreen() {
             items={checklistItems}
             baseUrl={baseUrl}
             insets={insets}
-            inspectionName={inspection?.inspectionType?.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) || "Inspection"}
+            inspectionName={inspection?.inspectionType ? (INSPECTION_TYPES[inspection.inspectionType] || inspection.inspectionType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())) : "Inspection"}
             onDeletePhoto={removePhotoFromItem}
             unlinkedPhotos={unlinkedPhotos}
             addingUnlinkedPhoto={addingUnlinkedPhoto}

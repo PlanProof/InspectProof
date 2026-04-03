@@ -104,7 +104,9 @@ export default function PhotoMarkupScreen() {
   }, [baseUrl, token]);
 
   const goToInspection = useCallback(() => {
-    if (inspectionId) {
+    if (router.canGoBack()) {
+      router.back();
+    } else if (inspectionId) {
       router.replace({
         pathname: "/inspection/conduct/[id]" as any,
         params: { id: inspectionId },
@@ -496,7 +498,7 @@ export default function PhotoMarkupScreen() {
             style={[styles.btnOutline, { flex: 1 }]}
             onPress={goToInspection}
           >
-            <Feather name="check" size={16} color={Colors.text} />
+            <Feather name="check" size={16} color="#fff" />
             <Text style={styles.btnOutlineText}>Done</Text>
           </Pressable>
         </View>
@@ -551,9 +553,9 @@ const styles = StyleSheet.create({
   btnSecondaryText: { color: Colors.secondary, fontSize: 14, fontWeight: "600" },
   btnOutline: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    borderWidth: 1.5, borderColor: "#555", paddingVertical: 12, borderRadius: 10,
+    borderWidth: 1.5, borderColor: "#888", paddingVertical: 12, borderRadius: 10,
   },
-  btnOutlineText: { color: Colors.text, fontSize: 14, fontWeight: "600" },
+  btnOutlineText: { color: "#fff", fontSize: 14, fontWeight: "600" },
   canvas: { position: "relative", backgroundColor: "#111", overflow: "hidden" },
   hintBox: {
     position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
