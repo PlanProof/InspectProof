@@ -19,6 +19,7 @@ interface User {
   profession?: string | null;
   isActive: boolean;
   isAdmin?: boolean;
+  requiresPasswordChange?: boolean;
   createdAt: string;
 }
 
@@ -26,7 +27,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -100,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadStoredAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<User> => {
     const response = await fetch(`${getBaseUrl()}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -118,6 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthTokenGetter(() => data.token);
     setToken(data.token);
     setUser(data.user);
+    return data.user as User;
   };
 
   const logout = async () => {

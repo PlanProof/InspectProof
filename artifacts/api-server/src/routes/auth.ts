@@ -55,6 +55,7 @@ router.post("/login", async (req, res) => {
         permissions: user.permissions ? JSON.parse(user.permissions) : null,
         isActive: user.isActive,
         mobileOnly: user.mobileOnly ?? false,
+        requiresPasswordChange: user.requiresPasswordChange ?? false,
         createdAt: user.createdAt.toISOString(),
       },
     });
@@ -196,6 +197,7 @@ router.get("/me", async (req, res) => {
       permissions: user.permissions ? JSON.parse(user.permissions) : null,
       plan: user.plan,
       mobileOnly: user.mobileOnly ?? false,
+      requiresPasswordChange: user.requiresPasswordChange ?? false,
       createdAt: user.createdAt.toISOString(),
     });
   } catch (err) {
@@ -309,6 +311,57 @@ router.post("/change-password", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Change password error");
+    res.status(500).json({ error: "internal_error", message: "Server error" });
+  }
+});
+
+// ── First-login forced password change ────────────────────────────────────────
+// Called when requiresPasswordChange=true. Does not require old password.
+
+router.post("/set-password", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      res.status(401).json({ error: "unauthorized", message: "No token" });
+      return;
+    }
+    const token = authHeader.slice(7);
+    const decoded = Buffer.from(token, "base64").toString("utf-8");
+    const [userIdStr] = decoded.split(":");
+    const userId = parseInt(userIdStr);
+    if (isNaN(userId)) {
+      res.status(401).json({ error: "unauthorized", message: "Invalid token" });
+      return;
+    }
+
+    const { newPassword } = req.body;
+    if (!newPassword) {
+      res.status(400).json({ error: "bad_request", message: "New password is required" });
+      return;
+    }
+    if (newPassword.length < 8) {
+      res.status(400).json({ error: "bad_request", message: "Password must be at least 8 characters" });
+      return;
+    }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) {
+      res.status(404).json({ error: "not_found", message: "User not found" });
+      return;
+    }
+    if (!user.requiresPasswordChange) {
+      res.status(400).json({ error: "bad_request", message: "No password change required" });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await db.update(usersTable)
+      .set({ passwordHash, requiresPasswordChange: false, updatedAt: new Date() })
+      .where(eq(usersTable.id, userId));
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Set password error");
     res.status(500).json({ error: "internal_error", message: "Server error" });
   }
 });

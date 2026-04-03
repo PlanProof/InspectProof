@@ -351,6 +351,7 @@ router.post("/accept", async (req, res) => {
       permissions,
       mobileOnly,
       adminUserId: invite.invitedById,
+      requiresPasswordChange: true,
     }).returning();
 
     // Mark token as used
@@ -363,6 +364,7 @@ router.post("/accept", async (req, res) => {
     res.status(201).json({
       token: authToken,
       mobileOnly,
+      requiresPasswordChange: true,
       user: {
         id: newUser.id,
         email: newUser.email,
@@ -378,6 +380,7 @@ router.post("/accept", async (req, res) => {
         permissions: JSON.parse(permissions),
         isActive: true,
         mobileOnly,
+        requiresPasswordChange: true,
         createdAt: newUser.createdAt.toISOString(),
       },
     });

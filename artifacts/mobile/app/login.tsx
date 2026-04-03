@@ -28,7 +28,13 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && user) router.replace("/(tabs)");
+    if (!isLoading && user) {
+      if (user.requiresPasswordChange) {
+        router.replace("/set-password" as any);
+      } else {
+        router.replace("/(tabs)");
+      }
+    }
   }, [user, isLoading]);
 
   const handleLogin = async () => {
@@ -39,8 +45,12 @@ export default function LoginScreen() {
     setError("");
     setSubmitting(true);
     try {
-      await login(email.trim(), password);
-      router.replace("/(tabs)");
+      const loggedInUser = await login(email.trim(), password);
+      if (loggedInUser?.requiresPasswordChange) {
+        router.replace("/set-password" as any);
+      } else {
+        router.replace("/(tabs)");
+      }
     } catch (e: any) {
       setError(e.message || "Login failed. Please try again.");
     } finally {

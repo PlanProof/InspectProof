@@ -14,6 +14,7 @@ interface CurrentUser {
   licenceNumber: string | null;
   companyName: string | null;
   mobileOnly?: boolean;
+  requiresPasswordChange?: boolean;
 }
 
 let cachedUser: CurrentUser | null = null;

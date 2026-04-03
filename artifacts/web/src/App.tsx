@@ -2,6 +2,8 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useAuth } from "@/hooks/use-auth";
+import { ForcePasswordChangeModal } from "@/components/ForcePasswordChangeModal";
 
 // Pages
 import Landing from "@/pages/landing";
@@ -91,14 +93,32 @@ function Router() {
   );
 }
 
+function AppInner() {
+  const { user, token } = useAuth();
+
+  const handlePasswordSet = () => {
+    // Reload user from /me to clear the flag in state
+    window.location.reload();
+  };
+
+  return (
+    <>
+      <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+        <Router />
+      </WouterRouter>
+      <Toaster />
+      {user?.requiresPasswordChange && token && (
+        <ForcePasswordChangeModal token={token} onSuccess={handlePasswordSet} />
+      )}
+    </>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
+        <AppInner />
       </TooltipProvider>
     </QueryClientProvider>
   );

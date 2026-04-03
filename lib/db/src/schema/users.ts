@@ -29,6 +29,7 @@ export const usersTable = pgTable("users", {
   permissions: text("permissions"),
   mobileOnly: boolean("mobile_only").notNull().default(false),
   adminUserId: text("admin_user_id"),
+  requiresPasswordChange: boolean("requires_password_change").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
