@@ -46,8 +46,18 @@ function abbreviateState(state?: string): string {
 
 function parseNominatimAddress(result: NominatimResult): AddressFields {
   const a = result.address;
-  const streetParts = [a.house_number, a.road].filter(Boolean);
-  const siteAddress = streetParts.join(" ");
+  let siteAddress: string;
+  if (a.house_number && a.road) {
+    siteAddress = `${a.house_number} ${a.road}`;
+  } else if (a.road) {
+    // Nominatim often omits house_number even when display_name has it.
+    // The first comma-separated segment of display_name is the full street address.
+    const firstSegment = result.display_name.split(",")[0].trim();
+    // Use it if it starts with a digit (i.e. contains a street number)
+    siteAddress = /^\d/.test(firstSegment) ? firstSegment : a.road;
+  } else {
+    siteAddress = result.display_name.split(",")[0].trim();
+  }
   const suburb = a.suburb ?? a.town ?? a.city ?? a.village ?? a.hamlet ?? "";
   const state = abbreviateState(a.state);
   const postcode = a.postcode ?? "";
@@ -245,19 +255,37 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
       </div>
 
       {selected && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label className={labelCls}>Suburb</Label>
-            <Input className={cn(inputCls, "bg-muted/30")} value={selected.suburb} readOnly />
+            <Label className={labelCls}>Street Address</Label>
+            <Input
+              className={inputCls}
+              placeholder="e.g. 42 Smith Street"
+              value={selected.siteAddress}
+              onChange={e => {
+                const next = { ...selected, siteAddress: e.target.value };
+                setSelected(next);
+                onChange(next);
+              }}
+            />
+            {!selected.siteAddress && (
+              <p className="text-[11px] text-amber-600">Street number missing — type it in above</p>
+            )}
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className={labelCls}>State</Label>
-              <Input className={cn(inputCls, "bg-muted/30")} value={selected.state} readOnly />
+              <Label className={labelCls}>Suburb</Label>
+              <Input className={cn(inputCls, "bg-muted/30")} value={selected.suburb} readOnly />
             </div>
-            <div className="space-y-1.5">
-              <Label className={labelCls}>Postcode</Label>
-              <Input className={cn(inputCls, "bg-muted/30")} value={selected.postcode} readOnly />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label className={labelCls}>State</Label>
+                <Input className={cn(inputCls, "bg-muted/30")} value={selected.state} readOnly />
+              </div>
+              <div className="space-y-1.5">
+                <Label className={labelCls}>Postcode</Label>
+                <Input className={cn(inputCls, "bg-muted/30")} value={selected.postcode} readOnly />
+              </div>
             </div>
           </div>
         </div>
