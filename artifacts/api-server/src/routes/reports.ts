@@ -1405,17 +1405,18 @@ function buildPdf(
     if (/^\s{2,}/.test(raw)) {
       checkPageBreak(15);
       const subText = line.trim();
-      const subKv = subText.match(/^([A-Za-z][A-Za-z 0-9\/]+?):\s+(.+)$/);
+      const subKv = subText.match(/^([A-Za-z][A-Za-z 0-9\/\-&]+?):\s+(.+)$/);
       if (subKv) {
-        const rowY = doc.y;
+        const indentX = MARGIN + 10;
+        const availW = contentW - 10;
         doc.fillColor("#6B7280").fontSize(8.5).font(FB)
-          .text(subKv[1] + ":", MARGIN + 43, rowY, { width: 90, lineBreak: false });
+          .text(subKv[1] + ": ", indentX, doc.y, { continued: true, width: availW });
         doc.fillColor("#374151").fontSize(8.5).font(F)
-          .text(subKv[2], MARGIN + 135, rowY, { width: contentW - 135 });
+          .text(subKv[2], { width: availW });
         doc.moveDown(0.35);
       } else {
         doc.fillColor("#374151").fontSize(9).font(F)
-          .text(subText, MARGIN + 43, doc.y, { width: contentW - 43 });
+          .text(subText, MARGIN + 10, doc.y, { width: contentW - 10 });
         doc.moveDown(0.3);
       }
       continue;
