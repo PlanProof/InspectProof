@@ -19,6 +19,7 @@ import docTemplatesRouter from "./docTemplates";
 import feedbackRouter from "./feedback";
 import markupRouter from "./markup";
 import internalStaffRouter from "./internalStaff";
+import orgContractorsRouter from "./orgContractors";
 import activityRouter from "./activity";
 import shareRouter from "./share";
 
@@ -44,6 +45,7 @@ router.use("/doc-templates", docTemplatesRouter);
 router.use("/feedback", feedbackRouter);
 router.use(markupRouter);
 router.use("/internal-staff", internalStaffRouter);
+router.use("/org-contractors", orgContractorsRouter);
 router.use("/activity", activityRouter);
 router.use(shareRouter);
 

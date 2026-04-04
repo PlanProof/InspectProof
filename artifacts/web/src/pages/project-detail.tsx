@@ -2139,8 +2139,17 @@ interface ProjectContractor {
   company: string | null;
 }
 
+interface OrgContractorEntry {
+  id: number;
+  name: string;
+  trade: string;
+  email: string | null;
+  company: string | null;
+}
+
 function ContractorsTab({ projectId, projectName }: { projectId: number; projectName: string }) {
   const [contractors, setContractors] = useState<ProjectContractor[]>([]);
+  const [orgContractors, setOrgContractors] = useState<OrgContractorEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -2157,10 +2166,13 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiFetch(`/api/projects/${projectId}/contractors`)
-      .then(setContractors)
-      .catch(() => setContractors([]))
-      .finally(() => setLoading(false));
+    Promise.all([
+      apiFetch(`/api/projects/${projectId}/contractors`).catch(() => []),
+      apiFetch("/api/org-contractors").catch(() => []),
+    ]).then(([projList, orgList]) => {
+      setContractors(projList);
+      setOrgContractors(orgList);
+    }).finally(() => setLoading(false));
   }, [projectId]);
 
   const addContractor = async () => {
@@ -2211,129 +2223,152 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
     </div>
   );
 
-  return (
-    <div className="space-y-4 mt-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-sidebar">Project Contractors</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Contractors assigned to this project. Use these when allocating defects during inspections.</p>
-        </div>
-        {!adding && (
-          <Button variant="outline" size="sm" onClick={() => { setAdding(true); setError(""); }}>
-            <Plus className="h-4 w-4" /> Add Contractor
-          </Button>
-        )}
-      </div>
-
-      {contractors.length === 0 && !adding && (
-        <div className="text-center py-10 border border-dashed rounded-lg text-muted-foreground text-sm">
-          No contractors added yet. Add your first contractor to this project.
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {contractors.map(c => (
-          <div key={c.id} className="rounded-lg border border-border bg-white">
-            {editingId === c.id ? (
-              <div className="p-4 space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs text-muted-foreground font-medium">Name *</label>
-                    <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Full name" autoFocus className="mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground font-medium">Trade / Discipline</label>
-                    <Input value={editTrade} onChange={e => setEditTrade(e.target.value)} placeholder="e.g. Plumber, Electrician" className="mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground font-medium">Email</label>
-                    <Input value={editEmail} onChange={e => setEditEmail(e.target.value)} placeholder="contractor@email.com" type="email" className="mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground font-medium">Company</label>
-                    <Input value={editCompany} onChange={e => setEditCompany(e.target.value)} placeholder="Company name" className="mt-1" />
-                  </div>
-                </div>
-                {error && <p className="text-xs text-red-500">{error}</p>}
-                <div className="flex items-center gap-2">
-                  <Button size="sm" onClick={saveEdit} disabled={savingEdit}>
-                    {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                    {savingEdit ? "Saving…" : "Save"}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
-                </div>
-              </div>
-            ) : (
-              <div className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="h-9 w-9 rounded-full bg-secondary/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <User className="h-4 w-4 text-secondary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-sidebar">{c.name}</p>
-                      {c.trade && <span className="text-xs bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded font-medium">{c.trade}</span>}
-                      {c.company && <span className="text-xs text-muted-foreground">{c.company}</span>}
-                    </div>
-                    {c.email && (
-                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                        <Mail className="h-3 w-3" />{c.email}
-                      </p>
-                    )}
-                    {!c.email && (
-                      <p className="text-xs text-amber-600 mt-1 italic">No email address — add one to enable defect report sending.</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => startEdit(c)} className="p-1.5 rounded text-muted-foreground hover:bg-muted/40 transition-colors" title="Edit">
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button onClick={() => remove(c.id)} className="p-1.5 rounded text-red-500 hover:bg-red-50 transition-colors" title="Remove">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {adding && (
-        <div className="p-4 rounded-lg border border-secondary/40 bg-secondary/5 space-y-3">
-          <p className="text-sm font-medium text-sidebar">New Contractor</p>
+  const ContractorCard = ({ c, isOrgLevel = false }: { c: ProjectContractor | OrgContractorEntry; isOrgLevel?: boolean }) => (
+    <div className="rounded-lg border border-border bg-white">
+      {editingId === c.id && !isOrgLevel ? (
+        <div className="p-4 space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-xs text-muted-foreground font-medium">Name *</label>
-              <Input value={newName} onChange={e => { setNewName(e.target.value); setError(""); }} placeholder="Full name" autoFocus className="mt-1" />
+              <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Full name" autoFocus className="mt-1" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground font-medium">Trade / Discipline</label>
-              <Input value={newTrade} onChange={e => setNewTrade(e.target.value)} placeholder="e.g. Plumber, Electrician" className="mt-1" />
+              <Input value={editTrade} onChange={e => setEditTrade(e.target.value)} placeholder="e.g. Plumber, Electrician" className="mt-1" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground font-medium">Email</label>
-              <Input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="contractor@email.com" type="email" className="mt-1" />
+              <Input value={editEmail} onChange={e => setEditEmail(e.target.value)} placeholder="contractor@email.com" type="email" className="mt-1" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground font-medium">Company</label>
-              <Input value={newCompany} onChange={e => setNewCompany(e.target.value)} placeholder="Company name" className="mt-1" />
+              <Input value={editCompany} onChange={e => setEditCompany(e.target.value)} placeholder="Company name" className="mt-1" />
             </div>
           </div>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex items-center gap-2">
-            <Button onClick={addContractor} disabled={saving}>
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-              {saving ? "Adding…" : "Add Contractor"}
+            <Button size="sm" onClick={saveEdit} disabled={savingEdit}>
+              {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+              {savingEdit ? "Saving…" : "Save"}
             </Button>
-            <Button variant="outline" onClick={() => { setAdding(false); setError(""); setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); }}>
-              Cancel
-            </Button>
+            <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <div className={cn("h-9 w-9 rounded-full flex items-center justify-center shrink-0 mt-0.5", isOrgLevel ? "bg-emerald-50" : "bg-secondary/10")}>
+              <User className={cn("h-4 w-4", isOrgLevel ? "text-emerald-600" : "text-secondary")} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-semibold text-sidebar">{c.name}</p>
+                {c.trade && <span className="text-xs bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded font-medium">{c.trade}</span>}
+                {c.company && <span className="text-xs text-muted-foreground">{c.company}</span>}
+              </div>
+              {c.email && (
+                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                  <Mail className="h-3 w-3" />{c.email}
+                </p>
+              )}
+              {!c.email && (
+                <p className="text-xs text-amber-600 mt-1 italic">No email address — add one to enable defect report sending.</p>
+              )}
+            </div>
+            {!isOrgLevel && (
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => startEdit(c as ProjectContractor)} className="p-1.5 rounded text-muted-foreground hover:bg-muted/40 transition-colors" title="Edit">
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button onClick={() => remove(c.id)} className="p-1.5 rounded text-red-500 hover:bg-red-50 transition-colors" title="Remove">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
+    </div>
+  );
 
-      {error && !adding && editingId === null && <p className="text-xs text-red-500">{error}</p>}
+  return (
+    <div className="space-y-6 mt-4">
+      {/* Organisation Library contractors */}
+      {orgContractors.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-sidebar">Organisation Library</h3>
+            <span className="text-xs text-muted-foreground bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded font-medium">Shared across all projects</span>
+          </div>
+          <div className="space-y-2">
+            {orgContractors.map(c => <ContractorCard key={`org-${c.id}`} c={c} isOrgLevel />)}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Manage these in <strong>Settings → Organisation → Contractor Library</strong>.
+          </p>
+        </div>
+      )}
+
+      {/* Project-specific contractors */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-sidebar">Project Contractors</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Contractors specific to this project only.</p>
+          </div>
+          {!adding && (
+            <Button variant="outline" size="sm" onClick={() => { setAdding(true); setError(""); }}>
+              <Plus className="h-4 w-4" /> Add Contractor
+            </Button>
+          )}
+        </div>
+
+        {contractors.length === 0 && !adding && (
+          <div className="text-center py-8 border border-dashed rounded-lg text-muted-foreground text-sm">
+            No project-specific contractors added yet.
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {contractors.map(c => <ContractorCard key={`proj-${c.id}`} c={c} />)}
+        </div>
+
+        {adding && (
+          <div className="p-4 rounded-lg border border-secondary/40 bg-secondary/5 space-y-3">
+            <p className="text-sm font-medium text-sidebar">New Contractor</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground font-medium">Name *</label>
+                <Input value={newName} onChange={e => { setNewName(e.target.value); setError(""); }} placeholder="Full name" autoFocus className="mt-1" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground font-medium">Trade / Discipline</label>
+                <Input value={newTrade} onChange={e => setNewTrade(e.target.value)} placeholder="e.g. Plumber, Electrician" className="mt-1" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground font-medium">Email</label>
+                <Input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="contractor@email.com" type="email" className="mt-1" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground font-medium">Company</label>
+                <Input value={newCompany} onChange={e => setNewCompany(e.target.value)} placeholder="Company name" className="mt-1" />
+              </div>
+            </div>
+            {error && <p className="text-xs text-red-500">{error}</p>}
+            <div className="flex items-center gap-2">
+              <Button onClick={addContractor} disabled={saving}>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                {saving ? "Adding…" : "Add Contractor"}
+              </Button>
+              <Button variant="outline" onClick={() => { setAdding(false); setError(""); setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); }}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {error && !adding && editingId === null && <p className="text-xs text-red-500">{error}</p>}
+      </div>
     </div>
   );
 }

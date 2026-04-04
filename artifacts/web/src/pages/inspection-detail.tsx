@@ -418,6 +418,7 @@ export default function InspectionDetail() {
   const [docTemplates, setDocTemplates] = useState<DocTemplate[]>([]);
   const [internalStaff, setInternalStaff] = useState<{ id: number; name: string; role: string; email: string | null }[]>([]);
   const [contractors, setContractors] = useState<{ id: number; name: string; trade: string; email: string | null }[]>([]);
+  const [orgContractors, setOrgContractors] = useState<{ id: number; name: string; trade: string; email: string | null }[]>([]);
 
   const openReportDialog = useCallback((inspection: Inspection) => {
     const suggested = getSuggestedReportType(inspection);
@@ -434,7 +435,7 @@ export default function InspectionDetail() {
       setInspection(data);
 
       // Parallel loads
-      const [docsWithLinks, reports, users, tmpls, projDocs, proj, docTmpls, staffList, contractorList] = await Promise.all([
+      const [docsWithLinks, reports, users, tmpls, projDocs, proj, docTmpls, staffList, contractorList, orgContractorList] = await Promise.all([
         data.projectId ? apiFetch(`/api/projects/${data.projectId}/documents-with-links`).catch(() => []) : Promise.resolve([]),
         apiFetch(`/api/reports?inspectionId=${inspId}`).catch(() => []),
         apiFetch("/api/users").catch(() => []),
@@ -444,6 +445,7 @@ export default function InspectionDetail() {
         apiFetch("/api/doc-templates").catch(() => []),
         apiFetch("/api/internal-staff").catch(() => []),
         data.projectId ? apiFetch(`/api/projects/${data.projectId}/contractors`).catch(() => []) : Promise.resolve([]),
+        apiFetch("/api/org-contractors").catch(() => []),
       ]);
 
       // Build docsByItem map
@@ -463,6 +465,7 @@ export default function InspectionDetail() {
       setDocTemplates(Array.isArray(docTmpls) ? docTmpls : []);
       setInternalStaff(Array.isArray(staffList) ? staffList : []);
       setContractors(Array.isArray(contractorList) ? contractorList : []);
+      setOrgContractors(Array.isArray(orgContractorList) ? orgContractorList : []);
     } catch {
       setError("Failed to load inspection");
     } finally {
@@ -879,8 +882,8 @@ export default function InspectionDetail() {
           onReload={load}
         />
       )}
-      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults ?? []} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} inspection={inspection} internalStaff={internalStaff} contractors={contractors} />}
-      {tab === "Issues" && <IssuesTab issues={inspection.issues} inspectionId={inspection.id} projectId={inspection.projectId} onReload={load} contractors={contractors} internalStaff={internalStaff} />}
+      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults ?? []} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} inspection={inspection} internalStaff={internalStaff} contractors={contractors} orgContractors={orgContractors} />}
+      {tab === "Issues" && <IssuesTab issues={inspection.issues} inspectionId={inspection.id} projectId={inspection.projectId} onReload={load} contractors={contractors} internalStaff={internalStaff} orgContractors={orgContractors} />}
       {tab === "Documents" && (
         <DocumentsTab
           documents={projectDocuments}
@@ -2367,6 +2370,7 @@ function ChecklistTab({
   inspection,
   internalStaff,
   contractors = [],
+  orgContractors = [],
 }: {
   results: ChecklistResult[];
   docsByItem: Record<number, { id: number; name: string; mimeType?: string }[]>;
@@ -2375,6 +2379,7 @@ function ChecklistTab({
   inspection: Inspection;
   internalStaff: { id: number; name: string; role: string }[];
   contractors?: { id: number; name: string; trade: string; email: string | null }[];
+  orgContractors?: { id: number; name: string; trade: string; email: string | null }[];
 }) {
   const [localResults, setLocalResults] = useState<ChecklistResult[]>(initialResults);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -2880,7 +2885,7 @@ ${checklistRows}
                       {/* Trade */}
                       <div>
                         <label className="text-xs text-muted-foreground font-medium block mb-1">Trade / Contractor Allocated</label>
-                        {(contractors.length > 0 || internalStaff.length > 0) ? (
+                        {(contractors.length > 0 || orgContractors.length > 0 || internalStaff.length > 0) ? (
                           <select
                             value={draft.tradeAllocated}
                             onChange={e => updateDraft(item.id, { tradeAllocated: e.target.value })}
@@ -2892,6 +2897,15 @@ ${checklistRows}
                                 {contractors.map(c => (
                                   <option key={`c-${c.id}`} value={c.name}>
                                     {c.name}{c.trade ? ` (${c.trade})` : ""}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {orgContractors.length > 0 && (
+                              <optgroup label="Organisation Library">
+                                {orgContractors.map(oc => (
+                                  <option key={`oc-${oc.id}`} value={oc.name}>
+                                    {oc.name}{oc.trade ? ` (${oc.trade})` : ""}
                                   </option>
                                 ))}
                               </optgroup>
@@ -2915,8 +2929,8 @@ ${checklistRows}
                             className="w-full text-sm border border-amber-200 rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-amber-400"
                           />
                         )}
-                        {(contractors.length === 0 && internalStaff.length === 0) && (
-                          <p className="text-xs text-muted-foreground mt-1">Add contractors to this project to pick from a list.</p>
+                        {(contractors.length === 0 && orgContractors.length === 0 && internalStaff.length === 0) && (
+                          <p className="text-xs text-muted-foreground mt-1">Add contractors to this project or the Organisation Library to pick from a list.</p>
                         )}
                       </div>
 
@@ -3361,13 +3375,14 @@ function DefectCorrectionPanel({ issue, inspectionId, projectId, onDone }: {
 
 // ── Issues Tab ────────────────────────────────────────────────────────────────
 
-function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, internalStaff }: {
+function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, internalStaff, orgContractors }: {
   issues: Issue[];
   inspectionId: number;
   projectId: number;
   onReload: () => void;
   contractors: { id: number; name: string; trade: string; email: string | null }[];
   internalStaff: { id: number; name: string; role: string; email: string | null }[];
+  orgContractors: { id: number; name: string; trade: string; email: string | null }[];
 }) {
   const [expandedCorrection, setExpandedCorrection] = useState<number | null>(null);
   const [localTrades, setLocalTrades] = useState<Record<number, string>>(() => {
@@ -3376,7 +3391,7 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
     return map;
   });
   const [sendingTo, setSendingTo] = useState<number | null>(null);
-  const [sendResult, setSendResult] = useState<Record<number, { ok: boolean; msg: string }>>({});
+  const [sendResult, setSendResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
 
   // Re-sync when issues list changes (e.g. after reload)
   useEffect(() => {
@@ -3422,26 +3437,32 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
 
   async function handleSend(tradeName: string) {
     const contractor = contractors.find(c => c.name.toLowerCase() === tradeName.toLowerCase());
-    const staff = !contractor ? internalStaff.find(s => s.name.toLowerCase() === tradeName.toLowerCase()) : null;
-    const target = contractor ?? staff;
+    const orgContractor = !contractor ? orgContractors.find(oc => oc.name.toLowerCase() === tradeName.toLowerCase()) : null;
+    const staff = !contractor && !orgContractor ? internalStaff.find(s => s.name.toLowerCase() === tradeName.toLowerCase()) : null;
+    const target = contractor ?? orgContractor ?? staff;
     if (!target) return;
-    const key = `${contractor ? "c" : "s"}:${target.id}`;
+    const key = contractor ? `c:${contractor.id}` : orgContractor ? `oc:${orgContractor.id}` : `s:${staff!.id}`;
     setSendingTo(target.id);
-    setSendResult(prev => { const n = { ...prev }; delete n[key as any]; return n; });
+    setSendResult(prev => { const n = { ...prev }; delete n[key]; return n; });
     try {
-      const url = contractor
-        ? `/api/projects/${projectId}/contractors/${contractor.id}/send-defect-report`
-        : `/api/projects/${projectId}/staff/${staff!.id}/send-defect-report`;
+      let url: string;
+      if (contractor) {
+        url = `/api/projects/${projectId}/contractors/${contractor.id}/send-defect-report`;
+      } else if (orgContractor) {
+        url = `/api/projects/${projectId}/org-contractors/${orgContractor.id}/send-defect-report`;
+      } else {
+        url = `/api/projects/${projectId}/staff/${staff!.id}/send-defect-report`;
+      }
       const data = await apiFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inspectionId }),
       });
-      setSendResult(prev => ({ ...prev, [key as any]: { ok: true, msg: data?.message ?? "Sent successfully" } }));
+      setSendResult(prev => ({ ...prev, [key]: { ok: true, msg: data?.message ?? "Sent successfully" } }));
     } catch (err: any) {
       let msg = "Failed to send";
       try { const body = JSON.parse(err.message); if (body.message) msg = body.message; } catch {}
-      setSendResult(prev => ({ ...prev, [key as any]: { ok: false, msg } }));
+      setSendResult(prev => ({ ...prev, [key]: { ok: false, msg } }));
     } finally {
       setSendingTo(null);
     }
@@ -3451,6 +3472,8 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
   function resolveTradeTarget(tradeName: string) {
     const contractor = contractors.find(c => c.name.toLowerCase() === tradeName.toLowerCase());
     if (contractor) return { type: "contractor" as const, person: contractor, key: `c:${contractor.id}`, email: contractor.email, label: contractor.trade };
+    const orgContractor = orgContractors.find(oc => oc.name.toLowerCase() === tradeName.toLowerCase());
+    if (orgContractor) return { type: "contractor" as const, person: orgContractor, key: `oc:${orgContractor.id}`, email: orgContractor.email, label: orgContractor.trade };
     const staff = internalStaff.find(s => s.name.toLowerCase() === tradeName.toLowerCase());
     if (staff) return { type: "staff" as const, person: staff, key: `s:${staff.id}`, email: staff.email, label: staff.role || "Internal Staff" };
     return null;
@@ -3485,9 +3508,16 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
         >
           <option value="">— Unassigned —</option>
           {contractors.length > 0 && (
-            <optgroup label="Contractors">
+            <optgroup label="Project Contractors">
               {contractors.map(c => (
                 <option key={c.id} value={c.name}>{c.name}{c.trade ? ` (${c.trade})` : ""}</option>
+              ))}
+            </optgroup>
+          )}
+          {orgContractors.length > 0 && (
+            <optgroup label="Organisation Library">
+              {orgContractors.map(oc => (
+                <option key={oc.id} value={oc.name}>{oc.name}{oc.trade ? ` (${oc.trade})` : ""}</option>
               ))}
             </optgroup>
           )}
@@ -3518,7 +3548,7 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
             {tradeNames.map(tradeName => {
               const tradeIssues = issuesByTrade[tradeName];
               const resolved = resolveTradeTarget(tradeName);
-              const result = resolved ? sendResult[resolved.key as any] : undefined;
+              const result = resolved ? sendResult[resolved.key] : undefined;
               const isSending = resolved ? sendingTo === resolved.person.id : false;
               const canSend = !!resolved?.email;
               return (

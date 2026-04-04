@@ -66,6 +66,21 @@ async function runSchemaMigrations() {
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS project_contractors_project_id_idx ON project_contractors(project_id)`);
 
+    // org_contractors table (Task #10)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS org_contractors (
+        id serial PRIMARY KEY,
+        company_name text NOT NULL,
+        name text NOT NULL,
+        trade text NOT NULL DEFAULT '',
+        email text,
+        company text,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS org_contractors_company_name_idx ON org_contractors(company_name)`);
+
     // checklist_results table additions
     await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS photo_markups text`);
     await pool.query(`ALTER TABLE checklist_results ADD COLUMN IF NOT EXISTS severity text`);

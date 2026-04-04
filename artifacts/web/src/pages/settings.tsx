@@ -924,6 +924,233 @@ interface StaffMember {
   email: string | null;
 }
 
+interface OrgContractor {
+  id: number;
+  name: string;
+  trade: string;
+  email: string | null;
+  company: string | null;
+}
+
+function ContractorLibrarySection() {
+  const [contractors, setContractors] = useState<OrgContractor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newTrade, setNewTrade] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newCompany, setNewCompany] = useState("");
+  const [savingNew, setSavingNew] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTrade, setEditTrade] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editCompany, setEditCompany] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch("/api/org-contractors")
+      .then(setContractors)
+      .catch(() => setContractors([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const add = async () => {
+    if (!newName.trim()) { setError("Name is required."); return; }
+    setError("");
+    setSavingNew(true);
+    try {
+      const created = await apiFetch("/api/org-contractors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim(), trade: newTrade.trim(), email: newEmail.trim() || null, company: newCompany.trim() || null }),
+      });
+      setContractors(c => [...c, created]);
+      setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); setAdding(false);
+    } catch {
+      setError("Failed to add contractor. Please try again.");
+    } finally {
+      setSavingNew(false);
+    }
+  };
+
+  const startEdit = (c: OrgContractor) => {
+    setEditingId(c.id);
+    setEditName(c.name);
+    setEditTrade(c.trade);
+    setEditEmail(c.email ?? "");
+    setEditCompany(c.company ?? "");
+    setError("");
+  };
+
+  const saveEdit = async () => {
+    if (!editName.trim()) { setError("Name is required."); return; }
+    setError("");
+    setSavingEdit(true);
+    try {
+      const updated = await apiFetch(`/api/org-contractors/${editingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editName.trim(), trade: editTrade.trim(), email: editEmail.trim() || null, company: editCompany.trim() || null }),
+      });
+      setContractors(c => c.map(x => x.id === editingId ? updated : x));
+      setEditingId(null);
+    } catch {
+      setError("Failed to update contractor. Please try again.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const remove = async (id: number) => {
+    try {
+      await apiFetch(`/api/org-contractors/${id}`, { method: "DELETE" });
+      setContractors(c => c.filter(x => x.id !== id));
+    } catch {
+      setError("Failed to remove contractor.");
+    }
+  };
+
+  if (loading) return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+      <Loader2 className="h-4 w-4 animate-spin" /> Loading contractor library…
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      {contractors.length === 0 && !adding && (
+        <p className="text-sm text-muted-foreground py-1">No contractors in the library yet. Add your first contractor below.</p>
+      )}
+
+      {contractors.map(c => (
+        <div key={c.id} className="flex items-start gap-3 p-3 rounded-lg border border-border bg-muted/10">
+          {editingId === c.id ? (
+            <>
+              <div className="flex-1 grid grid-cols-4 gap-2">
+                <Input
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  placeholder="Full name"
+                  autoFocus
+                />
+                <Input
+                  value={editTrade}
+                  onChange={e => setEditTrade(e.target.value)}
+                  placeholder="Trade / Discipline"
+                />
+                <Input
+                  value={editEmail}
+                  onChange={e => setEditEmail(e.target.value)}
+                  placeholder="Email address"
+                  type="email"
+                />
+                <Input
+                  value={editCompany}
+                  onChange={e => setEditCompany(e.target.value)}
+                  placeholder="Company"
+                />
+              </div>
+              <button
+                onClick={saveEdit}
+                disabled={savingEdit}
+                className="shrink-0 p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
+                title="Save"
+              >
+                {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              </button>
+              <button
+                onClick={() => setEditingId(null)}
+                className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors"
+                title="Cancel"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-sidebar">{c.name}</p>
+                <div className="flex flex-wrap gap-2 mt-0.5">
+                  {c.trade && <p className="text-xs text-muted-foreground">{c.trade}</p>}
+                  {c.company && <p className="text-xs text-muted-foreground">· {c.company}</p>}
+                </div>
+                {c.email && (
+                  <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                    <Mail className="h-3 w-3 shrink-0" />
+                    {c.email}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => startEdit(c)}
+                className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors"
+                title="Edit"
+              >
+                <Edit2 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => remove(c.id)}
+                className="shrink-0 p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+                title="Remove"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </>
+          )}
+        </div>
+      ))}
+
+      {adding ? (
+        <div className="p-3 rounded-lg border border-secondary/40 bg-secondary/5 space-y-2">
+          <div className="grid grid-cols-4 gap-2">
+            <Input
+              value={newName}
+              onChange={e => { setNewName(e.target.value); setError(""); }}
+              placeholder="Full name *"
+              autoFocus
+            />
+            <Input
+              value={newTrade}
+              onChange={e => setNewTrade(e.target.value)}
+              placeholder="Trade / Discipline"
+            />
+            <Input
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              placeholder="Email address (optional)"
+              type="email"
+            />
+            <Input
+              value={newCompany}
+              onChange={e => setNewCompany(e.target.value)}
+              placeholder="Company (optional)"
+            />
+          </div>
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <div className="flex items-center gap-2">
+            <Button onClick={add} disabled={savingNew}>
+              {savingNew ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              {savingNew ? "Saving…" : "Add Contractor"}
+            </Button>
+            <Button variant="outline" onClick={() => { setAdding(false); setError(""); setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); }}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button variant="outline" onClick={() => { setAdding(true); setError(""); }}>
+          <Plus className="h-4 w-4" />
+          Add Contractor
+        </Button>
+      )}
+
+      {error && !adding && <p className="text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
 function InternalStaffSection() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1428,6 +1655,13 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
         description="Your organisation's employees who can be assigned as responsible parties on defects. They appear alongside contractors in the trade allocation picker."
       >
         <InternalStaffSection />
+      </SectionCard>
+
+      <SectionCard
+        title="Contractor Library"
+        description="Contractors added here are automatically available across every project. They appear in the trade allocation picker alongside project-specific contractors and internal staff."
+      >
+        <ContractorLibrarySection />
       </SectionCard>
 
       <div className="flex justify-end">

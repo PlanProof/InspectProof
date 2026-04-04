@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
-import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable, internalStaffTable } from "@workspace/db";
+import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable, internalStaffTable, orgContractorsTable } from "@workspace/db";
 import { sendContractorDefectReportEmail } from "../lib/email";
 import { checkProjectQuota } from "../lib/quota";
 import { optionalAuth, requireAuth, type AuthUser } from "../middleware/auth";
@@ -894,6 +894,81 @@ router.post("/:id/staff/:staffId/send-defect-report", requireAuth, async (req, r
   }
 });
 
+router.post("/:id/org-contractors/:orgContractorId/send-defect-report", requireAuth, async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  const orgContractorId = parseInt(req.params.orgContractorId);
+  if (isNaN(projectId) || isNaN(orgContractorId)) return res.status(400).json({ error: "bad_request" });
+
+  const { inspectionId } = req.body as { inspectionId?: number };
+  if (!inspectionId) return res.status(400).json({ error: "bad_request", message: "inspectionId is required" });
+
+  try {
+    const authUser = req.authUser!;
+    const orgScope = authUser.companyName?.trim() || `user:${authUser.id}`;
+
+    const [contractor] = await db.select().from(orgContractorsTable)
+      .where(and(eq(orgContractorsTable.id, orgContractorId), eq(orgContractorsTable.companyName, orgScope)));
+    if (!contractor) return res.status(404).json({ error: "not_found", message: "Org contractor not found" });
+    if (!contractor.email) return res.status(400).json({ error: "bad_request", message: "Org contractor has no email address" });
+
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+    const [inspection] = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, inspectionId));
+    if (!inspection) return res.status(404).json({ error: "not_found", message: "Inspection not found" });
+
+    const results = await db.select().from(checklistResultsTable)
+      .where(eq(checklistResultsTable.inspectionId, inspectionId));
+
+    const itemIds = results.map(r => r.checklistItemId).filter(Boolean) as number[];
+    const items = itemIds.length > 0
+      ? await db.select().from(checklistItemsTable).where(inArray(checklistItemsTable.id, itemIds))
+      : [];
+    const itemNameMap: Record<number, string> = {};
+    for (const item of items) itemNameMap[item.id] = item.label ?? item.description ?? "Unknown Item";
+
+    const contractorResults = results.filter(r => {
+      const trade = (r.tradeAllocated ?? "").toLowerCase();
+      const name = contractor.name.toLowerCase();
+      return trade.includes(name) && (r.result === "fail" || r.defectStatus === "open" || r.defectStatus === "in_progress");
+    });
+
+    if (contractorResults.length === 0) {
+      return res.status(400).json({ error: "no_defects", message: "No defects are currently assigned to this contractor" });
+    }
+
+    const senderId = getUserIdFromRequest(req);
+    let senderName = "InspectProof";
+    if (senderId) {
+      const [sender] = await db.select().from(usersTable).where(eq(usersTable.id, senderId));
+      if (sender) senderName = `${sender.firstName} ${sender.lastName}`.trim();
+    }
+
+    const defects = contractorResults.map(r => ({
+      itemName: r.checklistItemId ? (itemNameMap[r.checklistItemId] ?? "Unknown Item") : "Unknown Item",
+      severity: r.severity,
+      location: r.location,
+      recommendedAction: r.recommendedAction,
+      notes: r.notes,
+    }));
+
+    await sendContractorDefectReportEmail({
+      toEmail: contractor.email,
+      contractorName: contractor.name,
+      trade: contractor.trade,
+      projectName: project?.name ?? "Unknown Project",
+      inspectionName: inspection.name ?? "Inspection",
+      inspectionDate: inspection.scheduledDate ? String(inspection.scheduledDate) : null,
+      senderName,
+      defects,
+    }, req.log);
+
+    req.log.info({ orgContractorId, projectId, inspectionId, defects: defects.length }, "Org contractor defect report sent");
+    res.json({ success: true, message: `Defect report sent to ${contractor.email} (${defects.length} item${defects.length !== 1 ? "s" : ""})` });
+  } catch (err) {
+    req.log.error({ err }, "Send org contractor defect report error");
+    res.status(500).json({ error: "internal_error", message: "Failed to send defect report" });
+  }
+});
+
 // Send defect reports to ALL allocated trades in one call — one email per person, all defects collated
 router.post("/:id/inspections/:inspectionId/send-all-defects", requireAuth, async (req, res) => {
   const projectId = parseInt(req.params.id);
@@ -923,10 +998,23 @@ router.post("/:id/inspections/:inspectionId/send-all-defects", requireAuth, asyn
     const itemNameMap: Record<number, string> = {};
     for (const item of items) itemNameMap[item.id] = item.label ?? item.description ?? "Unknown Item";
 
-    // All potential recipients: contractors for this project + internal staff
-    const [contractors, allStaff] = await Promise.all([
+    // Determine org scope for org-level contractor lookup
+    const senderId2 = getUserIdFromRequest(req);
+    let orgScope2: string | null = null;
+    if (senderId2) {
+      const [senderUser2] = await db.select().from(usersTable).where(eq(usersTable.id, senderId2));
+      if (senderUser2) orgScope2 = senderUser2.companyName?.trim() || `user:${senderUser2.id}`;
+    }
+
+    // All potential recipients: contractors for this project + org-level contractors + internal staff (scoped to org)
+    const [contractors, orgContractors, allStaff] = await Promise.all([
       db.select().from(projectContractorsTable).where(eq(projectContractorsTable.projectId, projectId)),
-      db.select().from(internalStaffTable),
+      orgScope2
+        ? db.select().from(orgContractorsTable).where(eq(orgContractorsTable.companyName, orgScope2))
+        : Promise.resolve([]),
+      orgScope2
+        ? db.select().from(internalStaffTable).where(eq(internalStaffTable.companyName, orgScope2))
+        : Promise.resolve([]),
     ]);
 
     type PersonEntry = {
@@ -957,6 +1045,14 @@ router.post("/:id/inspections/:inspectionId/send-all-defects", requireAuth, asyn
           const entry = personMap.get(c.email);
           if (entry) { entry.defects.push(defect); }
           else { personMap.set(c.email, { email: c.email, name: c.name, trade: c.trade ?? "Trade", defects: [defect] }); }
+        }
+      }
+      for (const oc of orgContractors) {
+        if (!oc.email) continue;
+        if (tradeField.includes(oc.name.toLowerCase())) {
+          const entry = personMap.get(oc.email);
+          if (entry) { entry.defects.push(defect); }
+          else { personMap.set(oc.email, { email: oc.email, name: oc.name, trade: oc.trade ?? "Trade", defects: [defect] }); }
         }
       }
       for (const s of allStaff) {

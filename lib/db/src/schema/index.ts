@@ -12,3 +12,4 @@ export * from "./docTemplates";
 export * from "./feedbacks";
 export * from "./internalStaff";
 export * from "./projectContractors";
+export * from "./orgContractors";
