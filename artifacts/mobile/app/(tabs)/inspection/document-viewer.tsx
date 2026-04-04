@@ -2,7 +2,7 @@ import React, { useRef, useState, useCallback, useEffect, useMemo } from "react"
 import {
   View, Text, StyleSheet, Pressable, Alert, ActivityIndicator,
   useWindowDimensions, Platform, Modal, TextInput,
-  KeyboardAvoidingView, Image, ScrollView,
+  KeyboardAvoidingView, Image, ScrollView, Linking,
 } from "react-native";
 import * as Sharing from "expo-sharing";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -374,16 +374,32 @@ export default function DocumentViewerScreen() {
     };
   }, [url, token]);
 
-  const webviewUri = localUri
-    ? Platform.OS === "android"
-      ? `file://${localUri}`
-      : localUri
-    : null;
+  // FileSystem.cacheDirectory already returns a file:// prefixed URI on both iOS
+  // and Android, so we must NOT add file:// again. Just use localUri directly.
+  const webviewUri = localUri ?? null;
   const isPdf =
     mimeType === "application/pdf" || name?.toLowerCase().endsWith(".pdf");
   const isImage =
     mimeType?.startsWith("image/") ||
     /\.(jpe?g|png|gif|webp|bmp)$/i.test(name ?? "");
+
+  // Android WebView cannot render local PDF files from file:// URIs.
+  // Use Google Docs Viewer with the original remote URL (which includes ?_token=
+  // for auth) so the PDF renders in-app on Android without needing a local file.
+  const useGoogleDocsViewer = Platform.OS === "android" && isPdf;
+  const googleDocsViewerUri = useGoogleDocsViewer && url
+    ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(url)}`
+    : null;
+
+  // For the "Open in browser" fallback — uses the token-authenticated URL directly
+  const openInBrowser = useCallback(async () => {
+    if (!url) return;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Error", "Could not open the document. Please try again.");
+    }
+  }, [url]);
 
   // ── WebView scroll ↔ currentPage sync (native PDF only) ───────────────────────
   // When markup mode is entered we inject JS to read the WebView's scroll position
@@ -1159,8 +1175,8 @@ export default function DocumentViewerScreen() {
         </View>
       )}
 
-      {/* ── Download progress ── */}
-      {downloadState === "downloading" && (
+      {/* ── Download progress ── (hidden on Android PDFs — Google Docs Viewer renders immediately) */}
+      {downloadState === "downloading" && !useGoogleDocsViewer && (
         <View style={styles.downloadBar}>
           <View style={styles.downloadBarFill}>
             <View
@@ -1181,8 +1197,8 @@ export default function DocumentViewerScreen() {
         </View>
       )}
 
-      {/* ── Error state ── */}
-      {downloadState === "error" && (
+      {/* ── Error state ── (suppressed for Android PDFs — Google Docs Viewer handles display) */}
+      {downloadState === "error" && !useGoogleDocsViewer && (
         <View style={styles.errorFull}>
           <Feather name="alert-circle" size={44} color={Colors.textTertiary} />
           <Text style={styles.errorTitle}>Could not load document</Text>
@@ -1257,7 +1273,8 @@ export default function DocumentViewerScreen() {
       )}
 
       {/* ── Document body ── */}
-      {isReady && webviewUri && (
+      {/* Android PDFs use Google Docs Viewer immediately — no need to wait for local download */}
+      {(useGoogleDocsViewer ? !!googleDocsViewerUri : (isReady && !!webviewUri)) && (
         <View
           ref={containerRef}
           style={[styles.body, { height: bodyH }]}
@@ -1281,6 +1298,24 @@ export default function DocumentViewerScreen() {
                 setWebError(true);
               },
             })
+          ) : useGoogleDocsViewer ? (
+            /* Android PDF — rendered via Google Docs Viewer (Android WebView cannot
+               render local file:// PDFs natively; this keeps the user in-app) */
+            <WebView
+              ref={webviewRef}
+              source={{ uri: googleDocsViewerUri! }}
+              style={styles.webview}
+              onLoadStart={() => setWebLoading(true)}
+              onLoadEnd={() => setWebLoading(false)}
+              onError={() => {
+                setWebLoading(false);
+                setWebError(true);
+              }}
+              javaScriptEnabled
+              domStorageEnabled
+              scalesPageToFit
+              scrollEnabled
+            />
           ) : isImage ? (
             /* Native image renderer — no WKWebView sandboxing; supports pinch-zoom */
             <ScrollView
@@ -1295,7 +1330,7 @@ export default function DocumentViewerScreen() {
               showsVerticalScrollIndicator={false}
             >
               <Image
-                source={{ uri: webviewUri }}
+                source={{ uri: webviewUri! }}
                 style={[styles.imageContent, { height: bodyH }]}
                 resizeMode="contain"
                 onLoad={() => setWebLoading(false)}
@@ -1305,7 +1340,7 @@ export default function DocumentViewerScreen() {
           ) : (
             <WebView
               ref={webviewRef}
-              source={{ uri: webviewUri }}
+              source={{ uri: webviewUri! }}
               style={styles.webview}
               onLoadStart={() => setWebLoading(true)}
               onLoadEnd={() => setWebLoading(false)}
@@ -1385,6 +1420,15 @@ export default function DocumentViewerScreen() {
                 <Feather name="refresh-cw" size={15} color="#fff" />
                 <Text style={styles.retryText}>Retry</Text>
               </Pressable>
+              {url && Platform.OS !== "web" && (
+                <Pressable
+                  onPress={openInBrowser}
+                  style={[styles.retryBtn, { marginTop: 10, backgroundColor: "transparent", borderWidth: 1, borderColor: Colors.secondary }]}
+                >
+                  <Feather name="external-link" size={15} color={Colors.secondary} />
+                  <Text style={[styles.retryText, { color: Colors.secondary }]}>Open in browser</Text>
+                </Pressable>
+              )}
             </View>
           )}
 
