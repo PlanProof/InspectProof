@@ -930,6 +930,143 @@ interface OrgContractor {
   trade: string;
   email: string | null;
   company: string | null;
+  licenceNumber: string | null;
+  registrationNumber: string | null;
+  licenceExpiry: string | null;
+  registrationExpiry: string | null;
+  totalProjects: number;
+  activeProjects: number;
+}
+
+interface OrgContractorDefect {
+  id: number;
+  defectDescription: string;
+  notes: string | null;
+  severity: string | null;
+  location: string | null;
+  status: string;
+  projectName: string;
+  dateRaised: string;
+  tradeAllocated: string | null;
+}
+
+function OrgContractorCard({ c, onEdit, onRemove }: {
+  c: OrgContractor;
+  onEdit: (c: OrgContractor) => void;
+  onRemove: (id: number) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [defects, setDefects] = useState<OrgContractorDefect[]>([]);
+  const [defectsLoading, setDefectsLoading] = useState(false);
+  const [defectsLoaded, setDefectsLoaded] = useState(false);
+
+  const loadDefects = async () => {
+    if (defectsLoaded) return;
+    setDefectsLoading(true);
+    try {
+      const data = await apiFetch(`/api/org-contractors/${c.id}/performance`);
+      setDefects(data);
+      setDefectsLoaded(true);
+    } catch {
+      setDefectsLoaded(true);
+    } finally {
+      setDefectsLoading(false);
+    }
+  };
+
+  const toggleExpand = () => {
+    if (!expanded) loadDefects();
+    setExpanded(e => !e);
+  };
+
+  const fmtDate = (d: string | null | undefined) =>
+    d ? new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "—";
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/10 overflow-hidden">
+      <div className="flex items-start gap-3 p-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium text-sidebar">{c.name}</p>
+            {c.trade && <span className="text-xs bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded">{c.trade}</span>}
+            {c.company && <span className="text-xs text-muted-foreground">· {c.company}</span>}
+          </div>
+          {c.email && (
+            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+              <Mail className="h-3 w-3 shrink-0" />{c.email}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-3 mt-1.5">
+            <span className="text-xs text-muted-foreground">
+              <span className="font-medium text-sidebar">{c.totalProjects}</span> total projects
+            </span>
+            <span className="text-xs text-muted-foreground">
+              <span className="font-medium text-green-700">{c.activeProjects}</span> active
+            </span>
+            {c.licenceNumber && (
+              <span className="text-xs text-muted-foreground">Lic: <span className="font-medium text-sidebar">{c.licenceNumber}</span>
+                {c.licenceExpiry && <span className="ml-1 text-amber-600">(exp {fmtDate(c.licenceExpiry)})</span>}
+              </span>
+            )}
+            {c.registrationNumber && (
+              <span className="text-xs text-muted-foreground">Reg: <span className="font-medium text-sidebar">{c.registrationNumber}</span>
+                {c.registrationExpiry && <span className="ml-1 text-amber-600">(exp {fmtDate(c.registrationExpiry)})</span>}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={toggleExpand}
+            className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors text-xs flex items-center gap-1"
+            title="View performance"
+          >
+            <ChevronRight className={cn("h-4 w-4 transition-transform", expanded && "rotate-90")} />
+          </button>
+          <button onClick={() => onEdit(c)} className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors" title="Edit">
+            <Edit2 className="h-4 w-4" />
+          </button>
+          <button onClick={() => onRemove(c.id)} className="shrink-0 p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors" title="Remove">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-border px-3 pb-3 pt-2 bg-white space-y-2">
+          <p className="text-xs font-semibold text-sidebar uppercase tracking-wide">Defect History</p>
+          {defectsLoading && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+            </div>
+          )}
+          {!defectsLoading && defects.length === 0 && (
+            <p className="text-xs text-muted-foreground py-1">No defects linked to this contractor.</p>
+          )}
+          {!defectsLoading && defects.map(d => (
+            <div key={d.id} className="rounded border border-border p-2 space-y-0.5">
+              <p className="text-xs font-medium text-sidebar">{d.defectDescription}</p>
+              <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                <span>{d.projectName}</span>
+                <span>{fmtDate(d.dateRaised)}</span>
+                {d.severity && <span className={cn("px-1.5 py-0.5 rounded font-medium",
+                  d.severity === "critical" ? "bg-red-50 text-red-700 border border-red-200" :
+                  d.severity === "major" ? "bg-orange-50 text-orange-700 border border-orange-200" :
+                  "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                )}>{d.severity}</span>}
+                <span className={cn("px-1.5 py-0.5 rounded capitalize",
+                  d.status === "open" ? "bg-red-50 text-red-700" :
+                  d.status === "in_progress" ? "bg-amber-50 text-amber-700" :
+                  "bg-gray-50 text-gray-600"
+                )}>{d.status.replace("_", " ")}</span>
+              </div>
+              {d.notes && <p className="text-[11px] text-muted-foreground italic">{d.notes}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ContractorLibrarySection() {
@@ -940,12 +1077,20 @@ function ContractorLibrarySection() {
   const [newTrade, setNewTrade] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newCompany, setNewCompany] = useState("");
+  const [newLicenceNumber, setNewLicenceNumber] = useState("");
+  const [newRegistrationNumber, setNewRegistrationNumber] = useState("");
+  const [newLicenceExpiry, setNewLicenceExpiry] = useState("");
+  const [newRegistrationExpiry, setNewRegistrationExpiry] = useState("");
   const [savingNew, setSavingNew] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editTrade, setEditTrade] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editCompany, setEditCompany] = useState("");
+  const [editLicenceNumber, setEditLicenceNumber] = useState("");
+  const [editRegistrationNumber, setEditRegistrationNumber] = useState("");
+  const [editLicenceExpiry, setEditLicenceExpiry] = useState("");
+  const [editRegistrationExpiry, setEditRegistrationExpiry] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [error, setError] = useState("");
 
@@ -964,10 +1109,19 @@ function ContractorLibrarySection() {
       const created = await apiFetch("/api/org-contractors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), trade: newTrade.trim(), email: newEmail.trim() || null, company: newCompany.trim() || null }),
+        body: JSON.stringify({
+          name: newName.trim(), trade: newTrade.trim(),
+          email: newEmail.trim() || null, company: newCompany.trim() || null,
+          licenceNumber: newLicenceNumber.trim() || null,
+          registrationNumber: newRegistrationNumber.trim() || null,
+          licenceExpiry: newLicenceExpiry || null,
+          registrationExpiry: newRegistrationExpiry || null,
+        }),
       });
       setContractors(c => [...c, created]);
-      setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); setAdding(false);
+      setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany("");
+      setNewLicenceNumber(""); setNewRegistrationNumber(""); setNewLicenceExpiry(""); setNewRegistrationExpiry("");
+      setAdding(false);
     } catch {
       setError("Failed to add contractor. Please try again.");
     } finally {
@@ -981,6 +1135,10 @@ function ContractorLibrarySection() {
     setEditTrade(c.trade);
     setEditEmail(c.email ?? "");
     setEditCompany(c.company ?? "");
+    setEditLicenceNumber(c.licenceNumber ?? "");
+    setEditRegistrationNumber(c.registrationNumber ?? "");
+    setEditLicenceExpiry(c.licenceExpiry ?? "");
+    setEditRegistrationExpiry(c.registrationExpiry ?? "");
     setError("");
   };
 
@@ -992,7 +1150,14 @@ function ContractorLibrarySection() {
       const updated = await apiFetch(`/api/org-contractors/${editingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editName.trim(), trade: editTrade.trim(), email: editEmail.trim() || null, company: editCompany.trim() || null }),
+        body: JSON.stringify({
+          name: editName.trim(), trade: editTrade.trim(),
+          email: editEmail.trim() || null, company: editCompany.trim() || null,
+          licenceNumber: editLicenceNumber.trim() || null,
+          registrationNumber: editRegistrationNumber.trim() || null,
+          licenceExpiry: editLicenceExpiry || null,
+          registrationExpiry: editRegistrationExpiry || null,
+        }),
       });
       setContractors(c => c.map(x => x.id === editingId ? updated : x));
       setEditingId(null);
@@ -1024,87 +1189,44 @@ function ContractorLibrarySection() {
         <p className="text-sm text-muted-foreground py-1">No contractors in the library yet. Add your first contractor below.</p>
       )}
 
-      {contractors.map(c => (
-        <div key={c.id} className="flex items-start gap-3 p-3 rounded-lg border border-border bg-muted/10">
-          {editingId === c.id ? (
-            <>
-              <div className="flex-1 grid grid-cols-4 gap-2">
-                <Input
-                  value={editName}
-                  onChange={e => setEditName(e.target.value)}
-                  placeholder="Full name"
-                  autoFocus
-                />
-                <Input
-                  value={editTrade}
-                  onChange={e => setEditTrade(e.target.value)}
-                  placeholder="Trade / Discipline"
-                />
-                <Input
-                  value={editEmail}
-                  onChange={e => setEditEmail(e.target.value)}
-                  placeholder="Email address"
-                  type="email"
-                />
-                <Input
-                  value={editCompany}
-                  onChange={e => setEditCompany(e.target.value)}
-                  placeholder="Company"
-                />
-              </div>
-              <button
-                onClick={saveEdit}
-                disabled={savingEdit}
-                className="shrink-0 p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
-                title="Save"
-              >
-                {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              </button>
-              <button
-                onClick={() => setEditingId(null)}
-                className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors"
-                title="Cancel"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-sidebar">{c.name}</p>
-                <div className="flex flex-wrap gap-2 mt-0.5">
-                  {c.trade && <p className="text-xs text-muted-foreground">{c.trade}</p>}
-                  {c.company && <p className="text-xs text-muted-foreground">· {c.company}</p>}
-                </div>
-                {c.email && (
-                  <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                    <Mail className="h-3 w-3 shrink-0" />
-                    {c.email}
-                  </p>
-                )}
-              </div>
-              <button
-                onClick={() => startEdit(c)}
-                className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors"
-                title="Edit"
-              >
-                <Edit2 className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => remove(c.id)}
-                className="shrink-0 p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
-                title="Remove"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </>
-          )}
+      {contractors.map(c => editingId === c.id ? (
+        <div key={c.id} className="p-3 rounded-lg border border-secondary/40 bg-secondary/5 space-y-2">
+          <p className="text-xs font-semibold text-sidebar">Edit Contractor</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Full name *" autoFocus />
+            <Input value={editTrade} onChange={e => setEditTrade(e.target.value)} placeholder="Trade / Discipline" />
+            <Input value={editEmail} onChange={e => setEditEmail(e.target.value)} placeholder="Email address" type="email" />
+            <Input value={editCompany} onChange={e => setEditCompany(e.target.value)} placeholder="Company" />
+            <Input value={editLicenceNumber} onChange={e => setEditLicenceNumber(e.target.value)} placeholder="Licence Number (optional)" />
+            <Input value={editRegistrationNumber} onChange={e => setEditRegistrationNumber(e.target.value)} placeholder="Registration Number (optional)" />
+            <div>
+              <label className="text-xs text-muted-foreground">Licence Expiry</label>
+              <Input value={editLicenceExpiry} onChange={e => setEditLicenceExpiry(e.target.value)} type="date" className="mt-0.5" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Registration Expiry</label>
+              <Input value={editRegistrationExpiry} onChange={e => setEditRegistrationExpiry(e.target.value)} type="date" className="mt-0.5" />
+            </div>
+          </div>
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <div className="flex items-center gap-2">
+            <button onClick={saveEdit} disabled={savingEdit} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary text-white text-xs font-medium disabled:opacity-50">
+              {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              {savingEdit ? "Saving…" : "Save"}
+            </button>
+            <button onClick={() => setEditingId(null)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium">
+              Cancel
+            </button>
+          </div>
         </div>
+      ) : (
+        <OrgContractorCard key={c.id} c={c} onEdit={startEdit} onRemove={remove} />
       ))}
 
       {adding ? (
         <div className="p-3 rounded-lg border border-secondary/40 bg-secondary/5 space-y-2">
-          <div className="grid grid-cols-4 gap-2">
+          <p className="text-xs font-semibold text-sidebar">New Contractor</p>
+          <div className="grid grid-cols-2 gap-2">
             <Input
               value={newName}
               onChange={e => { setNewName(e.target.value); setError(""); }}
@@ -1127,6 +1249,24 @@ function ContractorLibrarySection() {
               onChange={e => setNewCompany(e.target.value)}
               placeholder="Company (optional)"
             />
+            <Input
+              value={newLicenceNumber}
+              onChange={e => setNewLicenceNumber(e.target.value)}
+              placeholder="Licence Number (optional)"
+            />
+            <Input
+              value={newRegistrationNumber}
+              onChange={e => setNewRegistrationNumber(e.target.value)}
+              placeholder="Registration Number (optional)"
+            />
+            <div>
+              <label className="text-xs text-muted-foreground">Licence Expiry</label>
+              <Input value={newLicenceExpiry} onChange={e => setNewLicenceExpiry(e.target.value)} type="date" className="mt-0.5" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Registration Expiry</label>
+              <Input value={newRegistrationExpiry} onChange={e => setNewRegistrationExpiry(e.target.value)} type="date" className="mt-0.5" />
+            </div>
           </div>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex items-center gap-2">
@@ -1134,7 +1274,11 @@ function ContractorLibrarySection() {
               {savingNew ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
               {savingNew ? "Saving…" : "Add Contractor"}
             </Button>
-            <Button variant="outline" onClick={() => { setAdding(false); setError(""); setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); }}>
+            <Button variant="outline" onClick={() => {
+              setAdding(false); setError("");
+              setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany("");
+              setNewLicenceNumber(""); setNewRegistrationNumber(""); setNewLicenceExpiry(""); setNewRegistrationExpiry("");
+            }}>
               Cancel
             </Button>
           </div>

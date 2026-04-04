@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
-import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable, internalStaffTable, orgContractorsTable } from "@workspace/db";
+import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable, internalStaffTable, orgContractorsTable, orgContractorProjectAssignmentsTable } from "@workspace/db";
 import { sendContractorDefectReportEmail } from "../lib/email";
 import { checkProjectQuota } from "../lib/quota";
 import { optionalAuth, requireAuth, type AuthUser } from "../middleware/auth";
@@ -1124,6 +1124,109 @@ router.post("/:id/inspections/:inspectionId/send-all-defects", requireAuth, asyn
   } catch (err) {
     req.log.error({ err }, "Send all defects error");
     res.status(500).json({ error: "internal_error", message: "Failed to send defect reports" });
+  }
+});
+
+// ── Org Contractor Project Assignments ───────────────────────────────────────
+
+function orgScope(authUser: { companyName?: string | null; id: number }): string {
+  return authUser.companyName?.trim() || `user:${authUser.id}`;
+}
+
+router.get("/:id/org-contractor-assignments", requireAuth, async (req, res) => {
+  const projectId = parseInt(req.params.id, 10);
+  if (isNaN(projectId)) return res.status(400).json({ error: "bad_request" });
+  try {
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+    if (!project) return res.status(404).json({ error: "not_found" });
+    if (!await canAccessProject(project.createdById, req.authUser!)) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+    const rows = await db
+      .select({ orgContractorId: orgContractorProjectAssignmentsTable.orgContractorId })
+      .from(orgContractorProjectAssignmentsTable)
+      .where(eq(orgContractorProjectAssignmentsTable.projectId, projectId));
+    res.json(rows.map(r => r.orgContractorId));
+  } catch (err) {
+    req.log.error({ err }, "List org contractor assignments error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.post("/:id/org-contractor-assignments", requireAuth, async (req, res) => {
+  const projectId = parseInt(req.params.id, 10);
+  if (isNaN(projectId)) return res.status(400).json({ error: "bad_request" });
+  const { orgContractorId } = req.body as { orgContractorId?: number };
+  if (!orgContractorId || isNaN(Number(orgContractorId))) {
+    return res.status(400).json({ error: "bad_request", message: "orgContractorId is required" });
+  }
+  const orgContractorIdNum = Number(orgContractorId);
+  try {
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+    if (!project) return res.status(404).json({ error: "not_found" });
+    if (!await canAccessProject(project.createdById, req.authUser!)) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    // Verify the org contractor belongs to the caller's org scope
+    const scope = orgScope(req.authUser!);
+    const [contractor] = await db
+      .select({ id: orgContractorsTable.id })
+      .from(orgContractorsTable)
+      .where(and(eq(orgContractorsTable.id, orgContractorIdNum), eq(orgContractorsTable.companyName, scope)));
+    if (!contractor) {
+      return res.status(404).json({ error: "not_found", message: "Org contractor not found in your organisation" });
+    }
+
+    await db
+      .insert(orgContractorProjectAssignmentsTable)
+      .values({ orgContractorId: orgContractorIdNum, projectId })
+      .onConflictDoNothing({
+        target: [
+          orgContractorProjectAssignmentsTable.orgContractorId,
+          orgContractorProjectAssignmentsTable.projectId,
+        ],
+      });
+    res.status(201).json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Assign org contractor error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.delete("/:id/org-contractor-assignments/:orgContractorId", requireAuth, async (req, res) => {
+  const projectId = parseInt(req.params.id, 10);
+  const orgContractorId = parseInt(req.params.orgContractorId, 10);
+  if (isNaN(projectId) || isNaN(orgContractorId)) return res.status(400).json({ error: "bad_request" });
+  try {
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+    if (!project) return res.status(404).json({ error: "not_found" });
+    if (!await canAccessProject(project.createdById, req.authUser!)) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    // Verify the org contractor belongs to the caller's org scope
+    const scope = orgScope(req.authUser!);
+    const [contractor] = await db
+      .select({ id: orgContractorsTable.id })
+      .from(orgContractorsTable)
+      .where(and(eq(orgContractorsTable.id, orgContractorId), eq(orgContractorsTable.companyName, scope)));
+    if (!contractor) {
+      return res.status(404).json({ error: "not_found", message: "Org contractor not found in your organisation" });
+    }
+
+    await db
+      .delete(orgContractorProjectAssignmentsTable)
+      .where(
+        and(
+          eq(orgContractorProjectAssignmentsTable.projectId, projectId),
+          eq(orgContractorProjectAssignmentsTable.orgContractorId, orgContractorId)
+        )
+      );
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Unassign org contractor error");
+    res.status(500).json({ error: "internal_error" });
   }
 });
 

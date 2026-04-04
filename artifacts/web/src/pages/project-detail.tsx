@@ -2145,12 +2145,16 @@ interface OrgContractorEntry {
   trade: string;
   email: string | null;
   company: string | null;
+  totalProjects?: number;
+  activeProjects?: number;
 }
 
 function ContractorsTab({ projectId, projectName }: { projectId: number; projectName: string }) {
   const [contractors, setContractors] = useState<ProjectContractor[]>([]);
   const [orgContractors, setOrgContractors] = useState<OrgContractorEntry[]>([]);
+  const [assignedOrgIds, setAssignedOrgIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [togglingIds, setTogglingIds] = useState<Set<number>>(new Set());
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newTrade, setNewTrade] = useState("");
@@ -2169,11 +2173,36 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
     Promise.all([
       apiFetch(`/api/projects/${projectId}/contractors`).catch(() => []),
       apiFetch("/api/org-contractors").catch(() => []),
-    ]).then(([projList, orgList]) => {
+      apiFetch(`/api/projects/${projectId}/org-contractor-assignments`).catch(() => []),
+    ]).then(([projList, orgList, assignedIds]) => {
       setContractors(projList);
       setOrgContractors(orgList);
+      setAssignedOrgIds(new Set(assignedIds as number[]));
     }).finally(() => setLoading(false));
   }, [projectId]);
+
+  const toggleOrgContractor = async (orgContractorId: number, currentlyAssigned: boolean) => {
+    setTogglingIds(s => new Set([...s, orgContractorId]));
+    try {
+      if (currentlyAssigned) {
+        await apiFetch(`/api/projects/${projectId}/org-contractor-assignments/${orgContractorId}`, {
+          method: "DELETE",
+        });
+        setAssignedOrgIds(s => { const n = new Set(s); n.delete(orgContractorId); return n; });
+      } else {
+        await apiFetch(`/api/projects/${projectId}/org-contractor-assignments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orgContractorId }),
+        });
+        setAssignedOrgIds(s => new Set([...s, orgContractorId]));
+      }
+    } catch {
+      setError("Failed to update contractor assignment.");
+    } finally {
+      setTogglingIds(s => { const n = new Set(s); n.delete(orgContractorId); return n; });
+    }
+  };
 
   const addContractor = async () => {
     if (!newName.trim()) { setError("Name is required."); return; }
@@ -2216,16 +2245,15 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
     } catch { setError("Failed to remove contractor."); }
   };
 
-
   if (loading) return (
     <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
       <Loader2 className="h-4 w-4 animate-spin" /> Loading contractors…
     </div>
   );
 
-  const ContractorCard = ({ c, isOrgLevel = false }: { c: ProjectContractor | OrgContractorEntry; isOrgLevel?: boolean }) => (
+  const ContractorCard = ({ c }: { c: ProjectContractor }) => (
     <div className="rounded-lg border border-border bg-white">
-      {editingId === c.id && !isOrgLevel ? (
+      {editingId === c.id ? (
         <div className="p-4 space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -2257,8 +2285,8 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
       ) : (
         <div className="p-4">
           <div className="flex items-start gap-3">
-            <div className={cn("h-9 w-9 rounded-full flex items-center justify-center shrink-0 mt-0.5", isOrgLevel ? "bg-emerald-50" : "bg-secondary/10")}>
-              <User className={cn("h-4 w-4", isOrgLevel ? "text-emerald-600" : "text-secondary")} />
+            <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-secondary/10">
+              <User className="h-4 w-4 text-secondary" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -2275,16 +2303,14 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
                 <p className="text-xs text-amber-600 mt-1 italic">No email address — add one to enable defect report sending.</p>
               )}
             </div>
-            {!isOrgLevel && (
-              <div className="flex items-center gap-1 shrink-0">
-                <button onClick={() => startEdit(c as ProjectContractor)} className="p-1.5 rounded text-muted-foreground hover:bg-muted/40 transition-colors" title="Edit">
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button onClick={() => remove(c.id)} className="p-1.5 rounded text-red-500 hover:bg-red-50 transition-colors" title="Remove">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => startEdit(c)} className="p-1.5 rounded text-muted-foreground hover:bg-muted/40 transition-colors" title="Edit">
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button onClick={() => remove(c.id)} className="p-1.5 rounded text-red-500 hover:bg-red-50 transition-colors" title="Remove">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2293,21 +2319,69 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
 
   return (
     <div className="space-y-6 mt-4">
-      {/* Organisation Library contractors */}
-      {orgContractors.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-sidebar">Organisation Library</h3>
-            <span className="text-xs text-muted-foreground bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded font-medium">Shared across all projects</span>
-          </div>
-          <div className="space-y-2">
-            {orgContractors.map(c => <ContractorCard key={`org-${c.id}`} c={c} isOrgLevel />)}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Manage these in <strong>Settings → Organisation → Contractor Library</strong>.
-          </p>
+      {/* Organisation Library contractors — checklist */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-sidebar">Organisation Library</h3>
+          <span className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded font-medium">
+            {assignedOrgIds.size} assigned
+          </span>
         </div>
-      )}
+        {orgContractors.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">
+            No contractors in the organisation library yet. Add them in{" "}
+            <strong>Settings → Organisation → Contractor Library</strong>.
+          </p>
+        ) : (
+          <div className="rounded-xl border border-border overflow-hidden">
+            {orgContractors.map((c, idx) => {
+              const assigned = assignedOrgIds.has(c.id);
+              const toggling = togglingIds.has(c.id);
+              return (
+                <div
+                  key={c.id}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 transition-colors cursor-pointer",
+                    idx > 0 && "border-t border-border",
+                    assigned ? "bg-emerald-50/60" : "bg-white hover:bg-muted/30"
+                  )}
+                  onClick={() => !toggling && toggleOrgContractor(c.id, assigned)}
+                >
+                  <div className={cn(
+                    "h-5 w-5 rounded border flex items-center justify-center shrink-0 transition-colors",
+                    assigned ? "bg-emerald-600 border-emerald-600" : "border-muted-foreground/40 bg-white"
+                  )}>
+                    {toggling ? (
+                      <Loader2 className="h-3 w-3 animate-spin text-white" />
+                    ) : assigned ? (
+                      <svg viewBox="0 0 12 12" className="h-3 w-3 fill-none stroke-white stroke-[2]">
+                        <polyline points="1.5,6 4.5,9 10.5,3" />
+                      </svg>
+                    ) : null}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-sidebar">{c.name}</p>
+                      {c.trade && <span className="text-xs bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded">{c.trade}</span>}
+                      {c.company && <span className="text-xs text-muted-foreground">{c.company}</span>}
+                    </div>
+                    {c.email && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{c.email}</p>
+                    )}
+                  </div>
+                  {assigned && (
+                    <span className="text-xs font-medium text-emerald-700 shrink-0">On this job</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Tick contractors who are working on this project. Manage the library in{" "}
+          <strong>Settings → Organisation → Contractor Library</strong>.
+        </p>
+      </div>
 
       {/* Project-specific contractors */}
       <div className="space-y-3">
