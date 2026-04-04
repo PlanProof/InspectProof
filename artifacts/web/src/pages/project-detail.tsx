@@ -2149,6 +2149,162 @@ interface OrgContractorEntry {
   activeProjects?: number;
 }
 
+function OrgContractorCombobox({
+  orgContractors,
+  assignedOrgIds,
+  togglingIds,
+  onToggle,
+}: {
+  orgContractors: OrgContractorEntry[];
+  assignedOrgIds: Set<number>;
+  togglingIds: Set<number>;
+  onToggle: (id: number, currentlyAssigned: boolean) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const assignedContractors = orgContractors.filter(c => assignedOrgIds.has(c.id));
+  const unassignedContractors = orgContractors.filter(c => !assignedOrgIds.has(c.id));
+
+  const filtered = query.trim()
+    ? unassignedContractors.filter(c => {
+        const q = query.toLowerCase();
+        return (
+          c.name.toLowerCase().includes(q) ||
+          c.trade.toLowerCase().includes(q) ||
+          (c.company ?? "").toLowerCase().includes(q)
+        );
+      })
+    : unassignedContractors;
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
+        inputRef.current && !inputRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-sidebar">Organisation Library</h3>
+        {assignedContractors.length > 0 && (
+          <span className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded font-medium">
+            {assignedContractors.length} assigned
+          </span>
+        )}
+      </div>
+
+      {/* Assigned chips */}
+      {assignedContractors.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {assignedContractors.map(c => (
+            <div
+              key={c.id}
+              className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium px-2.5 py-1.5 rounded-full"
+            >
+              <User className="h-3 w-3 text-emerald-600 shrink-0" />
+              <span>{c.name}</span>
+              {c.trade && <span className="text-emerald-600 opacity-80">· {c.trade}</span>}
+              <button
+                onClick={() => onToggle(c.id, true)}
+                disabled={togglingIds.has(c.id)}
+                className="ml-1 text-emerald-600 hover:text-red-600 transition-colors disabled:opacity-50"
+                title="Remove from project"
+              >
+                {togglingIds.has(c.id) ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <X className="h-3 w-3" />
+                )}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Combobox */}
+      {orgContractors.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-1">
+          No contractors in the organisation library yet. Add them in{" "}
+          <strong>Settings → Organisation → Contractor Library</strong>.
+        </p>
+      ) : unassignedContractors.length > 0 ? (
+        <div className="relative">
+          <div className="relative">
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={e => { setQuery(e.target.value); setOpen(true); }}
+              onFocus={() => setOpen(true)}
+              placeholder="Search contractors by name, trade, or company…"
+              className="w-full text-sm border border-input rounded-lg pl-9 pr-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background transition"
+            />
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          </div>
+
+          {open && (
+            <div
+              ref={dropdownRef}
+              className="absolute z-20 mt-1 w-full bg-white rounded-lg border border-border shadow-lg overflow-hidden"
+            >
+              {filtered.length === 0 ? (
+                <p className="text-sm text-muted-foreground px-4 py-3">No contractors found.</p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto divide-y divide-border/50">
+                  {filtered.map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => {
+                        onToggle(c.id, false);
+                        setQuery("");
+                        setOpen(false);
+                      }}
+                      disabled={togglingIds.has(c.id)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors text-left disabled:opacity-50"
+                    >
+                      <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+                        <User className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium text-sidebar">{c.name}</p>
+                          {c.trade && (
+                            <span className="text-xs bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded">{c.trade}</span>
+                          )}
+                          {c.company && <span className="text-xs text-muted-foreground">{c.company}</span>}
+                        </div>
+                      </div>
+                      {togglingIds.has(c.id) && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">All library contractors are assigned to this project.</p>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Search and add contractors from your library. Manage the library in{" "}
+        <strong>Settings → Organisation → Contractor Library</strong>.
+      </p>
+    </div>
+  );
+}
+
 function ContractorsTab({ projectId, projectName }: { projectId: number; projectName: string }) {
   const [contractors, setContractors] = useState<ProjectContractor[]>([]);
   const [orgContractors, setOrgContractors] = useState<OrgContractorEntry[]>([]);
@@ -2319,69 +2475,13 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
 
   return (
     <div className="space-y-6 mt-4">
-      {/* Organisation Library contractors — checklist */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-sidebar">Organisation Library</h3>
-          <span className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded font-medium">
-            {assignedOrgIds.size} assigned
-          </span>
-        </div>
-        {orgContractors.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">
-            No contractors in the organisation library yet. Add them in{" "}
-            <strong>Settings → Organisation → Contractor Library</strong>.
-          </p>
-        ) : (
-          <div className="rounded-xl border border-border overflow-hidden">
-            {orgContractors.map((c, idx) => {
-              const assigned = assignedOrgIds.has(c.id);
-              const toggling = togglingIds.has(c.id);
-              return (
-                <div
-                  key={c.id}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3 transition-colors cursor-pointer",
-                    idx > 0 && "border-t border-border",
-                    assigned ? "bg-emerald-50/60" : "bg-white hover:bg-muted/30"
-                  )}
-                  onClick={() => !toggling && toggleOrgContractor(c.id, assigned)}
-                >
-                  <div className={cn(
-                    "h-5 w-5 rounded border flex items-center justify-center shrink-0 transition-colors",
-                    assigned ? "bg-emerald-600 border-emerald-600" : "border-muted-foreground/40 bg-white"
-                  )}>
-                    {toggling ? (
-                      <Loader2 className="h-3 w-3 animate-spin text-white" />
-                    ) : assigned ? (
-                      <svg viewBox="0 0 12 12" className="h-3 w-3 fill-none stroke-white stroke-[2]">
-                        <polyline points="1.5,6 4.5,9 10.5,3" />
-                      </svg>
-                    ) : null}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium text-sidebar">{c.name}</p>
-                      {c.trade && <span className="text-xs bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded">{c.trade}</span>}
-                      {c.company && <span className="text-xs text-muted-foreground">{c.company}</span>}
-                    </div>
-                    {c.email && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{c.email}</p>
-                    )}
-                  </div>
-                  {assigned && (
-                    <span className="text-xs font-medium text-emerald-700 shrink-0">On this job</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <p className="text-xs text-muted-foreground">
-          Tick contractors who are working on this project. Manage the library in{" "}
-          <strong>Settings → Organisation → Contractor Library</strong>.
-        </p>
-      </div>
+      {/* Organisation Library contractors — searchable combobox */}
+      <OrgContractorCombobox
+        orgContractors={orgContractors}
+        assignedOrgIds={assignedOrgIds}
+        togglingIds={togglingIds}
+        onToggle={toggleOrgContractor}
+      />
 
       {/* Project-specific contractors */}
       <div className="space-y-3">

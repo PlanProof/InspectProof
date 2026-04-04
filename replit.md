@@ -35,11 +35,13 @@ pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vi
 
 ## Routes (Web App)
 
-`/`, `/login`, `/dashboard`, `/projects`, `/projects/:id`, `/inspections`, `/inspections/:id`, `/issues`, `/activity`, `/share/:token`, `/analytics`, `/templates`, `/doc-templates`, `/inspectors`, `/settings`, `/billing`, `/admin`, `/terms`, `/privacy`
+`/`, `/login`, `/dashboard`, `/projects`, `/projects/:id`, `/inspections`, `/inspections/:id`, `/issues`, `/activity`, `/share/:token`, `/analytics`, `/templates`, `/doc-templates`, `/inspectors`, `/settings`, `/settings/contractor-library`, `/billing`, `/admin`, `/terms`, `/privacy`
 
 **Reports:** Accessed via the "Reports" tab inside each project's detail page (`/projects/:id`) — no standalone `/reports` route.
 
 **Contractors:** Managed per-project via the "Contractors" tab inside `/projects/:id` — linked specifically to that project.
+
+**Contractor Library:** Dedicated page at `/settings/contractor-library` — lists and manages all org-level contractors with search, trade category grouping, and performance history. Navigation card in Settings > Organisation tab.
 
 **Public Share Portal:** `/share/:token` — public (no auth) client portal for sharing an inspection with clients. Generated via `POST /api/inspections/:id/share`.
 
@@ -63,6 +65,9 @@ pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vi
 - **Org data in PDF footer**: PDF reports show company name, ABN, and address in the navy footer bar (instead of generic "InspectProof · Confidential"). Org data fetched from the inspector's user record at PDF generation time.
 - **Address Autocomplete (Web)**: `AddressAutocomplete` component in `artifacts/web/src/components/` uses free Nominatim OpenStreetMap API (no API key required). Searches Australian addresses, parses house/street/suburb/state/postcode fields. Used in the New Project dialog. Falls back to manual entry mode with unverified warning banner.
 - **Generate Report UX fix**: Removed the confusing "Generate" button from the `generate-report.tsx` header. Now shows a clear sticky footer CTA: grayed-out "Select a report type above" when no type selected, active "Generate Report" button once a type is selected.
+- **Contractor Library page** (`/settings/contractor-library`): Dedicated page with full contractor management (add, edit, remove, performance history). Two-column layout: main contractor list with search/filter + sidebar with Trade Categories management. Settings > Organisation tab replaced embedded library with navigation card.
+- **Trade Categories**: New `trade_categories` DB table (scoped per company). CRUD API at `/api/org-contractors/trade-categories`. Categories shown on contractor cards as violet badges. Contractors can be grouped by category on the library page.
+- **Org Contractor Combobox**: Project Contractors tab replaces flat checklist with `OrgContractorCombobox` — assigned contractors shown as removable emerald chips, unassigned searchable via text input dropdown (filters by name/trade/company).
 
 ## Security Architecture
 

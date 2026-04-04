@@ -3,11 +3,20 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { projectsTable } from "./projects";
 
+export const tradeCategoriesTable = pgTable("trade_categories", {
+  id: serial("id").primaryKey(),
+  companyName: text("company_name").notNull(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const orgContractorsTable = pgTable("org_contractors", {
   id: serial("id").primaryKey(),
   companyName: text("company_name").notNull(),
   name: text("name").notNull(),
   trade: text("trade").notNull().default(""),
+  tradeCategoryId: integer("trade_category_id").references(() => tradeCategoriesTable.id, { onDelete: "set null" }),
   email: text("email"),
   company: text("company"),
   licenceNumber: text("licence_number"),
@@ -28,6 +37,10 @@ export const orgContractorProjectAssignmentsTable = pgTable(
   },
   (t) => [unique("oca_unique_assignment").on(t.orgContractorId, t.projectId)]
 );
+
+export const insertTradeCategorySchema = createInsertSchema(tradeCategoriesTable).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTradeCategory = z.infer<typeof insertTradeCategorySchema>;
+export type TradeCategory = typeof tradeCategoriesTable.$inferSelect;
 
 export const insertOrgContractorSchema = createInsertSchema(orgContractorsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertOrgContractor = z.infer<typeof insertOrgContractorSchema>;

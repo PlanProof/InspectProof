@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
-import { db, orgContractorsTable, orgContractorProjectAssignmentsTable, projectsTable, checklistResultsTable, checklistItemsTable, inspectionsTable } from "@workspace/db";
+import { db, orgContractorsTable, orgContractorProjectAssignmentsTable, projectsTable, checklistResultsTable, checklistItemsTable, inspectionsTable, tradeCategoriesTable } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
@@ -57,8 +57,8 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.post("/", requireAuth, async (req, res) => {
   const scope = scopeKey(req.authUser!);
-  const { name, trade, email, company, licenceNumber, registrationNumber, licenceExpiry, registrationExpiry } = req.body as {
-    name?: string; trade?: string; email?: string; company?: string;
+  const { name, trade, tradeCategoryId, email, company, licenceNumber, registrationNumber, licenceExpiry, registrationExpiry } = req.body as {
+    name?: string; trade?: string; tradeCategoryId?: number | null; email?: string; company?: string;
     licenceNumber?: string; registrationNumber?: string; licenceExpiry?: string; registrationExpiry?: string;
   };
   if (!name?.trim()) {
@@ -66,12 +66,25 @@ router.post("/", requireAuth, async (req, res) => {
     return;
   }
   try {
+    // Validate tradeCategoryId belongs to this org
+    let resolvedCategoryId: number | null = tradeCategoryId ?? null;
+    if (resolvedCategoryId !== null) {
+      const [cat] = await db
+        .select({ id: tradeCategoriesTable.id })
+        .from(tradeCategoriesTable)
+        .where(and(eq(tradeCategoriesTable.id, resolvedCategoryId), eq(tradeCategoriesTable.companyName, scope)));
+      if (!cat) {
+        res.status(400).json({ error: "bad_request", message: "Invalid trade category" });
+        return;
+      }
+    }
     const [created] = await db
       .insert(orgContractorsTable)
       .values({
         companyName: scope,
         name: name.trim(),
         trade: (trade ?? "").trim(),
+        tradeCategoryId: resolvedCategoryId,
         email: email?.trim() || null,
         company: company?.trim() || null,
         licenceNumber: licenceNumber?.trim() || null,
@@ -94,8 +107,8 @@ router.patch("/:id", requireAuth, async (req, res) => {
     res.status(400).json({ error: "bad_request", message: "Invalid contractor id" });
     return;
   }
-  const { name, trade, email, company, licenceNumber, registrationNumber, licenceExpiry, registrationExpiry } = req.body as {
-    name?: string; trade?: string; email?: string; company?: string;
+  const { name, trade, tradeCategoryId, email, company, licenceNumber, registrationNumber, licenceExpiry, registrationExpiry } = req.body as {
+    name?: string; trade?: string; tradeCategoryId?: number | null; email?: string; company?: string;
     licenceNumber?: string; registrationNumber?: string; licenceExpiry?: string; registrationExpiry?: string;
   };
   if (name !== undefined && !name.trim()) {
@@ -112,6 +125,21 @@ router.patch("/:id", requireAuth, async (req, res) => {
   if (licenceExpiry !== undefined) updates.licenceExpiry = licenceExpiry || null;
   if (registrationExpiry !== undefined) updates.registrationExpiry = registrationExpiry || null;
   try {
+    // Validate tradeCategoryId belongs to this org scope
+    if ("tradeCategoryId" in req.body) {
+      const catId = tradeCategoryId ?? null;
+      if (catId !== null) {
+        const [cat] = await db
+          .select({ id: tradeCategoriesTable.id })
+          .from(tradeCategoriesTable)
+          .where(and(eq(tradeCategoriesTable.id, catId), eq(tradeCategoriesTable.companyName, scope)));
+        if (!cat) {
+          res.status(400).json({ error: "bad_request", message: "Invalid trade category" });
+          return;
+        }
+      }
+      updates.tradeCategoryId = catId;
+    }
     const [updated] = await db
       .update(orgContractorsTable)
       .set(updates)
@@ -280,6 +308,97 @@ router.get("/:id/performance", requireAuth, async (req, res) => {
     res.json(defects);
   } catch (err) {
     req.log.error({ err }, "Org contractor performance error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── Trade Categories ──────────────────────────────────────────────────────────
+
+router.get("/trade-categories", requireAuth, async (req, res) => {
+  const scope = scopeKey(req.authUser!);
+  try {
+    const categories = await db
+      .select()
+      .from(tradeCategoriesTable)
+      .where(eq(tradeCategoriesTable.companyName, scope))
+      .orderBy(tradeCategoriesTable.name);
+    res.json(categories);
+  } catch (err) {
+    req.log.error({ err }, "List trade categories error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.post("/trade-categories", requireAuth, async (req, res) => {
+  const scope = scopeKey(req.authUser!);
+  const { name } = req.body as { name?: string };
+  if (!name?.trim()) {
+    res.status(400).json({ error: "bad_request", message: "name is required" });
+    return;
+  }
+  try {
+    const [created] = await db
+      .insert(tradeCategoriesTable)
+      .values({ companyName: scope, name: name.trim() })
+      .returning();
+    res.status(201).json(created);
+  } catch (err) {
+    req.log.error({ err }, "Create trade category error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.patch("/trade-categories/:id", requireAuth, async (req, res) => {
+  const scope = scopeKey(req.authUser!);
+  const categoryId = parseInt(req.params.id, 10);
+  if (isNaN(categoryId)) {
+    res.status(400).json({ error: "bad_request", message: "Invalid category id" });
+    return;
+  }
+  const { name } = req.body as { name?: string };
+  if (!name?.trim()) {
+    res.status(400).json({ error: "bad_request", message: "name is required" });
+    return;
+  }
+  try {
+    const [updated] = await db
+      .update(tradeCategoriesTable)
+      .set({ name: name.trim(), updatedAt: new Date() })
+      .where(and(eq(tradeCategoriesTable.id, categoryId), eq(tradeCategoriesTable.companyName, scope)))
+      .returning();
+    if (!updated) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Update trade category error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.delete("/trade-categories/:id", requireAuth, async (req, res) => {
+  const scope = scopeKey(req.authUser!);
+  const categoryId = parseInt(req.params.id, 10);
+  if (isNaN(categoryId)) {
+    res.status(400).json({ error: "bad_request", message: "Invalid category id" });
+    return;
+  }
+  try {
+    const [existing] = await db
+      .select({ id: tradeCategoriesTable.id })
+      .from(tradeCategoriesTable)
+      .where(and(eq(tradeCategoriesTable.id, categoryId), eq(tradeCategoriesTable.companyName, scope)));
+    if (!existing) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    await db
+      .delete(tradeCategoriesTable)
+      .where(and(eq(tradeCategoriesTable.id, categoryId), eq(tradeCategoriesTable.companyName, scope)));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Delete trade category error");
     res.status(500).json({ error: "internal_error" });
   }
 });
