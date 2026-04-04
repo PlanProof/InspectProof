@@ -383,12 +383,24 @@ export default function DocumentViewerScreen() {
     mimeType?.startsWith("image/") ||
     /\.(jpe?g|png|gif|webp|bmp)$/i.test(name ?? "");
 
-  // Android WebView cannot render local PDF files from file:// URIs.
-  // Use Google Docs Viewer with the original remote URL (which includes ?_token=
-  // for auth) so the PDF renders in-app on Android without needing a local file.
+  // ── PDF rendering strategy ──────────────────────────────────────────────────
+  //
+  // Loading PDFs from local file:// URIs in a WebView is unreliable:
+  //   • iOS WKWebView renders PDFs via the native viewer — onLoadEnd may not fire,
+  //     leaving the spinner up forever even when the content is visible.
+  //   • Android WebView cannot render PDFs from file:// at all (blank screen).
+  //
+  // Solution: load the authenticated remote URL directly in the WebView.
+  //   • iOS WKWebView renders HTTPS PDFs natively and fires onLoadEnd correctly.
+  //   • Android uses Google Docs Viewer with the same URL so it renders in-app.
+  //
+  // The local FileSystem download (happening in parallel) is kept solely to power
+  // the share/download button once the file is ready.
   const useGoogleDocsViewer = Platform.OS === "android" && isPdf;
-  const googleDocsViewerUri = useGoogleDocsViewer && url
-    ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(url)}`
+  const pdfRenderUri = isPdf && url && Platform.OS !== "web"
+    ? Platform.OS === "android"
+      ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(url)}`
+      : url   // iOS WKWebView: load remote HTTPS URL directly
     : null;
 
   // For the "Open in browser" fallback — uses the token-authenticated URL directly
@@ -833,6 +845,14 @@ export default function DocumentViewerScreen() {
   const isReady =
     downloadState === "done" || downloadState === "cached";
 
+  // Whether to show the document body (PDFs render immediately from remote URL; others wait for download)
+  const showDocumentBody =
+    Platform.OS === "web"
+      ? isReady && !!webviewUri               // web: blob URL from fetch
+      : isPdf
+        ? !!pdfRenderUri                      // native PDF: remote URL ready immediately
+        : isReady && !!webviewUri;            // other files: wait for local download
+
   // When saving, renderingPage is set to a specific page number so only that
   // page's annotations appear in the capture. In normal view mode (null),
   // show only the annotations for the currently displayed page so strokes
@@ -1175,8 +1195,8 @@ export default function DocumentViewerScreen() {
         </View>
       )}
 
-      {/* ── Download progress ── (hidden on Android PDFs — Google Docs Viewer renders immediately) */}
-      {downloadState === "downloading" && !useGoogleDocsViewer && (
+      {/* ── Download progress ── (hidden for native PDFs — they render from remote URL immediately) */}
+      {downloadState === "downloading" && !(Platform.OS !== "web" && isPdf) && (
         <View style={styles.downloadBar}>
           <View style={styles.downloadBarFill}>
             <View
@@ -1197,8 +1217,8 @@ export default function DocumentViewerScreen() {
         </View>
       )}
 
-      {/* ── Error state ── (suppressed for Android PDFs — Google Docs Viewer handles display) */}
-      {downloadState === "error" && !useGoogleDocsViewer && (
+      {/* ── Error state ── (suppressed for native PDFs — they render from remote URL regardless) */}
+      {downloadState === "error" && !(Platform.OS !== "web" && isPdf) && (
         <View style={styles.errorFull}>
           <Feather name="alert-circle" size={44} color={Colors.textTertiary} />
           <Text style={styles.errorTitle}>Could not load document</Text>
@@ -1273,8 +1293,7 @@ export default function DocumentViewerScreen() {
       )}
 
       {/* ── Document body ── */}
-      {/* Android PDFs use Google Docs Viewer immediately — no need to wait for local download */}
-      {(useGoogleDocsViewer ? !!googleDocsViewerUri : (isReady && !!webviewUri)) && (
+      {showDocumentBody && (
         <View
           ref={containerRef}
           style={[styles.body, { height: bodyH }]}
@@ -1298,12 +1317,13 @@ export default function DocumentViewerScreen() {
                 setWebError(true);
               },
             })
-          ) : useGoogleDocsViewer ? (
-            /* Android PDF — rendered via Google Docs Viewer (Android WebView cannot
-               render local file:// PDFs natively; this keeps the user in-app) */
+          ) : isPdf && pdfRenderUri ? (
+            /* Native PDF renderer — iOS uses WKWebView + HTTPS URL directly (reliable
+               onLoadEnd); Android uses Google Docs Viewer (can't render PDFs natively).
+               Both load from the remote authenticated URL — no file:// needed. */
             <WebView
               ref={webviewRef}
-              source={{ uri: googleDocsViewerUri! }}
+              source={{ uri: pdfRenderUri }}
               style={styles.webview}
               onLoadStart={() => setWebLoading(true)}
               onLoadEnd={() => setWebLoading(false)}
