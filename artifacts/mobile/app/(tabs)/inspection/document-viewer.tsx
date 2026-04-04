@@ -403,6 +403,16 @@ export default function DocumentViewerScreen() {
       : url   // iOS WKWebView: load remote HTTPS URL directly
     : null;
 
+  // Safety timeout: if onLoadEnd hasn't fired after 8 s, clear the spinner anyway.
+  // WKWebView on iOS sometimes doesn't fire onLoadEnd for PDFs loaded via HTTPS,
+  // even though the PDF is already visible beneath the overlay.
+  useEffect(() => {
+    if (!isPdf || Platform.OS === "web") return;
+    const timer = setTimeout(() => setWebLoading(false), 8000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfRenderUri]);
+
   // For the "Open in browser" fallback — uses the token-authenticated URL directly
   const openInBrowser = useCallback(async () => {
     if (!url) return;
