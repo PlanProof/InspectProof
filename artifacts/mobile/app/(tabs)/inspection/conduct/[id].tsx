@@ -2448,7 +2448,7 @@ function ItemModal({
                 flexDirection: "row", alignItems: "center", justifyContent: "space-between",
                 borderWidth: 1, borderColor: Colors.border, borderRadius: 8,
                 paddingHorizontal: 12, paddingVertical: 10,
-                backgroundColor: pressed ? Colors.backgroundSecondary : Colors.background,
+                backgroundColor: pressed ? Colors.borderLight : Colors.background,
               })}
             >
               <Text style={{ fontSize: 14, color: tradeAllocated ? Colors.text : Colors.textTertiary, flex: 1, marginRight: 8 }} numberOfLines={2}>
@@ -2684,7 +2684,7 @@ function ItemModal({
                     const sel = pendingTrades.includes(c.name);
                     return (
                       <Pressable key={c.id} onPress={() => setPendingTrades(prev => sel ? prev.filter(n => n !== c.name) : [...prev, c.name])}
-                        style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 13, backgroundColor: pressed ? Colors.backgroundSecondary : "transparent" })}>
+                        style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 13, backgroundColor: pressed ? Colors.borderLight : "transparent" })}>
                         <View style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 2, borderColor: sel ? "#1d4ed8" : Colors.border, backgroundColor: sel ? "#1d4ed8" : "transparent", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
                           {sel && <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>✓</Text>}
                         </View>
@@ -2706,7 +2706,7 @@ function ItemModal({
                     const sel = pendingTrades.includes(s.name);
                     return (
                       <Pressable key={s.id} onPress={() => setPendingTrades(prev => sel ? prev.filter(n => n !== s.name) : [...prev, s.name])}
-                        style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 13, backgroundColor: pressed ? Colors.backgroundSecondary : "transparent" })}>
+                        style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 13, backgroundColor: pressed ? Colors.borderLight : "transparent" })}>
                         <View style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 2, borderColor: sel ? "#d97706" : Colors.border, backgroundColor: sel ? "#d97706" : "transparent", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
                           {sel && <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>✓</Text>}
                         </View>
@@ -2774,7 +2774,7 @@ function ItemModal({
                     paddingHorizontal: 18, paddingVertical: 14,
                     borderBottomWidth: i < suggestions.length - 1 ? 1 : 0,
                     borderBottomColor: Colors.border,
-                    backgroundColor: pressed ? Colors.backgroundSecondary : "transparent",
+                    backgroundColor: pressed ? Colors.borderLight : "transparent",
                   })}>
                   <Text style={{ fontSize: 14, color: Colors.text, lineHeight: 20 }}>{s}</Text>
                 </Pressable>
