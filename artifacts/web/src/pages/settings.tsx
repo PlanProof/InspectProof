@@ -955,152 +955,6 @@ interface TradeCategory {
   name: string;
 }
 
-function TradeCategoriesSettingsSection() {
-  const [categories, setCategories] = useState<TradeCategory[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [savingNew, setSavingNew] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editName, setEditName] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    apiFetch("/api/org-contractors/trade-categories")
-      .then(setCategories)
-      .catch(() => setCategories([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const add = async () => {
-    if (!newName.trim()) { setError("Name is required."); return; }
-    setError("");
-    setSavingNew(true);
-    try {
-      const created = await apiFetch("/api/org-contractors/trade-categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim() }),
-      });
-      setCategories(c => [...c, created].sort((a: TradeCategory, b: TradeCategory) => a.name.localeCompare(b.name)));
-      setNewName("");
-      setAdding(false);
-    } catch {
-      setError("Failed to add category.");
-    } finally {
-      setSavingNew(false);
-    }
-  };
-
-  const startEdit = (cat: TradeCategory) => {
-    setEditingId(cat.id);
-    setEditName(cat.name);
-    setError("");
-  };
-
-  const saveEdit = async () => {
-    if (!editName.trim()) { setError("Name is required."); return; }
-    setError("");
-    setSavingEdit(true);
-    try {
-      const updated = await apiFetch(`/api/org-contractors/trade-categories/${editingId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editName.trim() }),
-      });
-      setCategories(c => c.map((x: TradeCategory) => x.id === editingId ? updated : x).sort((a: TradeCategory, b: TradeCategory) => a.name.localeCompare(b.name)));
-      setEditingId(null);
-    } catch {
-      setError("Failed to update category.");
-    } finally {
-      setSavingEdit(false);
-    }
-  };
-
-  const remove = async (id: number) => {
-    try {
-      await apiFetch(`/api/org-contractors/trade-categories/${id}`, { method: "DELETE" });
-      setCategories(c => c.filter((x: TradeCategory) => x.id !== id));
-    } catch {
-      setError("Failed to remove category.");
-    }
-  };
-
-  if (loading) return (
-    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-      <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-    </div>
-  );
-
-  return (
-    <div className="space-y-2">
-      {categories.length === 0 && !adding && (
-        <p className="text-sm text-muted-foreground">No categories yet. Add categories to group your contractors (e.g. "Structural", "Hydraulic", "Electrical").</p>
-      )}
-      <div className="space-y-1.5">
-        {categories.map((cat: TradeCategory) => (
-          <div key={cat.id} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/10">
-            {editingId === cat.id ? (
-              <>
-                <Input
-                  value={editName}
-                  onChange={e => setEditName(e.target.value)}
-                  autoFocus
-                  className="flex-1"
-                  onKeyDown={e => e.key === "Enter" && saveEdit()}
-                />
-                <button onClick={saveEdit} disabled={savingEdit} className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50" title="Save">
-                  {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                </button>
-                <button onClick={() => setEditingId(null)} className="p-1.5 rounded text-muted-foreground hover:bg-muted/40 transition-colors" title="Cancel">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="flex-1 text-sm font-medium text-sidebar">{cat.name}</span>
-                <button onClick={() => startEdit(cat)} className="p-1.5 rounded text-muted-foreground hover:bg-muted/40 transition-colors" title="Rename">
-                  <Edit2 className="h-3.5 w-3.5" />
-                </button>
-                <button onClick={() => remove(cat.id)} className="p-1.5 rounded text-red-500 hover:bg-red-50 transition-colors" title="Delete">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
-      {adding ? (
-        <div className="flex items-center gap-2 mt-2">
-          <Input
-            value={newName}
-            onChange={e => { setNewName(e.target.value); setError(""); }}
-            placeholder="Category name (e.g. Structural)"
-            autoFocus
-            onKeyDown={e => e.key === "Enter" && add()}
-            className="flex-1"
-          />
-          <button onClick={add} disabled={savingNew} className="p-2 rounded-lg bg-sidebar text-white hover:bg-sidebar/90 disabled:opacity-50 transition-colors" title="Save">
-            {savingNew ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-          </button>
-          <button onClick={() => { setAdding(false); setNewName(""); setError(""); }} className="p-2 rounded-lg border border-border hover:bg-muted/30 transition-colors" title="Cancel">
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => { setAdding(true); setError(""); }}
-          className="flex items-center gap-1.5 text-xs font-medium text-secondary hover:text-secondary/80 transition-colors mt-1"
-        >
-          <Plus className="h-3.5 w-3.5" /> Add Category
-        </button>
-      )}
-      {error && <p className="text-xs text-red-500">{error}</p>}
-    </div>
-  );
-}
-
 function OrgContractorCard({ c, onEdit, onRemove }: {
   c: OrgContractor;
   onEdit: (c: OrgContractor) => void;
@@ -1947,13 +1801,6 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
       </SectionCard>
 
       <SectionCard
-        title="Trade Categories"
-        description="Define categories to group your contractors by trade type (e.g. Structural, Hydraulic, Electrical). Assign categories on each contractor in the library."
-      >
-        <TradeCategoriesSettingsSection />
-      </SectionCard>
-
-      <SectionCard
         title="Internal Staff"
         description="Your organisation's employees who can be assigned as responsible parties on defects. They appear alongside contractors in the trade allocation picker."
       >
@@ -1962,7 +1809,7 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
 
       <SectionCard
         title="Contractor Library"
-        description="Manage your organisation's shared contractor pool and trade categories. Contractors added here are automatically available across every project."
+        description="Manage your organisation's shared contractor pool. Contractors added here are automatically available across every project."
       >
         <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-colors">
           <div className="flex items-center gap-3">
@@ -1971,7 +1818,7 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
             </div>
             <div>
               <p className="text-sm font-semibold text-sidebar">Open Contractor Library</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Add, edit, and manage contractors and trade categories.</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Add, edit, and manage your shared contractor pool.</p>
             </div>
           </div>
           <button
