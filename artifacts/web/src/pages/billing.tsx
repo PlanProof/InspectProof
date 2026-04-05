@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CreditCard, CheckCircle2, ArrowRight, Shield, Zap, Building2,
-  BarChart3, Users, FileText, Infinity, X
+  BarChart3, Users, FileText, Infinity, X, AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +66,7 @@ export default function Billing() {
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState(false);
   const syncedRef = useRef(false);
 
   const params = new URLSearchParams(window.location.search);
@@ -85,19 +86,49 @@ export default function Billing() {
     if (success && !syncedRef.current) {
       syncedRef.current = true;
       setSyncing(true);
+      setSyncError(false);
       window.history.replaceState({}, "", "/billing");
-      // Sync the plan from Stripe immediately — don't wait for a webhook
+
+      const SYNC_TIMEOUT_MS = 10_000;
+      const timeoutId = setTimeout(() => {
+        setSyncing(false);
+        setSyncError(true);
+        toast({
+          title: "Subscription may still be activating",
+          description: "Your payment was received but plan sync timed out. Use 'Sync plan' to retry.",
+          variant: "destructive",
+        });
+      }, SYNC_TIMEOUT_MS);
+
       fetch(API("/billing/sync-plan"), { method: "POST", headers: authHeader() })
-        .then(() => queryClient.invalidateQueries({ queryKey: ["billing-subscription"] }))
-        .then(() => {
-          setSyncing(false);
-          toast({ title: "Subscription activated!", description: "Taking you to your dashboard..." });
-          setTimeout(() => setLocation("/dashboard"), 1500);
+        .then((r) => r.json())
+        .then(async (data) => {
+          clearTimeout(timeoutId);
+          await queryClient.invalidateQueries({ queryKey: ["billing-subscription"] });
+          const plan = data?.plan ?? "free_trial";
+          if (plan !== "free_trial") {
+            setSyncing(false);
+            toast({ title: "Subscription activated!", description: "Taking you to your dashboard..." });
+            setTimeout(() => setLocation("/dashboard"), 1500);
+          } else {
+            setSyncing(false);
+            setSyncError(true);
+            toast({
+              title: "Plan not updated yet",
+              description: "Stripe may still be processing. Use 'Sync plan' in a moment to retry.",
+              variant: "destructive",
+            });
+          }
         })
         .catch(() => {
+          clearTimeout(timeoutId);
           setSyncing(false);
-          toast({ title: "Subscription activated!", description: "Taking you to your dashboard..." });
-          setTimeout(() => setLocation("/dashboard"), 1500);
+          setSyncError(true);
+          toast({
+            title: "Could not confirm subscription",
+            description: "Your payment was likely received. Use 'Sync plan' to update your account.",
+            variant: "destructive",
+          });
         });
     }
   }, []);
@@ -139,7 +170,10 @@ export default function Billing() {
     onSuccess: (data) => {
       if (data.url) window.location.href = data.url;
     },
-    onError: () => toast({ title: "Error", description: "Could not start checkout.", variant: "destructive" }),
+    onError: () => {
+      setSelectedPriceId(null);
+      toast({ title: "Error", description: "Could not start checkout.", variant: "destructive" });
+    },
   });
 
   const portalMutation = useMutation({
@@ -150,6 +184,7 @@ export default function Billing() {
     onSuccess: (data) => {
       if (data.url) window.location.href = data.url;
     },
+    onError: () => toast({ title: "Error", description: "Could not open billing portal.", variant: "destructive" }),
   });
 
   const syncPlanMutation = useMutation({
@@ -159,6 +194,7 @@ export default function Billing() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["billing-subscription"] });
+      setSyncError(false);
       toast({ title: "Plan synced", description: `Your plan is now: ${PLAN_LABELS[data.plan] ?? data.plan ?? "updated"}.` });
     },
     onError: () => toast({ title: "Sync failed", description: "Could not sync plan from Stripe.", variant: "destructive" }),
@@ -167,6 +203,8 @@ export default function Billing() {
   const currentPlan = subData?.plan ?? "free_trial";
   const usage = subData?.usage ?? { projects: 0, inspections: 0 };
   const limits = subData?.limits ?? {};
+  const subscriptionStatus = subData?.subscription?.status ?? null;
+  const isPaymentFailing = subscriptionStatus === "past_due" || subscriptionStatus === "unpaid";
 
   const stripePlans: Plan[] = plansData?.plans ?? [];
 
@@ -217,12 +255,66 @@ export default function Billing() {
     return p.find(x => x.interval === "month") ?? null;
   }
 
+  function handlePlanAction(price: StripePrice | null) {
+    if (!price) return;
+    setSelectedPriceId(price.id);
+    if (subData?.stripeCustomerId) {
+      portalMutation.mutate();
+    } else {
+      checkoutMutation.mutate(price.id);
+    }
+  }
+
   return (
     <AppLayout>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-[#0B1933] tracking-tight">Plans & Billing</h1>
         <p className="text-muted-foreground mt-1">Manage your subscription and payment details.</p>
       </div>
+
+      {/* Failed payment banner */}
+      {isPaymentFailing && (
+        <div className="mb-6 flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-red-800">
+          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-sm">Payment issue — action required</p>
+            <p className="text-sm text-red-700 mt-0.5">
+              Your subscription is <strong>{subscriptionStatus}</strong>. Please update your payment method to continue using InspectProof.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="bg-red-600 hover:bg-red-700 text-white shrink-0"
+            onClick={() => portalMutation.mutate()}
+            disabled={portalMutation.isPending}
+          >
+            {portalMutation.isPending ? "Opening…" : "Update payment"}
+          </Button>
+        </div>
+      )}
+
+      {/* Sync error banner */}
+      {syncError && (
+        <div className="mb-6 flex items-start gap-3 bg-yellow-50 border border-yellow-200 rounded-xl px-5 py-4 text-yellow-800">
+          <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-sm">Subscription sync pending</p>
+            <p className="text-sm text-yellow-700 mt-0.5">
+              Your payment was received but we could not confirm your plan yet. Click "Sync plan" to retry.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-yellow-400 text-yellow-800 shrink-0"
+            onClick={() => syncPlanMutation.mutate()}
+            disabled={syncPlanMutation.isPending}
+          >
+            {syncPlanMutation.isPending ? "Syncing…" : "Sync plan"}
+          </Button>
+        </div>
+      )}
+
       {syncing && (
         <div className="mb-6 flex items-center gap-3 bg-[#466DB5]/10 border border-[#466DB5]/30 rounded-xl px-5 py-3 text-[#0B1933]">
           <svg className="animate-spin h-4 w-4 text-[#466DB5]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -336,6 +428,7 @@ export default function Billing() {
             const isCurrent = plan.plan === currentPlan;
             const isPro = plan.plan === "professional";
             const showBadge = config.isPopular || config.isBestValue;
+            const isThisButtonPending = (checkoutMutation.isPending || portalMutation.isPending) && selectedPriceId === price?.id;
 
             return (
               <div
@@ -421,13 +514,23 @@ export default function Billing() {
                 ) : (
                   <Button
                     className={`w-full ${isPro ? "bg-[#0B1933] hover:bg-[#0B1933]/90 text-white" : "bg-[#466DB5] hover:bg-[#466DB5]/90 text-white"}`}
-                    disabled={!price || checkoutMutation.isPending}
-                    onClick={() => price && checkoutMutation.mutate(price.id)}
+                    disabled={!price || isThisButtonPending || checkoutMutation.isPending || portalMutation.isPending}
+                    onClick={() => handlePlanAction(price)}
                   >
-                    {checkoutMutation.isPending && selectedPriceId === price?.id
-                      ? "Loading..."
-                      : `Upgrade to ${plan.name}`}
-                    <ArrowRight className="w-4 h-4 ml-1" />
+                    {isThisButtonPending
+                      ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                          Loading...
+                        </>
+                      )
+                      : subData?.stripeCustomerId
+                        ? `Switch to ${plan.name}`
+                        : `Upgrade to ${plan.name}`}
+                    {!isThisButtonPending && <ArrowRight className="w-4 h-4 ml-1" />}
                   </Button>
                 )}
               </div>

@@ -1,4 +1,4 @@
-import app from "./app";
+import app, { validateWebhookRouteOrder } from "./app";
 import { logger } from "./lib/logger";
 import { ensureSupabaseBucket, isSupabaseStorageAvailable } from "./lib/supabaseStorage";
 import { db, pool, usersTable, planConfigsTable } from "@workspace/db";
@@ -322,6 +322,10 @@ app.listen(port, (err) => {
     process.exit(1);
   }
   logger.info({ port }, "Server listening");
+
+  // Validate Stripe webhook route ordering by sending a synthetic probe request.
+  // We delay slightly so the server is ready to accept connections on this event loop tick.
+  setTimeout(() => validateWebhookRouteOrder(port), 200);
 
   // Run seeds and integrations in the background after port is open
   runBackgroundTasks().catch((err) => logger.error({ err }, "Background tasks failed"));

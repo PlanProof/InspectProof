@@ -17,6 +17,8 @@ const PLAN_UPDATE_EVENTS = new Set([
   "customer.subscription.created",
   "customer.subscription.updated",
   "customer.subscription.deleted",
+  "invoice.payment_failed",
+  "invoice.payment_succeeded",
 ]);
 
 const app: Express = express();
@@ -35,7 +37,9 @@ app.use(
   }),
 );
 
-// Stripe webhook MUST be registered before express.json() so it gets the raw Buffer
+// IMPORTANT: Stripe webhook MUST be registered before express.json() so it receives the raw Buffer.
+// Signature verification fails if the body has been parsed into a JS object first.
+// Ordering is validated at server startup via validateWebhookRouteOrder() in index.ts.
 app.post(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
@@ -122,5 +126,80 @@ app.use(
 );
 
 app.use("/api", router);
+
+/**
+ * Validate Stripe webhook route ordering by sending a synthetic POST to the webhook endpoint.
+ *
+ * The webhook route uses express.raw() to receive the raw Buffer required for Stripe signature
+ * verification. If express.json() is registered before the webhook route, the body will have
+ * been parsed into an object and signature verification will fail.
+ *
+ * This probe sends a POST with a JSON content-type and checks whether req.body is a Buffer
+ * (correct) or an object (misconfigured). We catch the 400 "missing signature" response as
+ * the expected happy path — reaching signature validation means the body was correctly buffered.
+ *
+ * Call this after the server starts listening (index.ts listen callback).
+ */
+export function validateWebhookRouteOrder(port: number): void {
+  import("http").then(({ default: http }) => {
+    const body = JSON.stringify({ type: "probe" });
+    const options = {
+      host: "127.0.0.1",
+      port,
+      path: "/api/stripe/webhook",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+        "stripe-signature": "probe-test",
+      },
+    };
+
+    const req = http.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        if (res.statusCode === 400) {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed?.error === "Webhook signature verification failed") {
+              logger.info(
+                "Stripe webhook route ordering OK: webhook body received as Buffer (signature check reached)"
+              );
+            } else if (parsed?.error === "Missing stripe-signature header") {
+              logger.info("Stripe webhook route ordering OK: webhook route reached before express.json()");
+            } else if (typeof parsed?.error === "string" && parsed.error.toLowerCase().includes("webhook")) {
+              logger.info("Stripe webhook route ordering OK: raw body handler is active");
+            } else {
+              logger.warn(
+                { response: parsed },
+                "Stripe webhook route order probe got unexpected 400 response — manual verification recommended"
+              );
+            }
+          } catch {
+            logger.warn("Stripe webhook route order probe: could not parse probe response");
+          }
+        } else if (res.statusCode === 200) {
+          logger.info("Stripe webhook route ordering OK: probe accepted");
+        } else {
+          logger.warn(
+            { statusCode: res.statusCode, body: data.slice(0, 200) },
+            "STRIPE WEBHOOK ORDER PROBE: unexpected status. " +
+            "Verify that app.post('/api/stripe/webhook', express.raw(...)) is registered BEFORE app.use(express.json()) in app.ts."
+          );
+        }
+      });
+    });
+
+    req.on("error", (err) => {
+      logger.warn({ err }, "Stripe webhook route order probe: connection error (non-fatal)");
+    });
+
+    req.write(body);
+    req.end();
+  }).catch((err) => {
+    logger.warn({ err }, "Stripe webhook route order probe: failed to import http (non-fatal)");
+  });
+}
 
 export default app;

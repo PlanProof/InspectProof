@@ -485,37 +485,13 @@ const PLAN_ICONS: Record<string, React.ReactNode> = {
   enterprise: <Building2 className="h-5 w-5" />,
 };
 
-const PLAN_FEATURES: Record<string, string[]> = {
-  free_trial: [
-    "1 active project",
-    "10 inspections total",
-    "1 team member",
-    "All core templates",
-    "PDF report generation",
-  ],
-  starter: [
-    "Up to 10 active projects",
-    "50 inspections per month",
-    "Up to 3 team members",
-    "All report types",
-    "Priority email support",
-  ],
-  professional: [
-    "Unlimited projects",
-    "Unlimited inspections",
-    "Up to 10 team members",
-    "Custom templates",
-    "All report types",
-    "Phone & email support",
-  ],
-  enterprise: [
-    "Unlimited everything",
-    "Unlimited team members",
-    "Custom integrations",
-    "Dedicated account manager",
-    "SLA guarantee",
-    "On-premise option",
-  ],
+type PlanConfig = {
+  planKey: string;
+  label: string;
+  description: string;
+  features: string[];
+  isPopular: boolean;
+  isBestValue: boolean;
 };
 
 function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => void }) {
@@ -523,16 +499,40 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
   const [selected, setSelected] = useState<string>("free_trial");
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [planConfigs, setPlanConfigs] = useState<Record<string, PlanConfig>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const { login } = useAuth();
 
   useEffect(() => {
+    let done = 0;
+    const finish = () => { done++; if (done === 2) setLoading(false); };
+
     fetch(API("/billing/plans"))
       .then((r) => r.json())
-      .then((d) => { setPlans(d.plans ?? []); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then((d) => { setPlans(d.plans ?? []); })
+      .catch(() => {})
+      .finally(finish);
+
+    fetch(API("/billing/plan-configs"))
+      .then((r) => r.json())
+      .then((d) => {
+        const configs: Record<string, PlanConfig> = {};
+        for (const p of d.plans ?? []) {
+          configs[p.planKey] = {
+            planKey: p.planKey,
+            label: p.label,
+            description: p.description ?? "",
+            features: Array.isArray(p.features) ? p.features : JSON.parse(p.features || "[]"),
+            isPopular: p.isPopular,
+            isBestValue: p.isBestValue,
+          };
+        }
+        setPlanConfigs(configs);
+      })
+      .catch(() => {})
+      .finally(finish);
   }, []);
 
   const getPriceId = (plan: Plan, interval: "month" | "year") => {
@@ -690,11 +690,11 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
               {/* Free Trial */}
               <PlanCard
                 planKey="free_trial"
-                name="Free Trial"
-                description="Try InspectProof free for 14 days."
+                name={planConfigs["free_trial"]?.label || "Free Trial"}
+                description={planConfigs["free_trial"]?.description || "Try InspectProof free for 14 days."}
                 price={null}
                 interval={billingInterval}
-                features={PLAN_FEATURES.free_trial}
+                features={planConfigs["free_trial"]?.features ?? []}
                 selected={selected === "free_trial"}
                 onSelect={() => handleSelect("free_trial")}
                 icon={null}
@@ -705,15 +705,16 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
               {plans.map((plan) => {
                 const price = plan.prices.find((p) => p.interval === billingInterval);
                 const savings = annualSavings[plan.plan];
+                const cfg = planConfigs[plan.plan];
                 return (
                   <PlanCard
                     key={plan.id}
                     planKey={plan.plan}
-                    name={plan.name}
-                    description={plan.description ?? ""}
+                    name={cfg?.label || plan.name}
+                    description={cfg?.description || plan.description || ""}
                     price={price?.unit_amount ?? null}
                     interval={billingInterval}
-                    features={PLAN_FEATURES[plan.plan] ?? []}
+                    features={cfg?.features ?? []}
                     selected={selected === plan.plan}
                     onSelect={() => handleSelect(plan.plan, plan)}
                     icon={PLAN_ICONS[plan.plan] ?? null}
@@ -726,11 +727,11 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
               {/* Enterprise */}
               <PlanCard
                 planKey="enterprise"
-                name="Enterprise"
-                description="Custom solutions for large organisations."
+                name={planConfigs["enterprise"]?.label || "Enterprise"}
+                description={planConfigs["enterprise"]?.description || "Custom solutions for large organisations."}
                 price={null}
                 interval={billingInterval}
-                features={PLAN_FEATURES.enterprise}
+                features={planConfigs["enterprise"]?.features ?? []}
                 selected={selected === "enterprise"}
                 onSelect={() => handleSelect("enterprise")}
                 icon={PLAN_ICONS.enterprise}
