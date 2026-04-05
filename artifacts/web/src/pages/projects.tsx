@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useListProjects, useCreateProject } from "@workspace/api-client-react";
+import { useListProjects, useCreateProject, CreateProjectRequestProjectType } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, Label } from "@/components/ui";
 import { Search, Plus, Building, ChevronDown, ChevronUp, ChevronsUpDown, X, AlertTriangle, TrendingUp } from "lucide-react";
@@ -521,6 +521,14 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── New project dialog ────────────────────────────────────────────────────────
 
+const PROJECT_TYPES = [
+  { value: "residential", label: "Residential" },
+  { value: "commercial", label: "Commercial" },
+  { value: "industrial", label: "Industrial" },
+  { value: "mixed_use", label: "Mixed Use" },
+  { value: "other", label: "Other" },
+];
+
 function NewProjectDialog({
   open,
   onOpenChange,
@@ -543,16 +551,20 @@ function NewProjectDialog({
   const [address, setAddress] = useState<AddressFields>({ siteAddress: "", suburb: "", state: "", postcode: "" });
   const [addressError, setAddressError] = useState(false);
 
+  const resetForm = () => {
+    setSelectedClasses([]);
+    setClassError(false);
+    setLimitError(null);
+    setAddressError(false);
+    setAddress({ siteAddress: "", suburb: "", state: "", postcode: "" });
+  };
+
   const mutation = useCreateProject({
     mutation: {
       onSuccess: () => {
         onSuccess();
         onOpenChange(false);
-        setSelectedClasses([]);
-        setClassError(false);
-        setLimitError(null);
-        setAddressError(false);
-        setAddress({ siteAddress: "", suburb: "", state: "", postcode: "" });
+        resetForm();
       },
       onError: (err: any) => {
         const body = err?.data ?? err;
@@ -577,7 +589,7 @@ function NewProjectDialog({
     setAddressError(false);
     setLimitError(null);
     const fd = new FormData(e.currentTarget);
-    const daNumber = (fd.get('daNumber') as string)?.trim();
+    const get = (k: string) => (fd.get(k) as string)?.trim() || undefined;
     mutation.mutate({
       data: {
         name: fd.get('name') as string,
@@ -586,15 +598,22 @@ function NewProjectDialog({
         state: address.state,
         postcode: address.postcode,
         clientName: fd.get('clientName') as string,
+        ownerName: get('ownerName') ?? null,
         buildingClassification: selectedClasses.join(", "),
-        projectType: fd.get('projectType') as any,
-        ...(daNumber ? { daNumber } : {}),
+        projectType: ((fd.get('projectType') as string) || "residential") as CreateProjectRequestProjectType,
+        referenceNumber: get('referenceNumber') ?? null,
+        daNumber: get('daNumber') ?? null,
+        builderName: get('builderName') ?? null,
+        designerName: get('designerName') ?? null,
+        startDate: get('startDate') ?? null,
+        expectedCompletionDate: get('expectedCompletionDate') ?? null,
+        notes: get('notes') ?? null,
       }
     });
   };
 
   return (
-    <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) { setSelectedClasses([]); setClassError(false); setLimitError(null); setAddressError(false); setAddress({ siteAddress: "", suburb: "", state: "", postcode: "" }); } }}>
+    <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) resetForm(); }}>
       <DialogContent
         className="max-w-2xl max-h-[90vh] overflow-y-auto"
         onInteractOutside={e => e.preventDefault()}
@@ -629,14 +648,34 @@ function NewProjectDialog({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          {/* Core details */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Project Name</Label>
+              <Label>Project Name <span className="text-red-500">*</span></Label>
               <Input name="name" required placeholder="e.g. Smith Residence" />
             </div>
             <div className="space-y-2">
-              <Label>Client Name</Label>
+              <Label>
+                Reference Number
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">(auto-generated if blank)</span>
+              </Label>
+              <Input name="referenceNumber" placeholder="e.g. PRJ-0001" />
+            </div>
+            <div className="space-y-2">
+              <Label>Client Name <span className="text-red-500">*</span></Label>
               <Input name="clientName" required />
+            </div>
+            <div className="space-y-2">
+              <Label>Owner Name <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
+              <Input name="ownerName" placeholder="Property owner" />
+            </div>
+            <div className="space-y-2">
+              <Label>Builder Name <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
+              <Input name="builderName" />
+            </div>
+            <div className="space-y-2">
+              <Label>Designer Name <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
+              <Input name="designerName" />
             </div>
             <div className="col-span-2">
               <AddressAutocomplete
@@ -648,8 +687,12 @@ function NewProjectDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label>Description</Label>
-              <Input name="projectType" placeholder="e.g. Dwelling, Shed" />
+              <Label>Project Type</Label>
+              <select name="projectType" defaultValue="residential" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {PROJECT_TYPES.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
             </div>
             <div className="col-span-2 space-y-2">
               <Label>
@@ -663,14 +706,35 @@ function NewProjectDialog({
             </div>
           </div>
 
+          {/* Application details */}
           <div className="border-t pt-4">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Application Details</p>
-            <div className="space-y-2 max-w-sm">
-              <Label>
-                Development Application Number
-                <span className="ml-1.5 text-xs font-normal text-muted-foreground">(optional)</span>
-              </Label>
-              <Input name="daNumber" placeholder="e.g. DA2024/1234" />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Development Application Number <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
+                <Input name="daNumber" placeholder="e.g. DA2024/1234" />
+              </div>
+              <div className="space-y-2">
+                <Label>Start Date <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
+                <Input name="startDate" type="date" />
+              </div>
+              <div className="space-y-2">
+                <Label>Expected Completion <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
+                <Input name="expectedCompletionDate" type="date" />
+              </div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="border-t pt-4">
+            <div className="space-y-2">
+              <Label>Notes <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
+              <textarea
+                name="notes"
+                rows={3}
+                placeholder="Add any project notes here…"
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring placeholder:text-muted-foreground resize-none"
+              />
             </div>
           </div>
 

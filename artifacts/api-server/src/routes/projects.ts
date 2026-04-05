@@ -42,12 +42,14 @@ const TEST_PROJECT_NAME = "Test Project";
 function formatProject(p: any, totalInspections = 0, openIssues = 0) {
   return {
     id: p.id,
+    referenceNumber: p.referenceNumber,
     name: p.name,
     siteAddress: p.siteAddress,
     suburb: p.suburb,
     state: p.state,
     postcode: p.postcode,
     clientName: p.clientName,
+    ownerName: p.ownerName,
     builderName: p.builderName,
     designerName: p.designerName,
     daNumber: p.daNumber,
@@ -56,6 +58,7 @@ function formatProject(p: any, totalInspections = 0, openIssues = 0) {
     projectType: p.projectType,
     status: p.status,
     stage: p.stage,
+    notes: p.notes,
     assignedCertifierId: p.assignedCertifierId,
     assignedInspectorId: p.assignedInspectorId,
     startDate: p.startDate,
@@ -66,6 +69,31 @@ function formatProject(p: any, totalInspections = 0, openIssues = 0) {
     createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
     updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : p.updatedAt,
   };
+}
+
+async function generateReferenceNumber(orgAdminId: number): Promise<string> {
+  // Count existing projects within this org to find starting sequence point
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(projectsTable)
+    .where(eq(projectsTable.orgAdminId, orgAdminId));
+
+  // Try sequential numbers starting from count+1, checking uniqueness within this org
+  let attempt = count + 1;
+  while (attempt < count + 100) {
+    const candidate = `PRJ-${attempt.toString().padStart(4, "0")}`;
+    const [existing] = await db
+      .select({ id: projectsTable.id })
+      .from(projectsTable)
+      .where(and(
+        eq(projectsTable.referenceNumber, candidate),
+        eq(projectsTable.orgAdminId, orgAdminId),
+      ));
+    if (!existing) return candidate;
+    attempt++;
+  }
+  // Fallback: use timestamp-based suffix to guarantee uniqueness
+  return `PRJ-${Date.now().toString(36).toUpperCase()}`;
 }
 
 function formatDoc(d: any) {
@@ -143,13 +171,18 @@ router.post("/", requireAuth, checkProjectQuota, async (req, res) => {
   try {
     const data = req.body;
     const createdById = req.authUser!.id;
+    const adminId = effectiveAdminId(req.authUser!);
+    const referenceNumber = data.referenceNumber?.trim() || await generateReferenceNumber(adminId);
     const [project] = await db.insert(projectsTable).values({
+      referenceNumber,
+      orgAdminId: adminId,
       name: data.name,
       siteAddress: data.siteAddress,
       suburb: data.suburb,
       state: data.state,
       postcode: data.postcode,
       clientName: data.clientName,
+      ownerName: data.ownerName || null,
       builderName: data.builderName,
       designerName: data.designerName,
       daNumber: data.daNumber,
@@ -158,6 +191,7 @@ router.post("/", requireAuth, checkProjectQuota, async (req, res) => {
       projectType: data.projectType || "residential",
       status: "active",
       stage: "pre_construction",
+      notes: data.notes || null,
       assignedCertifierId: data.assignedCertifierId,
       assignedInspectorId: data.assignedInspectorId,
       createdById,
@@ -300,9 +334,10 @@ router.patch("/:id", requireAuth, async (req, res) => {
     if (!await canAccessProject(existing.createdById, req.authUser!)) {
       res.status(403).json({ error: "forbidden" }); return;
     }
-    const allowed = ["status", "name", "siteAddress", "suburb", "state", "postcode", "client", "builder",
-      "designer", "stage", "projectType", "daNumber", "certificationNumber", "buildingClassification",
-      "startDate", "expectedCompletion"];
+    const allowed = ["status", "name", "siteAddress", "suburb", "state", "postcode", "clientName", "ownerName",
+      "builderName", "designerName", "stage", "projectType", "daNumber", "certificationNumber",
+      "buildingClassification", "startDate", "expectedCompletionDate", "notes", "referenceNumber",
+      "assignedCertifierId", "assignedInspectorId"];
     const data: Record<string, unknown> = {};
     for (const key of allowed) {
       if (key in req.body) data[key] = req.body[key];
@@ -378,10 +413,46 @@ router.delete("/:id", requireAuth, async (req, res) => {
 router.get("/:id/activity", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+    if (!project) { res.status(404).json({ error: "not_found" }); return; }
+    if (!await canAccessProject(project.createdById, req.authUser!)) {
+      res.status(403).json({ error: "forbidden" }); return;
+    }
+
+    // Gather all entity IDs relevant to this project:
+    // - The project itself
+    // - All inspections belonging to this project
+    // - All issues belonging to this project
+    const [projectInspections, projectIssues] = await Promise.all([
+      db.select({ id: inspectionsTable.id }).from(inspectionsTable).where(eq(inspectionsTable.projectId, id)),
+      db.select({ id: issuesTable.id }).from(issuesTable).where(eq(issuesTable.projectId, id)),
+    ]);
+
+    const inspectionIds = projectInspections.map(i => i.id);
+    const issueIds = projectIssues.map(i => i.id);
+
+    // Build a WHERE clause that includes all relevant activity logs
+    const conditions = [
+      sql`(${activityLogsTable.entityType} = 'project' AND ${activityLogsTable.entityId} = ${id})`,
+    ];
+    if (inspectionIds.length > 0) {
+      conditions.push(sql`(${activityLogsTable.entityType} = 'inspection' AND ${activityLogsTable.entityId} IN (${sql.join(inspectionIds.map(iid => sql`${iid}`), sql`, `)}))`);
+    }
+    if (issueIds.length > 0) {
+      conditions.push(sql`(${activityLogsTable.entityType} = 'issue' AND ${activityLogsTable.entityId} IN (${sql.join(issueIds.map(iid => sql`${iid}`), sql`, `)}))`);
+    }
+
     const logs = await db.select().from(activityLogsTable)
-      .where(sql`${activityLogsTable.entityType} = 'project' AND ${activityLogsTable.entityId} = ${id}`)
+      .where(sql`${sql.join(conditions, sql` OR `)}`)
       .orderBy(sql`${activityLogsTable.createdAt} DESC`)
-      .limit(20);
+      .limit(50);
+
+    const userIds = [...new Set(logs.map(l => l.userId))];
+    const users = userIds.length > 0
+      ? await db.select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName })
+          .from(usersTable).where(inArray(usersTable.id, userIds))
+      : [];
+    const userMap = Object.fromEntries(users.map(u => [u.id, `${u.firstName} ${u.lastName}`]));
 
     res.json(logs.map(l => ({
       id: l.id,
@@ -390,7 +461,7 @@ router.get("/:id/activity", requireAuth, async (req, res) => {
       action: l.action,
       description: l.description,
       userId: l.userId,
-      userName: "Admin User",
+      userName: userMap[l.userId] || "Unknown User",
       createdAt: l.createdAt instanceof Date ? l.createdAt.toISOString() : l.createdAt,
     })));
   } catch (err) {

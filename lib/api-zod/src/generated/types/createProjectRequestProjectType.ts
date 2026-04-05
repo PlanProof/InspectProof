@@ -14,5 +14,6 @@ export const CreateProjectRequestProjectType = {
   commercial: "commercial",
   industrial: "industrial",
   mixed_use: "mixed_use",
+  other: "other",
   infrastructure: "infrastructure",
 } as const;

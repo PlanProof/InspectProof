@@ -43,10 +43,6 @@ export interface User {
   avatar?: string | null;
   isActive: boolean;
   createdAt: string;
-  isAdmin?: boolean | null;
-  profession?: string | null;
-  companyName?: string | null;
-  licenceNumber?: string | null;
 }
 
 export interface LoginResponse {
@@ -81,6 +77,7 @@ export const ProjectProjectType = {
   commercial: "commercial",
   industrial: "industrial",
   mixed_use: "mixed_use",
+  other: "other",
   infrastructure: "infrastructure",
 } as const;
 
@@ -108,12 +105,14 @@ export const ProjectStage = {
 
 export interface Project {
   id: number;
+  referenceNumber?: string | null;
   name: string;
   siteAddress: string;
   suburb: string;
   state: string;
   postcode: string;
   clientName: string;
+  ownerName?: string | null;
   builderName?: string | null;
   designerName?: string | null;
   daNumber?: string | null;
@@ -122,6 +121,7 @@ export interface Project {
   projectType: ProjectProjectType;
   status: ProjectStatus;
   stage: ProjectStage;
+  notes?: string | null;
   assignedCertifierId?: number | null;
   assignedInspectorId?: number | null;
   startDate?: string | null;
@@ -261,22 +261,26 @@ export const CreateProjectRequestProjectType = {
   commercial: "commercial",
   industrial: "industrial",
   mixed_use: "mixed_use",
+  other: "other",
   infrastructure: "infrastructure",
 } as const;
 
 export interface CreateProjectRequest {
+  referenceNumber?: string | null;
   name: string;
   siteAddress: string;
   suburb: string;
   state: string;
   postcode: string;
   clientName: string;
+  ownerName?: string | null;
   builderName?: string | null;
   designerName?: string | null;
   daNumber?: string | null;
   certificationNumber?: string | null;
   buildingClassification: string;
   projectType: CreateProjectRequestProjectType;
+  notes?: string | null;
   assignedCertifierId?: number | null;
   assignedInspectorId?: number | null;
   startDate?: string | null;
@@ -291,6 +295,7 @@ export const UpdateProjectRequestProjectType = {
   commercial: "commercial",
   industrial: "industrial",
   mixed_use: "mixed_use",
+  other: "other",
   infrastructure: "infrastructure",
 } as const;
 
@@ -319,12 +324,14 @@ export const UpdateProjectRequestStage = {
 } as const;
 
 export interface UpdateProjectRequest {
+  referenceNumber?: string | null;
   name?: string;
   siteAddress?: string;
   suburb?: string;
   state?: string;
   postcode?: string;
   clientName?: string;
+  ownerName?: string | null;
   builderName?: string | null;
   designerName?: string | null;
   daNumber?: string | null;
@@ -333,6 +340,7 @@ export interface UpdateProjectRequest {
   projectType?: UpdateProjectRequestProjectType;
   status?: UpdateProjectRequestStatus;
   stage?: UpdateProjectRequestStage;
+  notes?: string | null;
   assignedCertifierId?: number | null;
   assignedInspectorId?: number | null;
   startDate?: string | null;
@@ -687,18 +695,14 @@ export interface DashboardAnalytics {
   overdueIssues: number;
   reportsPending: number;
   upcomingInspections: Inspection[];
-  allInspections?: Inspection[];
   recentActivity: ActivityLog[];
   projectsByStage: DashboardAnalyticsProjectsByStageItem[];
   issuesBySeverity: DashboardAnalyticsIssuesBySeverityItem[];
-  complianceRate?: number | null;
-  inspectionsByType?: { type: string; total: number; completed: number; scheduled: number }[];
 }
 
 export type AnalyticsTrendsInspectionsByMonthItem = {
   month: string;
-  total?: number;
-  count?: number;
+  count: number;
 };
 
 export type AnalyticsTrendsDefectsByTypeItem = {
@@ -711,30 +715,12 @@ export type AnalyticsTrendsCommonFailuresItem = {
   count: number;
 };
 
-export type AnalyticsTrendsPassFailItem = {
-  name: string;
-  value: number;
-};
-
-export type AnalyticsTrendsComplianceTrendItem = {
-  month: string;
-  rate: number;
-};
-
-export type AnalyticsTrendsIssuesBySeverityItem = {
-  name: string;
-  count: number;
-};
-
 export interface AnalyticsTrends {
   inspectionsByMonth: AnalyticsTrendsInspectionsByMonthItem[];
   defectsByType: AnalyticsTrendsDefectsByTypeItem[];
   commonFailures: AnalyticsTrendsCommonFailuresItem[];
-  passFailBreakdown?: AnalyticsTrendsPassFailItem[];
-  complianceTrend?: AnalyticsTrendsComplianceTrendItem[];
-  issuesBySeverity?: AnalyticsTrendsIssuesBySeverityItem[];
   avgResolutionDays: number;
-  complianceRate: number | null;
+  complianceRate: number;
 }
 
 export type NotificationType =

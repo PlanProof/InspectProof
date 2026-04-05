@@ -10,12 +10,14 @@ import type { UpdateProjectRequestStage } from "./updateProjectRequestStage";
 import type { UpdateProjectRequestStatus } from "./updateProjectRequestStatus";
 
 export interface UpdateProjectRequest {
+  referenceNumber?: string | null;
   name?: string;
   siteAddress?: string;
   suburb?: string;
   state?: string;
   postcode?: string;
   clientName?: string;
+  ownerName?: string | null;
   builderName?: string | null;
   designerName?: string | null;
   daNumber?: string | null;
@@ -24,6 +26,7 @@ export interface UpdateProjectRequest {
   projectType?: UpdateProjectRequestProjectType;
   status?: UpdateProjectRequestStatus;
   stage?: UpdateProjectRequestStage;
+  notes?: string | null;
   assignedCertifierId?: number | null;
   assignedInspectorId?: number | null;
   startDate?: string | null;

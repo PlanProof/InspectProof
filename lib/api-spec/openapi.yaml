@@ -835,6 +835,9 @@ components:
       properties:
         id:
           type: integer
+        referenceNumber:
+          type: string
+          nullable: true
         name:
           type: string
         siteAddress:
@@ -847,6 +850,9 @@ components:
           type: string
         clientName:
           type: string
+        ownerName:
+          type: string
+          nullable: true
         builderName:
           type: string
           nullable: true
@@ -863,13 +869,16 @@ components:
           type: string
         projectType:
           type: string
-          enum: [residential, commercial, industrial, mixed_use, infrastructure]
+          enum: [residential, commercial, industrial, mixed_use, other, infrastructure]
         status:
           type: string
           enum: [active, on_hold, completed, archived]
         stage:
           type: string
           enum: [pre_construction, footings, slab, frame, lock_up, fit_out, final, completed]
+        notes:
+          type: string
+          nullable: true
         assignedCertifierId:
           type: integer
           nullable: true
@@ -935,6 +944,9 @@ components:
     CreateProjectRequest:
       type: object
       properties:
+        referenceNumber:
+          type: string
+          nullable: true
         name:
           type: string
         siteAddress:
@@ -947,6 +959,9 @@ components:
           type: string
         clientName:
           type: string
+        ownerName:
+          type: string
+          nullable: true
         builderName:
           type: string
           nullable: true
@@ -963,7 +978,10 @@ components:
           type: string
         projectType:
           type: string
-          enum: [residential, commercial, industrial, mixed_use, infrastructure]
+          enum: [residential, commercial, industrial, mixed_use, other, infrastructure]
+        notes:
+          type: string
+          nullable: true
         assignedCertifierId:
           type: integer
           nullable: true
@@ -989,6 +1007,9 @@ components:
     UpdateProjectRequest:
       type: object
       properties:
+        referenceNumber:
+          type: string
+          nullable: true
         name:
           type: string
         siteAddress:
@@ -1001,6 +1022,9 @@ components:
           type: string
         clientName:
           type: string
+        ownerName:
+          type: string
+          nullable: true
         builderName:
           type: string
           nullable: true
@@ -1017,13 +1041,16 @@ components:
           type: string
         projectType:
           type: string
-          enum: [residential, commercial, industrial, mixed_use, infrastructure]
+          enum: [residential, commercial, industrial, mixed_use, other, infrastructure]
         status:
           type: string
           enum: [active, on_hold, completed, archived]
         stage:
           type: string
           enum: [pre_construction, footings, slab, frame, lock_up, fit_out, final, completed]
+        notes:
+          type: string
+          nullable: true
         assignedCertifierId:
           type: integer
           nullable: true

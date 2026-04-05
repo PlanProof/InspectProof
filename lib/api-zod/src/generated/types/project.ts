@@ -11,12 +11,14 @@ import type { ProjectStatus } from "./projectStatus";
 
 export interface Project {
   id: number;
+  referenceNumber?: string | null;
   name: string;
   siteAddress: string;
   suburb: string;
   state: string;
   postcode: string;
   clientName: string;
+  ownerName?: string | null;
   builderName?: string | null;
   designerName?: string | null;
   daNumber?: string | null;
@@ -25,6 +27,7 @@ export interface Project {
   projectType: ProjectProjectType;
   status: ProjectStatus;
   stage: ProjectStage;
+  notes?: string | null;
   assignedCertifierId?: number | null;
   assignedInspectorId?: number | null;
   startDate?: string | null;
