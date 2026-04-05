@@ -145,6 +145,54 @@ async function runSchemaMigrations() {
         AND admin_user_id IS NULL
     `, [jakyHash]);
 
+    // inductions tables (Task #21)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS inductions (
+        id serial PRIMARY KEY,
+        project_id integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        title text NOT NULL DEFAULT 'Site Induction',
+        scheduled_date text NOT NULL,
+        scheduled_time text,
+        location text,
+        conducted_by_id integer,
+        conducted_by_name text,
+        status text NOT NULL DEFAULT 'scheduled',
+        notes text,
+        checklist_data jsonb,
+        completed_at timestamp,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS inductions_project_id_idx ON inductions(project_id)`);
+    await pool.query(`ALTER TABLE inductions ADD COLUMN IF NOT EXISTS checklist_data jsonb`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS induction_attendees (
+        id serial PRIMARY KEY,
+        induction_id integer NOT NULL REFERENCES inductions(id) ON DELETE CASCADE,
+        org_contractor_id integer REFERENCES org_contractors(id) ON DELETE SET NULL,
+        internal_staff_id integer REFERENCES internal_staff(id) ON DELETE SET NULL,
+        attendee_type text NOT NULL DEFAULT 'contractor',
+        contractor_name text NOT NULL,
+        contractor_email text,
+        contractor_trade text,
+        attended boolean NOT NULL DEFAULT false,
+        signed_off boolean NOT NULL DEFAULT false,
+        signature_data text,
+        acknowledged_at timestamp,
+        created_at timestamp NOT NULL DEFAULT now()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS induction_attendees_induction_id_idx ON induction_attendees(induction_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS induction_attendees_org_contractor_id_idx ON induction_attendees(org_contractor_id)`);
+    await pool.query(`ALTER TABLE induction_attendees ADD COLUMN IF NOT EXISTS internal_staff_id integer REFERENCES internal_staff(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE induction_attendees ADD COLUMN IF NOT EXISTS attendee_type text NOT NULL DEFAULT 'contractor'`);
+
+    // induction_id on documents for per-induction attachments
+    await pool.query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS induction_id integer REFERENCES inductions(id) ON DELETE SET NULL`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS documents_induction_id_idx ON documents(induction_id)`);
+
     logger.info("Schema migrations applied");
   } catch (err) {
     logger.error({ err }, "Schema migration failed — continuing");

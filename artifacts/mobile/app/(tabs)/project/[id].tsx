@@ -326,6 +326,9 @@ export default function ProjectDetailScreen() {
         )}
       </View>
 
+      {/* Inductions */}
+      <InductionsSection projectId={id as string} baseUrl={baseUrl} token={token} />
+
       {/* Notes */}
       {project.notes && (
         <View style={styles.notesCard}>
@@ -925,3 +928,112 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
   },
 });
+
+// ── InductionsSection ─────────────────────────────────────────────────────────
+
+interface InductionItem {
+  id: number;
+  title: string;
+  scheduledDate: string;
+  status: string;
+  attendeeCount: number;
+}
+
+function InductionsSection({ projectId, baseUrl, token }: { projectId: string; baseUrl: string; token: string | null }) {
+  const { data: inductions = [], isLoading } = useQuery<InductionItem[]>({
+    queryKey: ["project-inductions", projectId, token],
+    queryFn: async () => {
+      const res = await fetch(`${baseUrl}/api/projects/${projectId}/inductions`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!token && !!projectId,
+  });
+
+  const indStyles = StyleSheet.create({
+    section: { marginTop: 16, paddingHorizontal: 16 },
+    header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+    title: { fontSize: 15, fontFamily: "PlusJakartaSans_700Bold", color: Colors.primary },
+    count: { fontSize: 13, color: Colors.textSecondary },
+    card: {
+      backgroundColor: "#fff",
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: "#e2e8f0",
+      marginBottom: 8,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    overdue: { borderColor: "#fca5a5", backgroundColor: "#fef2f2" },
+    icon: {
+      width: 36, height: 36, borderRadius: 8, backgroundColor: "#f0fdf4",
+      alignItems: "center", justifyContent: "center",
+    },
+    cardInfo: { flex: 1 },
+    cardTitle: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+    cardMeta: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+    statusBadge: {
+      paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, borderWidth: 1,
+    },
+    statusText: { fontSize: 11, fontWeight: "600" },
+    empty: { alignItems: "center", paddingVertical: 20 },
+    emptyText: { fontSize: 13, color: Colors.textSecondary, marginTop: 6 },
+  });
+
+  const today = new Date().toISOString().split("T")[0];
+
+  return (
+    <View style={indStyles.section}>
+      <View style={indStyles.header}>
+        <Text style={indStyles.title}>Inductions ({inductions.length})</Text>
+      </View>
+      {isLoading ? (
+        <ActivityIndicator size="small" color={Colors.secondary} />
+      ) : inductions.length === 0 ? (
+        <View style={indStyles.empty}>
+          <Feather name="shield" size={28} color={Colors.textSecondary} />
+          <Text style={indStyles.emptyText}>No inductions recorded</Text>
+        </View>
+      ) : (
+        inductions.slice(0, 5).map(ind => {
+          const overdue = ind.status === "scheduled" && ind.scheduledDate < today;
+          const statusColors: Record<string, { bg: string; text: string; border: string }> = {
+            scheduled: { bg: "#eff6ff", text: "#1d4ed8", border: "#bfdbfe" },
+            in_progress: { bg: "#fffbeb", text: "#b45309", border: "#fde68a" },
+            completed: { bg: "#f0fdf4", text: "#166534", border: "#bbf7d0" },
+            cancelled: { bg: "#f9fafb", text: "#6b7280", border: "#e5e7eb" },
+          };
+          const sc = statusColors[ind.status] || statusColors.scheduled;
+          const dateStr = ind.scheduledDate
+            ? new Date(ind.scheduledDate + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" })
+            : "—";
+          return (
+            <Pressable
+              key={ind.id}
+              style={[indStyles.card, overdue && indStyles.overdue]}
+              onPress={() => router.push(`/inspection/conduct/induction/${ind.id}` as never)}
+            >
+              <View style={[indStyles.icon, { backgroundColor: sc.bg }]}>
+                <Feather name="shield" size={16} color={sc.text} />
+              </View>
+              <View style={indStyles.cardInfo}>
+                <Text style={indStyles.cardTitle}>{ind.title}</Text>
+                <Text style={indStyles.cardMeta}>{dateStr} · {ind.attendeeCount} attendee{ind.attendeeCount !== 1 ? "s" : ""}{overdue ? " · Overdue" : ""}</Text>
+              </View>
+              <View style={[indStyles.statusBadge, { backgroundColor: sc.bg, borderColor: sc.border }]}>
+                <Text style={[indStyles.statusText, { color: sc.text }]}>
+                  {ind.status === "in_progress" ? "Active" : ind.status.charAt(0).toUpperCase() + ind.status.slice(1)}
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={Colors.textTertiary} />
+            </Pressable>
+          );
+        })
+      )}
+    </View>
+  );
+}

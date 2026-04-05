@@ -16,6 +16,7 @@ export const documentsTable = pgTable("documents", {
   folder: text("folder").notNull().default("General"),
   fileUrl: text("file_url"),
   inspectionId: integer("inspection_id"),
+  inductionId: integer("induction_id"),
   includedInInspection: boolean("included_in_inspection").notNull().default(true),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),

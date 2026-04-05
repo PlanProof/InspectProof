@@ -22,6 +22,7 @@ import internalStaffRouter from "./internalStaff";
 import orgContractorsRouter from "./orgContractors";
 import activityRouter from "./activity";
 import shareRouter from "./share";
+import inductionsRouter from "./inductions";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use("/internal-staff", internalStaffRouter);
 router.use("/org-contractors", orgContractorsRouter);
 router.use("/activity", activityRouter);
 router.use(shareRouter);
+router.use(inductionsRouter);
 
 export default router;

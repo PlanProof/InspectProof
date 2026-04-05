@@ -11,7 +11,7 @@ import {
   FolderPlus, Pencil, Trash2, Archive, Eye, EyeOff, File, Folder, FolderOpen,
   ChevronRight, ChevronDown, Calendar, Clock, CheckCircle, CheckCircle2, AlertCircle, XCircle, MoreHorizontal,
   Download, Mail, Loader2, Link2, Unlink, Award, Send, BarChart2,
-  Smartphone, X, Info, ZoomIn, User
+  Smartphone, X, Info, ZoomIn, User, ShieldCheck, UserCheck, Paperclip
 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { useListUsers, useCreateInspection, useGetMe } from "@workspace/api-client-react";
@@ -124,7 +124,7 @@ function inspectionStatusBadge(status: string) {
   );
 }
 
-const TABS = ["Overview", "Inspection Types", "Inspections", "Reports", "Documents", "Contractors"] as const;
+const TABS = ["Overview", "Inspection Types", "Inspections", "Reports", "Documents", "Contractors", "Inductions"] as const;
 type Tab = typeof TABS[number];
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -271,6 +271,7 @@ export default function ProjectDetail() {
       {tab === "Inspections" && <InspectionsTab project={project} onRefresh={loadProject} />}
       {tab === "Inspection Types" && <InspectionTypesTab projectId={projectId} />}
       {tab === "Reports" && <ReportsTab projectId={projectId} project={project} />}
+      {tab === "Inductions" && <InductionsTab projectId={projectId} />}
 
       {/* Archive Confirmation Dialog */}
       <Dialog open={archiveOpen} onOpenChange={open => { if (!archiving) setArchiveOpen(open); }}>
@@ -2154,11 +2155,13 @@ function OrgContractorCombobox({
   assignedOrgIds,
   togglingIds,
   onToggle,
+  inductedIds,
 }: {
   orgContractors: OrgContractorEntry[];
   assignedOrgIds: Set<number>;
   togglingIds: Set<number>;
   onToggle: (id: number, currentlyAssigned: boolean) => void;
+  inductedIds?: Record<number, boolean>;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -2207,28 +2210,38 @@ function OrgContractorCombobox({
       {/* Assigned chips */}
       {assignedContractors.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {assignedContractors.map(c => (
-            <div
-              key={c.id}
-              className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium px-2.5 py-1.5 rounded-full"
-            >
-              <User className="h-3 w-3 text-emerald-600 shrink-0" />
-              <span>{c.name}</span>
-              {c.trade && <span className="text-emerald-600 opacity-80">· {c.trade}</span>}
-              <button
-                onClick={() => onToggle(c.id, true)}
-                disabled={togglingIds.has(c.id)}
-                className="ml-1 text-emerald-600 hover:text-red-600 transition-colors disabled:opacity-50"
-                title="Remove from project"
+          {assignedContractors.map(c => {
+            const inducted = inductedIds?.[c.id] ?? false;
+            return (
+              <div
+                key={c.id}
+                className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium px-2.5 py-1.5 rounded-full"
               >
-                {togglingIds.has(c.id) ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
+                <User className="h-3 w-3 text-emerald-600 shrink-0" />
+                <span>{c.name}</span>
+                {c.trade && <span className="text-emerald-600 opacity-80">· {c.trade}</span>}
+                {inducted ? (
+                  <span className="ml-1 flex items-center gap-0.5 bg-green-100 text-green-700 border border-green-200 px-1 py-0.5 rounded text-[10px] font-semibold">
+                    <ShieldCheck className="h-2.5 w-2.5" /> Inducted
+                  </span>
                 ) : (
-                  <X className="h-3 w-3" />
+                  <span className="ml-1 text-amber-600 text-[10px] font-medium">Not Inducted</span>
                 )}
-              </button>
-            </div>
-          ))}
+                <button
+                  onClick={() => onToggle(c.id, true)}
+                  disabled={togglingIds.has(c.id)}
+                  className="ml-1 text-emerald-600 hover:text-red-600 transition-colors disabled:opacity-50"
+                  title="Remove from project"
+                >
+                  {togglingIds.has(c.id) ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <X className="h-3 w-3" />
+                  )}
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -2309,6 +2322,7 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
   const [contractors, setContractors] = useState<ProjectContractor[]>([]);
   const [orgContractors, setOrgContractors] = useState<OrgContractorEntry[]>([]);
   const [assignedOrgIds, setAssignedOrgIds] = useState<Set<number>>(new Set());
+  const [inductedIds, setInductedIds] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [togglingIds, setTogglingIds] = useState<Set<number>>(new Set());
   const [adding, setAdding] = useState(false);
@@ -2329,11 +2343,17 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
     Promise.all([
       apiFetch(`/api/projects/${projectId}/contractors`).catch(() => []),
       apiFetch("/api/org-contractors").catch(() => []),
-      apiFetch(`/api/projects/${projectId}/org-contractor-assignments`).catch(() => []),
-    ]).then(([projList, orgList, assignedIds]) => {
+      apiFetch(`/api/projects/${projectId}/org-contractor-assignments?format=enriched`).catch(() => []),
+    ]).then(([projList, orgList, enrichedAssignments]) => {
       setContractors(projList);
       setOrgContractors(orgList);
-      setAssignedOrgIds(new Set(assignedIds as number[]));
+      const assignedArr = enrichedAssignments as Array<{ id: number; isInducted: boolean }>;
+      setAssignedOrgIds(new Set(assignedArr.map((a) => a.id)));
+      const inductionMap: Record<number, boolean> = {};
+      for (const a of assignedArr) {
+        if (a.isInducted) inductionMap[a.id] = true;
+      }
+      setInductedIds(inductionMap);
     }).finally(() => setLoading(false));
   }, [projectId]);
 
@@ -2481,6 +2501,7 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
         assignedOrgIds={assignedOrgIds}
         togglingIds={togglingIds}
         onToggle={toggleOrgContractor}
+        inductedIds={inductedIds}
       />
 
       {/* Project-specific contractors */}
@@ -3168,5 +3189,738 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// ── Inductions Tab ─────────────────────────────────────────────────────────────
+
+interface InductionAttendee {
+  id: number;
+  inductionId: number;
+  orgContractorId: number | null;
+  internalStaffId: number | null;
+  attendeeType: "contractor" | "staff";
+  contractorName: string;
+  contractorEmail: string | null;
+  contractorTrade: string | null;
+  attended: boolean;
+  signedOff: boolean;
+  signatureData: string | null;
+  acknowledgedAt: string | null;
+}
+
+interface Induction {
+  id: number;
+  projectId: number;
+  title: string;
+  scheduledDate: string;
+  scheduledTime: string | null;
+  location: string | null;
+  conductedById: number | null;
+  conductedByName: string | null;
+  status: string;
+  notes: string | null;
+  checklistData: Record<string, Record<number, boolean>> | null;
+  completedAt: string | null;
+  attendees: InductionAttendee[];
+  attendeeCount: number;
+  createdAt: string;
+}
+
+type InductionStatus = "scheduled" | "in_progress" | "completed" | "cancelled";
+
+function inductionStatusBadge(status: string) {
+  const now = new Date();
+  const map: Record<string, string> = {
+    scheduled: "bg-blue-50 text-blue-700 border-blue-200",
+    in_progress: "bg-amber-50 text-amber-700 border-amber-200",
+    completed: "bg-green-50 text-green-700 border-green-200",
+    cancelled: "bg-gray-50 text-gray-500 border-gray-200",
+  };
+  const label: Record<string, string> = {
+    scheduled: "Scheduled",
+    in_progress: "In Progress",
+    completed: "Completed",
+    cancelled: "Cancelled",
+  };
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded border ${map[status] || "bg-gray-50 text-gray-500 border-gray-200"}`}>
+      {label[status] || status}
+    </span>
+  );
+}
+
+function isOverdue(induction: Induction) {
+  if (induction.status !== "scheduled") return false;
+  const today = new Date().toISOString().split("T")[0];
+  return induction.scheduledDate < today;
+}
+
+interface StaffEntry {
+  id: number;
+  name: string;
+  role: string;
+  email: string | null;
+}
+
+interface BookAttendee {
+  orgContractorId?: number;
+  internalStaffId?: number;
+  attendeeType: "contractor" | "staff";
+  contractorName: string;
+  contractorEmail?: string;
+  contractorTrade?: string;
+}
+
+function InductionsTab({ projectId }: { projectId: number }) {
+  const [inductions, setInductions] = useState<Induction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [bookOpen, setBookOpen] = useState(false);
+  const [viewInduction, setViewInduction] = useState<Induction | null>(null);
+  const [orgContractors, setOrgContractors] = useState<OrgContractorEntry[]>([]);
+  const [assignedOrgIds, setAssignedOrgIds] = useState<number[]>([]);
+  const [staffList, setStaffList] = useState<StaffEntry[]>([]);
+  const [attendeeTab, setAttendeeTab] = useState<"contractors" | "staff">("contractors");
+
+  // Book form state
+  const [bookTitle, setBookTitle] = useState("Site Induction");
+  const [bookDate, setBookDate] = useState("");
+  const [bookTime, setBookTime] = useState("");
+  const [bookLocation, setBookLocation] = useState("");
+  const [bookConductorName, setBookConductorName] = useState("");
+  const [bookAttendees, setBookAttendees] = useState<BookAttendee[]>([]);
+  const [bookError, setBookError] = useState("");
+  const [booking, setBooking] = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [inds, orgList, assigned, staff] = await Promise.all([
+        apiFetch(`/api/projects/${projectId}/inductions`).catch(() => []),
+        apiFetch("/api/org-contractors").catch(() => []),
+        apiFetch(`/api/projects/${projectId}/org-contractor-assignments`).catch(() => []),
+        apiFetch("/api/internal-staff").catch(() => []),
+      ]);
+      setInductions(inds);
+      setOrgContractors(orgList);
+      setAssignedOrgIds(assigned as number[]);
+      setStaffList(staff);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const assignedContractors = orgContractors.filter(c => assignedOrgIds.includes(c.id));
+
+  const toggleContractorAttendee = (contractor: OrgContractorEntry) => {
+    const exists = bookAttendees.find(a => a.orgContractorId === contractor.id);
+    if (exists) {
+      setBookAttendees(prev => prev.filter(a => a.orgContractorId !== contractor.id));
+    } else {
+      setBookAttendees(prev => [...prev, {
+        orgContractorId: contractor.id,
+        attendeeType: "contractor",
+        contractorName: contractor.name,
+        contractorEmail: contractor.email ?? undefined,
+        contractorTrade: contractor.trade ?? undefined,
+      }]);
+    }
+  };
+
+  const toggleStaffAttendee = (staff: StaffEntry) => {
+    const exists = bookAttendees.find(a => a.internalStaffId === staff.id);
+    if (exists) {
+      setBookAttendees(prev => prev.filter(a => a.internalStaffId !== staff.id));
+    } else {
+      setBookAttendees(prev => [...prev, {
+        internalStaffId: staff.id,
+        attendeeType: "staff",
+        contractorName: staff.name,
+        contractorEmail: staff.email ?? undefined,
+        contractorTrade: staff.role || undefined,
+      }]);
+    }
+  };
+
+  const handleBook = async () => {
+    if (!bookDate.trim()) { setBookError("Please select a date."); return; }
+    setBookError(""); setBooking(true);
+    try {
+      const created = await apiFetch(`/api/projects/${projectId}/inductions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: bookTitle.trim() || "Site Induction",
+          scheduledDate: bookDate,
+          scheduledTime: bookTime || null,
+          location: bookLocation || null,
+          conductedByName: bookConductorName || null,
+          attendees: bookAttendees,
+        }),
+      });
+      setInductions(prev => [created, ...prev]);
+      setBookOpen(false);
+      setBookTitle("Site Induction"); setBookDate(""); setBookTime(""); setBookLocation(""); setBookConductorName(""); setBookAttendees([]); setAttendeeTab("contractors");
+    } catch {
+      setBookError("Failed to book induction. Please try again.");
+    } finally {
+      setBooking(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    setDeleting(id);
+    try {
+      await apiFetch(`/api/inductions/${id}`, { method: "DELETE" });
+      setInductions(prev => prev.filter(i => i.id !== id));
+    } catch {} finally {
+      setDeleting(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading inductions…
+      </div>
+    );
+  }
+
+  const upcoming = inductions.filter(i => i.status === "scheduled" || i.status === "in_progress");
+  const completed = inductions.filter(i => i.status === "completed");
+  const cancelled = inductions.filter(i => i.status === "cancelled");
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold text-sidebar">Site Inductions</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {inductions.length} induction{inductions.length !== 1 ? "s" : ""} recorded
+            {completed.length > 0 && ` · ${completed.length} completed`}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={load}>Refresh</Button>
+          <Button size="sm" className="bg-secondary hover:bg-secondary/90 text-secondary-foreground" onClick={() => setBookOpen(true)}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Book Induction
+          </Button>
+        </div>
+      </div>
+
+      {inductions.length === 0 && (
+        <div className="text-center py-16 border border-dashed rounded-xl text-muted-foreground">
+          <ShieldCheck className="h-12 w-12 mx-auto mb-4 opacity-30" />
+          <p className="font-semibold text-sidebar">No inductions yet</p>
+          <p className="text-sm mt-1">Book a site induction session to get started.</p>
+        </div>
+      )}
+
+      {upcoming.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-sidebar border-b pb-2">Upcoming & Active</h3>
+          {upcoming.map(ind => (
+            <InductionCard key={ind.id} induction={ind} onView={setViewInduction} onDelete={handleDelete} deleting={deleting} />
+          ))}
+        </div>
+      )}
+
+      {completed.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-sidebar border-b pb-2">Completed</h3>
+          {completed.map(ind => (
+            <InductionCard key={ind.id} induction={ind} onView={setViewInduction} onDelete={handleDelete} deleting={deleting} />
+          ))}
+        </div>
+      )}
+
+      {cancelled.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground border-b pb-2">Cancelled</h3>
+          {cancelled.map(ind => (
+            <InductionCard key={ind.id} induction={ind} onView={setViewInduction} onDelete={handleDelete} deleting={deleting} />
+          ))}
+        </div>
+      )}
+
+      {/* Book Induction Dialog */}
+      <Dialog open={bookOpen} onOpenChange={open => { if (!booking) setBookOpen(open); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-secondary" />
+              Book Site Induction
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Title</label>
+              <Input value={bookTitle} onChange={e => setBookTitle(e.target.value)} placeholder="Site Induction" className="mt-1" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Date *</label>
+                <Input type="date" value={bookDate} onChange={e => setBookDate(e.target.value)} className="mt-1" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Time</label>
+                <Input type="time" value={bookTime} onChange={e => setBookTime(e.target.value)} className="mt-1" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Location</label>
+              <Input value={bookLocation} onChange={e => setBookLocation(e.target.value)} placeholder="e.g. Site office, main entrance" className="mt-1" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Conductor Name</label>
+              <Input value={bookConductorName} onChange={e => setBookConductorName(e.target.value)} placeholder="Name of person conducting the induction" className="mt-1" />
+            </div>
+
+            {(assignedContractors.length > 0 || staffList.length > 0) && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-2 block">Attendees</label>
+                <div className="flex gap-1 mb-2">
+                  <button type="button" onClick={() => setAttendeeTab("contractors")}
+                    className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${attendeeTab === "contractors" ? "bg-secondary text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                    Contractors
+                  </button>
+                  <button type="button" onClick={() => setAttendeeTab("staff")}
+                    className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${attendeeTab === "staff" ? "bg-secondary text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                    Internal Staff
+                  </button>
+                </div>
+                {attendeeTab === "contractors" && (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {assignedContractors.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic py-2">No contractors assigned to this project.</p>
+                    ) : (
+                      assignedContractors.map(c => {
+                        const selected = bookAttendees.some(a => a.orgContractorId === c.id);
+                        return (
+                          <button key={c.id} type="button" onClick={() => toggleContractorAttendee(c)}
+                            className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg border text-left transition-colors ${selected ? "bg-secondary/10 border-secondary/40" : "border-border hover:bg-muted/40"}`}>
+                            <span className={`h-4 w-4 shrink-0 rounded border flex items-center justify-center ${selected ? "bg-secondary border-secondary" : "border-muted-foreground/40"}`}>
+                              {selected && <CheckCircle2 className="h-3 w-3 text-white" />}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-sidebar">{c.name}</p>
+                              {c.trade && <p className="text-xs text-muted-foreground">{c.trade}</p>}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+                {attendeeTab === "staff" && (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {staffList.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic py-2">No internal staff found. Add staff members first.</p>
+                    ) : (
+                      staffList.map(s => {
+                        const selected = bookAttendees.some(a => a.internalStaffId === s.id);
+                        return (
+                          <button key={s.id} type="button" onClick={() => toggleStaffAttendee(s)}
+                            className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg border text-left transition-colors ${selected ? "bg-secondary/10 border-secondary/40" : "border-border hover:bg-muted/40"}`}>
+                            <span className={`h-4 w-4 shrink-0 rounded border flex items-center justify-center ${selected ? "bg-secondary border-secondary" : "border-muted-foreground/40"}`}>
+                              {selected && <CheckCircle2 className="h-3 w-3 text-white" />}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-sidebar">{s.name}</p>
+                              {s.role && <p className="text-xs text-muted-foreground">{s.role}</p>}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+                {bookAttendees.length > 0 && (
+                  <p className="text-xs text-secondary mt-1">{bookAttendees.length} attendee{bookAttendees.length !== 1 ? "s" : ""} selected</p>
+                )}
+              </div>
+            )}
+
+            {bookError && <p className="text-xs text-red-500">{bookError}</p>}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setBookOpen(false)} disabled={booking}>Cancel</Button>
+            <Button size="sm" onClick={handleBook} disabled={booking}>
+              {booking ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <ShieldCheck className="h-4 w-4 mr-1.5" />}
+              {booking ? "Booking…" : "Book Induction"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Induction Dialog */}
+      {viewInduction && (
+        <InductionDetailDialog
+          induction={viewInduction}
+          onClose={() => setViewInduction(null)}
+          onRefresh={async () => {
+            await load();
+            const updated = await apiFetch(`/api/inductions/${viewInduction.id}`).catch(() => null);
+            if (updated) setViewInduction(updated);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function InductionCard({ induction, onView, onDelete, deleting }: {
+  induction: Induction;
+  onView: (ind: Induction) => void;
+  onDelete: (id: number) => void;
+  deleting: number | null;
+}) {
+  const overdue = isOverdue(induction);
+  const signedCount = induction.attendees.filter(a => a.signedOff).length;
+
+  return (
+    <div className={`rounded-xl border bg-white p-4 transition-colors ${overdue ? "border-red-300 bg-red-50/30" : "border-border"}`}>
+      <div className="flex items-start gap-4">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+          induction.status === "completed" ? "bg-green-100" :
+          overdue ? "bg-red-100" :
+          induction.status === "in_progress" ? "bg-amber-100" :
+          "bg-blue-50"
+        }`}>
+          <ShieldCheck className={`h-5 w-5 ${
+            induction.status === "completed" ? "text-green-700" :
+            overdue ? "text-red-600" :
+            induction.status === "in_progress" ? "text-amber-700" :
+            "text-blue-700"
+          }`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <p className="font-semibold text-sidebar text-sm">{induction.title}</p>
+            {inductionStatusBadge(induction.status)}
+            {overdue && (
+              <span className="text-xs font-medium px-2 py-0.5 rounded border bg-red-50 text-red-700 border-red-200">
+                Overdue
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {formatDate(induction.scheduledDate)}
+              {induction.scheduledTime && ` at ${induction.scheduledTime}`}
+            </span>
+            {induction.location && (
+              <span className="flex items-center gap-1">
+                <Building className="h-3 w-3" />
+                {induction.location}
+              </span>
+            )}
+            {induction.conductedByName && (
+              <span className="flex items-center gap-1">
+                <User className="h-3 w-3" />
+                {induction.conductedByName}
+              </span>
+            )}
+            <span className="flex items-center gap-1">
+              <UserCheck className="h-3 w-3" />
+              {induction.attendeeCount} attendee{induction.attendeeCount !== 1 ? "s" : ""}
+              {induction.attendeeCount > 0 && ` · ${signedCount} signed off`}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={() => onView(induction)} className="text-xs">
+            <Eye className="h-3.5 w-3.5 mr-1.5" /> View
+          </Button>
+          <button
+            onClick={() => onDelete(induction.id)}
+            disabled={deleting === induction.id}
+            className="p-1.5 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+            title="Delete induction"
+          >
+            {deleting === induction.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface InductionAttachment {
+  id: number;
+  name: string;
+  fileName: string;
+  fileUrl: string | null;
+  fileSize: number | null;
+  mimeType: string | null;
+  createdAt: string;
+}
+
+function InductionDetailDialog({ induction, onClose, onRefresh }: {
+  induction: Induction;
+  onClose: () => void;
+  onRefresh: () => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [notes, setNotes] = useState(induction.notes || "");
+  const [completing, setCompleting] = useState(false);
+  const [attachments, setAttachments] = useState<InductionAttachment[]>([]);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
+  const [addingFile, setAddingFile] = useState(false);
+  const [newFileName, setNewFileName] = useState("");
+  const [newFileUrl, setNewFileUrl] = useState("");
+
+  useEffect(() => {
+    setLoadingAttachments(true);
+    apiFetch(`/api/inductions/${induction.id}/attachments`)
+      .then(data => setAttachments(data))
+      .catch(() => {})
+      .finally(() => setLoadingAttachments(false));
+  }, [induction.id]);
+
+  const handleAddAttachment = async () => {
+    if (!newFileName.trim()) return;
+    setAddingFile(true);
+    try {
+      const doc = await apiFetch(`/api/inductions/${induction.id}/attachments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newFileName.trim(),
+          fileName: newFileName.trim(),
+          fileUrl: newFileUrl.trim() || null,
+        }),
+      });
+      setAttachments(prev => [doc, ...prev]);
+      setNewFileName(""); setNewFileUrl(""); setAddingFile(false);
+    } catch {
+      setAddingFile(false);
+    }
+  };
+
+  const handleDeleteAttachment = async (docId: number) => {
+    try {
+      await apiFetch(`/api/inductions/${induction.id}/attachments/${docId}`, { method: "DELETE" });
+      setAttachments(prev => prev.filter(d => d.id !== docId));
+    } catch {}
+  };
+
+  const handleSaveNotes = async () => {
+    setSaving(true);
+    try {
+      await apiFetch(`/api/inductions/${induction.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes }),
+      });
+      await onRefresh();
+    } finally { setSaving(false); }
+  };
+
+  const handleComplete = async () => {
+    if (!confirm("Mark this induction as Completed?")) return;
+    setCompleting(true);
+    try {
+      await apiFetch(`/api/inductions/${induction.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "completed" }),
+      });
+      await onRefresh();
+    } finally { setCompleting(false); }
+  };
+
+  const toggleAttendeeSignOff = async (att: InductionAttendee) => {
+    try {
+      await apiFetch(`/api/inductions/${induction.id}/attendees/${att.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attended: true, signedOff: !att.signedOff }),
+      });
+      await onRefresh();
+    } catch {}
+  };
+
+  const allSignedOff = induction.attendees.length > 0 && induction.attendees.every(a => a.signedOff);
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-secondary" />
+            {induction.title}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Meta */}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <span className="text-xs text-muted-foreground">Date</span>
+              <p className="font-medium text-sidebar">{formatDate(induction.scheduledDate)}{induction.scheduledTime && ` at ${induction.scheduledTime}`}</p>
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground">Status</span>
+              <div className="mt-0.5">{inductionStatusBadge(induction.status)}</div>
+            </div>
+            {induction.location && (
+              <div>
+                <span className="text-xs text-muted-foreground">Location</span>
+                <p className="font-medium text-sidebar">{induction.location}</p>
+              </div>
+            )}
+            {induction.conductedByName && (
+              <div>
+                <span className="text-xs text-muted-foreground">Conductor</span>
+                <p className="font-medium text-sidebar">{induction.conductedByName}</p>
+              </div>
+            )}
+            {induction.completedAt && (
+              <div>
+                <span className="text-xs text-muted-foreground">Completed</span>
+                <p className="font-medium text-sidebar">{formatDate(induction.completedAt)}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Attendees */}
+          <div>
+            <h4 className="text-sm font-semibold text-sidebar mb-2">
+              Attendees ({induction.attendees.length})
+            </h4>
+            {induction.attendees.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No attendees recorded.</p>
+            ) : (
+              <div className="space-y-2">
+                {induction.attendees.map(att => (
+                  <div key={att.id} className={`flex items-center gap-3 p-2.5 rounded-lg border ${att.signedOff ? "bg-green-50 border-green-200" : "border-border bg-white"}`}>
+                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+                      <User className="h-3.5 w-3.5 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-sidebar">{att.contractorName}</p>
+                      {att.contractorTrade && <p className="text-xs text-muted-foreground">{att.contractorTrade}</p>}
+                    </div>
+                    {att.signedOff ? (
+                      <div className="flex items-center gap-1.5 text-green-600 text-xs font-medium shrink-0">
+                        <CheckCircle className="h-4 w-4" />
+                        Signed off
+                      </div>
+                    ) : (
+                      induction.status !== "completed" && (
+                        <button
+                          onClick={() => toggleAttendeeSignOff(att)}
+                          className="text-xs border border-secondary/40 text-secondary hover:bg-secondary/10 px-2 py-1 rounded transition-colors shrink-0"
+                        >
+                          Sign off
+                        </button>
+                      )
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Session Notes</label>
+            <textarea
+              className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              rows={3}
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Add notes about this induction session…"
+              disabled={induction.status === "completed"}
+            />
+            {induction.status !== "completed" && (
+              <Button size="sm" variant="outline" onClick={handleSaveNotes} disabled={saving} className="mt-1.5">
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                Save Notes
+              </Button>
+            )}
+          </div>
+
+          {/* Attachments */}
+          <div>
+            <h4 className="text-sm font-semibold text-sidebar mb-2 flex items-center gap-1.5">
+              <Paperclip className="h-3.5 w-3.5" />
+              Attachments
+            </h4>
+            {loadingAttachments ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading…</div>
+            ) : attachments.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No attachments yet.</p>
+            ) : (
+              <div className="space-y-2 mb-2">
+                {attachments.map(doc => (
+                  <div key={doc.id} className="flex items-center gap-2 p-2 rounded border border-border bg-muted/30">
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      {doc.fileUrl ? (
+                        <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer"
+                          className="text-xs font-medium text-secondary hover:underline truncate block">{doc.name}</a>
+                      ) : (
+                        <span className="text-xs font-medium text-sidebar truncate block">{doc.name}</span>
+                      )}
+                    </div>
+                    {induction.status !== "completed" && (
+                      <button
+                        onClick={() => handleDeleteAttachment(doc.id)}
+                        className="text-muted-foreground hover:text-red-500 transition-colors shrink-0"
+                        title="Remove attachment"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {induction.status !== "completed" && (
+              <div className="space-y-1.5 border border-dashed rounded-lg p-3">
+                <p className="text-xs font-medium text-muted-foreground">Add attachment</p>
+                <Input
+                  placeholder="File name or description"
+                  value={newFileName}
+                  onChange={e => setNewFileName(e.target.value)}
+                  className="text-xs h-7"
+                />
+                <Input
+                  placeholder="File URL (optional)"
+                  value={newFileUrl}
+                  onChange={e => setNewFileUrl(e.target.value)}
+                  className="text-xs h-7"
+                />
+                <Button size="sm" variant="outline" onClick={handleAddAttachment} disabled={addingFile || !newFileName.trim()} className="h-7 text-xs">
+                  {addingFile ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
+                  Add
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-between gap-2 pt-2 border-t">
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          {induction.status !== "completed" && induction.status !== "cancelled" && (
+            <Button
+              onClick={handleComplete}
+              disabled={completing}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {completing ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle className="h-4 w-4 mr-1.5" />}
+              Mark as Completed
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

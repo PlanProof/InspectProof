@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
-import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable, internalStaffTable, orgContractorsTable, orgContractorProjectAssignmentsTable } from "@workspace/db";
+import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable, internalStaffTable, orgContractorsTable, orgContractorProjectAssignmentsTable, inductionsTable, inductionAttendeesTable } from "@workspace/db";
 import { sendContractorDefectReportEmail } from "../lib/email";
 import { checkProjectQuota, getOrgMemberIds } from "../lib/quota";
 import { optionalAuth, requireAuth, type AuthUser } from "../middleware/auth";
@@ -1148,7 +1148,41 @@ router.get("/:id/org-contractor-assignments", requireAuth, async (req, res) => {
       .select({ orgContractorId: orgContractorProjectAssignmentsTable.orgContractorId })
       .from(orgContractorProjectAssignmentsTable)
       .where(eq(orgContractorProjectAssignmentsTable.projectId, projectId));
-    res.json(rows.map(r => r.orgContractorId));
+
+    const orgContractorIds = rows.map(r => r.orgContractorId);
+
+    // Compute is_inducted for each contractor: signed off on a completed induction
+    const inductedSet = new Set<number>();
+    if (orgContractorIds.length > 0) {
+      const completedInductions = await db
+        .select({ id: inductionsTable.id })
+        .from(inductionsTable)
+        .where(and(eq(inductionsTable.projectId, projectId), eq(inductionsTable.status, "completed")));
+      if (completedInductions.length > 0) {
+        const completedIds = completedInductions.map(i => i.id);
+        const signedRows = await db
+          .select({ orgContractorId: inductionAttendeesTable.orgContractorId })
+          .from(inductionAttendeesTable)
+          .where(
+            and(
+              inArray(inductionAttendeesTable.inductionId, completedIds),
+              eq(inductionAttendeesTable.signedOff, true),
+              sql`${inductionAttendeesTable.orgContractorId} IS NOT NULL`
+            )
+          );
+        for (const r of signedRows) {
+          if (r.orgContractorId !== null) inductedSet.add(r.orgContractorId);
+        }
+      }
+    }
+
+    // Return both plain array (backward compat) and enriched format based on Accept header
+    const enriched = req.query.format === "enriched";
+    if (enriched) {
+      res.json(orgContractorIds.map(id => ({ id, isInducted: inductedSet.has(id) })));
+    } else {
+      res.json(orgContractorIds);
+    }
   } catch (err) {
     req.log.error({ err }, "List org contractor assignments error");
     res.status(500).json({ error: "internal_error" });
