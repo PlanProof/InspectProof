@@ -3,16 +3,9 @@ import { db, usersTable, projectsTable, inspectionsTable, planConfigsTable } fro
 import { eq, count, and, gte, sql, inArray } from 'drizzle-orm';
 import { getUncachableStripeClient, getStripePublishableKey } from '../stripeClient';
 import { getLimits, PLAN_LIMITS } from '../lib/planLimits';
-import { decodeSessionToken } from '../lib/session-token';
+import { requireAuth } from '../middleware/auth';
 
 const router: IRouter = Router();
-
-function getUserId(req: any): number | null {
-  const auth = req.headers.authorization;
-  if (!auth?.startsWith('Bearer ')) return null;
-  const { userId, valid } = decodeSessionToken(auth.slice(7));
-  return valid ? userId : null;
-}
 
 router.get('/billing/plan-configs', async (_req, res) => {
   try {
@@ -57,11 +50,10 @@ router.get('/billing/plans', async (_req, res) => {
   }
 });
 
-router.get('/billing/subscription', async (req: any, res) => {
-  const userId = getUserId(req);
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+router.get('/billing/subscription', requireAuth, async (req: any, res) => {
+  const caller = req.authUser!;
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, caller.id));
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   // Resolve billing owner: team members share their org admin's plan and quota pool.
@@ -144,14 +136,16 @@ router.get('/billing/subscription', async (req: any, res) => {
   });
 });
 
-router.post('/billing/checkout', async (req: any, res) => {
-  const userId = getUserId(req);
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+router.post('/billing/checkout', requireAuth, async (req: any, res) => {
+  const caller = req.authUser!;
+  if (!caller.isCompanyAdmin && !caller.isAdmin) {
+    return res.status(403).json({ error: 'forbidden', message: 'Only company admins can manage billing.' });
+  }
 
   const { priceId } = req.body;
   if (!priceId) return res.status(400).json({ error: 'priceId required' });
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, caller.id));
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const stripe = await getUncachableStripeClient();
@@ -164,7 +158,7 @@ router.post('/billing/checkout', async (req: any, res) => {
       metadata: { userId: String(user.id) },
     });
     customerId = customer.id;
-    await db.update(usersTable).set({ stripeCustomerId: customerId }).where(eq(usersTable.id, userId));
+    await db.update(usersTable).set({ stripeCustomerId: customerId }).where(eq(usersTable.id, caller.id));
   }
 
   const domain = process.env.REPLIT_DOMAINS?.split(',')[0] ?? req.get('host');
@@ -175,17 +169,19 @@ router.post('/billing/checkout', async (req: any, res) => {
     mode: 'subscription',
     success_url: `https://${domain}/billing?success=1`,
     cancel_url: `https://${domain}/billing?cancelled=1`,
-    metadata: { userId: String(userId) },
+    metadata: { userId: String(caller.id) },
   });
 
   return res.json({ url: session.url });
 });
 
-router.post('/billing/portal', async (req: any, res) => {
-  const userId = getUserId(req);
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+router.post('/billing/portal', requireAuth, async (req: any, res) => {
+  const caller = req.authUser!;
+  if (!caller.isCompanyAdmin && !caller.isAdmin) {
+    return res.status(403).json({ error: 'forbidden', message: 'Only company admins can manage billing.' });
+  }
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, caller.id));
   if (!user?.stripeCustomerId) return res.status(400).json({ error: 'No billing account found' });
 
   const stripe = await getUncachableStripeClient();
@@ -198,9 +194,7 @@ router.post('/billing/portal', async (req: any, res) => {
   return res.json({ url: session.url });
 });
 
-router.get('/billing/enterprise-enquiry', async (req: any, res) => {
-  const userId = getUserId(req);
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+router.get('/billing/enterprise-enquiry', requireAuth, async (_req: any, res) => {
   return res.json({
     message: 'Enterprise enquiry received.',
     email: 'enterprise@inspectproof.com.au',
@@ -274,12 +268,15 @@ export async function syncTeamMembersMobileOnly(adminUserId: number): Promise<vo
     .where(eq(usersTable.adminUserId, String(adminUserId)));
 }
 
-router.post('/billing/sync-plan', async (req: any, res) => {
-  const userId = getUserId(req);
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+router.post('/billing/sync-plan', requireAuth, async (req: any, res) => {
+  const caller = req.authUser!;
+  if (!caller.isCompanyAdmin && !caller.isAdmin) {
+    return res.status(403).json({ error: 'forbidden', message: 'Only company admins can manage billing.' });
+  }
+
   try {
-    const result = await syncPlanFromStripe(userId);
-    await syncTeamMembersMobileOnly(userId);
+    const result = await syncPlanFromStripe(caller.id);
+    await syncTeamMembersMobileOnly(caller.id);
     return res.json(result);
   } catch (err: any) {
     console.error('sync-plan error:', err.message);

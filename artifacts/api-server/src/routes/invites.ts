@@ -5,6 +5,7 @@ import { db, usersTable, invitationsTable } from "@workspace/db";
 import { sendTokenInviteEmail } from "../lib/email";
 import { requireAuth } from "../middleware/auth";
 import { getLimits } from "../lib/planLimits";
+import { validatePermissions, parsePermissions, DEFAULT_PERMISSIONS } from "../lib/permissions";
 import bcrypt from "bcryptjs";
 import { createSessionToken } from "../lib/session-token";
 
@@ -34,26 +35,41 @@ router.post("/app-invite", requireAuth, async (req, res) => {
       return;
     }
 
-    if (!inviter.isCompanyAdmin) {
-      res.status(403).json({ error: "forbidden", message: "Only organisation admins can send invitations." });
+    const inviterPerms = parsePermissions(inviter.permissions);
+
+    if (!inviter.isCompanyAdmin && !inviterPerms.addInspectors) {
+      res.status(403).json({ error: "forbidden", message: "You do not have permission to send invitations." });
       return;
     }
 
-    const companyName = inviter.companyName ?? null;
+    // ── Resolve org owner ─────────────────────────────────────────────────────
+    // For delegated users (non-admin with addInspectors), the canonical org owner is
+    // their adminUserId. All quota and linkage must be scoped to the org owner, not
+    // the delegated inviter, to ensure correct seat limits and account association.
+    let orgOwner = inviter;
+    if (!inviter.isCompanyAdmin && inviter.adminUserId) {
+      const adminId = parseInt(inviter.adminUserId);
+      if (!isNaN(adminId)) {
+        const [ownerRow] = await db.select().from(usersTable).where(eq(usersTable.id, adminId));
+        if (ownerRow) orgOwner = ownerRow;
+      }
+    }
+
+    const companyName = orgOwner.companyName ?? inviter.companyName ?? null;
 
     // ── Seat limit check ──────────────────────────────────────────────────────
-    // Count only team members (users with adminUserId = inviter.id), not the admin themselves.
-    const limits = getLimits(inviter.plan ?? "free_trial");
+    // Count all team members linked to the org owner (adminUserId = orgOwner.id).
+    const limits = getLimits(orgOwner.plan ?? "free_trial");
     if (limits.maxTeamMembers !== null) {
       const [{ value: currentMemberCount }] = await db
         .select({ value: count() })
         .from(usersTable)
-        .where(eq(usersTable.adminUserId, String(inviter.id)));
+        .where(eq(usersTable.adminUserId, String(orgOwner.id)));
       if (currentMemberCount >= limits.maxTeamMembers) {
         res.status(402).json({
           error: "team_limit_reached",
-          message: `Your ${limits.label} plan allows up to ${limits.maxTeamMembers} team member${limits.maxTeamMembers === 1 ? "" : "s"}. Upgrade your plan to invite more.`,
-          plan: inviter.plan,
+          message: `Your organisation's ${limits.label} plan allows up to ${limits.maxTeamMembers} team member${limits.maxTeamMembers === 1 ? "" : "s"}. Upgrade your plan to invite more.`,
+          plan: orgOwner.plan,
           limit: limits.maxTeamMembers,
           current: currentMemberCount,
         });
@@ -84,7 +100,7 @@ router.post("/app-invite", requireAuth, async (req, res) => {
       token,
       email: normalizedEmail,
       companyName,
-      invitedById: String(inviter.id),
+      invitedById: String(orgOwner.id),
       role: role ?? "inspector",
       userType: inviteUserType,
       permissions: JSON.stringify({ editTemplates: false, addInspectors: false, createProjects: false }),
@@ -349,7 +365,21 @@ router.post("/accept", async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const permissions = invite.permissions ?? JSON.stringify({ editTemplates: false, addInspectors: false, createProjects: false });
+
+    // Validate and reject corrupted/tampered permissions before creating the user.
+    let permissions: string;
+    try {
+      const rawPerms = JSON.parse(invite.permissions ?? "{}");
+      const validated = validatePermissions(rawPerms);
+      if (!validated.ok) {
+        res.status(400).json({ error: "bad_request", message: "Invite contains invalid permission data. Please contact your administrator." });
+        return;
+      }
+      permissions = JSON.stringify(validated.data);
+    } catch {
+      res.status(400).json({ error: "bad_request", message: "Invite contains malformed permission data. Please contact your administrator." });
+      return;
+    }
 
     const [newUser] = await db.insert(usersTable).values({
       email: invite.email,

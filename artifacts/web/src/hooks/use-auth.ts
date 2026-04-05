@@ -9,13 +9,18 @@ interface CurrentUser {
   role: string;
   plan: string;
   isAdmin: boolean;
-  isCompanyAdmin?: boolean;
+  isCompanyAdmin: boolean;
   isActive: boolean;
   profession: string | null;
   licenceNumber: string | null;
   companyName: string | null;
   mobileOnly?: boolean;
   requiresPasswordChange?: boolean;
+  permissions?: {
+    editTemplates: boolean;
+    addInspectors: boolean;
+    createProjects: boolean;
+  };
 }
 
 let cachedUser: CurrentUser | null = null;

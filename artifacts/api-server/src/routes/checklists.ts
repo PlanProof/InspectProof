@@ -1,8 +1,26 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, and } from "drizzle-orm";
-import { db, checklistTemplatesTable, checklistItemsTable } from "@workspace/db";
+import { db, checklistTemplatesTable, checklistItemsTable, usersTable } from "@workspace/db";
+import { requireAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
+
+async function requireTemplateEdit(req: any, res: any): Promise<boolean> {
+  const caller = req.authUser;
+  if (!caller) {
+    res.status(401).json({ error: "unauthorized", message: "Authentication required." });
+    return false;
+  }
+  if (caller.isAdmin || caller.isCompanyAdmin) return true;
+
+  const [user] = await db.select({ permissions: usersTable.permissions }).from(usersTable).where(eq(usersTable.id, caller.id));
+  let perms: any = {};
+  try { perms = JSON.parse(user?.permissions ?? "{}"); } catch {}
+  if (perms.editTemplates === true) return true;
+
+  res.status(403).json({ error: "forbidden", message: "You do not have permission to modify inspection templates." });
+  return false;
+}
 
 function formatTemplate(t: any, itemCount = 0) {
   return {
@@ -40,7 +58,7 @@ function formatItem(i: any) {
 
 // ── Templates list & create ──────────────────────────────────────────────────
 
-router.get("/", async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
   try {
     const { discipline } = req.query;
     const templates = discipline
@@ -63,7 +81,9 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", requireAuth, async (req: any, res) => {
+  const allowed = await requireTemplateEdit(req, res);
+  if (!allowed) return;
   try {
     const { name, inspectionType, description, folder, discipline, sortOrder, items } = req.body;
     const [template] = await db.insert(checklistTemplatesTable).values({
@@ -97,7 +117,9 @@ router.post("/", async (req, res) => {
 
 // ── Item-level routes (before /:id to avoid routing conflicts) ───────────────
 
-router.post("/items/reorder", async (req, res) => {
+router.post("/items/reorder", requireAuth, async (req: any, res) => {
+  const allowed = await requireTemplateEdit(req, res);
+  if (!allowed) return;
   try {
     const { items } = req.body as { items: { id: number; orderIndex: number }[] };
     await Promise.all(items.map(({ id, orderIndex }) =>
@@ -112,7 +134,9 @@ router.post("/items/reorder", async (req, res) => {
   }
 });
 
-router.patch("/items/:itemId", async (req, res) => {
+router.patch("/items/:itemId", requireAuth, async (req: any, res) => {
+  const allowed = await requireTemplateEdit(req, res);
+  if (!allowed) return;
   try {
     const itemId = parseInt(req.params.itemId);
     const { description, reason, codeReference, riskLevel, isRequired, category, orderIndex } = req.body;
@@ -138,7 +162,9 @@ router.patch("/items/:itemId", async (req, res) => {
   }
 });
 
-router.delete("/items/:itemId", async (req, res) => {
+router.delete("/items/:itemId", requireAuth, async (req: any, res) => {
+  const allowed = await requireTemplateEdit(req, res);
+  if (!allowed) return;
   try {
     const itemId = parseInt(req.params.itemId);
     await db.delete(checklistItemsTable).where(eq(checklistItemsTable.id, itemId));
@@ -151,7 +177,7 @@ router.delete("/items/:itemId", async (req, res) => {
 
 // ── Template by ID ────────────────────────────────────────────────────────────
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const templates = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, id));
@@ -172,7 +198,9 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", requireAuth, async (req: any, res) => {
+  const allowed = await requireTemplateEdit(req, res);
+  if (!allowed) return;
   try {
     const id = parseInt(req.params.id);
     const { name, sortOrder, folder, discipline, description, inspectionType, recurrenceType, recurrenceInterval } = req.body;
@@ -200,7 +228,9 @@ router.patch("/:id", async (req, res) => {
 });
 
 // Add item to template
-router.post("/:id/items", async (req, res) => {
+router.post("/:id/items", requireAuth, async (req: any, res) => {
+  const allowed = await requireTemplateEdit(req, res);
+  if (!allowed) return;
   try {
     const templateId = parseInt(req.params.id);
     const { description, reason, codeReference, riskLevel, isRequired, category } = req.body;
@@ -228,7 +258,9 @@ router.post("/:id/items", async (req, res) => {
 });
 
 // Copy template with all items
-router.post("/:id/copy", async (req, res) => {
+router.post("/:id/copy", requireAuth, async (req: any, res) => {
+  const allowed = await requireTemplateEdit(req, res);
+  if (!allowed) return;
   try {
     const id = parseInt(req.params.id);
     const templates = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, id));
@@ -271,7 +303,9 @@ router.post("/:id/copy", async (req, res) => {
 });
 
 // Reorder templates within folder
-router.post("/reorder", async (req, res) => {
+router.post("/reorder", requireAuth, async (req: any, res) => {
+  const allowed = await requireTemplateEdit(req, res);
+  if (!allowed) return;
   try {
     const { items } = req.body as { items: { id: number; sortOrder: number }[] };
     await Promise.all(items.map(({ id, sortOrder }) =>
@@ -287,7 +321,9 @@ router.post("/reorder", async (req, res) => {
 });
 
 // Reorder folders — assigns sortOrders in 1000-item buckets per folder
-router.post("/folder-reorder", async (req, res) => {
+router.post("/folder-reorder", requireAuth, async (req: any, res) => {
+  const allowed = await requireTemplateEdit(req, res);
+  if (!allowed) return;
   try {
     const { discipline, folders } = req.body as { discipline: string; folders: string[] };
     if (!discipline || !Array.isArray(folders)) {
@@ -324,7 +360,9 @@ router.post("/folder-reorder", async (req, res) => {
 });
 
 // Delete all templates (and their items) in a folder
-router.delete("/folder", async (req, res) => {
+router.delete("/folder", requireAuth, async (req: any, res) => {
+  const allowed = await requireTemplateEdit(req, res);
+  if (!allowed) return;
   try {
     const { discipline, folder } = req.query as { discipline: string; folder: string };
     if (!discipline || !folder) {
@@ -355,7 +393,9 @@ router.delete("/folder", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireAuth, async (req: any, res) => {
+  const allowed = await requireTemplateEdit(req, res);
+  if (!allowed) return;
   try {
     const id = parseInt(req.params.id);
     await db.delete(checklistItemsTable).where(eq(checklistItemsTable.templateId, id));

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { useAuth } from "@/hooks/use-auth";
 
 const API = (path: string) => `/api${path}`;
 
@@ -63,12 +64,14 @@ export default function Billing() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const { user: authUser } = useAuth();
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
   const syncedRef = useRef(false);
 
+  const canManageBilling = authUser?.isCompanyAdmin || authUser?.isAdmin;
   const params = new URLSearchParams(window.location.search);
   const success = params.get("success") === "1";
   const cancelled = params.get("cancelled") === "1";
@@ -247,6 +250,19 @@ export default function Billing() {
   };
 
   const allPlans = [freePlan, ...stripePlans, enterprisePlan];
+
+  if (authUser && !canManageBilling) {
+    return (
+      <AppLayout>
+        <div className="flex flex-col items-center justify-center min-h-[40vh] text-center gap-4">
+          <Shield className="h-12 w-12 text-muted-foreground/40" />
+          <h2 className="text-xl font-semibold text-sidebar">Access Restricted</h2>
+          <p className="text-muted-foreground max-w-sm">Billing is managed by your organisation owner. Contact your admin to upgrade the plan.</p>
+          <Button variant="outline" onClick={() => setLocation("/dashboard")}>Back to Dashboard</Button>
+        </div>
+      </AppLayout>
+    );
+  }
 
   function getPrice(plan: typeof freePlan & Partial<Plan>) {
     if (!("prices" in plan) || !plan.prices?.length) return null;

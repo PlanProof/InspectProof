@@ -101,7 +101,7 @@ export function Sidebar() {
             </div>
           </div>
         )}
-        {user && user.plan === "free_trial" && (
+        {user && (user.isCompanyAdmin || user.isAdmin) && user.plan === "free_trial" && (
           <Link
             href="/billing"
             className={cn(

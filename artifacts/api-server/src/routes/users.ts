@@ -5,13 +5,9 @@ import { db, usersTable } from "@workspace/db";
 import { sendWelcomeWithCredentialsEmail } from "../lib/email";
 import { requireAuth } from "../middleware/auth";
 import { getLimits } from "../lib/planLimits";
+import { validatePermissions, parsePermissions } from "../lib/permissions";
 
 const router: IRouter = Router();
-
-function parsePermissions(raw: string | null | undefined) {
-  if (!raw) return { editTemplates: false, addInspectors: false, createProjects: false };
-  try { return JSON.parse(raw); } catch { return { editTemplates: false, addInspectors: false, createProjects: false }; }
-}
 
 function formatUser(u: any) {
   return {
@@ -115,9 +111,17 @@ router.post("/", requireAuth, async (req, res) => {
 
     const userType: string = data.userType ?? "inspector";
     const defaultPerms = { editTemplates: false, addInspectors: false, createProjects: false };
-    const permissions = data.permissions
-      ? JSON.stringify({ ...defaultPerms, ...data.permissions })
-      : JSON.stringify(defaultPerms);
+    let permissions: string;
+    if (data.permissions) {
+      const validated = validatePermissions({ ...defaultPerms, ...data.permissions });
+      if (!validated.ok) {
+        res.status(400).json({ error: "bad_request", message: "Invalid permissions format. Allowed keys: editTemplates, addInspectors, createProjects (all boolean)." });
+        return;
+      }
+      permissions = JSON.stringify(validated.data);
+    } else {
+      permissions = JSON.stringify(defaultPerms);
+    }
 
     // "inspector" userType = mobile app only → restrict from web portal
     const mobileOnly = userType === "inspector";
@@ -337,30 +341,74 @@ router.patch("/:id", requireAuth, async (req, res) => {
     const { phone, firstName, lastName, role, signatureUrl, profession, licenceNumber,
             companyName, isActive, userType, permissions } = req.body;
 
+    const isAdminOrCompanyAdmin = caller.isAdmin || caller.isCompanyAdmin;
+    const isSelfUpdate = caller.id === id;
+
     const updateData: Record<string, any> = { updatedAt: new Date() };
+
+    // Profile fields — any user may update their own; admins may update team members
     if (phone !== undefined) updateData.phone = phone;
     if (firstName !== undefined) updateData.firstName = firstName;
     if (lastName !== undefined) updateData.lastName = lastName;
-    if (role !== undefined) updateData.role = role;
     if (signatureUrl !== undefined) updateData.signatureUrl = signatureUrl;
     if (profession !== undefined) updateData.profession = profession;
     if (licenceNumber !== undefined) updateData.licenceNumber = licenceNumber;
     if (companyName !== undefined && caller.isAdmin) updateData.companyName = companyName;
-    if (isActive !== undefined) updateData.isActive = isActive;
+
+    // Privilege fields — only company admins or platform admins may set these;
+    // users MUST NOT be able to escalate their own role or permissions.
+    if (role !== undefined) {
+      if (!isAdminOrCompanyAdmin) {
+        res.status(403).json({ error: "forbidden", message: "You do not have permission to change roles." });
+        return;
+      }
+      updateData.role = role;
+    }
+    if (isActive !== undefined) {
+      if (!isAdminOrCompanyAdmin) {
+        res.status(403).json({ error: "forbidden", message: "You do not have permission to change account status." });
+        return;
+      }
+      updateData.isActive = isActive;
+    }
     if (userType !== undefined) {
+      if (!isAdminOrCompanyAdmin) {
+        res.status(403).json({ error: "forbidden", message: "You do not have permission to change access type." });
+        return;
+      }
       updateData.userType = userType;
       updateData.mobileOnly = userType === "inspector";
     }
-    if (permissions !== undefined) updateData.permissions = JSON.stringify(permissions);
+    if (permissions !== undefined) {
+      // Only admins and company admins can grant/revoke permissions; users cannot self-escalate.
+      if (!isAdminOrCompanyAdmin) {
+        res.status(403).json({ error: "forbidden", message: "You do not have permission to change permissions." });
+        return;
+      }
+      // Prevent a company admin from granting permissions to themselves (only platform admin can do that)
+      if (isSelfUpdate && !caller.isAdmin) {
+        res.status(403).json({ error: "forbidden", message: "Company admins cannot modify their own permissions." });
+        return;
+      }
+      const validated = validatePermissions(permissions);
+      if (!validated.ok) {
+        res.status(400).json({ error: "bad_request", message: "Invalid permissions format. Allowed keys: editTemplates, addInspectors, createProjects (all boolean)." });
+        return;
+      }
+      updateData.permissions = JSON.stringify(validated.data);
+    }
 
     // isCompanyAdmin:
     //   - Platform super-admin: can set on anyone
     //   - Company admin: can promote/demote their own team members only
     //     (target's adminUserId must be their own id — already verified above)
-    //   - Regular team members: blocked
+    //   - Regular team members: blocked; cannot self-promote
     if (typeof req.body.isCompanyAdmin === "boolean") {
-      if (caller.isAdmin || caller.isCompanyAdmin) {
+      if (caller.isAdmin || (caller.isCompanyAdmin && !isSelfUpdate)) {
         updateData.isCompanyAdmin = req.body.isCompanyAdmin;
+      } else if (isSelfUpdate) {
+        res.status(403).json({ error: "forbidden", message: "You cannot modify your own admin status." });
+        return;
       }
     }
 

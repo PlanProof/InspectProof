@@ -162,7 +162,7 @@ function Button({
 }
 
 export default function Settings() {
-  const { token } = useAuth();
+  const { token, user: authUser } = useAuth();
   const [, setLocation] = useLocation();
   const isOnboarding = new URLSearchParams(window.location.search).get("onboarding") === "1";
   const [activeTab, setActiveTab] = useState<Tab>("profile");
@@ -171,6 +171,8 @@ export default function Settings() {
   );
   const [user, setUser] = useState<any>(null);
   const [loadingUser, setLoadingUser] = useState(true);
+
+  const canManageBilling = authUser?.isCompanyAdmin || authUser?.isAdmin;
 
   useEffect(() => {
     apiFetch("/api/auth/me").then(setUser).catch(() => {}).finally(() => setLoadingUser(false));
@@ -221,7 +223,7 @@ export default function Settings() {
       <div className="flex gap-6">
         {/* Sidebar nav */}
         <nav className="w-52 shrink-0 space-y-1">
-          {TABS.map(({ id, label, icon: Icon }) => (
+          {TABS.filter(t => t.id !== "billing" || canManageBilling).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
@@ -246,7 +248,7 @@ export default function Settings() {
           {activeTab === "notifications" && <NotificationsTab />}
           {activeTab === "organisation"  && <OrganisationTab isOnboarding={isOnboarding && onboardingStep === "organisation"} onOnboardingComplete={handleOrgOnboardingComplete} />}
           {activeTab === "platform"      && <PlatformTab />}
-          {activeTab === "billing"       && <BillingTab />}
+          {activeTab === "billing"       && (canManageBilling ? <BillingTab /> : null)}
         </div>
       </div>
     </AppLayout>

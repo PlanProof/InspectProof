@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, type ComponentType } from "react";
 import { useListUsers } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -6,7 +6,8 @@ import { Card, Button } from "@/components/ui";
 import {
   Users, Smartphone, Monitor, Mail, Phone,
   UserPlus, Send, Pencil, X, Check, Loader2, Shield, Building2,
-  Crown, Lock, Unlock, Clock, Trash2, RefreshCw,
+  Crown, Lock, Unlock, Clock, Trash2, RefreshCw, ChevronDown, ChevronUp,
+  CreditCard, FileText, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,18 +49,18 @@ const AVATAR_COLORS = [
 ];
 
 const ROLE_MAP: Record<string, string> = {
-  admin:              "Administrator",
-  certifier:          "Building Certifier",
-  inspector:          "Site Inspector",
-  building_inspector: "Building Inspector",
-  engineer:           "Structural Engineer",
-  plumber:            "Plumbing Inspector",
-  project_manager:    "Project Manager",
-  builder:            "Builder",
-  supervisor:         "Site Supervisor",
-  whs:                "WHS Officer",
-  pre_purchase:       "Pre-Purchase Inspector",
-  fire_engineer:      "Fire Safety Engineer",
+  admin:              "Owner",
+  certifier:          "Inspector",
+  inspector:          "Inspector",
+  building_inspector: "Inspector",
+  engineer:           "Inspector",
+  plumber:            "Inspector",
+  project_manager:    "Manager",
+  builder:            "Inspector",
+  supervisor:         "Manager",
+  whs:                "Inspector",
+  pre_purchase:       "Inspector",
+  fire_engineer:      "Inspector",
   staff:              "Staff",
 };
 
@@ -90,24 +91,20 @@ function apiUserToMember(u: any): TeamMember {
   };
 }
 
-const ROLES = ["Inspector", "Certifier", "Staff", "Admin"];
-const ADD_MEMBER_ROLES = ["Inspector", "Certifier", "Staff", "Admin"];
+const ROLES = ["Inspector", "Manager", "Staff"];
+const ADD_MEMBER_ROLES = ["Inspector", "Manager", "Staff"];
 
 const ROLE_REVERSE: Record<string, string> = {
   Inspector: "inspector",
-  Certifier: "certifier",
-  Staff: "staff",
-  Admin: "admin",
+  Manager:   "supervisor",
+  Staff:     "staff",
 };
 
 const ROLE_BADGE: Record<string, string> = {
-  Inspector:           "bg-blue-50 text-blue-700 border-blue-200",
-  Certifier:           "bg-violet-50 text-violet-700 border-violet-200",
-  Staff:               "bg-muted text-muted-foreground border-muted/60",
-  Administrator:       "bg-sidebar/10 text-sidebar border-sidebar/20",
-  "Site Inspector":    "bg-blue-50 text-blue-700 border-blue-200",
-  "Building Certifier":"bg-violet-50 text-violet-700 border-violet-200",
-  "Building Inspector":"bg-blue-50 text-blue-700 border-blue-200",
+  Owner:     "bg-amber-50 text-amber-700 border-amber-200",
+  Manager:   "bg-violet-50 text-violet-700 border-violet-200",
+  Inspector: "bg-blue-50 text-blue-700 border-blue-200",
+  Staff:     "bg-muted text-muted-foreground border-muted/60",
 };
 
 function apiBase() {
@@ -468,7 +465,7 @@ function MemberRow({
           </span>
           {member.isCompanyAdmin && (
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-0.5">
-              <Crown className="h-2.5 w-2.5" /> Admin
+              <Crown className="h-2.5 w-2.5" /> Owner
             </span>
           )}
           {memberHasMobile && (
@@ -566,6 +563,147 @@ function MemberRow({
         <Pencil className="h-3.5 w-3.5" />
       </button>
     </div>
+  );
+}
+
+// ── Permission Matrix ─────────────────────────────────────────────────────────
+
+const ROLE_DEFINITIONS: RoleDefinition[] = [
+  {
+    role: "Owner",
+    badge: "bg-amber-50 text-amber-700 border-amber-200",
+    icon: Crown,
+    description: "Company admin — full control of the organisation",
+    billing: true,
+    inviteUsers: true,
+    editTemplates: true,
+    createProjects: true,
+    viewOnly: false,
+  },
+  {
+    role: "Manager",
+    badge: "bg-violet-50 text-violet-700 border-violet-200",
+    icon: Shield,
+    description: "Promoted team member with delegated permissions",
+    billing: false,
+    inviteUsers: "permission",
+    editTemplates: "permission",
+    createProjects: "permission",
+    viewOnly: false,
+  },
+  {
+    role: "Inspector",
+    badge: "bg-blue-50 text-blue-700 border-blue-200",
+    icon: Smartphone,
+    description: "Field staff — uses mobile app for inspections",
+    billing: false,
+    inviteUsers: false,
+    editTemplates: false,
+    createProjects: "permission",
+    viewOnly: false,
+  },
+  {
+    role: "Staff",
+    badge: "bg-muted text-muted-foreground border-muted/60",
+    icon: Monitor,
+    description: "Office user — view and report access only",
+    billing: false,
+    inviteUsers: false,
+    editTemplates: false,
+    createProjects: false,
+    viewOnly: true,
+  },
+];
+
+type MatrixKey = "billing" | "inviteUsers" | "editTemplates" | "createProjects" | "viewOnly";
+type RoleDefinition = { role: string; badge: string; icon: ComponentType<{ className?: string }>; description: string } & Record<MatrixKey, boolean | "permission">;
+
+const MATRIX_ACTIONS: { key: MatrixKey; label: string; icon: ComponentType<{ className?: string }> }[] = [
+  { key: "billing",        label: "Billing & Subscriptions",     icon: CreditCard },
+  { key: "inviteUsers",    label: "Invite Team Members",         icon: UserPlus },
+  { key: "editTemplates",  label: "Edit Inspection Templates",   icon: FileText },
+  { key: "createProjects", label: "Create Projects",             icon: Star },
+  { key: "viewOnly",       label: "View-Only (read-only access)", icon: Monitor },
+];
+
+function MatrixCell({ value }: { value: boolean | "permission" | false }) {
+  if (value === true) {
+    return <Check className="h-4 w-4 text-green-600 mx-auto" />;
+  }
+  if (value === "permission") {
+    return (
+      <span className="text-[10px] text-amber-600 font-semibold uppercase tracking-wide flex items-center justify-center gap-0.5">
+        <Unlock className="h-3 w-3" /> Delegated
+      </span>
+    );
+  }
+  return <X className="h-4 w-4 text-muted-foreground/40 mx-auto" />;
+}
+
+function PermissionMatrix() {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Card className="mb-6 shadow-sm border-muted/60 overflow-hidden">
+      <button
+        className="w-full px-5 py-3.5 border-b border-muted/50 flex items-center justify-between hover:bg-muted/20 transition-colors"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <div className="flex items-center gap-2">
+          <Shield className="h-4 w-4 text-secondary" />
+          <span className="text-sm font-semibold text-sidebar">Roles &amp; Permissions</span>
+          <span className="text-xs text-muted-foreground ml-1">— click to {expanded ? "collapse" : "expand"} matrix</span>
+        </div>
+        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </button>
+
+      {expanded && (
+        <div className="p-5">
+          <p className="text-xs text-muted-foreground mb-4">
+            This table shows what each role can do. "Owner" is the company admin account. "Delegated" means the permission can be granted by an Owner on a per-member basis.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-muted/60">
+                  <th className="text-left py-2 pr-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide min-w-44">Action</th>
+                  {ROLE_DEFINITIONS.map(rd => (
+                    <th key={rd.role} className="py-2 px-3 text-center min-w-28">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded border", rd.badge)}>
+                          {rd.role}
+                        </span>
+                        <span className="text-[10px] font-normal text-muted-foreground leading-tight max-w-24 text-center">{rd.description}</span>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {MATRIX_ACTIONS.map(({ key, label, icon: Icon }) => (
+                  <tr key={key} className="border-b border-muted/30 hover:bg-muted/10">
+                    <td className="py-2.5 pr-4">
+                      <span className="flex items-center gap-1.5 text-xs font-medium text-sidebar">
+                        <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        {label}
+                      </span>
+                    </td>
+                    {ROLE_DEFINITIONS.map(rd => (
+                      <td key={rd.role} className="py-2.5 px-3 text-center">
+                        <MatrixCell value={rd[key]} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-3">
+            <span className="font-semibold">Note:</span> All backend operations are enforced server-side — permissions cannot be bypassed by direct API calls.
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -1261,6 +1399,9 @@ export default function Inspectors() {
           </div>
         </Card>
       </div>
+
+      {/* Permission Matrix */}
+      <PermissionMatrix />
 
       {/* Invite sent toast */}
       {inviteSentFor !== null && (
