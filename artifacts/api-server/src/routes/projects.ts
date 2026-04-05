@@ -759,16 +759,41 @@ router.get("/:id/contractors", requireAuth, async (req, res) => {
 router.post("/:id/contractors", requireAuth, async (req, res) => {
   const projectId = parseInt(req.params.id);
   if (isNaN(projectId)) return res.status(400).json({ error: "bad_request" });
-  const { name, trade, email, company } = req.body as { name?: string; trade?: string; email?: string; company?: string };
+  const { name, trade, email, company, contactRole, phone, isPrimary } = req.body as {
+    name?: string; trade?: string; email?: string; company?: string;
+    contactRole?: string; phone?: string; isPrimary?: boolean;
+  };
   if (!name?.trim()) return res.status(400).json({ error: "bad_request", message: "name is required" });
+
+  // Duplicate email check
+  if (email?.trim()) {
+    const existing = await db.select({ id: projectContractorsTable.id })
+      .from(projectContractorsTable)
+      .where(and(eq(projectContractorsTable.projectId, projectId), eq(projectContractorsTable.email, email.trim())));
+    if (existing.length > 0) {
+      return res.status(409).json({ error: "duplicate_email", message: "A contact with this email already exists on this project" });
+    }
+  }
+
   try {
-    const [created] = await db.insert(projectContractorsTable).values({
-      projectId,
-      name: name.trim(),
-      trade: (trade ?? "").trim(),
-      email: email?.trim() || null,
-      company: company?.trim() || null,
-    }).returning();
+    const created = await db.transaction(async (tx) => {
+      if (isPrimary) {
+        await tx.update(projectContractorsTable)
+          .set({ isPrimary: false, updatedAt: new Date() })
+          .where(eq(projectContractorsTable.projectId, projectId));
+      }
+      const [row] = await tx.insert(projectContractorsTable).values({
+        projectId,
+        name: name.trim(),
+        trade: (trade ?? "").trim(),
+        email: email?.trim() || null,
+        company: company?.trim() || null,
+        contactRole: contactRole?.trim() || null,
+        phone: phone?.trim() || null,
+        isPrimary: isPrimary ?? false,
+      }).returning();
+      return row;
+    });
     res.status(201).json(created);
   } catch (err) {
     req.log.error({ err }, "Create contractor error");
@@ -780,17 +805,43 @@ router.patch("/:id/contractors/:contractorId", requireAuth, async (req, res) => 
   const projectId = parseInt(req.params.id);
   const contractorId = parseInt(req.params.contractorId);
   if (isNaN(projectId) || isNaN(contractorId)) return res.status(400).json({ error: "bad_request" });
-  const { name, trade, email, company } = req.body as { name?: string; trade?: string; email?: string; company?: string };
+  const { name, trade, email, company, contactRole, phone, isPrimary } = req.body as {
+    name?: string; trade?: string; email?: string; company?: string;
+    contactRole?: string; phone?: string; isPrimary?: boolean;
+  };
   if (name !== undefined && !name.trim()) return res.status(400).json({ error: "bad_request", message: "name cannot be empty" });
-  const updates: Partial<{ name: string; trade: string; email: string | null; company: string | null; updatedAt: Date }> = { updatedAt: new Date() };
+
+  // Duplicate email check (exclude current contractor)
+  if (email?.trim()) {
+    const existing = await db.select({ id: projectContractorsTable.id })
+      .from(projectContractorsTable)
+      .where(and(eq(projectContractorsTable.projectId, projectId), eq(projectContractorsTable.email, email.trim())));
+    if (existing.some(r => r.id !== contractorId)) {
+      return res.status(409).json({ error: "duplicate_email", message: "A contact with this email already exists on this project" });
+    }
+  }
+
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (name !== undefined) updates.name = name.trim();
   if (trade !== undefined) updates.trade = trade.trim();
   if (email !== undefined) updates.email = email.trim() || null;
   if (company !== undefined) updates.company = company.trim() || null;
+  if (contactRole !== undefined) updates.contactRole = contactRole.trim() || null;
+  if (phone !== undefined) updates.phone = phone.trim() || null;
+  if (isPrimary !== undefined) updates.isPrimary = isPrimary;
   try {
-    const [updated] = await db.update(projectContractorsTable).set(updates)
-      .where(and(eq(projectContractorsTable.id, contractorId), eq(projectContractorsTable.projectId, projectId)))
-      .returning();
+    const updated = await db.transaction(async (tx) => {
+      // If setting as primary, atomically clear existing primary
+      if (isPrimary) {
+        await tx.update(projectContractorsTable)
+          .set({ isPrimary: false, updatedAt: new Date() })
+          .where(and(eq(projectContractorsTable.projectId, projectId), sql`${projectContractorsTable.id} != ${contractorId}`));
+      }
+      const [row] = await tx.update(projectContractorsTable).set(updates)
+        .where(and(eq(projectContractorsTable.id, contractorId), eq(projectContractorsTable.projectId, projectId)))
+        .returning();
+      return row;
+    });
     if (!updated) return res.status(404).json({ error: "not_found" });
     res.json(updated);
   } catch (err) {

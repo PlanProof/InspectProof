@@ -23,6 +23,8 @@ export const orgContractorsTable = pgTable("org_contractors", {
   registrationNumber: text("registration_number"),
   licenceExpiry: date("licence_expiry"),
   registrationExpiry: date("registration_expiry"),
+  contactRole: text("contact_role"),
+  phone: text("phone"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

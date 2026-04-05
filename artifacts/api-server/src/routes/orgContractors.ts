@@ -57,9 +57,10 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.post("/", requireAuth, async (req, res) => {
   const scope = scopeKey(req.authUser!);
-  const { name, trade, tradeCategoryId, email, company, licenceNumber, registrationNumber, licenceExpiry, registrationExpiry } = req.body as {
+  const { name, trade, tradeCategoryId, email, company, licenceNumber, registrationNumber, licenceExpiry, registrationExpiry, contactRole, phone } = req.body as {
     name?: string; trade?: string; tradeCategoryId?: number | null; email?: string; company?: string;
     licenceNumber?: string; registrationNumber?: string; licenceExpiry?: string; registrationExpiry?: string;
+    contactRole?: string; phone?: string;
   };
   if (!name?.trim()) {
     res.status(400).json({ error: "bad_request", message: "name is required" });
@@ -91,6 +92,8 @@ router.post("/", requireAuth, async (req, res) => {
         registrationNumber: registrationNumber?.trim() || null,
         licenceExpiry: licenceExpiry || null,
         registrationExpiry: registrationExpiry || null,
+        contactRole: (contactRole ?? "").trim() || null,
+        phone: (phone ?? "").trim() || null,
       })
       .returning();
     res.status(201).json({ ...created, totalProjects: 0, activeProjects: 0 });
@@ -107,9 +110,10 @@ router.patch("/:id", requireAuth, async (req, res) => {
     res.status(400).json({ error: "bad_request", message: "Invalid contractor id" });
     return;
   }
-  const { name, trade, tradeCategoryId, email, company, licenceNumber, registrationNumber, licenceExpiry, registrationExpiry } = req.body as {
+  const { name, trade, tradeCategoryId, email, company, licenceNumber, registrationNumber, licenceExpiry, registrationExpiry, contactRole, phone } = req.body as {
     name?: string; trade?: string; tradeCategoryId?: number | null; email?: string; company?: string;
     licenceNumber?: string; registrationNumber?: string; licenceExpiry?: string; registrationExpiry?: string;
+    contactRole?: string; phone?: string;
   };
   if (name !== undefined && !name.trim()) {
     res.status(400).json({ error: "bad_request", message: "name cannot be empty" });
@@ -124,6 +128,8 @@ router.patch("/:id", requireAuth, async (req, res) => {
   if (registrationNumber !== undefined) updates.registrationNumber = registrationNumber.trim() || null;
   if (licenceExpiry !== undefined) updates.licenceExpiry = licenceExpiry || null;
   if (registrationExpiry !== undefined) updates.registrationExpiry = registrationExpiry || null;
+  if (contactRole !== undefined) updates.contactRole = contactRole.trim() || null;
+  if (phone !== undefined) updates.phone = phone.trim() || null;
   try {
     // Validate tradeCategoryId belongs to this org scope
     if ("tradeCategoryId" in req.body) {

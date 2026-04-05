@@ -30,6 +30,15 @@ import { useAuth } from "@/context/AuthContext";
 import { useNotifications } from "@/context/NotificationsContext";
 import { PROJECT_STAGES } from "@/constants/api";
 
+const CONTACT_ROLE_LABELS: Record<string, string> = {
+  builder: "Builder",
+  owner: "Owner / Client",
+  contractor: "Contractor",
+  consultant: "Consultant",
+  designer: "Designer / Architect",
+  other: "Other",
+};
+
 const REPORT_TYPES: Record<string, string> = {
   inspection_certificate:   "Inspection Certificate",
   compliance_report:        "Compliance Report",
@@ -101,6 +110,12 @@ export default function ProjectDetailScreen() {
     enabled: !!token && !!id,
   });
 
+  const { data: contacts = [], refetch: refetchContacts } = useQuery<any[]>({
+    queryKey: ["project-contacts", id, token],
+    queryFn: () => fetchWithAuth(`/api/projects/${id}/contractors`),
+    enabled: !!token && !!id,
+  });
+
   // Selected inspection types from desktop, filtered by user's discipline
   const { data: inspectionTypes = [] } = useQuery({
     queryKey: ["project-inspection-types", id, token, userDiscipline],
@@ -161,6 +176,117 @@ export default function ProjectDetailScreen() {
       Alert.alert("Error", err.message === "inspection_limit_reached" ? "Your account has reached its usage limit. Please visit inspectproof.com.au or contact your account administrator." : "Failed to book inspection. Please try again.");
     } finally {
       setBookSubmitting(false);
+    }
+  };
+
+  // Add contact state
+  const [addContactOpen, setAddContactOpen] = useState(false);
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactRole, setNewContactRole] = useState("");
+  const [newContactTrade, setNewContactTrade] = useState("");
+  const [newContactEmail, setNewContactEmail] = useState("");
+  const [newContactPhone, setNewContactPhone] = useState("");
+  const [newContactCompany, setNewContactCompany] = useState("");
+  const [newContactIsPrimary, setNewContactIsPrimary] = useState(false);
+  const [addingContact, setAddingContact] = useState(false);
+  const [addContactError, setAddContactError] = useState("");
+  const [showRolePicker, setShowRolePicker] = useState(false);
+
+  const CONTACT_ROLE_OPTIONS = [
+    { value: "builder", label: "Builder" },
+    { value: "owner", label: "Owner / Client" },
+    { value: "contractor", label: "Contractor" },
+    { value: "consultant", label: "Consultant" },
+    { value: "designer", label: "Designer / Architect" },
+    { value: "other", label: "Other" },
+  ];
+
+  const handleAddContact = async () => {
+    if (!newContactName.trim()) { setAddContactError("Name is required."); return; }
+    setAddContactError(""); setAddingContact(true);
+    try {
+      const res = await fetch(`${baseUrl}/api/projects/${id}/contractors`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: newContactName.trim(),
+          trade: newContactTrade.trim() || undefined,
+          email: newContactEmail.trim() || null,
+          phone: newContactPhone.trim() || null,
+          company: newContactCompany.trim() || null,
+          contactRole: newContactRole || null,
+          isPrimary: newContactIsPrimary,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.error === "duplicate_email") {
+          setAddContactError("A contact with this email already exists on this project.");
+        } else {
+          setAddContactError("Failed to add contact. Please try again.");
+        }
+        return;
+      }
+      setAddContactOpen(false);
+      setNewContactName(""); setNewContactRole(""); setNewContactTrade(""); setNewContactEmail(""); setNewContactPhone(""); setNewContactCompany(""); setNewContactIsPrimary(false);
+      refetchContacts();
+    } catch {
+      setAddContactError("Failed to add contact. Please try again.");
+    } finally {
+      setAddingContact(false);
+    }
+  };
+
+  // Send report modal state
+  const [sendReportOpen, setSendReportOpen] = useState(false);
+  const [sendReportTarget, setSendReportTarget] = useState<any>(null);
+  const [sendSelectedIds, setSendSelectedIds] = useState<Set<number>>(new Set());
+  const [sendCustomEmail, setSendCustomEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
+  const [sendSuccess, setSendSuccess] = useState(false);
+
+  const openSendReport = (report: any) => {
+    setSendReportTarget(report);
+    setSendError("");
+    setSendSuccess(false);
+    setSendCustomEmail("");
+    const primary = (contacts as any[]).find((c: any) => c.isPrimary && c.email);
+    setSendSelectedIds(primary ? new Set([primary.id]) : new Set());
+    setSendReportOpen(true);
+  };
+
+  const handleSendReport = async () => {
+    if (sendSelectedIds.size === 0 && !sendCustomEmail.trim()) {
+      setSendError("Select at least one recipient or enter a custom email.");
+      return;
+    }
+    setSendError(""); setSending(true);
+    try {
+      const selected = (contacts as any[]).filter((c: any) => sendSelectedIds.has(c.id) && c.email);
+      const recipients = [
+        ...selected.map((c: any) => ({ email: c.email, name: c.name })),
+        ...(sendCustomEmail.trim() ? [{ email: sendCustomEmail.trim() }] : []),
+      ];
+      for (const r of recipients) {
+        const res = await fetch(`${baseUrl}/api/reports/${sendReportTarget.id}/send`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ sentTo: r.email, recipientName: r.name }),
+        });
+        if (!res.ok) throw new Error("Send failed");
+      }
+      setSendSuccess(true);
+    } catch {
+      setSendError("Failed to send. Please try again.");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -318,7 +444,13 @@ export default function ProjectDetailScreen() {
                 <View style={styles.reportFooter}>
                   <Feather name="file-text" size={12} color={Colors.secondary} />
                   <Text style={styles.reportRef}>Tap to view PDF</Text>
-                  <Feather name="chevron-right" size={15} color={Colors.textTertiary} style={{ marginLeft: "auto" }} />
+                  <Pressable
+                    onPress={e => { e.stopPropagation?.(); openSendReport(r); }}
+                    style={styles.reportSendBtn}
+                  >
+                    <Feather name="send" size={13} color={Colors.secondary} />
+                    <Text style={styles.reportSendBtnText}>Send</Text>
+                  </Pressable>
                 </View>
               </Pressable>
             );
@@ -328,6 +460,55 @@ export default function ProjectDetailScreen() {
 
       {/* Inductions */}
       <InductionsSection projectId={id as string} baseUrl={baseUrl} token={token} />
+
+      {/* Contacts */}
+      <View style={styles.section}>
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+          <Text style={[styles.sectionTitle, { flex: 1 }]}>Contacts{contacts.length > 0 ? ` (${contacts.length})` : ""}</Text>
+          <Pressable onPress={() => setAddContactOpen(true)} style={styles.addContactBtn}>
+            <Feather name="user-plus" size={13} color={Colors.secondary} />
+            <Text style={styles.addContactBtnText}>Add</Text>
+          </Pressable>
+        </View>
+        {contacts.length === 0 && (
+          <Text style={[styles.contactSub, { textAlign: "center", paddingVertical: 12 }]}>No contacts yet</Text>
+        )}
+        {contacts.map((c: any, i: number) => (
+          <View key={c.id} style={[styles.contactCard, i > 0 && { marginTop: 8 }]}>
+            <View style={styles.contactRow}>
+              <View style={styles.contactAvatar}>
+                <Feather name="user" size={16} color={Colors.secondary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <Text style={styles.contactName}>{c.name}</Text>
+                  {c.isPrimary && (
+                    <View style={styles.primaryBadge}>
+                      <Text style={styles.primaryBadgeText}>PRIMARY</Text>
+                    </View>
+                  )}
+                  {c.contactRole && (
+                    <View style={styles.roleBadge}>
+                      <Text style={styles.roleBadgeText}>{CONTACT_ROLE_LABELS[c.contactRole] || c.contactRole}</Text>
+                    </View>
+                  )}
+                </View>
+                {c.trade ? <Text style={styles.contactSub}>{c.trade}{c.company ? ` · ${c.company}` : ""}</Text> : c.company ? <Text style={styles.contactSub}>{c.company}</Text> : null}
+                {c.email && (
+                  <Pressable onPress={() => Linking.openURL(`mailto:${c.email}`)}>
+                    <Text style={[styles.contactSub, { color: Colors.secondary, textDecorationLine: "underline" }]}>{c.email}</Text>
+                  </Pressable>
+                )}
+                {c.phone && (
+                  <Pressable onPress={() => Linking.openURL(`tel:${c.phone}`)}>
+                    <Text style={[styles.contactSub, { color: Colors.secondary }]}>{c.phone}</Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          </View>
+        ))}
+      </View>
 
       {/* Notes */}
       {project.notes && (
@@ -503,6 +684,196 @@ export default function ProjectDetailScreen() {
       </View>
     </Modal>
 
+    {/* Send Report Modal */}
+    <Modal visible={sendReportOpen} animationType="slide" transparent onRequestClose={() => setSendReportOpen(false)}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setSendReportOpen(false)} />
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Send Report</Text>
+            <Pressable onPress={() => setSendReportOpen(false)} style={styles.modalClose}>
+              <Feather name="x" size={20} color={Colors.textSecondary} />
+            </Pressable>
+          </View>
+          {sendSuccess ? (
+            <View style={{ alignItems: "center", padding: 32, gap: 12 }}>
+              <Feather name="check-circle" size={48} color="#16a34a" />
+              <Text style={{ fontSize: 16, fontFamily: "PlusJakartaSans_700Bold", color: Colors.text }}>Report Sent!</Text>
+              <TouchableOpacity onPress={() => setSendReportOpen(false)} style={[styles.bookBtn, { marginTop: 8 }]}>
+                <Text style={styles.bookBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }} showsVerticalScrollIndicator={false}>
+              {(contacts as any[]).filter((c: any) => c.email).length > 0 && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[styles.fieldLabel, { marginBottom: 8 }]}>Project Contacts</Text>
+                  {(contacts as any[]).filter((c: any) => c.email).map((c: any) => (
+                    <Pressable
+                      key={c.id}
+                      style={[styles.sendContactRow, sendSelectedIds.has(c.id) && styles.sendContactRowActive]}
+                      onPress={() => {
+                        setSendSelectedIds(prev => {
+                          const next = new Set(prev);
+                          next.has(c.id) ? next.delete(c.id) : next.add(c.id);
+                          return next;
+                        });
+                      }}
+                    >
+                      <View style={[styles.sendCheckbox, sendSelectedIds.has(c.id) && styles.sendCheckboxActive]}>
+                        {sendSelectedIds.has(c.id) && <Feather name="check" size={11} color="#fff" />}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.contactName}>{c.name}{c.isPrimary ? " · Primary" : ""}</Text>
+                        <Text style={styles.contactSub}>{c.email}</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Additional Recipient</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={sendCustomEmail}
+                  onChangeText={setSendCustomEmail}
+                  placeholder="email@example.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor={Colors.textTertiary}
+                />
+              </View>
+              {sendError ? <Text style={{ color: "#dc2626", fontSize: 12, fontFamily: "PlusJakartaSans_400Regular", marginHorizontal: 16, marginBottom: 8 }}>{sendError}</Text> : null}
+              <TouchableOpacity
+                onPress={handleSendReport}
+                disabled={sending}
+                style={[styles.bookBtn, { opacity: sending ? 0.6 : 1 }]}
+              >
+                {sending && <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />}
+                <Text style={styles.bookBtnText}>
+                  {sending ? "Sending…" : `Send to ${sendSelectedIds.size + (sendCustomEmail.trim() ? 1 : 0)} recipient${sendSelectedIds.size + (sendCustomEmail.trim() ? 1 : 0) !== 1 ? "s" : ""}`}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+
+    {/* Add Contact Modal */}
+    <Modal visible={addContactOpen} animationType="slide" transparent onRequestClose={() => setAddContactOpen(false)}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setAddContactOpen(false)} />
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Add Contact</Text>
+            <Pressable onPress={() => setAddContactOpen(false)} style={styles.modalClose}>
+              <Feather name="x" size={20} color={Colors.textSecondary} />
+            </Pressable>
+          </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16, gap: 12 }} showsVerticalScrollIndicator={false}>
+            {addContactError ? (
+              <View style={{ backgroundColor: "#fef2f2", borderRadius: 8, padding: 10 }}>
+                <Text style={{ color: "#dc2626", fontSize: 13, fontFamily: "PlusJakartaSans_400Regular" }}>{addContactError}</Text>
+              </View>
+            ) : null}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Name *</Text>
+              <TextInput
+                style={styles.textInput}
+                value={newContactName}
+                onChangeText={setNewContactName}
+                placeholder="Full name"
+                placeholderTextColor={Colors.textTertiary}
+              />
+            </View>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Role</Text>
+              <Pressable style={styles.pickerBtn} onPress={() => setShowRolePicker(!showRolePicker)}>
+                <Text style={[styles.pickerBtnText, !newContactRole && styles.pickerPlaceholder]}>
+                  {newContactRole ? CONTACT_ROLE_OPTIONS.find(o => o.value === newContactRole)?.label ?? newContactRole : "Select role…"}
+                </Text>
+                <Feather name={showRolePicker ? "chevron-up" : "chevron-down"} size={16} color={Colors.textSecondary} />
+              </Pressable>
+              {showRolePicker && (
+                <View style={styles.pickerDropdown}>
+                  {CONTACT_ROLE_OPTIONS.map(opt => (
+                    <Pressable
+                      key={opt.value}
+                      style={[styles.pickerOption, newContactRole === opt.value && styles.pickerOptionActive]}
+                      onPress={() => { setNewContactRole(opt.value); setShowRolePicker(false); }}
+                    >
+                      <Text style={[styles.pickerOptionText, newContactRole === opt.value && styles.pickerOptionTextActive]}>{opt.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Phone</Text>
+              <TextInput
+                style={styles.textInput}
+                value={newContactPhone}
+                onChangeText={setNewContactPhone}
+                placeholder="+61 400 000 000"
+                placeholderTextColor={Colors.textTertiary}
+                keyboardType="phone-pad"
+              />
+            </View>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Email</Text>
+              <TextInput
+                style={styles.textInput}
+                value={newContactEmail}
+                onChangeText={setNewContactEmail}
+                placeholder="email@example.com"
+                placeholderTextColor={Colors.textTertiary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Company</Text>
+              <TextInput
+                style={styles.textInput}
+                value={newContactCompany}
+                onChangeText={setNewContactCompany}
+                placeholder="Company name"
+                placeholderTextColor={Colors.textTertiary}
+              />
+            </View>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Trade / Discipline</Text>
+              <TextInput
+                style={styles.textInput}
+                value={newContactTrade}
+                onChangeText={setNewContactTrade}
+                placeholder="e.g. Electrician, Plumber"
+                placeholderTextColor={Colors.textTertiary}
+              />
+            </View>
+            <Pressable
+              style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}
+              onPress={() => setNewContactIsPrimary(!newContactIsPrimary)}
+            >
+              <View style={[styles.sendCheckbox, newContactIsPrimary && styles.sendCheckboxActive]}>
+                {newContactIsPrimary && <Feather name="check" size={11} color="#fff" />}
+              </View>
+              <Text style={[styles.fieldLabel, { marginBottom: 0 }]}>Set as primary contact</Text>
+            </Pressable>
+            <TouchableOpacity
+              onPress={handleAddContact}
+              disabled={addingContact}
+              style={[styles.bookBtn, { opacity: addingContact ? 0.6 : 1 }]}
+            >
+              {addingContact && <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />}
+              <Text style={styles.bookBtnText}>{addingContact ? "Adding…" : "Add Contact"}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+
     </View>
   );
 }
@@ -671,6 +1042,64 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "PlusJakartaSans_400Regular",
     color: Colors.secondary,
+  },
+  contactCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+  },
+  contactRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  contactAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.secondary + "15",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  contactName: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: Colors.text,
+  },
+  contactSub: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_400Regular",
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  primaryBadge: {
+    backgroundColor: Colors.secondary + "15",
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: Colors.secondary + "40",
+  },
+  primaryBadgeText: {
+    fontSize: 9,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: Colors.secondary,
+    letterSpacing: 0.5,
+  },
+  roleBadge: {
+    backgroundColor: "#f5f3ff",
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: "#ddd6fe",
+  },
+  roleBadgeText: {
+    fontSize: 10,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#7c3aed",
   },
   notesCard: {
     backgroundColor: Colors.surface,
@@ -926,6 +1355,81 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textTertiary,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_700Bold",
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  addContactBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: Colors.secondary + "12",
+    borderWidth: 1,
+    borderColor: Colors.secondary + "30",
+  },
+  addContactBtnText: {
+    fontSize: 12,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.secondary,
+  },
+  reportSendBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: "auto",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: Colors.secondary + "12",
+    borderWidth: 1,
+    borderColor: Colors.secondary + "30",
+  },
+  reportSendBtnText: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.secondary,
+  },
+  sendContactRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+  },
+  sendContactRowActive: {
+    backgroundColor: Colors.secondary + "08",
+  },
+  sendCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  sendCheckboxActive: {
+    backgroundColor: Colors.secondary,
+    borderColor: Colors.secondary,
+  },
+  textInput: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+    backgroundColor: Colors.background,
   },
 });
 

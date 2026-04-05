@@ -3,7 +3,7 @@ import { useParams, Link, useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AddressAutocomplete, type AddressFields } from "@/components/AddressAutocomplete";
 import {
-  Button, Badge, Input, Label, Dialog, DialogContent, DialogHeader, DialogTitle,
+  Button, Badge, Input, Label, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui";
 import {
@@ -277,7 +277,7 @@ export default function ProjectDetail() {
       </div>
 
       {/* Tab Content */}
-      {tab === "Overview" && <OverviewTab project={project} onRefresh={loadProject} />}
+      {tab === "Overview" && <OverviewTab project={project} onRefresh={loadProject} onGoToContacts={() => setTab("Contractors")} />}
       {tab === "Contractors" && <ContractorsTab projectId={projectId} projectName={project.name} />}
       {tab === "Documents" && <DocumentsTab projectId={projectId} />}
       {tab === "Inspections" && <InspectionsTab project={project} onRefresh={loadProject} />}
@@ -492,13 +492,14 @@ const PROJECT_TYPES = [
 
 // ── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () => void }) {
+function OverviewTab({ project, onRefresh, onGoToContacts }: { project: Project; onRefresh: () => void; onGoToContacts?: () => void }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [, navigate] = useLocation();
   const [bookOpen, setBookOpen] = useState(false);
   const { data: users } = useListUsers({});
+  const [projectContacts, setProjectContacts] = useState<ProjectContractor[]>([]);
 
   const [editingClasses, setEditingClasses] = useState<string[]>(
     project.buildingClassification ? project.buildingClassification.split(",").map(s => s.trim()).filter(Boolean) : []
@@ -512,6 +513,10 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
 
   const certifiers: User[] = users?.filter((u) => u.role === "certifier" || u.role === "admin") ?? [];
   const inspectors: User[] = users?.filter((u) => u.role === "inspector" || u.role === "admin") ?? [];
+
+  useEffect(() => {
+    apiFetch(`/api/projects/${project.id}/contractors`).then(setProjectContacts).catch(() => {});
+  }, [project.id]);
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -706,11 +711,67 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
                 <div className="font-medium text-sidebar font-mono">{project.referenceNumber}</div>
               </div>
             )}
+            {/* Client — linked to owner/client contacts */}
+            {(() => {
+              const linked = projectContacts.filter(c => c.contactRole === "owner");
+              return (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-0.5">Client</div>
+                  <div className="font-medium text-sidebar">{project.clientName || "—"}</div>
+                  {linked.map(c => (
+                    <div key={c.id} className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      {c.isPrimary && <span className="text-[9px] font-bold px-1 rounded bg-secondary/15 text-secondary border border-secondary/30 uppercase tracking-wide">Primary</span>}
+                      <span className="text-xs text-muted-foreground">{c.name}</span>
+                      {c.email && <span className="text-xs text-muted-foreground">· {c.email}</span>}
+                      {c.phone && <span className="text-xs text-muted-foreground">· {c.phone}</span>}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            {project.ownerName && (
+              <div>
+                <div className="text-xs text-muted-foreground mb-0.5">Owner</div>
+                <div className="font-medium text-sidebar">{project.ownerName}</div>
+              </div>
+            )}
+            {/* Builder */}
+            {(() => {
+              const linked = projectContacts.filter(c => c.contactRole === "builder");
+              return (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-0.5">Builder</div>
+                  <div className="font-medium text-sidebar">{project.builderName || "—"}</div>
+                  {linked.map(c => (
+                    <div key={c.id} className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      {c.isPrimary && <span className="text-[9px] font-bold px-1 rounded bg-secondary/15 text-secondary border border-secondary/30 uppercase tracking-wide">Primary</span>}
+                      <span className="text-xs text-muted-foreground">{c.name}</span>
+                      {c.email && <span className="text-xs text-muted-foreground">· {c.email}</span>}
+                      {c.phone && <span className="text-xs text-muted-foreground">· {c.phone}</span>}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            {/* Designer */}
+            {(() => {
+              const linked = projectContacts.filter(c => c.contactRole === "designer");
+              return (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-0.5">Designer</div>
+                  <div className="font-medium text-sidebar">{project.designerName || "—"}</div>
+                  {linked.map(c => (
+                    <div key={c.id} className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      {c.isPrimary && <span className="text-[9px] font-bold px-1 rounded bg-secondary/15 text-secondary border border-secondary/30 uppercase tracking-wide">Primary</span>}
+                      <span className="text-xs text-muted-foreground">{c.name}</span>
+                      {c.email && <span className="text-xs text-muted-foreground">· {c.email}</span>}
+                      {c.phone && <span className="text-xs text-muted-foreground">· {c.phone}</span>}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             {[
-              { label: "Client", value: project.clientName },
-              { label: "Owner", value: project.ownerName || "—" },
-              { label: "Builder", value: project.builderName || "—" },
-              { label: "Designer", value: project.designerName || "—" },
               { label: "Project Type", value: projectTypeLabel },
               { label: "DA Number", value: project.daNumber || "—" },
               { label: "Certification / DA Number", value: project.certificationNumber || "—" },
@@ -746,6 +807,24 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
                   : "—"}
               </div>
             </div>
+            {/* Primary contact summary */}
+            {projectContacts.some(c => c.isPrimary) && (
+              <div className="col-span-2 pt-1 border-t border-border/50 mt-1">
+                <div className="text-xs text-muted-foreground mb-1.5">Primary Contact</div>
+                {projectContacts.filter(c => c.isPrimary).map(c => (
+                  <div key={c.id} className="flex items-center gap-2 flex-wrap">
+                    <UserIcon className="h-3.5 w-3.5 text-secondary" />
+                    <span className="text-sm font-medium text-sidebar">{c.name}</span>
+                    {c.contactRole && <span className="text-xs text-violet-700">{contactRoleLabel(c.contactRole)}</span>}
+                    {c.email && <span className="text-xs text-muted-foreground">{c.email}</span>}
+                    {c.phone && <span className="text-xs text-muted-foreground">· {c.phone}</span>}
+                    {onGoToContacts && (
+                      <button onClick={onGoToContacts} className="text-xs text-secondary hover:underline ml-1">Manage contacts →</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             {/* Building Classification — full width row with pill badges */}
             <div className="col-span-2">
               <div className="text-xs text-muted-foreground mb-1.5">Building Classification</div>
@@ -2271,6 +2350,9 @@ interface ProjectContractor {
   trade: string;
   email: string | null;
   company: string | null;
+  contactRole: string | null;
+  phone: string | null;
+  isPrimary: boolean;
 }
 
 interface OrgContractorEntry {
@@ -2279,8 +2361,26 @@ interface OrgContractorEntry {
   trade: string;
   email: string | null;
   company: string | null;
+  contactRole?: string | null;
+  phone?: string | null;
   totalProjects?: number;
   activeProjects?: number;
+}
+
+const CONTACT_ROLES = [
+  { value: "builder", label: "Builder" },
+  { value: "owner", label: "Owner / Client" },
+  { value: "contractor", label: "Contractor" },
+  { value: "consultant", label: "Consultant" },
+  { value: "designer", label: "Designer / Architect" },
+  { value: "other", label: "Other" },
+] as const;
+
+type ContactRole = typeof CONTACT_ROLES[number]["value"];
+
+function contactRoleLabel(role: string | null | undefined): string {
+  if (!role) return "";
+  return CONTACT_ROLES.find(r => r.value === role)?.label ?? role;
 }
 
 function OrgContractorCombobox({
@@ -2463,14 +2563,21 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
   const [newTrade, setNewTrade] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newCompany, setNewCompany] = useState("");
+  const [newRole, setNewRole] = useState<string>("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newIsPrimary, setNewIsPrimary] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editTrade, setEditTrade] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editCompany, setEditCompany] = useState("");
+  const [editRole, setEditRole] = useState<string>("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editIsPrimary, setEditIsPrimary] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [error, setError] = useState("");
+  const [dupWarning, setDupWarning] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -2490,15 +2597,30 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
     }).finally(() => setLoading(false));
   }, [projectId]);
 
+  const checkDupEmail = (email: string, excludeId?: number) => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) { setDupWarning(""); return; }
+    const dup = contractors.find(c => c.email?.toLowerCase() === trimmed && c.id !== excludeId);
+    setDupWarning(dup ? `A contact with this email (${dup.name}) already exists on this project.` : "");
+  };
+
   const toggleOrgContractor = async (orgContractorId: number, currentlyAssigned: boolean) => {
     setTogglingIds(s => new Set([...s, orgContractorId]));
     try {
       if (currentlyAssigned) {
-        await apiFetch(`/api/projects/${projectId}/org-contractor-assignments/${orgContractorId}`, {
-          method: "DELETE",
-        });
+        await apiFetch(`/api/projects/${projectId}/org-contractor-assignments/${orgContractorId}`, { method: "DELETE" });
         setAssignedOrgIds(s => { const n = new Set(s); n.delete(orgContractorId); return n; });
       } else {
+        // Duplicate email check for org contractor assignment
+        const orgC = orgContractors.find(c => c.id === orgContractorId);
+        if (orgC?.email) {
+          const dup = contractors.find(c => c.email?.toLowerCase() === orgC.email!.toLowerCase());
+          if (dup) {
+            if (!confirm(`A contact with the email "${orgC.email}" (${dup.name}) already exists on this project. Assign anyway?`)) {
+              return;
+            }
+          }
+        }
         await apiFetch(`/api/projects/${projectId}/org-contractor-assignments`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2515,36 +2637,60 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
 
   const addContractor = async () => {
     if (!newName.trim()) { setError("Name is required."); return; }
+    if (dupWarning) { setError(dupWarning + " Please use a different email or edit the existing contact."); return; }
     setError(""); setSaving(true);
     try {
       const created = await apiFetch(`/api/projects/${projectId}/contractors`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), trade: newTrade.trim(), email: newEmail.trim() || null, company: newCompany.trim() || null }),
+        body: JSON.stringify({
+          name: newName.trim(), trade: newTrade.trim(),
+          email: newEmail.trim() || null, company: newCompany.trim() || null,
+          contactRole: newRole || null, phone: newPhone.trim() || null,
+          isPrimary: newIsPrimary,
+        }),
       });
-      setContractors(c => [...c, created]);
-      setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); setAdding(false);
-    } catch { setError("Failed to add contractor."); }
-    finally { setSaving(false); }
+      setContractors(c => newIsPrimary ? [...c.map(x => ({ ...x, isPrimary: false })), created] : [...c, created]);
+      setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); setNewRole(""); setNewPhone(""); setNewIsPrimary(false); setAdding(false); setDupWarning("");
+    } catch (err: any) {
+      const body = await err?.response?.json?.().catch?.(() => null);
+      if (body?.error === "duplicate_email") setError(body.message);
+      else setError("Failed to add contractor.");
+    } finally { setSaving(false); }
   };
 
   const startEdit = (c: ProjectContractor) => {
-    setEditingId(c.id); setEditName(c.name); setEditTrade(c.trade); setEditEmail(c.email ?? ""); setEditCompany(c.company ?? ""); setError("");
+    setEditingId(c.id); setEditName(c.name); setEditTrade(c.trade);
+    setEditEmail(c.email ?? ""); setEditCompany(c.company ?? "");
+    setEditRole(c.contactRole ?? ""); setEditPhone(c.phone ?? "");
+    setEditIsPrimary(c.isPrimary); setError(""); setDupWarning("");
   };
 
   const saveEdit = async () => {
     if (!editName.trim()) { setError("Name is required."); return; }
+    if (dupWarning) { setError(dupWarning + " Please use a different email."); return; }
     setError(""); setSavingEdit(true);
     try {
       const updated = await apiFetch(`/api/projects/${projectId}/contractors/${editingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editName.trim(), trade: editTrade.trim(), email: editEmail.trim() || null, company: editCompany.trim() || null }),
+        body: JSON.stringify({
+          name: editName.trim(), trade: editTrade.trim(),
+          email: editEmail.trim() || null, company: editCompany.trim() || null,
+          contactRole: editRole || null, phone: editPhone.trim() || null,
+          isPrimary: editIsPrimary,
+        }),
       });
-      setContractors(c => c.map(x => x.id === editingId ? updated : x));
-      setEditingId(null);
-    } catch { setError("Failed to update contractor."); }
-    finally { setSavingEdit(false); }
+      setContractors(c => (editIsPrimary
+        ? c.map(x => ({ ...x, isPrimary: x.id === editingId }))
+        : c.map(x => x.id === editingId ? updated : x)
+      ));
+      setEditingId(null); setDupWarning("");
+    } catch (err: any) {
+      const body = await err?.response?.json?.().catch?.(() => null);
+      if (body?.error === "duplicate_email") setError(body.message);
+      else setError("Failed to update contractor.");
+    } finally { setSavingEdit(false); }
   };
 
   const remove = async (id: number) => {
@@ -2561,7 +2707,7 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
   );
 
   const ContractorCard = ({ c }: { c: ProjectContractor }) => (
-    <div className="rounded-lg border border-border bg-white">
+    <div className={cn("rounded-lg border bg-white", c.isPrimary ? "border-secondary/40 ring-1 ring-secondary/20" : "border-border")}>
       {editingId === c.id ? (
         <div className="p-4 space-y-3">
           <div className="grid grid-cols-2 gap-2">
@@ -2570,25 +2716,43 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
               <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Full name" autoFocus className="mt-1" />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground font-medium">Trade / Discipline</label>
-              <Input value={editTrade} onChange={e => setEditTrade(e.target.value)} placeholder="e.g. Plumber, Electrician" className="mt-1" />
+              <label className="text-xs text-muted-foreground font-medium">Role</label>
+              <select value={editRole} onChange={e => setEditRole(e.target.value)} className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <option value="">Select role…</option>
+                {CONTACT_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground font-medium">Email</label>
-              <Input value={editEmail} onChange={e => setEditEmail(e.target.value)} placeholder="contractor@email.com" type="email" className="mt-1" />
+              <label className="text-xs text-muted-foreground font-medium">Trade / Discipline</label>
+              <Input value={editTrade} onChange={e => setEditTrade(e.target.value)} placeholder="e.g. Plumber, Electrician" className="mt-1" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground font-medium">Company</label>
               <Input value={editCompany} onChange={e => setEditCompany(e.target.value)} placeholder="Company name" className="mt-1" />
             </div>
+            <div>
+              <label className="text-xs text-muted-foreground font-medium">Email</label>
+              <Input value={editEmail}
+                onChange={e => { setEditEmail(e.target.value); checkDupEmail(e.target.value, c.id); }}
+                placeholder="email@example.com" type="email" className="mt-1" />
+              {dupWarning && <p className="text-xs text-amber-600 mt-1">{dupWarning}</p>}
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground font-medium">Phone</label>
+              <Input value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="+61 4XX XXX XXX" className="mt-1" />
+            </div>
           </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none mt-1">
+            <input type="checkbox" checked={editIsPrimary} onChange={e => setEditIsPrimary(e.target.checked)} className="h-4 w-4 rounded border-gray-300 accent-secondary" />
+            <span className="text-xs font-medium text-sidebar">Set as primary contact</span>
+          </label>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={saveEdit} disabled={savingEdit}>
               {savingEdit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
               {savingEdit ? "Saving…" : "Save"}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
+            <Button size="sm" variant="outline" onClick={() => { setEditingId(null); setDupWarning(""); }}>Cancel</Button>
           </div>
         </div>
       ) : (
@@ -2600,17 +2764,30 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-semibold text-sidebar">{c.name}</p>
+                {c.isPrimary && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-secondary/15 text-secondary border border-secondary/30 uppercase tracking-wide">Primary</span>
+                )}
+                {c.contactRole && (
+                  <span className="text-xs bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded font-medium">{contactRoleLabel(c.contactRole)}</span>
+                )}
                 {c.trade && <span className="text-xs bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded font-medium">{c.trade}</span>}
                 {c.company && <span className="text-xs text-muted-foreground">{c.company}</span>}
               </div>
-              {c.email && (
-                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                  <Mail className="h-3 w-3" />{c.email}
-                </p>
-              )}
-              {!c.email && (
-                <p className="text-xs text-amber-600 mt-1 italic">No email address — add one to enable defect report sending.</p>
-              )}
+              <div className="mt-0.5 flex flex-col gap-0.5">
+                {c.email && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Mail className="h-3 w-3" />{c.email}
+                  </p>
+                )}
+                {c.phone && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <span className="h-3 w-3 text-center text-[10px]">📞</span>{c.phone}
+                  </p>
+                )}
+                {!c.email && (
+                  <p className="text-xs text-amber-600 italic">No email address — add one to enable defect report sending.</p>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button onClick={() => startEdit(c)} className="p-1.5 rounded text-muted-foreground hover:bg-muted/40 transition-colors" title="Edit">
@@ -2628,7 +2805,6 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
 
   return (
     <div className="space-y-6 mt-4">
-      {/* Organisation Library contractors — searchable combobox */}
       <OrgContractorCombobox
         orgContractors={orgContractors}
         assignedOrgIds={assignedOrgIds}
@@ -2641,19 +2817,19 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-sidebar">Project Contractors</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Contractors specific to this project only.</p>
+            <h3 className="text-sm font-semibold text-sidebar">Project Contacts</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Contacts specific to this project — owners, builders, designers, etc.</p>
           </div>
           {!adding && (
-            <Button variant="outline" size="sm" onClick={() => { setAdding(true); setError(""); }}>
-              <Plus className="h-4 w-4" /> Add Contractor
+            <Button variant="outline" size="sm" onClick={() => { setAdding(true); setError(""); setDupWarning(""); }}>
+              <Plus className="h-4 w-4" /> Add Contact
             </Button>
           )}
         </div>
 
         {contractors.length === 0 && !adding && (
           <div className="text-center py-8 border border-dashed rounded-lg text-muted-foreground text-sm">
-            No project-specific contractors added yet.
+            No contacts added yet. Add builders, owners, designers and other parties here.
           </div>
         )}
 
@@ -2663,32 +2839,53 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
 
         {adding && (
           <div className="p-4 rounded-lg border border-secondary/40 bg-secondary/5 space-y-3">
-            <p className="text-sm font-medium text-sidebar">New Contractor</p>
+            <p className="text-sm font-medium text-sidebar">New Contact</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-xs text-muted-foreground font-medium">Name *</label>
                 <Input value={newName} onChange={e => { setNewName(e.target.value); setError(""); }} placeholder="Full name" autoFocus className="mt-1" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground font-medium">Trade / Discipline</label>
-                <Input value={newTrade} onChange={e => setNewTrade(e.target.value)} placeholder="e.g. Plumber, Electrician" className="mt-1" />
+                <label className="text-xs text-muted-foreground font-medium">Role</label>
+                <select value={newRole} onChange={e => setNewRole(e.target.value)} className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <option value="">Select role…</option>
+                  {CONTACT_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground font-medium">Email</label>
-                <Input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="contractor@email.com" type="email" className="mt-1" />
+                <label className="text-xs text-muted-foreground font-medium">Trade / Discipline</label>
+                <Input value={newTrade} onChange={e => setNewTrade(e.target.value)} placeholder="e.g. Plumber, Electrician" className="mt-1" />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground font-medium">Company</label>
                 <Input value={newCompany} onChange={e => setNewCompany(e.target.value)} placeholder="Company name" className="mt-1" />
               </div>
+              <div>
+                <label className="text-xs text-muted-foreground font-medium">Email</label>
+                <Input value={newEmail}
+                  onChange={e => { setNewEmail(e.target.value); checkDupEmail(e.target.value); setError(""); }}
+                  placeholder="email@example.com" type="email" className="mt-1" />
+                {dupWarning && <p className="text-xs text-amber-600 mt-1">{dupWarning}</p>}
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground font-medium">Phone</label>
+                <Input value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="+61 4XX XXX XXX" className="mt-1" />
+              </div>
             </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={newIsPrimary} onChange={e => setNewIsPrimary(e.target.checked)} className="h-4 w-4 rounded border-gray-300 accent-secondary" />
+              <span className="text-xs font-medium text-sidebar">Set as primary contact</span>
+            </label>
             {error && <p className="text-xs text-red-500">{error}</p>}
             <div className="flex items-center gap-2">
               <Button onClick={addContractor} disabled={saving}>
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                {saving ? "Adding…" : "Add Contractor"}
+                {saving ? "Adding…" : "Add Contact"}
               </Button>
-              <Button variant="outline" onClick={() => { setAdding(false); setError(""); setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); }}>
+              <Button variant="outline" onClick={() => {
+                setAdding(false); setError(""); setDupWarning("");
+                setNewName(""); setNewTrade(""); setNewEmail(""); setNewCompany(""); setNewRole(""); setNewPhone(""); setNewIsPrimary(false);
+              }}>
                 Cancel
               </Button>
             </div>
@@ -2986,6 +3183,16 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Send dialog state
+  const [sendDialogReport, setSendDialogReport] = useState<any | null>(null);
+  const [sendContacts, setSendContacts] = useState<ProjectContractor[]>([]);
+  const [sendSelectedIds, setSendSelectedIds] = useState<Set<number>>(new Set());
+  const [sendCustomEmail, setSendCustomEmail] = useState("");
+  const [sendCustomName, setSendCustomName] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
+  const [sendSuccess, setSendSuccess] = useState(false);
+
   const load = useCallback(async () => {
     try {
       setLoading(true);
@@ -3064,6 +3271,54 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
     } catch {
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const openSendDialog = async (report: any) => {
+    setSendDialogReport(report);
+    setSendSelectedIds(new Set());
+    setSendCustomEmail("");
+    setSendCustomName("");
+    setSendError("");
+    setSendSuccess(false);
+    try {
+      const contacts: ProjectContractor[] = await apiFetch(`/api/projects/${projectId}/contractors`).catch(() => []);
+      setSendContacts(contacts);
+      // Pre-select primary contact if any
+      const primary = contacts.find(c => c.isPrimary && c.email);
+      if (primary) setSendSelectedIds(new Set([primary.id]));
+    } catch {
+      setSendContacts([]);
+    }
+  };
+
+  const closeSendDialog = () => { setSendDialogReport(null); setSendSuccess(false); };
+
+  const sendReport = async () => {
+    if (sendSelectedIds.size === 0 && !sendCustomEmail.trim()) {
+      setSendError("Please select at least one recipient or enter a custom email.");
+      return;
+    }
+    setSendError(""); setSending(true);
+    try {
+      const selectedContacts = sendContacts.filter(c => sendSelectedIds.has(c.id) && c.email);
+      const recipients = [
+        ...selectedContacts.map(c => ({ email: c.email!, name: c.name })),
+        ...(sendCustomEmail.trim() ? [{ email: sendCustomEmail.trim(), name: sendCustomName.trim() || undefined }] : []),
+      ];
+      for (const r of recipients) {
+        await apiFetch(`/api/reports/${sendDialogReport!.id}/send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sentTo: r.email, recipientName: r.name }),
+        });
+      }
+      setSendSuccess(true);
+      await load();
+    } catch (err: any) {
+      setSendError("Failed to send the report. Please try again.");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -3210,6 +3465,16 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => openSendDialog(report)}
+                        className="text-xs gap-1.5"
+                        title="Send report to contacts"
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        Send
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => setConfirmDeleteId(report.id)}
                         className="text-xs text-red-500 border-red-200 hover:bg-red-50 hover:border-red-400"
                         title="Delete report"
@@ -3319,6 +3584,98 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Report Dialog */}
+      <Dialog open={!!sendDialogReport} onOpenChange={o => { if (!o) closeSendDialog(); }}>
+        <DialogContent className="max-w-lg w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-4 w-4 text-secondary" /> Send Report
+            </DialogTitle>
+            <DialogDescription>
+              Select recipients from project contacts or enter a custom email.
+            </DialogDescription>
+          </DialogHeader>
+
+          {sendSuccess ? (
+            <div className="py-8 text-center space-y-3">
+              <CheckCircle className="h-10 w-10 text-green-500 mx-auto" />
+              <p className="font-semibold text-sidebar">Report sent successfully!</p>
+              <p className="text-sm text-muted-foreground">The report has been emailed to the selected recipients.</p>
+              <Button onClick={closeSendDialog} variant="outline">Close</Button>
+            </div>
+          ) : (
+            <div className="space-y-4 pt-2">
+              {/* Contact checkboxes */}
+              {sendContacts.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Project Contacts</p>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {sendContacts.filter(c => c.email).map(c => (
+                      <label key={c.id} className="flex items-center gap-3 cursor-pointer rounded-lg border border-border p-2.5 hover:bg-muted/30 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={sendSelectedIds.has(c.id)}
+                          onChange={e => {
+                            setSendSelectedIds(prev => {
+                              const next = new Set(prev);
+                              e.target.checked ? next.add(c.id) : next.delete(c.id);
+                              return next;
+                            });
+                          }}
+                          className="h-4 w-4 accent-secondary rounded"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-medium text-sidebar">{c.name}</span>
+                            {c.isPrimary && (
+                              <span className="text-[10px] font-bold px-1 py-0 rounded bg-secondary/15 text-secondary border border-secondary/30 uppercase tracking-wide">Primary</span>
+                            )}
+                            {c.contactRole && (
+                              <span className="text-xs text-violet-700">{contactRoleLabel(c.contactRole)}</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{c.email}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  {sendContacts.filter(c => !c.email).length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {sendContacts.filter(c => !c.email).length} contact(s) have no email and are not shown.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Custom email */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Additional Recipient</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Email</label>
+                    <Input value={sendCustomEmail} onChange={e => setSendCustomEmail(e.target.value)} placeholder="email@example.com" type="email" className="mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Name (optional)</label>
+                    <Input value={sendCustomName} onChange={e => setSendCustomName(e.target.value)} placeholder="Full name" className="mt-1" />
+                  </div>
+                </div>
+              </div>
+
+              {sendError && <p className="text-xs text-red-500">{sendError}</p>}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="outline" onClick={closeSendDialog} disabled={sending}>Cancel</Button>
+                <Button onClick={sendReport} disabled={sending} className="gap-1.5">
+                  {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  {sending ? "Sending…" : `Send to ${sendSelectedIds.size + (sendCustomEmail.trim() ? 1 : 0)} recipient${sendSelectedIds.size + (sendCustomEmail.trim() ? 1 : 0) !== 1 ? "s" : ""}`}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
