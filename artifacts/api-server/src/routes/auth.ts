@@ -307,19 +307,39 @@ router.get("/organisation", async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     if (!user) { res.status(404).json({ error: "not_found" }); return; }
 
+    // Team members inherit org details from their company admin's record
+    let orgUser = user;
+    if (!user.isCompanyAdmin && user.adminUserId) {
+      const adminId = parseInt(user.adminUserId);
+      if (!isNaN(adminId)) {
+        const [adminRecord] = await db.select().from(usersTable).where(eq(usersTable.id, adminId));
+        if (adminRecord) orgUser = adminRecord;
+      }
+    }
+
     res.json({
-      name: user.companyName ?? "",
-      abn: user.abn ?? "",
-      phone: user.companyPhone ?? "",
-      email: user.companyEmail ?? "",
-      address: user.companyAddress ?? "",
-      suburb: user.companySuburb ?? "",
-      state: user.companyState ?? "NSW",
-      postcode: user.companyPostcode ?? "",
-      website: user.companyWebsite ?? "",
-      logoUrl: user.logoUrl ?? null,
-      accredBody: user.accreditationBody ?? "BPB",
-      accredNum: user.accreditationNumber ?? "",
+      name: orgUser.companyName ?? "",
+      abn: orgUser.abn ?? "",
+      acn: orgUser.acn ?? "",
+      phone: orgUser.companyPhone ?? "",
+      email: orgUser.companyEmail ?? "",
+      address: orgUser.companyAddress ?? "",
+      suburb: orgUser.companySuburb ?? "",
+      state: orgUser.companyState ?? "NSW",
+      postcode: orgUser.companyPostcode ?? "",
+      website: orgUser.companyWebsite ?? "",
+      logoUrl: orgUser.logoUrl ?? null,
+      accredBody: orgUser.accreditationBody ?? "BPB",
+      accredNum: orgUser.accreditationNumber ?? "",
+      accredExpiry: orgUser.accreditationExpiry ?? "",
+      plInsurer: orgUser.plInsurer ?? "",
+      plPolicyNumber: orgUser.plPolicyNumber ?? "",
+      plExpiry: orgUser.plExpiry ?? "",
+      piInsurer: orgUser.piInsurer ?? "",
+      piPolicyNumber: orgUser.piPolicyNumber ?? "",
+      piExpiry: orgUser.piExpiry ?? "",
+      reportFooterText: orgUser.reportFooterText ?? "",
+      isCompanyAdmin: user.isCompanyAdmin ?? false,
     });
   } catch (err) {
     req.log.error({ err }, "Get organisation error");
@@ -335,10 +355,21 @@ router.patch("/organisation", async (req, res) => {
     const userId = parseInt(Buffer.from(token, "base64").toString().split(":")[0]);
     if (isNaN(userId)) { res.status(401).json({ error: "unauthorized" }); return; }
 
-    const { name, abn, phone, email, address, suburb, state, postcode, website, logoUrl, accredBody, accredNum } = req.body;
+    const [user] = await db.select({ isCompanyAdmin: usersTable.isCompanyAdmin, isAdmin: usersTable.isAdmin })
+      .from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) { res.status(404).json({ error: "not_found" }); return; }
+
+    // Only company admins (or platform admins) may modify organisation details
+    if (!user.isCompanyAdmin && !user.isAdmin) {
+      res.status(403).json({ error: "forbidden", message: "Only company administrators can update organisation settings" });
+      return;
+    }
+
+    const { name, abn, acn, phone, email, address, suburb, state, postcode, website, logoUrl, accredBody, accredNum, accredExpiry, plInsurer, plPolicyNumber, plExpiry, piInsurer, piPolicyNumber, piExpiry, reportFooterText } = req.body;
     const updates: Record<string, any> = { updatedAt: new Date() };
     if (name !== undefined) updates.companyName = name?.trim() || null;
     if (abn !== undefined) updates.abn = abn?.trim() || null;
+    if (acn !== undefined) updates.acn = acn?.trim() || null;
     if (phone !== undefined) updates.companyPhone = phone?.trim() || null;
     if (email !== undefined) updates.companyEmail = email?.trim() || null;
     if (address !== undefined) updates.companyAddress = address?.trim() || null;
@@ -349,6 +380,14 @@ router.patch("/organisation", async (req, res) => {
     if (logoUrl !== undefined) updates.logoUrl = logoUrl || null;
     if (accredBody !== undefined) updates.accreditationBody = accredBody?.trim() || null;
     if (accredNum !== undefined) updates.accreditationNumber = accredNum?.trim() || null;
+    if (accredExpiry !== undefined) updates.accreditationExpiry = accredExpiry?.trim() || null;
+    if (plInsurer !== undefined) updates.plInsurer = plInsurer?.trim() || null;
+    if (plPolicyNumber !== undefined) updates.plPolicyNumber = plPolicyNumber?.trim() || null;
+    if (plExpiry !== undefined) updates.plExpiry = plExpiry?.trim() || null;
+    if (piInsurer !== undefined) updates.piInsurer = piInsurer?.trim() || null;
+    if (piPolicyNumber !== undefined) updates.piPolicyNumber = piPolicyNumber?.trim() || null;
+    if (piExpiry !== undefined) updates.piExpiry = piExpiry?.trim() || null;
+    if (reportFooterText !== undefined) updates.reportFooterText = reportFooterText?.trim() || null;
 
     const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, userId)).returning();
     if (!updated) { res.status(404).json({ error: "not_found" }); return; }

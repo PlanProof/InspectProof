@@ -1151,7 +1151,7 @@ const FOOTER_H = 40;
 const HEADER_H = 72;    // 68px navy + 4px pear accent
 const CONTENT_TOP = 90; // cursor reset after header
 
-function addPageHeader(doc: PDFKit.PDFDocument, typeLabel: string) {
+function addPageHeader(doc: PDFKit.PDFDocument, typeLabel: string, logoBuffer?: Buffer, companyName?: string) {
   const pageW = doc.page.width;
 
   doc.save();
@@ -1160,37 +1160,38 @@ function addPageHeader(doc: PDFKit.PDFDocument, typeLabel: string) {
   doc.rect(0, 0, pageW, 68).fill(COLOR_NAVY);
   doc.rect(0, 68, pageW, 4).fill(COLOR_PEAR);
 
-  // ── Logo badge — pear rounded square matching the landing page icon ───────
-  const badgeX = MARGIN;
-  const badgeY = 14;
-  const badgeS = 40; // square
-  doc.roundedRect(badgeX, badgeY, badgeS, badgeS, 6).fill(COLOR_PEAR);
-
-  // Clipboard body (navy) — sits inside the pear badge
-  const cbX = badgeX + 7;
-  const cbY = badgeY + 11;
-  const cbW = badgeS - 14;
-  const cbH = badgeS - 15;
-  doc.roundedRect(cbX, cbY, cbW, cbH, 2).fill(COLOR_NAVY);
-
-  // Clip at top centre (navy, overlapping top edge of body)
-  const clipW = 10;
-  const clipH = 5;
-  const clipX = badgeX + (badgeS - clipW) / 2;
-  const clipY = badgeY + 7;
-  doc.roundedRect(clipX, clipY, clipW, clipH, 1.5).fill(COLOR_NAVY);
-
-  // Three list lines (pear) inside the clipboard body
-  const lineX = cbX + 3;
-  const lineW = cbW - 6;
-  for (let i = 0; i < 3; i++) {
-    doc.rect(lineX, cbY + 4 + i * 5, lineW, 1.5).fill(COLOR_PEAR);
+  if (logoBuffer) {
+    // ── Company logo (uploaded) ───────────────────────────────────────────
+    try {
+      const logoMaxW = 130;
+      const logoMaxH = 44;
+      const logoX = MARGIN;
+      const logoY = (68 - logoMaxH) / 2;
+      doc.image(logoBuffer, logoX, logoY, {
+        fit: [logoMaxW, logoMaxH],
+        align: "left",
+        valign: "center",
+      });
+    } catch {
+      // fallback to default badge if logo is corrupt
+      _drawDefaultBadge(doc);
+    }
+  } else {
+    // ── Default InspectProof vector badge ────────────────────────────────
+    _drawDefaultBadge(doc);
   }
 
-  // ── Brand name — Oddlini, centred vertically in the 68px bar ─────────────
-  const textX = badgeX + badgeS + 10;
-  doc.fillColor("#ffffff").fontSize(16).font(FODDLINI)
-    .text("InspectProof", textX, 25, { lineBreak: false });
+  // ── Brand / company name text ─────────────────────────────────────────
+  if (!logoBuffer) {
+    const textX = MARGIN + 50; // badge is 40px + 10px gap
+    doc.fillColor("#ffffff").fontSize(16).font(FODDLINI)
+      .text("InspectProof", textX, 25, { lineBreak: false });
+  } else if (companyName) {
+    // Show company name beside logo when logo is loaded
+    const textX = MARGIN + 140;
+    doc.fillColor("#ffffff").fontSize(13).font(FODDLINI)
+      .text(companyName, textX, 26, { lineBreak: false });
+  }
 
   // ── Report type label (right-aligned) ────────────────────────────────────
   doc.fillColor("rgba(255,255,255,0.6)").fontSize(7.5).font(F)
@@ -1203,7 +1204,39 @@ function addPageHeader(doc: PDFKit.PDFDocument, typeLabel: string) {
   doc.y = CONTENT_TOP;
 }
 
-function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number, orgInfo?: { companyName?: string; abn?: string; address?: string }) {
+function _drawDefaultBadge(doc: PDFKit.PDFDocument) {
+  const badgeX = MARGIN;
+  const badgeY = 14;
+  const badgeS = 40;
+  doc.roundedRect(badgeX, badgeY, badgeS, badgeS, 6).fill(COLOR_PEAR);
+  const cbX = badgeX + 7;
+  const cbY = badgeY + 11;
+  const cbW = badgeS - 14;
+  const cbH = badgeS - 15;
+  doc.roundedRect(cbX, cbY, cbW, cbH, 2).fill(COLOR_NAVY);
+  const clipW = 10;
+  const clipH = 5;
+  const clipX = badgeX + (badgeS - clipW) / 2;
+  const clipY = badgeY + 7;
+  doc.roundedRect(clipX, clipY, clipW, clipH, 1.5).fill(COLOR_NAVY);
+  const lineX = cbX + 3;
+  const lineW = cbW - 6;
+  for (let i = 0; i < 3; i++) {
+    doc.rect(lineX, cbY + 4 + i * 5, lineW, 1.5).fill(COLOR_PEAR);
+  }
+}
+
+interface OrgInfo {
+  companyName?: string;
+  abn?: string;
+  acn?: string;
+  address?: string;
+  phone?: string;
+  accreditationNumber?: string;
+  reportFooterText?: string;
+}
+
+function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number, orgInfo?: OrgInfo) {
   const pageW = doc.page.width;
   const pageH = doc.page.height;
   doc.save();
@@ -1211,19 +1244,29 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
 
   let footerLeft = "InspectProof · Confidential";
   if (orgInfo?.companyName) {
-    footerLeft = orgInfo.companyName;
-    if (orgInfo.abn) footerLeft += `  ·  ABN ${orgInfo.abn}`;
-    if (orgInfo.address) footerLeft += `  ·  ${orgInfo.address}`;
+    const parts: string[] = [orgInfo.companyName];
+    if (orgInfo.abn) parts.push(`ABN ${orgInfo.abn}`);
+    else if (orgInfo.acn) parts.push(`ACN ${orgInfo.acn}`);
+    if (orgInfo.address) parts.push(orgInfo.address);
+    if (orgInfo.phone) parts.push(orgInfo.phone);
+    if (orgInfo.accreditationNumber) parts.push(`Acc. No. ${orgInfo.accreditationNumber}`);
+    footerLeft = parts.join("  ·  ");
   }
 
   const footerRight = `Page ${pageNum} of ${totalPages}`;
-  const footerY = pageH - FOOTER_H + 15;
+  const footerY = pageH - FOOTER_H + (orgInfo?.reportFooterText ? 7 : 15);
   const halfW = (pageW - MARGIN * 2) / 2 - 10;
 
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
     .text(footerLeft, MARGIN, footerY, { width: halfW * 1.6, lineBreak: false, ellipsis: true });
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
     .text(footerRight, pageW - MARGIN - 60, footerY, { width: 60, align: "right", lineBreak: false });
+
+  // Custom footer text on a second line
+  if (orgInfo?.reportFooterText) {
+    doc.fillColor("#6B7280").fontSize(6.5).font(F)
+      .text(orgInfo.reportFooterText, MARGIN, footerY + 12, { width: pageW - MARGIN * 2, lineBreak: false, ellipsis: true });
+  }
 
   doc.restore();
 }
@@ -1242,7 +1285,8 @@ function buildPdf(
   photosByDesc?: Map<string, string[]>,        // description → [storagePath, ...]
   photoBuffers?: Map<string, Buffer>,          // storagePath → image buffer
   checklistPhotos?: ChecklistPhotoEntry[],     // ordered list for photo appendix
-  orgInfo?: { companyName?: string; abn?: string; address?: string },
+  orgInfo?: OrgInfo,
+  logoBuffer?: Buffer,
 ): PDFKit.PDFDocument {
   const doc = new PDFDocument({
     size: "A4",
@@ -1262,7 +1306,7 @@ function buildPdf(
   const typeLabel = (report.reportTypeLabel || report.reportType || "Report").toUpperCase();
 
   // Header on first page
-  addPageHeader(doc, typeLabel);
+  addPageHeader(doc, typeLabel, logoBuffer, orgInfo?.companyName);
 
   // ── Document title ─────────────────────────────────────────────────────────
   doc.fillColor(COLOR_NAVY).fontSize(15).font(FB)
@@ -1302,7 +1346,7 @@ function buildPdf(
   const checkPageBreak = (needed = 20) => {
     if (doc.y + needed > bottomLimit) {
       doc.addPage();
-      addPageHeader(doc, typeLabel);
+      addPageHeader(doc, typeLabel, logoBuffer, orgInfo?.companyName);
     }
   };
 
@@ -1522,13 +1566,13 @@ function buildPdf(
 
     if (itemsWithPhotos.length > 0) {
       doc.addPage();
-      addPageHeader(doc, "Photo Documentation");
+      addPageHeader(doc, "Photo Documentation", logoBuffer, orgInfo?.companyName);
 
       // Section heading
       const checkPageBreakAppendix = (needed = 20) => {
         if (doc.y + needed > doc.page.height - FOOTER_H - 30) {
           doc.addPage();
-          addPageHeader(doc, "Photo Documentation");
+          addPageHeader(doc, "Photo Documentation", logoBuffer, orgInfo?.companyName);
         }
       };
 
@@ -1830,8 +1874,9 @@ router.get("/:id/pdf", async (req, res) => {
       }
     }
 
-    // Fetch org info from the report's inspector for the PDF footer
-    let orgInfo: { companyName?: string; abn?: string; address?: string } | undefined;
+    // Fetch org info from the report's inspector for the PDF header/footer
+    let orgInfo: OrgInfo | undefined;
+    let logoBuffer: Buffer | undefined;
     try {
       let inspectorId: number | null = null;
       if (report.inspectionId) {
@@ -1840,27 +1885,72 @@ router.get("/:id/pdf", async (req, res) => {
         inspectorId = insp?.inspectorId ?? null;
       }
       if (inspectorId) {
-        const [orgUser] = await db.select({
+        const [inspectorUser] = await db.select({
           companyName: usersTable.companyName,
           abn: usersTable.abn,
+          acn: usersTable.acn,
           companyAddress: usersTable.companyAddress,
           companySuburb: usersTable.companySuburb,
           companyState: usersTable.companyState,
+          companyPhone: usersTable.companyPhone,
+          accreditationNumber: usersTable.accreditationNumber,
+          reportFooterText: usersTable.reportFooterText,
+          logoUrl: usersTable.logoUrl,
+          isCompanyAdmin: usersTable.isCompanyAdmin,
+          adminUserId: usersTable.adminUserId,
         }).from(usersTable).where(eq(usersTable.id, inspectorId));
+
+        // For team members, inherit company branding from the admin's record
+        let orgUser = inspectorUser;
+        if (inspectorUser && !inspectorUser.isCompanyAdmin && inspectorUser.adminUserId) {
+          const adminId = parseInt(inspectorUser.adminUserId);
+          if (!isNaN(adminId)) {
+            const [adminRecord] = await db.select({
+              companyName: usersTable.companyName,
+              abn: usersTable.abn,
+              acn: usersTable.acn,
+              companyAddress: usersTable.companyAddress,
+              companySuburb: usersTable.companySuburb,
+              companyState: usersTable.companyState,
+              companyPhone: usersTable.companyPhone,
+              accreditationNumber: usersTable.accreditationNumber,
+              reportFooterText: usersTable.reportFooterText,
+              logoUrl: usersTable.logoUrl,
+              isCompanyAdmin: usersTable.isCompanyAdmin,
+              adminUserId: usersTable.adminUserId,
+            }).from(usersTable).where(eq(usersTable.id, adminId));
+            if (adminRecord) orgUser = adminRecord;
+          }
+        }
+
         if (orgUser?.companyName) {
           const addrParts = [orgUser.companyAddress, orgUser.companySuburb, orgUser.companyState].filter(Boolean);
           orgInfo = {
             companyName: orgUser.companyName || undefined,
             abn: orgUser.abn || undefined,
+            acn: orgUser.acn || undefined,
             address: addrParts.length ? addrParts.join(", ") : undefined,
+            phone: orgUser.companyPhone || undefined,
+            accreditationNumber: orgUser.accreditationNumber || undefined,
+            reportFooterText: orgUser.reportFooterText || undefined,
           };
+          // Fetch company logo if set
+          if (orgUser.logoUrl) {
+            try {
+              const logoStorage = new ObjectStorageService();
+              const { buffer: logoBuf } = await logoStorage.fetchObjectBuffer(orgUser.logoUrl);
+              logoBuffer = logoBuf;
+            } catch (logoErr) {
+              req.log.warn({ logoErr }, "Could not fetch company logo for PDF header");
+            }
+          }
         }
       }
     } catch (orgErr) {
-      req.log.warn({ orgErr }, "Could not load org info for PDF footer");
+      req.log.warn({ orgErr }, "Could not load org info for PDF");
     }
 
-    const doc = buildPdf(formatted, project, signatureBuffer, photosByDesc, photoBuffers, checklistPhotos, orgInfo);
+    const doc = buildPdf(formatted, project, signatureBuffer, photosByDesc, photoBuffers, checklistPhotos, orgInfo, logoBuffer);
 
     // ── Append markup pages at end of report ─────────────────────────────────
     if (markupBuffers.length > 0) {

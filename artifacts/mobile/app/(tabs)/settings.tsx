@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View, Text, ScrollView, StyleSheet, Pressable,
   Platform, Switch, Image, Alert, Linking,
@@ -86,6 +86,25 @@ export default function SettingsScreen() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [orgDetails, setOrgDetails] = useState<{
+    name?: string; abn?: string; acn?: string; phone?: string;
+    address?: string; suburb?: string; state?: string; postcode?: string;
+    accredBody?: string; accredNum?: string; accredExpiry?: string;
+    logoUrl?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    fetch(getApiUrl("/api/auth/organisation"), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && (data.name || data.abn || data.phone)) setOrgDetails(data);
+      })
+      .catch(() => {});
+  }, [token]);
+
   async function handleDeleteAccount() {
     setDeleting(true);
     try {
@@ -143,6 +162,70 @@ export default function SettingsScreen() {
             <Text style={styles.profileEditText}>Edit</Text>
           </View>
         </Pressable>
+
+        {/* Company Details (read-only) */}
+        {orgDetails && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Company</Text>
+            <View style={styles.group}>
+              {orgDetails.logoUrl && (
+                <View style={styles.orgLogoRow}>
+                  <Image
+                    source={{ uri: getApiUrl(`/api/storage${orgDetails.logoUrl}`) }}
+                    style={styles.orgLogo}
+                    resizeMode="contain"
+                  />
+                </View>
+              )}
+              {orgDetails.name && (
+                <View style={styles.orgDetailRow}>
+                  <Feather name="briefcase" size={14} color={Colors.textTertiary} style={styles.orgDetailIcon} />
+                  <Text style={styles.orgDetailLabel}>Company</Text>
+                  <Text style={styles.orgDetailValue}>{orgDetails.name}</Text>
+                </View>
+              )}
+              {(orgDetails.abn || orgDetails.acn) && (
+                <View style={styles.orgDetailRow}>
+                  <Feather name="hash" size={14} color={Colors.textTertiary} style={styles.orgDetailIcon} />
+                  <Text style={styles.orgDetailLabel}>{orgDetails.abn ? "ABN" : "ACN"}</Text>
+                  <Text style={styles.orgDetailValue}>{orgDetails.abn || orgDetails.acn}</Text>
+                </View>
+              )}
+              {orgDetails.phone && (
+                <View style={styles.orgDetailRow}>
+                  <Feather name="phone" size={14} color={Colors.textTertiary} style={styles.orgDetailIcon} />
+                  <Text style={styles.orgDetailLabel}>Phone</Text>
+                  <Text style={styles.orgDetailValue}>{orgDetails.phone}</Text>
+                </View>
+              )}
+              {(orgDetails.address || orgDetails.suburb) && (
+                <View style={styles.orgDetailRow}>
+                  <Feather name="map-pin" size={14} color={Colors.textTertiary} style={styles.orgDetailIcon} />
+                  <Text style={styles.orgDetailLabel}>Address</Text>
+                  <Text style={styles.orgDetailValue}>
+                    {[orgDetails.address, orgDetails.suburb, orgDetails.state, orgDetails.postcode].filter(Boolean).join(", ")}
+                  </Text>
+                </View>
+              )}
+              {(orgDetails.accredBody || orgDetails.accredNum) && (
+                <View style={styles.orgDetailRow}>
+                  <Feather name="award" size={14} color={Colors.textTertiary} style={styles.orgDetailIcon} />
+                  <Text style={styles.orgDetailLabel}>Accreditation</Text>
+                  <Text style={styles.orgDetailValue}>
+                    {[orgDetails.accredBody, orgDetails.accredNum].filter(Boolean).join(" · ")}
+                  </Text>
+                </View>
+              )}
+              {orgDetails.accredExpiry && (
+                <View style={styles.orgDetailRow}>
+                  <Feather name="calendar" size={14} color={Colors.textTertiary} style={styles.orgDetailIcon} />
+                  <Text style={styles.orgDetailLabel}>Acc. Expiry</Text>
+                  <Text style={styles.orgDetailValue}>{orgDetails.accredExpiry}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Account */}
         <View style={styles.section}>
@@ -419,4 +502,24 @@ const styles = StyleSheet.create({
   confirmBtnDangerText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
   confirmSuccess: { flexDirection: "row", alignItems: "center", gap: 8 },
   confirmSuccessText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.success },
+
+  orgLogoRow: {
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: Colors.borderLight,
+    alignItems: "flex-start",
+  },
+  orgLogo: { width: 120, height: 40 },
+  orgDetailRow: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    paddingHorizontal: 14, paddingVertical: 11,
+    borderBottomWidth: 1, borderBottomColor: Colors.borderLight,
+  },
+  orgDetailIcon: { marginTop: 1 },
+  orgDetailLabel: {
+    fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary, width: 88,
+  },
+  orgDetailValue: {
+    flex: 1, fontSize: 13, fontFamily: "PlusJakartaSans_400Regular", color: Colors.text,
+  },
 });

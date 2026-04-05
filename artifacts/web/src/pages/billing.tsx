@@ -108,8 +108,8 @@ export default function Billing() {
           const plan = data?.plan ?? "free_trial";
           if (plan !== "free_trial") {
             setSyncing(false);
-            toast({ title: "Subscription activated!", description: "Taking you to your dashboard..." });
-            setTimeout(() => setLocation("/dashboard"), 1500);
+            toast({ title: "Subscription activated!", description: "Setting up your organisation…" });
+            setTimeout(() => setLocation("/settings?onboarding=1"), 1500);
           } else {
             setSyncing(false);
             setSyncError(true);

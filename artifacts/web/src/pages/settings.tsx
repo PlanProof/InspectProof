@@ -904,17 +904,26 @@ function NotificationsTab() {
 // ── Organisation Tab ──────────────────────────────────────────────────────────
 
 const ORG_DEFAULTS = {
-  name:       "",
-  abn:        "",
-  phone:      "",
-  email:      "",
-  address:    "",
-  suburb:     "",
-  state:      "NSW",
-  postcode:   "",
-  website:    "",
-  accredBody: "BPB",
-  accredNum:  "",
+  name:            "",
+  abn:             "",
+  acn:             "",
+  phone:           "",
+  email:           "",
+  address:         "",
+  suburb:          "",
+  state:           "NSW",
+  postcode:        "",
+  website:         "",
+  accredBody:      "BPB",
+  accredNum:       "",
+  accredExpiry:    "",
+  plInsurer:       "",
+  plPolicyNumber:  "",
+  plExpiry:        "",
+  piInsurer:       "",
+  piPolicyNumber:  "",
+  piExpiry:        "",
+  reportFooterText: "",
 };
 
 interface StaffMember {
@@ -1554,25 +1563,36 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
   const [form, setForm] = useState(ORG_DEFAULTS);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     apiFetch("/api/auth/organisation")
       .then(data => {
         setForm({
-          name:       data.name       ?? ORG_DEFAULTS.name,
-          abn:        data.abn        ?? ORG_DEFAULTS.abn,
-          phone:      data.phone      ?? ORG_DEFAULTS.phone,
-          email:      data.email      ?? ORG_DEFAULTS.email,
-          address:    data.address    ?? ORG_DEFAULTS.address,
-          suburb:     data.suburb     ?? ORG_DEFAULTS.suburb,
-          state:      data.state      ?? ORG_DEFAULTS.state,
-          postcode:   data.postcode   ?? ORG_DEFAULTS.postcode,
-          website:    data.website    ?? ORG_DEFAULTS.website,
-          accredBody: data.accredBody ?? ORG_DEFAULTS.accredBody,
-          accredNum:  data.accredNum  ?? ORG_DEFAULTS.accredNum,
+          name:            data.name            ?? ORG_DEFAULTS.name,
+          abn:             data.abn             ?? ORG_DEFAULTS.abn,
+          acn:             data.acn             ?? ORG_DEFAULTS.acn,
+          phone:           data.phone           ?? ORG_DEFAULTS.phone,
+          email:           data.email           ?? ORG_DEFAULTS.email,
+          address:         data.address         ?? ORG_DEFAULTS.address,
+          suburb:          data.suburb          ?? ORG_DEFAULTS.suburb,
+          state:           data.state           ?? ORG_DEFAULTS.state,
+          postcode:        data.postcode        ?? ORG_DEFAULTS.postcode,
+          website:         data.website         ?? ORG_DEFAULTS.website,
+          accredBody:      data.accredBody      ?? ORG_DEFAULTS.accredBody,
+          accredNum:       data.accredNum       ?? ORG_DEFAULTS.accredNum,
+          accredExpiry:    data.accredExpiry    ?? ORG_DEFAULTS.accredExpiry,
+          plInsurer:       data.plInsurer       ?? ORG_DEFAULTS.plInsurer,
+          plPolicyNumber:  data.plPolicyNumber  ?? ORG_DEFAULTS.plPolicyNumber,
+          plExpiry:        data.plExpiry        ?? ORG_DEFAULTS.plExpiry,
+          piInsurer:       data.piInsurer       ?? ORG_DEFAULTS.piInsurer,
+          piPolicyNumber:  data.piPolicyNumber  ?? ORG_DEFAULTS.piPolicyNumber,
+          piExpiry:        data.piExpiry        ?? ORG_DEFAULTS.piExpiry,
+          reportFooterText: data.reportFooterText ?? ORG_DEFAULTS.reportFooterText,
         });
         setLogoUrl(data.logoUrl ?? null);
+        setIsAdmin(data.isCompanyAdmin ?? false);
         // Migrate any local data if DB is empty
         if (!data.name && !data.abn) {
           try {
@@ -1669,8 +1689,16 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
     </div>
   );
 
+  const readOnly = !isAdmin;
+
   return (
     <>
+      {readOnly && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 mb-2">
+          <Lock className="h-4 w-4 shrink-0 text-amber-600" />
+          <span>Organisation settings can only be edited by your company administrator.</span>
+        </div>
+      )}
       <SectionCard title="Company Logo" description="Your logo appears on generated compliance reports and defect notices">
         <div className="flex items-center gap-5">
           <div className="relative h-20 w-40 rounded-lg border-2 border-dashed border-border bg-muted/30 flex items-center justify-center overflow-hidden shrink-0">
@@ -1700,16 +1728,18 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
               className="hidden"
               onChange={handleLogoUpload}
             />
-            <Button
-              variant="outline"
-              onClick={() => logoInputRef.current?.click()}
-              disabled={logoUploading}
-              className="flex items-center gap-2"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              {logoUrl ? "Replace Logo" : "Upload Logo"}
-            </Button>
-            {logoUrl && (
+            {!readOnly && (
+              <Button
+                variant="outline"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={logoUploading}
+                className="flex items-center gap-2"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {logoUrl ? "Replace Logo" : "Upload Logo"}
+              </Button>
+            )}
+            {!readOnly && logoUrl && (
               <Button
                 variant="danger"
                 onClick={removeLogo}
@@ -1725,45 +1755,45 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
         </div>
       </SectionCard>
 
-      <SectionCard title="Organisation Details" description="Details that appear on compliance reports and correspondence">
+      <SectionCard title="Business Details" description="Details that appear on compliance reports and correspondence">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField label="Organisation Name">
-            <Input value={form.name} onChange={set("name")} />
+            <Input value={form.name} onChange={set("name")} disabled={readOnly} />
           </FormField>
           <FormField label="ABN" hint="Australian Business Number">
-            <Input value={form.abn} onChange={set("abn")} placeholder="12 345 678 901" />
+            <Input value={form.abn} onChange={set("abn")} placeholder="12 345 678 901" disabled={readOnly} />
+          </FormField>
+          <FormField label="ACN" hint="Australian Company Number (if registered as a company)">
+            <Input value={form.acn} onChange={set("acn")} placeholder="123 456 789" disabled={readOnly} />
           </FormField>
           <FormField label="Business Phone">
-            <Input value={form.phone} onChange={set("phone")} />
+            <Input value={form.phone} onChange={set("phone")} disabled={readOnly} />
           </FormField>
           <FormField label="Business Email">
-            <Input value={form.email} onChange={set("email")} type="email" />
+            <Input value={form.email} onChange={set("email")} type="email" disabled={readOnly} />
           </FormField>
           <FormField label="Website">
-            <Input value={form.website} onChange={set("website")} />
+            <Input value={form.website} onChange={set("website")} disabled={readOnly} />
           </FormField>
         </div>
-      </SectionCard>
-
-      <SectionCard title="Business Address" description="Address printed on compliance certificates and defect notices">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="border-t border-border/50 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
             <FormField label="Street Address">
-              <Input value={form.address} onChange={set("address")} />
+              <Input value={form.address} onChange={set("address")} disabled={readOnly} />
             </FormField>
           </div>
           <FormField label="Suburb">
-            <Input value={form.suburb} onChange={set("suburb")} />
+            <Input value={form.suburb} onChange={set("suburb")} disabled={readOnly} />
           </FormField>
           <FormField label="State">
-            <Select value={form.state} onChange={set("state") as any}>
+            <Select value={form.state} onChange={set("state") as any} disabled={readOnly}>
               {["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"].map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </Select>
           </FormField>
           <FormField label="Postcode">
-            <Input value={form.postcode} onChange={set("postcode")} maxLength={4} />
+            <Input value={form.postcode} onChange={set("postcode")} maxLength={4} disabled={readOnly} />
           </FormField>
         </div>
       </SectionCard>
@@ -1771,7 +1801,7 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
       <SectionCard title="Accreditation" description="Professional accreditation details printed on reports">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField label="Accreditation Body">
-            <Select value={form.accredBody} onChange={set("accredBody") as any}>
+            <Select value={form.accredBody} onChange={set("accredBody") as any} disabled={readOnly}>
               <optgroup label="State &amp; Territory Regulatory Bodies">
                 <option value="BPB">NSW Building Professionals Board (BPB)</option>
                 <option value="QBCC">Queensland Building and Construction Commission (QBCC)</option>
@@ -1795,9 +1825,59 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
             </Select>
           </FormField>
           <FormField label="Accreditation Number">
-            <Input value={form.accredNum} onChange={set("accredNum")} placeholder="e.g. BPB0001234" />
+            <Input value={form.accredNum} onChange={set("accredNum")} placeholder="e.g. BPB0001234" disabled={readOnly} />
+          </FormField>
+          <FormField label="Accreditation Expiry Date">
+            <Input value={form.accredExpiry} onChange={set("accredExpiry")} type="date" disabled={readOnly} />
           </FormField>
         </div>
+      </SectionCard>
+
+      <SectionCard title="Insurance" description="Insurance details for compliance reporting. Stored securely, not shared externally.">
+        <div className="space-y-4">
+          <p className="text-xs font-semibold text-sidebar uppercase tracking-wide">Public Liability Insurance</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <FormField label="Insurer Name">
+              <Input value={form.plInsurer} onChange={set("plInsurer")} placeholder="e.g. QBE Insurance" disabled={readOnly} />
+            </FormField>
+            <FormField label="Policy Number">
+              <Input value={form.plPolicyNumber} onChange={set("plPolicyNumber")} placeholder="e.g. PLI-12345678" disabled={readOnly} />
+            </FormField>
+            <FormField label="Expiry Date">
+              <Input value={form.plExpiry} onChange={set("plExpiry")} type="date" disabled={readOnly} />
+            </FormField>
+          </div>
+          <div className="border-t border-border/50 pt-4">
+            <p className="text-xs font-semibold text-sidebar uppercase tracking-wide mb-3">Professional Indemnity Insurance</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <FormField label="Insurer Name">
+                <Input value={form.piInsurer} onChange={set("piInsurer")} placeholder="e.g. Aon Risk Solutions" disabled={readOnly} />
+              </FormField>
+              <FormField label="Policy Number">
+                <Input value={form.piPolicyNumber} onChange={set("piPolicyNumber")} placeholder="e.g. PII-87654321" disabled={readOnly} />
+              </FormField>
+              <FormField label="Expiry Date">
+                <Input value={form.piExpiry} onChange={set("piExpiry")} type="date" disabled={readOnly} />
+              </FormField>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Report Branding" description="Custom text and branding options applied to generated PDF reports">
+        <FormField
+          label="Custom Footer Text"
+          hint="This text appears at the bottom of every generated PDF report — use it for disclaimers, terms, or contact info."
+        >
+          <textarea
+            value={form.reportFooterText}
+            onChange={e => setForm((f: typeof ORG_DEFAULTS) => ({ ...f, reportFooterText: e.target.value }))}
+            placeholder="e.g. This report is prepared for the exclusive use of the commissioning client. All findings are based on conditions observed at the time of inspection."
+            rows={3}
+            disabled={readOnly}
+            className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background transition resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+        </FormField>
       </SectionCard>
 
       <SectionCard
@@ -1830,23 +1910,25 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
         </div>
       </SectionCard>
 
-      <div className="flex justify-end">
-        <div className="flex items-center gap-3">
-          {isOnboarding && (
-            <button
-              onClick={() => save(true)}
-              className="text-sm text-muted-foreground underline underline-offset-2 hover:text-sidebar transition-colors"
-            >
-              Skip for now →
-            </button>
-          )}
-          <SaveBanner show={saved} />
-          <Button onClick={() => save()} disabled={saving} className="flex items-center gap-2">
-            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {saving ? "Saving…" : isOnboarding ? "Save & Start Inspecting →" : "Save Organisation"}
-          </Button>
+      {!readOnly && (
+        <div className="flex justify-end">
+          <div className="flex items-center gap-3">
+            {isOnboarding && (
+              <button
+                onClick={() => save(true)}
+                className="text-sm text-muted-foreground underline underline-offset-2 hover:text-sidebar transition-colors"
+              >
+                Skip for now →
+              </button>
+            )}
+            <SaveBanner show={saved} />
+            <Button onClick={() => save()} disabled={saving} className="flex items-center gap-2">
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {saving ? "Saving…" : isOnboarding ? "Save & Start Inspecting →" : "Save Organisation"}
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
