@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Label } from "@/components/ui";
-import { AlertTriangle, Check, ChevronLeft, Loader2, Eye, EyeOff, Smartphone } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, Loader2, Eye, EyeOff, Smartphone, LogIn } from "lucide-react";
 
 const API = (path: string) => `/api${path}`;
 
@@ -32,9 +32,12 @@ export default function JoinPage() {
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [mobileOnly, setMobileOnly] = useState(false);
-  const [wasAlreadyLoggedIn, setWasAlreadyLoggedIn] = useState(false);
 
-  const { login } = useAuth();
+  const { isAuthenticated } = useAuth();
+
+  // If a user is already logged in, show them a clear message rather than
+  // letting them accidentally create a new account in their active session.
+  const alreadyLoggedIn = isAuthenticated;
 
   useEffect(() => {
     if (!token) {
@@ -79,15 +82,11 @@ export default function JoinPage() {
         return;
       }
       setMobileOnly(body.mobileOnly ?? false);
-      // Capture before login() sets localStorage, so "done" render is correct
-      const alreadyLoggedIn = !!localStorage.getItem("inspectproof_token");
-      setWasAlreadyLoggedIn(alreadyLoggedIn);
       setStatus("done");
-      // Only auto-login if there is no existing session — otherwise we'd hijack
-      // the current user's session (e.g. the admin testing their own invite link).
-      if (!body.mobileOnly && body.token && !alreadyLoggedIn) {
-        login(body.token);
-      }
+      // Never auto-login from the join page.  Doing so risks overwriting the
+      // current admin session if they opened this link themselves (e.g. to
+      // test it), or if their token was removed mid-request by the 401
+      // interceptor.  The new user always signs in manually from /login.
     } catch {
       setFormError("Network error — please try again.");
     } finally {
@@ -202,26 +201,63 @@ export default function JoinPage() {
                       </a>
                     </div>
                   </div>
-                ) : wasAlreadyLoggedIn ? (
+                ) : (
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      The new account has been created. Sign in with the invitation email and password to access the dashboard.
+                      Sign in with your invitation email and the password you just set to access your dashboard.
                     </p>
                     <a
                       href="/login"
-                      className="w-full flex items-center justify-center h-11 bg-[#0B1933] text-white rounded-xl text-base font-semibold hover:bg-[#0B1933]/90 transition-colors"
+                      className="w-full flex items-center justify-center gap-2 h-11 bg-[#0B1933] text-white rounded-xl text-base font-semibold hover:bg-[#0B1933]/90 transition-colors"
                     >
-                      Sign in to new account
+                      <LogIn className="h-4 w-4" />
+                      Sign in to your account
                     </a>
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Redirecting you to your dashboard…</p>
                 )}
               </CardContent>
             </Card>
           )}
 
-          {status === "valid" && invite && (
+          {/* Already logged in — warn admin not to fill out the form */}
+          {status === "valid" && invite && alreadyLoggedIn && (
+            <Card className="border-0 shadow-2xl shadow-black/5">
+              <CardHeader>
+                <CardTitle className="text-2xl font-bold">You're already signed in</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800">Active session detected</p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      This invitation link is for <span className="font-semibold">{invite.email}</span>.
+                      Filling out this form while signed in would create a separate account and could affect your current session.
+                    </p>
+                    <p className="text-xs text-amber-700 mt-2">
+                      To accept this invitation, please sign out first, then return to this link.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <a
+                    href="/dashboard"
+                    className="w-full flex items-center justify-center h-10 bg-[#0B1933] text-white rounded-xl text-sm font-semibold hover:bg-[#0B1933]/90 transition-colors"
+                  >
+                    Back to my dashboard
+                  </a>
+                  <a
+                    href="/login"
+                    className="w-full flex items-center justify-center h-10 border border-border rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
+                  >
+                    Sign out and accept invitation
+                  </a>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {status === "valid" && invite && !alreadyLoggedIn && (
             <Card className="border-0 shadow-2xl shadow-black/5">
               <CardHeader className="space-y-1 pb-6">
                 <CardTitle className="text-2xl font-bold">Accept Invitation</CardTitle>
