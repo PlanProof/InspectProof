@@ -44,20 +44,47 @@ function abbreviateState(state?: string): string {
   return STATE_ABBREVS[lower] ?? state.toUpperCase().slice(0, 3);
 }
 
+/**
+ * Extract the best possible street address from a Nominatim result.
+ *
+ * Priority order:
+ *  1. address.house_number + address.road   (ideal — Nominatim gave us both)
+ *  2. display_name first segment starts with a digit  (e.g. "42, Smith Street, …")
+ *  3. address.road only  (street-level result — no number found)
+ *  4. display_name first segment as fallback
+ */
 function parseNominatimAddress(result: NominatimResult): AddressFields {
   const a = result.address;
   let siteAddress: string;
+
   if (a.house_number && a.road) {
+    // Best case: Nominatim returned both fields explicitly.
     siteAddress = `${a.house_number} ${a.road}`;
-  } else if (a.road) {
-    // Nominatim often omits house_number even when display_name has it.
-    // The first comma-separated segment of display_name is the full street address.
-    const firstSegment = result.display_name.split(",")[0].trim();
-    // Use it if it starts with a digit (i.e. contains a street number)
-    siteAddress = /^\d/.test(firstSegment) ? firstSegment : a.road;
   } else {
-    siteAddress = result.display_name.split(",")[0].trim();
+    // Try to pull the number from display_name.
+    // Nominatim formats specific addresses as "42, Smith Street, Suburb, …"
+    // or sometimes "42 Smith Street, Suburb, …" (no comma after number).
+    const segments = result.display_name.split(",").map(s => s.trim());
+    const first = segments[0];
+
+    // Case A: first segment is just a number and second segment is road
+    if (/^\d+[A-Za-z]?$/.test(first) && segments[1]) {
+      siteAddress = `${first} ${segments[1]}`;
+    }
+    // Case B: first segment starts with a number (e.g. "42 Smith Street")
+    else if (/^\d/.test(first)) {
+      siteAddress = first;
+    }
+    // Case C: fall back to road-only (user will need to type number in)
+    else if (a.road) {
+      siteAddress = a.road;
+    }
+    // Case D: last resort
+    else {
+      siteAddress = first;
+    }
   }
+
   const suburb = a.suburb ?? a.town ?? a.city ?? a.village ?? a.hamlet ?? "";
   const state = abbreviateState(a.state);
   const postcode = a.postcode ?? "";
@@ -114,6 +141,12 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
       url.searchParams.set("addressdetails", "1");
       url.searchParams.set("countrycodes", "au");
       url.searchParams.set("limit", "8");
+      // When the query starts with a digit the user is searching for a
+      // specific numbered address — restrict results to address-level features
+      // so Nominatim returns house_number instead of just the street.
+      if (/^\d/.test(q.trim())) {
+        url.searchParams.set("featuretype", "address");
+      }
       const res = await fetch(url.toString(), {
         signal: abortRef.current.signal,
         headers: { "Accept-Language": "en" },
@@ -139,7 +172,7 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
   const handleSelect = (result: NominatimResult) => {
     const fields = parseNominatimAddress(result);
     setSelected(fields);
-    setQuery(result.display_name.split(",").slice(0, 2).join(",").trim());
+    setQuery(fields.siteAddress + (fields.suburb ? `, ${fields.suburb}` : ""));
     setSuggestions([]);
     setOpen(false);
     onChange(fields);
@@ -214,11 +247,14 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
     <div className="space-y-3">
       <div ref={containerRef} className="relative col-span-2">
         <Label className={labelCls}>Site Address</Label>
-        <div className="relative mt-1.5">
+        <p className="text-[11px] text-muted-foreground mt-0.5 mb-1.5">
+          Start with the street number for best results — e.g. <span className="font-medium">42 Smith Street, Sydney</span>
+        </p>
+        <div className="relative">
           <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             className={cn("pl-9", inputCls)}
-            placeholder="Start typing an Australian address…"
+            placeholder="e.g. 42 Smith Street, Sydney NSW"
             value={query}
             onChange={handleQueryChange}
             onFocus={() => { if (suggestions.length > 0) setOpen(true); }}
@@ -234,9 +270,9 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
         {open && suggestions.length > 0 && (
           <ul className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-xl overflow-hidden max-h-64 overflow-y-auto">
             {suggestions.map(r => {
-              const parts = r.display_name.split(", ");
-              const main = parts.slice(0, 2).join(", ");
-              const secondary = parts.slice(2).join(", ");
+              const parsed = parseNominatimAddress(r);
+              const mainLine = [parsed.siteAddress, parsed.suburb].filter(Boolean).join(", ");
+              const secondLine = [parsed.state, parsed.postcode].filter(Boolean).join(" ");
               return (
                 <li key={r.place_id}>
                   <button
@@ -244,8 +280,8 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
                     onMouseDown={e => { e.preventDefault(); handleSelect(r); }}
                     className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors border-b border-border/40 last:border-0"
                   >
-                    <div className="text-sm font-medium text-sidebar truncate">{main}</div>
-                    {secondary && <div className="text-xs text-muted-foreground truncate">{secondary}</div>}
+                    <div className="text-sm font-medium text-sidebar truncate">{mainLine}</div>
+                    {secondLine && <div className="text-xs text-muted-foreground truncate">{secondLine}</div>}
                   </button>
                 </li>
               );
