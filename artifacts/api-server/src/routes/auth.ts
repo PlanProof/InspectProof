@@ -9,9 +9,9 @@ import { createSessionToken, decodeSessionToken } from "../lib/session-token";
 
 export { createSessionToken, decodeSessionToken };
 
-const APP_SECRET = process.env.APP_SECRET;
+const APP_SECRET = process.env.APP_SECRET ?? process.env.SESSION_SECRET;
 if (!APP_SECRET) {
-  throw new Error("APP_SECRET environment variable is required but not set.");
+  throw new Error("APP_SECRET (or SESSION_SECRET) environment variable is required but not set.");
 }
 
 // ── Reset token helpers (HMAC-SHA256 signed, 1 hour) ─────────────────────────
