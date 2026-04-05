@@ -143,7 +143,7 @@ export default function ProjectDetailScreen() {
         const isQuota = body.error === "inspection_limit_reached" || body.error === "project_limit_reached";
         if (isQuota) {
           setBookOpen(false);
-          setQuotaError(body.message ?? "You've reached your plan limit.");
+          setQuotaError("Your account has reached its usage limit.");
           return;
         }
       }
@@ -158,7 +158,7 @@ export default function ProjectDetailScreen() {
       refetchInspections();
       refetch();
     } catch (err: any) {
-      Alert.alert("Error", err.message === "inspection_limit_reached" ? "Inspection limit reached. Please upgrade your plan." : "Failed to book inspection. Please try again.");
+      Alert.alert("Error", err.message === "inspection_limit_reached" ? "Your account has reached its usage limit. Please visit inspectproof.com.au or contact your account administrator." : "Failed to book inspection. Please try again.");
     } finally {
       setBookSubmitting(false);
     }
@@ -466,27 +466,33 @@ export default function ProjectDetailScreen() {
       </KeyboardAvoidingView>
     </Modal>
 
-    {/* Quota / Plan limit upgrade modal */}
+    {/* Quota / Plan limit modal */}
     <Modal visible={!!quotaError} transparent animationType="fade" onRequestClose={() => setQuotaError(null)}>
       <View style={styles.quotaOverlay}>
         <View style={styles.quotaCard}>
           <View style={styles.quotaIconWrap}>
-            <Feather name="zap" size={28} color={Colors.secondary} />
+            <Feather name="info" size={28} color={Colors.secondary} />
           </View>
-          <Text style={styles.quotaTitle}>Plan limit reached</Text>
+          <Text style={styles.quotaTitle}>Usage limit reached</Text>
           <Text style={styles.quotaMessage}>{quotaError}</Text>
-          <TouchableOpacity
-            style={styles.quotaBtn}
-            onPress={() => {
-              setQuotaError(null);
-              const domain = process.env.EXPO_PUBLIC_DOMAIN ?? "";
-              const url = domain ? `https://${domain}/billing` : "https://inspectproof.com.au/billing";
-              Linking.openURL(url).catch(() => {});
-            }}
-          >
-            <Feather name="arrow-up-right" size={16} color="#fff" />
-            <Text style={styles.quotaBtnText}>View upgrade options</Text>
-          </TouchableOpacity>
+          {Platform.OS === "ios" ? (
+            <Text style={styles.quotaInfoText}>
+              To manage your plan, visit inspectproof.com.au or contact your account administrator.
+            </Text>
+          ) : (
+            <TouchableOpacity
+              style={styles.quotaBtn}
+              onPress={() => {
+                setQuotaError(null);
+                const domain = process.env.EXPO_PUBLIC_DOMAIN ?? "";
+                const url = domain ? `https://${domain}/dashboard` : "https://inspectproof.com.au/dashboard";
+                Linking.openURL(url).catch(() => {});
+              }}
+            >
+              <Feather name="external-link" size={16} color="#fff" />
+              <Text style={styles.quotaBtnText}>Go to account dashboard</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.quotaDismiss} onPress={() => setQuotaError(null)}>
             <Text style={styles.quotaDismissText}>Dismiss</Text>
           </TouchableOpacity>
@@ -901,6 +907,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: "#fff",
+  },
+  quotaInfoText: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 19,
+    marginTop: 4,
   },
   quotaDismiss: {
     paddingVertical: 8,

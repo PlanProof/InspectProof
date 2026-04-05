@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, Pressable,
-  Platform, Switch, Image, Alert,
+  Platform, Switch, Image, Alert, Linking,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -148,6 +148,15 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
           <View style={styles.group}>
+            <SettingRow
+              icon="package"
+              label="Plan"
+              sublabel={Platform.OS === "ios" ? "Visit inspectproof.com.au to manage your plan" : undefined}
+              value={user?.plan
+                ? ({ free_trial: "Free Trial", starter: "Starter", professional: "Professional", enterprise: "Enterprise" }[user.plan] ?? user.plan)
+                : "Not available"}
+              onPress={Platform.OS !== "ios" ? () => Linking.openURL("https://inspectproof.com.au").catch(() => {}) : undefined}
+            />
             <SettingRow
               icon="lock"
               label="Change Password"

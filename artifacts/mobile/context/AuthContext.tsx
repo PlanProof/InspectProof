@@ -20,6 +20,7 @@ interface User {
   isActive: boolean;
   isAdmin?: boolean;
   requiresPasswordChange?: boolean;
+  plan?: string | null;
   createdAt: string;
 }
 
