@@ -2,6 +2,7 @@ import path from "path";
 import { Router, type IRouter } from "express";
 import { eq, sql, and } from "drizzle-orm";
 import PDFDocument from "pdfkit";
+import sharp from "sharp";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { sendReportEmail } from "../lib/email";
 
@@ -1102,6 +1103,47 @@ router.post("/:id/send", requireAuth, async (req, res) => {
   }
 });
 
+// ── Markup compositing ────────────────────────────────────────────────────────
+
+interface StrokePoint { x: number; y: number; }
+interface Stroke { points: StrokePoint[]; color: string; width: number; }
+interface MarkupData { w: number; h: number; strokes: Stroke[]; }
+
+function strokeToSvgPath(points: StrokePoint[]): string {
+  if (points.length === 0) return "";
+  if (points.length === 1) {
+    return `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)} L ${(points[0].x + 0.5).toFixed(1)} ${points[0].y.toFixed(1)}`;
+  }
+  return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+}
+
+async function applyMarkupToPhoto(photoBuffer: Buffer, markup: MarkupData): Promise<Buffer> {
+  if (!markup?.strokes?.length) return photoBuffer;
+  try {
+    const meta = await sharp(photoBuffer).metadata();
+    const imgW = meta.width;
+    const imgH = meta.height;
+    if (!imgW || !imgH) return photoBuffer;
+
+    const pathEls = markup.strokes.map(stroke => {
+      const d = strokeToSvgPath(stroke.points);
+      if (!d) return "";
+      const color = (stroke.color || "#FF0000").replace(/"/g, "");
+      const w = Math.max(1, stroke.width || 3);
+      return `<path d="${d}" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
+    }).filter(Boolean).join("");
+
+    const svgOverlay = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgW}" height="${imgH}" viewBox="0 0 ${markup.w} ${markup.h}" preserveAspectRatio="none">${pathEls}</svg>`;
+
+    return await sharp(photoBuffer)
+      .composite([{ input: Buffer.from(svgOverlay), top: 0, left: 0 }])
+      .jpeg({ quality: 90 })
+      .toBuffer();
+  } catch {
+    return photoBuffer;
+  }
+}
+
 // ── PDF generation ────────────────────────────────────────────────────────────
 
 const MARGIN = 50;
@@ -1652,8 +1694,11 @@ router.get("/:id/pdf", async (req, res) => {
 
         const storageService = new ObjectStorageService();
 
-        // First pass: collect all paths and fetch buffers
+        // First pass: collect all paths, fetch buffers, and gather markup data
         const rowsWithPhotos: Array<{ row: typeof checklistRows[0]; paths: string[] }> = [];
+
+        // Map from storage path → MarkupData (strokes to composite onto the photo)
+        const markupByPath = new Map<string, MarkupData>();
 
         for (const row of checklistRows) {
           const rawUrls = row.result.photoUrls;
@@ -1668,15 +1713,30 @@ router.get("/:id/pdf", async (req, res) => {
           const descKey = (row.item.description || "").toLowerCase().trim();
           if (!photosByDesc!.has(descKey)) photosByDesc!.set(descKey, []);
           photosByDesc!.get(descKey)!.push(...paths);
+
+          // Parse photoMarkups: { [storagePath]: MarkupData }
+          if (row.result.photoMarkups) {
+            try {
+              const markups: Record<string, MarkupData> =
+                typeof row.result.photoMarkups === "string"
+                  ? JSON.parse(row.result.photoMarkups)
+                  : row.result.photoMarkups;
+              for (const [p, md] of Object.entries(markups)) {
+                if (md?.strokes?.length) markupByPath.set(p, md);
+              }
+            } catch { /* ignore malformed markup */ }
+          }
         }
 
-        // Fetch all photo buffers concurrently
+        // Fetch all photo buffers concurrently, then composite markups
         const allPaths = [...new Set(rowsWithPhotos.flatMap(r => r.paths))];
         await Promise.allSettled(allPaths.map(async (photoPath) => {
           if (photoBuffers!.has(photoPath)) return;
           try {
-            const { buffer } = await storageService.fetchObjectBuffer(photoPath);
-            photoBuffers!.set(photoPath, buffer);
+            const { buffer: rawBuf } = await storageService.fetchObjectBuffer(photoPath);
+            const markup = markupByPath.get(photoPath);
+            const finalBuf = markup ? await applyMarkupToPhoto(rawBuf, markup) : rawBuf;
+            photoBuffers!.set(photoPath, finalBuf);
           } catch {
             // skip — photo unavailable
           }
