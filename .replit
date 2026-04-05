@@ -59,11 +59,3 @@ SMTP_USER = "contact@inspectproof.com.au"
 SMTP_FROM = "InspectProof <noreply@inspectproof.com.au>"
 APP_BASE_URL = "https://inspectproof.com.au"
 FEEDBACK_EMAIL = "contact@inspectproof.com.au"
-
-[[ports]]
-localPort = 8080
-externalPort = 80
-
-[[ports]]
-localPort = 22333
-externalPort = 3000
