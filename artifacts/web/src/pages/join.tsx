@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Label } from "@/components/ui";
-import { AlertTriangle, Check, ChevronLeft, Loader2, Eye, EyeOff, Smartphone, LogIn } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, Loader2, Eye, EyeOff, Smartphone, LogIn, Monitor, FolderOpen, ClipboardList } from "lucide-react";
 
 const API = (path: string) => `/api${path}`;
 
@@ -178,7 +178,10 @@ export default function JoinPage() {
                       <div>
                         <p className="text-sm font-semibold text-blue-800">Mobile App Access</p>
                         <p className="text-xs text-blue-700 mt-1">
-                          Your account is set up for mobile use only. Download the InspectProof app and sign in with your email and password. Ask your administrator to upgrade the plan for full web access.
+                          Your account is configured for field use. Download the InspectProof app, sign in with your email and the password you just created, and you're ready to start inspecting.
+                        </p>
+                        <p className="text-xs text-blue-600 mt-2 font-medium">
+                          Note: Your role does not include web dashboard access. If you need it, ask your administrator.
                         </p>
                       </div>
                     </div>
@@ -189,6 +192,7 @@ export default function JoinPage() {
                         rel="noreferrer"
                         className="flex-1 flex items-center justify-center gap-2 bg-[#0B1933] text-white rounded-xl py-3 px-4 text-sm font-semibold hover:bg-[#0B1933]/90 transition-colors"
                       >
+                        <Smartphone className="h-4 w-4" />
                         App Store
                       </a>
                       <a
@@ -197,15 +201,24 @@ export default function JoinPage() {
                         rel="noreferrer"
                         className="flex-1 flex items-center justify-center gap-2 bg-[#0B1933] text-white rounded-xl py-3 px-4 text-sm font-semibold hover:bg-[#0B1933]/90 transition-colors"
                       >
+                        <Smartphone className="h-4 w-4" />
                         Google Play
                       </a>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      Sign in with your invitation email and the password you just set to access your dashboard.
-                    </p>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-sky-50 border border-sky-200 rounded-xl space-y-2">
+                      <p className="text-sm font-semibold text-sky-800 flex items-center gap-2">
+                        <Monitor className="h-4 w-4" /> What you can do on the web
+                      </p>
+                      <ul className="text-xs text-sky-700 space-y-1.5">
+                        <li className="flex items-start gap-1.5"><Check className="h-3 w-3 mt-0.5 shrink-0 text-sky-600" /> Sign in to the InspectProof dashboard</li>
+                        <li className="flex items-start gap-1.5"><FolderOpen className="h-3 w-3 mt-0.5 shrink-0 text-sky-600" /> View and manage projects assigned to you</li>
+                        <li className="flex items-start gap-1.5"><ClipboardList className="h-3 w-3 mt-0.5 shrink-0 text-sky-600" /> Review inspection reports and status updates</li>
+                        <li className="flex items-start gap-1.5"><Smartphone className="h-3 w-3 mt-0.5 shrink-0 text-sky-600" /> Also use the mobile app to conduct field inspections</li>
+                      </ul>
+                    </div>
                     <a
                       href="/login"
                       className="w-full flex items-center justify-center gap-2 h-11 bg-[#0B1933] text-white rounded-xl text-base font-semibold hover:bg-[#0B1933]/90 transition-colors"

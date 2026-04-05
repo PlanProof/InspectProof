@@ -203,6 +203,110 @@ router.patch("/me/notification-prefs", requireAuth, async (req, res) => {
   }
 });
 
+router.delete("/:id", requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const caller = req.authUser!;
+
+    if (isNaN(id)) {
+      res.status(400).json({ error: "bad_request", message: "Invalid user id" });
+      return;
+    }
+
+    // Cannot delete yourself
+    if (caller.id === id) {
+      res.status(400).json({ error: "bad_request", message: "You cannot remove yourself from the team." });
+      return;
+    }
+
+    // Only company admins or platform admins may delete team members
+    if (!caller.isCompanyAdmin && !caller.isAdmin) {
+      res.status(403).json({ error: "forbidden", message: "Only organisation admins can remove team members." });
+      return;
+    }
+
+    // Verify the target user belongs to this company admin
+    const [target] = await db.select({ adminUserId: usersTable.adminUserId, id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.id, id));
+
+    if (!target) {
+      res.status(404).json({ error: "not_found", message: "User not found" });
+      return;
+    }
+
+    if (!caller.isAdmin && target.adminUserId !== String(caller.id)) {
+      res.status(403).json({ error: "forbidden", message: "You do not have permission to remove this team member." });
+      return;
+    }
+
+    await db.delete(usersTable).where(eq(usersTable.id, id));
+
+    req.log.info({ deletedUserId: id, deletedBy: caller.id }, "Team member removed");
+    res.json({ success: true, message: "Team member removed" });
+  } catch (err) {
+    req.log.error({ err }, "Delete user error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.post("/:id/resend-invite", requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const caller = req.authUser!;
+
+    if (isNaN(id)) {
+      res.status(400).json({ error: "bad_request", message: "Invalid user id" });
+      return;
+    }
+
+    if (!caller.isCompanyAdmin && !caller.isAdmin) {
+      res.status(403).json({ error: "forbidden", message: "Only organisation admins can resend invites." });
+      return;
+    }
+
+    const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+
+    if (!target) {
+      res.status(404).json({ error: "not_found", message: "User not found" });
+      return;
+    }
+
+    if (!caller.isAdmin && target.adminUserId !== String(caller.id)) {
+      res.status(403).json({ error: "forbidden", message: "You do not have permission to resend an invite for this user." });
+      return;
+    }
+
+    const callerRows = await db.select().from(usersTable).where(eq(usersTable.id, caller.id));
+    const callerUser = callerRows[0];
+    const inviterName = callerUser ? `${callerUser.firstName} ${callerUser.lastName}`.trim() : "Your team administrator";
+
+    // Generate a new temporary password, persist it, and mark requiresPasswordChange
+    const temporaryPassword = generateTempPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+    await db.update(usersTable)
+      .set({ passwordHash, requiresPasswordChange: true, updatedAt: new Date() })
+      .where(eq(usersTable.id, id));
+
+    // Fire and forget — do not block on email result
+    sendWelcomeWithCredentialsEmail(
+      {
+        toEmail: target.email,
+        firstName: target.firstName ?? "",
+        temporaryPassword,
+        inviterName,
+      },
+      req.log
+    ).catch(() => {});
+
+    req.log.info({ targetUserId: id, sentBy: caller.id }, "Resend credentials email sent with new temp password");
+    res.json({ success: true, message: `Credentials resent to ${target.email}` });
+  } catch (err) {
+    req.log.error({ err }, "Resend invite error");
+    res.status(500).json({ error: "internal_error", message: "Failed to resend invite" });
+  }
+});
+
 router.patch("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);

@@ -9,6 +9,7 @@ interface CurrentUser {
   role: string;
   plan: string;
   isAdmin: boolean;
+  isCompanyAdmin?: boolean;
   isActive: boolean;
   profession: string | null;
   licenceNumber: string | null;

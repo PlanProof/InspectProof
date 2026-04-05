@@ -153,10 +153,12 @@ function EditMemberModal({
   member,
   onSave,
   onClose,
+  onRemove,
 }: {
   member: TeamMember;
   onSave: (updated: TeamMember) => void;
   onClose: () => void;
+  onRemove: (id: number) => void;
 }) {
   const [form, setForm] = useState({
     firstName: member.firstName,
@@ -169,6 +171,8 @@ function EditMemberModal({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   const setField = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -217,6 +221,30 @@ function EditMemberModal({
       setError("Network error — please try again");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const removeMember = async () => {
+    setRemoving(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase()}/api/users/${member.id}`, {
+        method: "DELETE",
+        headers: authHeader(),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as any;
+        setError(body?.message ?? "Failed to remove team member");
+        setConfirmRemove(false);
+        return;
+      }
+      onRemove(member.id);
+      onClose();
+    } catch {
+      setError("Network error — please try again");
+      setConfirmRemove(false);
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -350,12 +378,41 @@ function EditMemberModal({
             </p>
           )}
 
+          {/* Remove member */}
+          {!confirmRemove ? (
+            <div className="pt-1 border-t border-border">
+              <button
+                onClick={() => setConfirmRemove(true)}
+                className="w-full flex items-center justify-center gap-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg px-3 py-2 transition-colors font-medium"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Remove from team
+              </button>
+            </div>
+          ) : (
+            <div className="pt-2 border-t border-border space-y-2">
+              <p className="text-sm text-red-700 font-semibold text-center">Remove {member.firstName} {member.lastName}?</p>
+              <p className="text-xs text-muted-foreground text-center">This will permanently delete their account and all access. This cannot be undone.</p>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setConfirmRemove(false)} disabled={removing}
+                  className="flex-1 px-3 py-2 rounded-lg text-sm border border-border text-muted-foreground hover:bg-muted/30 transition-colors disabled:opacity-50">
+                  Cancel
+                </button>
+                <button onClick={removeMember} disabled={removing}
+                  className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+                  {removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  {removing ? "Removing…" : "Yes, Remove"}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-end gap-2 pt-1">
             <button onClick={onClose}
               className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:bg-muted/30 transition-colors">
               Cancel
             </button>
-            <button onClick={save} disabled={saving}
+            <button onClick={save} disabled={saving || confirmRemove}
               className="px-4 py-2 rounded-lg text-sm font-semibold bg-sidebar text-white hover:bg-sidebar/90 transition-colors flex items-center gap-2 disabled:opacity-50">
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
               {saving ? "Saving…" : "Save Changes"}
@@ -372,14 +429,14 @@ function EditMemberModal({
 function MemberRow({
   member,
   onTogglePlatform,
-  onSendInvite,
+  onResendCredentials,
   onEdit,
   isInviting,
   justSent,
 }: {
   member: TeamMember;
   onTogglePlatform: (id: number) => void;
-  onSendInvite: (id: number) => void;
+  onResendCredentials: (id: number) => void;
   onEdit: (m: TeamMember) => void;
   isInviting?: boolean;
   justSent?: boolean;
@@ -475,7 +532,7 @@ function MemberRow({
           </span>
         ) : memberHasMobile ? (
           <button
-            onClick={() => onSendInvite(member.id)}
+            onClick={() => onResendCredentials(member.id)}
             className="flex items-center gap-1 text-[10px] text-secondary hover:underline font-medium"
           >
             <Send className="h-2.5 w-2.5" />
@@ -538,12 +595,14 @@ export default function Inspectors() {
   const planLimit = PLAN_TEAM_LIMITS[currentPlan] ?? null;
 
   const [overrides, setOverrides] = useState<Record<number, Partial<TeamMember>>>({});
+  const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
   const [inviteSentFor, setInviteSentFor] = useState<number | null>(null);
   const [invitingId, setInvitingId] = useState<number | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [newEmail, setNewEmail] = useState("");
-  const [newCompany, setNewCompany] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newRole, setNewRole] = useState("Inspector");
   const [formSending, setFormSending] = useState(false);
   const [formResult, setFormResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
@@ -555,6 +614,7 @@ export default function Inspectors() {
   const [loadingInvites, setLoadingInvites] = useState(false);
   const [resendingToken, setResendingToken] = useState<string | null>(null);
   const [revokingToken, setRevokingToken] = useState<string | null>(null);
+  const [revokeConfirmToken, setRevokeConfirmToken] = useState<string | null>(null);
   const [inviteActionMsg, setInviteActionMsg] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const fetchPendingInvites = useCallback(async () => {
@@ -579,10 +639,18 @@ export default function Inspectors() {
 
   const members: TeamMember[] = useMemo(() => {
     if (!rawUsers) return [];
-    return (rawUsers as any[]).map(u => ({ ...apiUserToMember(u), ...(overrides[u.id] ?? {}) }));
-  }, [rawUsers, overrides]);
+    return (rawUsers as any[])
+      .filter(u => !removedIds.has(u.id))
+      .map(u => ({ ...apiUserToMember(u), ...(overrides[u.id] ?? {}) }));
+  }, [rawUsers, overrides, removedIds]);
 
-  const atLimit = planLimit !== null && members.length >= planLimit;
+  // Seat counter excludes the current admin themselves (the API returns them in the list,
+  // but the plan limit only applies to *team members*, not the admin account).
+  const teamMemberCount = useMemo(() => {
+    return members.filter(m => m.id !== currentUser?.id).length;
+  }, [members, currentUser]);
+
+  const atLimit = planLimit !== null && teamMemberCount >= planLimit;
 
   const togglePlatform = useCallback(async (id: number) => {
     const current = members.find(i => i.id === id)?.platformAccess ?? false;
@@ -598,43 +666,21 @@ export default function Inspectors() {
     }
   }, [members]);
 
-  const sendInvite = useCallback(async (id: number) => {
-    const member = members.find(i => i.id === id);
-    if (!member) return;
-    setInvitingId(id);
-    setInviteError(null);
-    try {
-      const res = await fetch(`${apiBase()}/api/invites/app-invite`, {
-        method: "POST",
-        headers: authHeader(),
-        body: JSON.stringify({ email: member.email, userType: member.userType }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as any;
-        setInviteError(body?.message || "Failed to send invite");
-        setTimeout(() => setInviteError(null), 5000);
-        return;
-      }
-      setInviteSentFor(id);
-      fetchPendingInvites();
-      setTimeout(() => setInviteSentFor(null), 4000);
-    } catch {
-      setInviteError("Network error — please try again");
-      setTimeout(() => setInviteError(null), 5000);
-    } finally {
-      setInvitingId(null);
-    }
-  }, [members, fetchPendingInvites]);
 
   const sendFormInvite = useCallback(async () => {
     if (!newEmail.trim()) return;
     setFormSending(true);
     setFormResult(null);
     try {
+      const dbRole = ROLE_REVERSE[newRole] ?? newRole.toLowerCase();
       const res = await fetch(`${apiBase()}/api/invites/app-invite`, {
         method: "POST",
         headers: authHeader(),
-        body: JSON.stringify({ email: newEmail.trim() }),
+        body: JSON.stringify({
+          email: newEmail.trim(),
+          name: newName.trim() || undefined,
+          role: dbRole,
+        }),
       });
       const body = await res.json().catch(() => ({})) as any;
       if (!res.ok) {
@@ -642,7 +688,8 @@ export default function Inspectors() {
       } else {
         setFormResult({ ok: true, msg: `Invite sent to ${newEmail.trim()}` });
         setNewEmail("");
-        setNewCompany("");
+        setNewName("");
+        setNewRole("Inspector");
         fetchPendingInvites();
         setTimeout(() => { setShowInviteForm(false); setFormResult(null); }, 3000);
       }
@@ -651,7 +698,7 @@ export default function Inspectors() {
     } finally {
       setFormSending(false);
     }
-  }, [newEmail, newCompany, fetchPendingInvites]);
+  }, [newEmail, newName, newRole, fetchPendingInvites]);
 
   const resendInvite = useCallback(async (token: string, email: string) => {
     setResendingToken(token);
@@ -677,6 +724,7 @@ export default function Inspectors() {
   }, [fetchPendingInvites]);
 
   const revokeInvite = useCallback(async (token: string) => {
+    setRevokeConfirmToken(null);
     setRevokingToken(token);
     setInviteActionMsg(null);
     try {
@@ -702,6 +750,37 @@ export default function Inspectors() {
   const saveMember = (updated: TeamMember) => {
     setOverrides(prev => ({ ...prev, [updated.id]: updated }));
   };
+
+  const handleRemoveMember = useCallback((id: number) => {
+    setRemovedIds(prev => new Set([...prev, id]));
+    refetch();
+  }, [refetch]);
+
+  const resendCredentials = useCallback(async (id: number) => {
+    const member = members.find(i => i.id === id);
+    if (!member) return;
+    setInvitingId(id);
+    setInviteError(null);
+    try {
+      const res = await fetch(`${apiBase()}/api/users/${id}/resend-invite`, {
+        method: "POST",
+        headers: authHeader(),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as any;
+        setInviteError(body?.message || "Failed to resend invite");
+        setTimeout(() => setInviteError(null), 5000);
+        return;
+      }
+      setInviteSentFor(id);
+      setTimeout(() => setInviteSentFor(null), 4000);
+    } catch {
+      setInviteError("Network error — please try again");
+      setTimeout(() => setInviteError(null), 5000);
+    } finally {
+      setInvitingId(null);
+    }
+  }, [members]);
 
   const addMember = useCallback(async () => {
     if (!addMemberForm.firstName || !addMemberForm.lastName || !addMemberForm.email) return;
@@ -757,6 +836,7 @@ export default function Inspectors() {
           member={editingMember}
           onSave={saveMember}
           onClose={() => setEditingMember(null)}
+          onRemove={handleRemoveMember}
         />
       )}
 
@@ -940,7 +1020,7 @@ export default function Inspectors() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setShowInviteForm(!showInviteForm)} className="gap-2">
+          <Button variant="outline" onClick={() => { if (!atLimit) setShowInviteForm(!showInviteForm); }} disabled={atLimit} className="gap-2">
             <Send className="h-4 w-4" /> Send App Invite
           </Button>
           <Button
@@ -963,7 +1043,7 @@ export default function Inspectors() {
           <Crown className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-amber-800">
-              Team limit reached — {members.length} / {planLimit} members on {PLAN_LABELS[currentPlan] ?? currentPlan} plan
+              Team limit reached — {teamMemberCount} / {planLimit} members on {PLAN_LABELS[currentPlan] ?? currentPlan} plan
             </p>
             <p className="text-xs text-amber-700 mt-0.5">
               To add more team members, upgrade your plan.{" "}
@@ -984,20 +1064,33 @@ export default function Inspectors() {
               <p className="text-sm font-semibold text-sidebar">Send Secure Invitation</p>
               <p className="text-xs text-muted-foreground">A unique invite link will be emailed to the invitee</p>
             </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <input type="email" placeholder="inspector@email.com.au" value={newEmail}
-                onChange={e => setNewEmail(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") sendFormInvite(); }}
-                disabled={formSending}
-                className="flex-1 min-w-48 text-sm border border-input rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-60"
-              />
-              <Button size="sm" onClick={sendFormInvite} disabled={formSending || !newEmail.trim()} className="gap-1.5">
-                {formSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                {formSending ? "Sending…" : "Send Invite"}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => { setShowInviteForm(false); setFormResult(null); setNewEmail(""); setNewCompany(""); }}>
-                Cancel
-              </Button>
+            <div className="grid grid-cols-1 gap-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                <input type="email" placeholder="inspector@email.com.au" value={newEmail}
+                  onChange={e => setNewEmail(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") sendFormInvite(); }}
+                  disabled={formSending}
+                  className="flex-1 min-w-48 text-sm border border-input rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-60"
+                />
+                <input type="text" placeholder="Name (optional)" value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  disabled={formSending}
+                  className="flex-1 min-w-36 text-sm border border-input rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30 disabled:opacity-60"
+                />
+                <select value={newRole} onChange={e => setNewRole(e.target.value)} disabled={formSending}
+                  className="text-sm border border-input rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-secondary/30 bg-background disabled:opacity-60">
+                  {ADD_MEMBER_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={sendFormInvite} disabled={formSending || !newEmail.trim()} className="gap-1.5">
+                  {formSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  {formSending ? "Sending…" : "Send Invite"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => { setShowInviteForm(false); setFormResult(null); setNewEmail(""); setNewName(""); setNewRole("Inspector"); }}>
+                  Cancel
+                </Button>
+              </div>
             </div>
           </div>
           {formResult && (
@@ -1009,81 +1102,102 @@ export default function Inspectors() {
         </Card>
       )}
 
-      {/* Pending Invites section */}
-      {(pendingInvites.length > 0 || loadingInvites) && (
-        <Card className="mb-6 shadow-sm border-muted/60">
-          <div className="px-5 py-3.5 border-b border-muted/50 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-amber-500" />
-              <span className="text-sm font-semibold text-sidebar">
-                Pending Invitations {pendingInvites.length > 0 && <span className="ml-1 text-xs font-normal text-muted-foreground">({pendingInvites.length})</span>}
-              </span>
-            </div>
-            <button onClick={fetchPendingInvites} disabled={loadingInvites}
-              className="p-1 rounded text-muted-foreground hover:text-sidebar transition-colors disabled:opacity-50" title="Refresh">
-              <RefreshCw className={cn("h-3.5 w-3.5", loadingInvites && "animate-spin")} />
-            </button>
+      {/* Pending Invites section — only shown to company admins */}
+      {currentUser?.isCompanyAdmin && <Card className="mb-6 shadow-sm border-muted/60">
+        <div className="px-5 py-3.5 border-b border-muted/50 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-amber-500" />
+            <span className="text-sm font-semibold text-sidebar">
+              Pending Invitations {pendingInvites.length > 0 && <span className="ml-1 text-xs font-normal text-muted-foreground">({pendingInvites.length})</span>}
+            </span>
           </div>
-          {inviteActionMsg && (
-            <div className={`px-5 py-2.5 text-xs font-medium flex items-center gap-2 border-b border-muted/50 ${inviteActionMsg.ok ? "text-green-700 bg-green-50" : "text-red-600 bg-red-50"}`}>
-              {inviteActionMsg.ok ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
-              {inviteActionMsg.msg}
-            </div>
-          )}
-          {loadingInvites ? (
-            <div className="flex items-center justify-center py-6 text-sm text-muted-foreground gap-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
-            </div>
-          ) : (
-            <div className="divide-y divide-muted/40">
-              {pendingInvites.map(inv => {
-                const expiry = new Date(inv.expiresAt);
-                const created = new Date(inv.createdAt);
-                const expiryStr = expiry.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
-                const sentStr = created.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
-                const isExpiringSoon = (expiry.getTime() - Date.now()) < 2 * 24 * 60 * 60 * 1000;
-                return (
-                  <div key={inv.token} className="flex items-center gap-4 px-5 py-3 hover:bg-muted/20 transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-sidebar truncate">{inv.email}</p>
-                      <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
-                        <span>Sent {sentStr}</span>
-                        <span className={cn("flex items-center gap-0.5", isExpiringSoon ? "text-amber-600 font-medium" : "")}>
-                          <Clock className="h-2.5 w-2.5" />
-                          Expires {expiryStr}
-                          {isExpiringSoon && " ⚠"}
-                        </span>
-                      </div>
+          <button onClick={fetchPendingInvites} disabled={loadingInvites}
+            className="p-1 rounded text-muted-foreground hover:text-sidebar transition-colors disabled:opacity-50" title="Refresh">
+            <RefreshCw className={cn("h-3.5 w-3.5", loadingInvites && "animate-spin")} />
+          </button>
+        </div>
+        {inviteActionMsg && (
+          <div className={`px-5 py-2.5 text-xs font-medium flex items-center gap-2 border-b border-muted/50 ${inviteActionMsg.ok ? "text-green-700 bg-green-50" : "text-red-600 bg-red-50"}`}>
+            {inviteActionMsg.ok ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+            {inviteActionMsg.msg}
+          </div>
+        )}
+        {loadingInvites ? (
+          <div className="flex items-center justify-center py-6 text-sm text-muted-foreground gap-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+          </div>
+        ) : pendingInvites.length === 0 ? (
+          <div className="flex items-center justify-center py-6 text-sm text-muted-foreground gap-2">
+            <Clock className="h-4 w-4 opacity-40" />
+            <span>No pending invitations — send one using "Send App Invite" above.</span>
+          </div>
+        ) : (
+          <div className="divide-y divide-muted/40">
+            {pendingInvites.map(inv => {
+              const expiry = new Date(inv.expiresAt);
+              const created = new Date(inv.createdAt);
+              const expiryStr = expiry.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+              const sentStr = created.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
+              const isExpiringSoon = (expiry.getTime() - Date.now()) < 2 * 24 * 60 * 60 * 1000;
+              const isConfirmingRevoke = revokeConfirmToken === inv.token;
+              return (
+                <div key={inv.token} className="flex items-center gap-4 px-5 py-3 hover:bg-muted/20 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-sidebar truncate">{inv.email}</p>
+                    <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                      <span>Sent {sentStr}</span>
+                      <span className={cn("flex items-center gap-0.5", isExpiringSoon ? "text-amber-600 font-medium" : "")}>
+                        <Clock className="h-2.5 w-2.5" />
+                        Expires {expiryStr}
+                        {isExpiringSoon && " ⚠"}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => resendInvite(inv.token, inv.email)}
+                      disabled={resendingToken === inv.token || isConfirmingRevoke}
+                      className="flex items-center gap-1 text-xs text-secondary hover:underline font-medium disabled:opacity-50 px-2 py-1 rounded hover:bg-secondary/10 transition-colors"
+                    >
+                      {resendingToken === inv.token
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <RefreshCw className="h-3 w-3" />}
+                      Resend
+                    </button>
+                    {isConfirmingRevoke ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-red-700 font-medium">Sure?</span>
+                        <button
+                          onClick={() => revokeInvite(inv.token)}
+                          disabled={revokingToken === inv.token}
+                          className="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+                        >
+                          {revokingToken === inv.token ? <Loader2 className="h-3 w-3 animate-spin inline" /> : "Yes, revoke"}
+                        </button>
+                        <button
+                          onClick={() => setRevokeConfirmToken(null)}
+                          className="text-xs text-muted-foreground hover:text-sidebar px-1 py-0.5 rounded transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
                       <button
-                        onClick={() => resendInvite(inv.token, inv.email)}
-                        disabled={resendingToken === inv.token}
-                        className="flex items-center gap-1 text-xs text-secondary hover:underline font-medium disabled:opacity-50 px-2 py-1 rounded hover:bg-secondary/10 transition-colors"
-                      >
-                        {resendingToken === inv.token
-                          ? <Loader2 className="h-3 w-3 animate-spin" />
-                          : <RefreshCw className="h-3 w-3" />}
-                        Resend
-                      </button>
-                      <button
-                        onClick={() => revokeInvite(inv.token)}
+                        onClick={() => setRevokeConfirmToken(inv.token)}
                         disabled={revokingToken === inv.token}
                         className="flex items-center gap-1 text-xs text-red-600 hover:underline font-medium disabled:opacity-50 px-2 py-1 rounded hover:bg-red-50 transition-colors"
                       >
-                        {revokingToken === inv.token
-                          ? <Loader2 className="h-3 w-3 animate-spin" />
-                          : <Trash2 className="h-3 w-3" />}
+                        <Trash2 className="h-3 w-3" />
                         Revoke
                       </button>
-                    </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-      )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>}
 
       {/* Error banner */}
       {inviteError && (
@@ -1101,12 +1215,12 @@ export default function Inspectors() {
             </div>
             <div>
               <p className="text-2xl font-bold text-sidebar leading-none">
-                {members.length}
+                {teamMemberCount}
                 <span className="text-sm font-normal text-muted-foreground">
                   /{planLimit !== null ? planLimit : "∞"}
                 </span>
               </p>
-              <p className="text-xs text-muted-foreground font-medium mt-0.5">Total Team</p>
+              <p className="text-xs text-muted-foreground font-medium mt-0.5">Team Members</p>
               <p className="text-[10px] text-muted-foreground/70 font-medium mt-0.5 uppercase tracking-wide">
                 {PLAN_LABELS[currentPlan] ?? currentPlan} plan
               </p>
@@ -1185,7 +1299,7 @@ export default function Inspectors() {
               key={member.id}
               member={member}
               onTogglePlatform={togglePlatform}
-              onSendInvite={sendInvite}
+              onResendCredentials={resendCredentials}
               onEdit={setEditingMember}
               isInviting={invitingId === member.id}
               justSent={inviteSentFor === member.id}
