@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, inspectionsTable, projectsTable, checklistResultsTable, checklistItemsTable, issuesTable, usersTable } from "@workspace/db";
 import crypto from "crypto";
+import { decodeSessionToken } from "../lib/session-token";
 
 const router: IRouter = Router();
 
@@ -38,8 +39,8 @@ router.post("/inspections/:id/sign-off", async (req, res) => {
     const inspId = parseInt(req.params.id);
     const auth = req.headers.authorization;
     if (!auth?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
-    const decoded = Buffer.from(auth.slice(7), "base64").toString();
-    const [userId] = decoded.split(":").map(Number);
+    const { userId, valid } = decodeSessionToken(auth.slice(7));
+    if (!valid) { res.status(401).json({ error: "unauthorized" }); return; }
 
     const [updated] = await db.update(inspectionsTable)
       .set({

@@ -4,6 +4,7 @@ import { eq, count, desc, sql, and, ne } from 'drizzle-orm';
 import { getUncachableStripeClient } from '../stripeClient';
 import { getLimits } from '../lib/planLimits';
 import bcrypt from 'bcryptjs';
+import { decodeSessionToken } from '../lib/session-token';
 
 const router: IRouter = Router();
 
@@ -11,9 +12,8 @@ function getUserId(req: any): number | null {
   const auth = req.headers.authorization;
   if (!auth?.startsWith('Bearer ')) return null;
   try {
-    const decoded = Buffer.from(auth.slice(7), 'base64').toString();
-    const [userId] = decoded.split(':');
-    return Number(userId);
+    const { userId, valid } = decodeSessionToken(auth.slice(7));
+    return valid ? userId : null;
   } catch {
     return null;
   }

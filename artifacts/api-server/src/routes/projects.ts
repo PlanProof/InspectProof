@@ -4,6 +4,7 @@ import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activ
 import { sendContractorDefectReportEmail } from "../lib/email";
 import { checkProjectQuota, getOrgMemberIds } from "../lib/quota";
 import { optionalAuth, requireAuth, type AuthUser } from "../middleware/auth";
+import { decodeSessionToken } from "../lib/session-token";
 
 const router: IRouter = Router();
 
@@ -31,14 +32,9 @@ async function canAccessProject(createdById: number, user: AuthUser): Promise<bo
 
 function getUserIdFromRequest(req: any): number | null {
   const auth = req.headers?.authorization;
-  if (!auth) return null;
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : auth.startsWith('Basic ') ? auth.slice(6) : null;
-  if (!token) return null;
-  try {
-    const decoded = Buffer.from(token, 'base64').toString();
-    const [userId] = decoded.split(':');
-    return Number(userId) || null;
-  } catch { return null; }
+  if (!auth?.startsWith('Bearer ')) return null;
+  const { userId, valid } = decodeSessionToken(auth.slice(7));
+  return valid ? userId : null;
 }
 
 const TEST_PROJECT_NAME = "Test Project";

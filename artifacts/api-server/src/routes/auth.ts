@@ -2,15 +2,24 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import { db, usersTable } from "@workspace/db";
-import { sendPasswordResetEmail } from "../lib/email";
+import { sendPasswordResetEmail, sendWelcomeEmail } from "../lib/email";
+import { createSessionToken, decodeSessionToken } from "../lib/session-token";
 
-const RESET_SECRET = process.env.APP_SECRET || "inspectproof-pw-reset-salt-2024";
+export { createSessionToken, decodeSessionToken };
+
+const APP_SECRET = process.env.APP_SECRET;
+if (!APP_SECRET) {
+  throw new Error("APP_SECRET environment variable is required but not set.");
+}
+
+// ── Reset token helpers (HMAC-SHA256 signed, 1 hour) ─────────────────────────
 
 function createResetToken(userId: number): string {
   const expiry = Math.floor(Date.now() / 1000) + 3600;
   const data = `${userId}:${expiry}`;
-  const sig = crypto.createHmac("sha256", RESET_SECRET).update(data).digest("hex");
+  const sig = crypto.createHmac("sha256", APP_SECRET).update(data).digest("hex");
   return Buffer.from(`${data}:${sig}`).toString("base64url");
 }
 
@@ -27,7 +36,7 @@ function verifyResetToken(token: string): { userId: number; valid: boolean; expi
     const expiry = parseInt(parts[1], 10);
     if (isNaN(userId) || isNaN(expiry)) return { userId: 0, valid: false, expired: false };
     const now = Math.floor(Date.now() / 1000);
-    const expected = crypto.createHmac("sha256", RESET_SECRET).update(data).digest("hex");
+    const expected = crypto.createHmac("sha256", APP_SECRET).update(data).digest("hex");
     if (expected !== sig) return { userId: 0, valid: false, expired: false };
     if (now > expiry) return { userId, valid: false, expired: true };
     return { userId, valid: true, expired: false };
@@ -36,9 +45,63 @@ function verifyResetToken(token: string): { userId: number; valid: boolean; expi
   }
 }
 
+// ── Rate limiters ─────────────────────────────────────────────────────────────
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 10,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "too_many_requests", message: "Too many login attempts. Please wait 15 minutes before trying again." },
+});
+
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 5,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "too_many_requests", message: "Too many registration attempts. Please try again in an hour." },
+});
+
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 5,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "too_many_requests", message: "Too many password reset requests. Please wait 15 minutes before trying again." },
+});
+
+// ── Shared user shape ─────────────────────────────────────────────────────────
+
+function formatUser(user: typeof usersTable.$inferSelect) {
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    phone: user.phone,
+    avatar: user.avatar,
+    signatureUrl: user.signatureUrl ?? null,
+    companyName: user.companyName ?? null,
+    profession: user.profession ?? null,
+    licenceNumber: user.licenceNumber ?? null,
+    isAdmin: user.isAdmin ?? false,
+    isCompanyAdmin: user.isCompanyAdmin ?? false,
+    userType: user.userType ?? "inspector",
+    permissions: user.permissions ? JSON.parse(user.permissions) : null,
+    isActive: user.isActive,
+    mobileOnly: user.mobileOnly ?? false,
+    requiresPasswordChange: user.requiresPasswordChange ?? false,
+    createdAt: user.createdAt.toISOString(),
+  };
+}
+
 const router: IRouter = Router();
 
-router.post("/login", async (req, res) => {
+// ── Login ─────────────────────────────────────────────────────────────────────
+
+router.post("/login", loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -55,50 +118,25 @@ router.post("/login", async (req, res) => {
       return;
     }
 
-    const storedHash = user.passwordHash;
-    const isBcryptHash = storedHash.startsWith("$2a$") || storedHash.startsWith("$2b$");
-    const passwordMatch = isBcryptHash
-      ? await bcrypt.compare(password, storedHash)
-      : storedHash === password;
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
 
     if (!passwordMatch) {
       res.status(401).json({ error: "unauthorized", message: "Invalid credentials" });
       return;
     }
 
-    const token = Buffer.from(`${user.id}:${user.email}:${Date.now()}`).toString("base64");
+    const token = createSessionToken(user.id);
 
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        phone: user.phone,
-        avatar: user.avatar,
-        signatureUrl: user.signatureUrl ?? null,
-        companyName: user.companyName ?? null,
-        profession: user.profession ?? null,
-        licenceNumber: user.licenceNumber ?? null,
-        isAdmin: user.isAdmin ?? false,
-        isCompanyAdmin: user.isCompanyAdmin ?? false,
-        userType: user.userType ?? "inspector",
-        permissions: user.permissions ? JSON.parse(user.permissions) : null,
-        isActive: user.isActive,
-        mobileOnly: user.mobileOnly ?? false,
-        requiresPasswordChange: user.requiresPasswordChange ?? false,
-        createdAt: user.createdAt.toISOString(),
-      },
-    });
+    res.json({ token, user: formatUser(user) });
   } catch (err) {
     req.log.error({ err }, "Login error");
     res.status(500).json({ error: "internal_error", message: "Server error" });
   }
 });
 
-router.post("/register", async (req, res) => {
+// ── Register ──────────────────────────────────────────────────────────────────
+
+router.post("/register", registerLimiter, async (req, res) => {
   try {
     const { email, password, firstName, lastName, role, organization, plan, profession } = req.body;
 
@@ -149,7 +187,17 @@ router.post("/register", async (req, res) => {
       permissions: JSON.stringify({ editTemplates: true, addInspectors: true, createProjects: true }),
     }).returning();
 
-    const token = Buffer.from(`${newUser.id}:${newUser.email}:${Date.now()}`).toString("base64");
+    const token = createSessionToken(newUser.id);
+
+    // Send welcome email (non-blocking — don't fail registration if email fails)
+    sendWelcomeEmail(
+      {
+        toEmail: newUser.email,
+        firstName: newUser.firstName,
+        companyName: newUser.companyName ?? organization.trim(),
+      },
+      req.log,
+    ).catch(() => {});
 
     res.status(201).json({
       token,
@@ -169,6 +217,8 @@ router.post("/register", async (req, res) => {
         userType: newUser.userType ?? "user",
         permissions: newUser.permissions ? JSON.parse(newUser.permissions) : { editTemplates: true, addInspectors: true, createProjects: true },
         isActive: newUser.isActive,
+        mobileOnly: false,
+        requiresPasswordChange: false,
         createdAt: newUser.createdAt.toISOString(),
       },
       plan: plan || "starter",
@@ -185,6 +235,8 @@ router.post("/register", async (req, res) => {
   }
 });
 
+// ── Me ────────────────────────────────────────────────────────────────────────
+
 router.get("/me", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -194,12 +246,10 @@ router.get("/me", async (req, res) => {
     }
 
     const token = authHeader.slice(7);
-    const decoded = Buffer.from(token, "base64").toString("utf-8");
-    const [userIdStr] = decoded.split(":");
-    const userId = parseInt(userIdStr);
+    const { userId, valid, expired } = decodeSessionToken(token);
 
-    if (isNaN(userId)) {
-      res.status(401).json({ error: "unauthorized", message: "Invalid token" });
+    if (!valid || expired) {
+      res.status(401).json({ error: "unauthorized", message: expired ? "Session expired" : "Invalid token" });
       return;
     }
 
@@ -249,10 +299,8 @@ router.patch("/profile", async (req, res) => {
       return;
     }
     const token = authHeader.slice(7);
-    const decoded = Buffer.from(token, "base64").toString("utf-8");
-    const [userIdStr] = decoded.split(":");
-    const userId = parseInt(userIdStr);
-    if (isNaN(userId)) {
+    const { userId, valid, expired } = decodeSessionToken(token);
+    if (!valid || expired) {
       res.status(401).json({ error: "unauthorized", message: "Invalid token" });
       return;
     }
@@ -300,9 +348,8 @@ router.get("/organisation", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
-    const token = authHeader.slice(7);
-    const userId = parseInt(Buffer.from(token, "base64").toString().split(":")[0]);
-    if (isNaN(userId)) { res.status(401).json({ error: "unauthorized" }); return; }
+    const { userId, valid } = decodeSessionToken(authHeader.slice(7));
+    if (!valid) { res.status(401).json({ error: "unauthorized" }); return; }
 
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     if (!user) { res.status(404).json({ error: "not_found" }); return; }
@@ -351,9 +398,8 @@ router.patch("/organisation", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
-    const token = authHeader.slice(7);
-    const userId = parseInt(Buffer.from(token, "base64").toString().split(":")[0]);
-    if (isNaN(userId)) { res.status(401).json({ error: "unauthorized" }); return; }
+    const { userId, valid } = decodeSessionToken(authHeader.slice(7));
+    if (!valid) { res.status(401).json({ error: "unauthorized" }); return; }
 
     const [user] = await db.select({ isCompanyAdmin: usersTable.isCompanyAdmin, isAdmin: usersTable.isAdmin })
       .from(usersTable).where(eq(usersTable.id, userId));
@@ -405,8 +451,8 @@ router.get("/notification-prefs", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
-    const userId = parseInt(Buffer.from(authHeader.slice(7), "base64").toString().split(":")[0]);
-    if (isNaN(userId)) { res.status(401).json({ error: "unauthorized" }); return; }
+    const { userId, valid } = decodeSessionToken(authHeader.slice(7));
+    if (!valid) { res.status(401).json({ error: "unauthorized" }); return; }
 
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     if (!user) { res.status(404).json({ error: "not_found" }); return; }
@@ -424,8 +470,8 @@ router.patch("/notification-prefs", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
-    const userId = parseInt(Buffer.from(authHeader.slice(7), "base64").toString().split(":")[0]);
-    if (isNaN(userId)) { res.status(401).json({ error: "unauthorized" }); return; }
+    const { userId, valid } = decodeSessionToken(authHeader.slice(7));
+    if (!valid) { res.status(401).json({ error: "unauthorized" }); return; }
 
     await db.update(usersTable)
       .set({ notificationPrefs: JSON.stringify(req.body), updatedAt: new Date() })
@@ -446,11 +492,8 @@ router.post("/change-password", async (req, res) => {
       res.status(401).json({ error: "unauthorized", message: "No token" });
       return;
     }
-    const token = authHeader.slice(7);
-    const decoded = Buffer.from(token, "base64").toString("utf-8");
-    const [userIdStr] = decoded.split(":");
-    const userId = parseInt(userIdStr);
-    if (isNaN(userId)) {
+    const { userId, valid, expired } = decodeSessionToken(authHeader.slice(7));
+    if (!valid || expired) {
       res.status(401).json({ error: "unauthorized", message: "Invalid token" });
       return;
     }
@@ -471,10 +514,7 @@ router.post("/change-password", async (req, res) => {
       return;
     }
 
-    const isBcryptHash = user.passwordHash.startsWith("$2a$") || user.passwordHash.startsWith("$2b$");
-    const match = isBcryptHash
-      ? await bcrypt.compare(currentPassword, user.passwordHash)
-      : user.passwordHash === currentPassword;
+    const match = await bcrypt.compare(currentPassword, user.passwordHash);
 
     if (!match) {
       res.status(401).json({ error: "unauthorized", message: "Current password is incorrect" });
@@ -501,11 +541,8 @@ router.post("/set-password", async (req, res) => {
       res.status(401).json({ error: "unauthorized", message: "No token" });
       return;
     }
-    const token = authHeader.slice(7);
-    const decoded = Buffer.from(token, "base64").toString("utf-8");
-    const [userIdStr] = decoded.split(":");
-    const userId = parseInt(userIdStr);
-    if (isNaN(userId)) {
+    const { userId, valid, expired } = decodeSessionToken(authHeader.slice(7));
+    if (!valid || expired) {
       res.status(401).json({ error: "unauthorized", message: "Invalid token" });
       return;
     }
@@ -544,7 +581,7 @@ router.post("/set-password", async (req, res) => {
 
 // ── Forgot password ────────────────────────────────────────────────────────────
 
-router.post("/forgot-password", async (req, res) => {
+router.post("/forgot-password", forgotPasswordLimiter, async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) {
@@ -620,11 +657,8 @@ router.delete("/account", async (req, res) => {
       res.status(401).json({ error: "unauthorized", message: "No token" });
       return;
     }
-    const token = authHeader.slice(7);
-    const decoded = Buffer.from(token, "base64").toString("utf-8");
-    const [userIdStr] = decoded.split(":");
-    const userId = parseInt(userIdStr);
-    if (isNaN(userId)) {
+    const { userId, valid, expired } = decodeSessionToken(authHeader.slice(7));
+    if (!valid || expired) {
       res.status(401).json({ error: "unauthorized", message: "Invalid token" });
       return;
     }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useGetDashboardAnalytics } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Dialog, DialogContent
 import {
   FolderOpen, CheckSquare, AlertTriangle, FileText, ArrowRight,
   ChevronLeft, ChevronRight, Calendar, Clock, MapPin, User, CalendarDays,
-  Send, CheckCircle2, Users, Zap,
+  Send, CheckCircle2, Users, Zap, X, PartyPopper,
 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { Link, useLocation } from "wouter";
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
@@ -554,6 +555,81 @@ function CalendarWidget({
   );
 }
 
+// ── Welcome Banner (shown once after a brand-new self-registration) ───────────
+function WelcomeBanner() {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+
+  // The banner is gated by a flag set at registration time (`ip_show_welcome_{id}`).
+  // It is never shown to existing users or invite-accepted users.
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    const showKey = `ip_show_welcome_${user.id}`;
+    if (localStorage.getItem(showKey) === "1") {
+      setVisible(true);
+    }
+  }, [user?.id]);
+
+  if (!user || !visible) return null;
+
+  const handleDismiss = () => {
+    localStorage.removeItem(`ip_show_welcome_${user.id}`);
+    setVisible(false);
+  };
+
+  const firstName = user.firstName || "there";
+
+  return (
+    <div className="rounded-2xl border border-[#C5D92D]/40 bg-gradient-to-r from-[#0B1933] to-[#1a2e52] px-6 py-5 mb-7 relative overflow-hidden">
+      <button
+        onClick={handleDismiss}
+        className="absolute top-3 right-3 text-white/50 hover:text-white/80 transition-colors rounded-full p-1"
+        aria-label="Dismiss"
+      >
+        <X className="h-4 w-4" />
+      </button>
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 rounded-xl bg-[#C5D92D]/20 flex items-center justify-center shrink-0 mt-0.5">
+          <PartyPopper className="h-5 w-5 text-[#C5D92D]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-white text-base mb-1">
+            Welcome to InspectProof, {firstName}!
+          </p>
+          <p className="text-white/70 text-sm mb-4">
+            Your free 14-day trial is active. Here are three things to get started:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => { handleDismiss(); setLocation("/projects"); }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#C5D92D] text-[#0B1933] text-xs font-bold hover:bg-[#d4e830] transition-colors"
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              Create a project
+            </button>
+            <button
+              onClick={() => { handleDismiss(); setLocation("/inspectors"); }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs font-semibold hover:bg-white/20 transition-colors border border-white/20"
+            >
+              <Users className="h-3.5 w-3.5" />
+              Invite team members
+            </button>
+            <button
+              onClick={() => { handleDismiss(); setLocation("/inspections"); }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs font-semibold hover:bg-white/20 transition-colors border border-white/20"
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+              Schedule an inspection
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Upgrade Banner ────────────────────────────────────────────────────────────
 function UpgradeBanner() {
   const [, setLocation] = useLocation();
@@ -661,6 +737,7 @@ export default function Dashboard() {
         </Button>
       </div>
 
+      <WelcomeBanner />
       <UpgradeBanner />
 
       {/* KPI Cards */}

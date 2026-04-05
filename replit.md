@@ -104,6 +104,17 @@ pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vi
 - **Stripe:** Replit Stripe connector (development); `STRIPE_SECRET_KEY` in production
 - **Expo Project ID:** `b93ea21e-4b89-4be9-9ca7-c37bd022f2aa`; `newArchEnabled: false` in `app.json`
 
+## Required Environment Variables
+
+| Variable | Scope | Description |
+|---|---|---|
+| `APP_SECRET` | shared | Long random string used to HMAC-sign session tokens and password-reset tokens. **Required at startup — server throws if unset.** |
+| `APP_BASE_URL` | shared | Public base URL of the production web app (e.g. `https://inspectproof.com.au`). Used in password-reset email links. |
+| `RESEND_API_KEY` | secret | Resend transactional email API key. |
+| `STRIPE_WEBHOOK_SECRET` | secret | Stripe webhook signing secret for payment event verification. |
+| `DATABASE_URL` / `PGHOST` etc. | secret (runtime) | PostgreSQL connection credentials (Replit-managed). |
+| `PRIVATE_OBJECT_DIR` | secret | Replit Object Storage private directory path. |
+
 ## Deployment Configuration
 
 ### API Server (`artifacts/api-server/.replit-artifact/artifact.toml`)

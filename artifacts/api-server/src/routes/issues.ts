@@ -3,19 +3,15 @@ import { eq, sql, lt, and, ne } from "drizzle-orm";
 import { db, issuesTable, projectsTable, activityLogsTable, usersTable } from "@workspace/db";
 import { optionalAuth } from "../middleware/auth";
 import { sendEmail } from "../lib/email";
+import { decodeSessionToken } from "../lib/session-token";
 
 const router: IRouter = Router();
 
 function getUserIdFromRequest(req: any): number | null {
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) return null;
-  try {
-    const decoded = Buffer.from(auth.slice(7), "base64").toString();
-    const [userId] = decoded.split(":");
-    return Number(userId) || null;
-  } catch {
-    return null;
-  }
+  const { userId, valid } = decodeSessionToken(auth.slice(7));
+  return valid ? userId : null;
 }
 
 async function formatIssue(i: any) {

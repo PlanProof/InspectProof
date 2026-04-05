@@ -709,3 +709,72 @@ export async function sendReportEmail(opts: {
     throw new Error(error.message);
   }
 }
+
+/* ── Welcome Email (new self-registration) ─────────────────── */
+
+export interface WelcomeEmailOpts {
+  toEmail: string;
+  firstName: string;
+  companyName: string;
+}
+
+function welcomeEmailHtml(opts: { firstName: string; companyName: string; appUrl: string }): string {
+  const { firstName, companyName, appUrl } = opts;
+
+  const content = `
+    ${greeting(firstName)}
+    ${sectionTitle("Welcome to InspectProof!")}
+    ${bodyText(`Your organisation <strong>${companyName}</strong> is all set up and your free 14-day trial is now active. We're excited to have you on board.`)}
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:28px;">
+      <tr><td style="padding:13px 20px;background:#0B1933;">
+        <p style="margin:0;font-size:12px;font-weight:700;color:#C5D92D;text-transform:uppercase;letter-spacing:0.6px;font-family:${BASE_FONT};">Get started in 3 steps</p>
+      </td></tr>
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:14px 20px;">
+          <p style="margin:0;font-size:14px;color:#374151;line-height:1.7;font-family:${BASE_FONT};"><strong style="color:#0B1933;">1.</strong> Create your first project</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#6b7280;font-family:${BASE_FONT};">Add a building site or development to start tracking inspections.</p>
+        </td>
+      </tr>
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:14px 20px;">
+          <p style="margin:0;font-size:14px;color:#374151;line-height:1.7;font-family:${BASE_FONT};"><strong style="color:#0B1933;">2.</strong> Invite your team members</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#6b7280;font-family:${BASE_FONT};">Bring in inspectors and other team members so everyone's on the same page.</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:14px 20px;">
+          <p style="margin:0;font-size:14px;color:#374151;line-height:1.7;font-family:${BASE_FONT};"><strong style="color:#0B1933;">3.</strong> Run your first inspection</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#6b7280;font-family:${BASE_FONT};">Schedule and complete inspections, then generate professional PDF reports.</p>
+        </td>
+      </tr>
+    </table>
+    ${ctaButton(appUrl, "Go to your dashboard →")}
+    ${bodyText(`Your free trial lasts 14 days with full access to all features. No credit card is required until you're ready to upgrade.`, "font-size:13px;color:#6b7280;")}`;
+
+  return emailWrapper({
+    title: "Welcome to InspectProof",
+    tag: "Welcome",
+    content,
+    footer: "InspectProof — a product of PlanProof Technologies Pty Ltd<br/>You're receiving this because you just created an InspectProof account.",
+  });
+}
+
+export async function sendWelcomeEmail(
+  opts: WelcomeEmailOpts,
+  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+): Promise<void> {
+  if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping welcome email"); return; }
+  const appUrl = APP_BASE_URL;
+  try {
+    const { error } = await getResend().emails.send({
+      from: SMTP_FROM,
+      to: opts.toEmail,
+      subject: `Welcome to InspectProof, ${opts.firstName}!`,
+      html: welcomeEmailHtml({ firstName: opts.firstName, companyName: opts.companyName, appUrl }),
+    });
+    if (error) throw new Error(error.message);
+    log?.info({ to: opts.toEmail }, "Welcome email sent");
+  } catch (err) {
+    log?.error({ err, to: opts.toEmail }, "Failed to send welcome email");
+  }
+}

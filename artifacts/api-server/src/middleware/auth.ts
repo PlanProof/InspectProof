@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { decodeSessionToken } from "../lib/session-token";
 
 export interface AuthUser {
   id: number;
@@ -33,10 +34,8 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
   try {
     const token = extractToken(req);
     if (token) {
-      const decoded = Buffer.from(token, "base64").toString("utf-8");
-      const [userIdStr] = decoded.split(":");
-      const userId = parseInt(userIdStr);
-      if (!isNaN(userId)) {
+      const { userId, valid } = decodeSessionToken(token);
+      if (valid && userId) {
         const users = await db.select().from(usersTable).where(eq(usersTable.id, userId));
         if (users[0]) {
           req.authUser = {

@@ -23,6 +23,9 @@ const PLAN_UPDATE_EVENTS = new Set([
 
 const app: Express = express();
 
+// Trust the first proxy hop so rate limiting and IP-based logic use the real client IP
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,

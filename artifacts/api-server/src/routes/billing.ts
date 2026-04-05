@@ -3,19 +3,15 @@ import { db, usersTable, projectsTable, inspectionsTable, planConfigsTable } fro
 import { eq, count, and, gte, sql, inArray } from 'drizzle-orm';
 import { getUncachableStripeClient, getStripePublishableKey } from '../stripeClient';
 import { getLimits, PLAN_LIMITS } from '../lib/planLimits';
+import { decodeSessionToken } from '../lib/session-token';
 
 const router: IRouter = Router();
 
 function getUserId(req: any): number | null {
   const auth = req.headers.authorization;
   if (!auth?.startsWith('Bearer ')) return null;
-  try {
-    const decoded = Buffer.from(auth.slice(7), 'base64').toString();
-    const [userId] = decoded.split(':');
-    return Number(userId);
-  } catch {
-    return null;
-  }
+  const { userId, valid } = decodeSessionToken(auth.slice(7));
+  return valid ? userId : null;
 }
 
 router.get('/billing/plan-configs', async (_req, res) => {

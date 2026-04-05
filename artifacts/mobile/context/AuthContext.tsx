@@ -110,8 +110,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || "Invalid credentials");
+      const body = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        throw new Error("Invalid email or password.");
+      }
+      if (response.status === 429) {
+        throw new Error("Too many login attempts. Please wait 15 minutes and try again.");
+      }
+      throw new Error(body.message || "Something went wrong. Please try again.");
     }
 
     const data = await response.json();

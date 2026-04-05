@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, notesTable, usersTable, projectsTable } from "@workspace/db";
 import { optionalAuth } from "../middleware/auth";
+import { decodeSessionToken } from "../lib/session-token";
 
 const router: IRouter = Router();
 
@@ -59,9 +60,8 @@ router.post("/", async (req, res) => {
     if (!authorId) {
       const authHeader = req.headers.authorization;
       if (authHeader?.startsWith("Bearer ")) {
-        const decoded = Buffer.from(authHeader.slice(7), "base64").toString("utf-8");
-        const parsedId = parseInt(decoded.split(":")[0]);
-        if (!isNaN(parsedId)) authorId = parsedId;
+        const { userId, valid } = decodeSessionToken(authHeader.slice(7));
+        if (valid) authorId = userId;
       }
     }
 

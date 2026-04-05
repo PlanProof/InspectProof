@@ -3,6 +3,7 @@ import { eq, sql, ilike } from "drizzle-orm";
 import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable, reportsTable } from "@workspace/db";
 import { checkInspectionQuota, getOrgMemberIds } from "../lib/quota";
 import { optionalAuth, requireAuth, isInspectorOnly, type AuthUser } from "../middleware/auth";
+import { decodeSessionToken } from "../lib/session-token";
 
 import { sendInspectionAssignedEmail } from "../lib/email";
 import { sendExpoPush } from "../lib/expoPush";
@@ -25,13 +26,8 @@ const router: IRouter = Router();
 function getUserIdFromRequest(req: any): number | null {
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) return null;
-  try {
-    const decoded = Buffer.from(auth.slice(7), "base64").toString();
-    const [userId] = decoded.split(":");
-    return Number(userId) || null;
-  } catch {
-    return null;
-  }
+  const { userId, valid } = decodeSessionToken(auth.slice(7));
+  return valid ? userId : null;
 }
 
 async function getInspectionCounts(inspectionId: number) {

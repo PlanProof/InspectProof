@@ -7,6 +7,17 @@ import { cn } from "@/lib/utils";
 
 const API = (path: string) => `/api${path}`;
 
+function extractHttpStatus(err: unknown): number {
+  if (err === null || typeof err !== "object") return 0;
+  const e = err as Record<string, unknown>;
+  if (typeof e["response"] === "object" && e["response"] !== null) {
+    const resp = e["response"] as Record<string, unknown>;
+    if (typeof resp["status"] === "number") return resp["status"];
+  }
+  if (typeof e["status"] === "number") return e["status"];
+  return 0;
+}
+
 type Plan = {
   id: string;
   plan: string;
@@ -131,6 +142,14 @@ function SignInForm() {
     loginMutation.mutate({ data: { email, password } });
   };
 
+  function getLoginError(): string {
+    if (!loginMutation.error) return "";
+    const status = extractHttpStatus(loginMutation.error);
+    if (status === 401) return "Invalid email or password.";
+    if (status === 429) return "Too many login attempts. Please wait a few minutes and try again.";
+    return "Something went wrong. Please try again.";
+  }
+
   const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError("");
@@ -235,7 +254,7 @@ function SignInForm() {
           {loginMutation.isError && (
             <div className="p-3 rounded bg-destructive/10 text-destructive text-sm flex items-center gap-2 border border-destructive/20">
               <AlertTriangle className="h-4 w-4 shrink-0" />
-              Invalid email or password
+              {getLoginError()}
             </div>
           )}
           <div className="space-y-2">
@@ -246,6 +265,7 @@ function SignInForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              placeholder="you@company.com"
               className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary"
             />
           </div>
@@ -581,6 +601,13 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
       }
 
       const token = regData.token;
+
+      // Mark this as a brand-new self-registration so the dashboard shows a welcome banner
+      // We use the user id from the registration response to scope the key
+      const newUserId = regData.user?.id;
+      if (newUserId) {
+        localStorage.setItem(`ip_show_welcome_${newUserId}`, "1");
+      }
 
       // 2. If free trial or enterprise contact, just log in
       if (selected === "free_trial" || selected === "enterprise") {

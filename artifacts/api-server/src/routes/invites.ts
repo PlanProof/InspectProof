@@ -6,6 +6,7 @@ import { sendTokenInviteEmail } from "../lib/email";
 import { requireAuth } from "../middleware/auth";
 import { getLimits } from "../lib/planLimits";
 import bcrypt from "bcryptjs";
+import { createSessionToken } from "../lib/session-token";
 
 const router: IRouter = Router();
 
@@ -369,7 +370,7 @@ router.post("/accept", async (req, res) => {
     // Mark token as used
     await db.update(invitationsTable).set({ usedAt: new Date() }).where(eq(invitationsTable.token, token));
 
-    const authToken = Buffer.from(`${newUser.id}:${newUser.email}:${Date.now()}`).toString("base64");
+    const authToken = createSessionToken(newUser.id);
 
     req.log.info({ userId: newUser.id, email: newUser.email, company: invite.companyName }, "Invite accepted — account created");
 
