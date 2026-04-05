@@ -275,6 +275,19 @@ export class ObjectStorageService {
       requestedPermission: requestedPermission ?? ObjectPermission.READ,
     });
   }
+
+  /**
+   * Delete an object by its objectPath (e.g. /objects/uploads/<uuid>).
+   * Silently ignores "not found" errors so callers can call this safely in cleanup paths.
+   */
+  async deleteFile(objectPath: string): Promise<void> {
+    try {
+      const file = await this.getObjectEntityFileUnchecked(objectPath);
+      await file.delete({ ignoreNotFound: true });
+    } catch {
+      // best-effort – do not surface delete errors to callers
+    }
+  }
 }
 
 function parseObjectPath(path: string): {

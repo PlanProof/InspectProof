@@ -620,6 +620,30 @@ export default function ConductInspectionScreen() {
     }
   };
 
+  const reorderPhotos = async (newPhotoUrls: string[]) => {
+    if (!activeItem) return;
+    const snapshot = activeItem;
+    const itemId = activeItem.id;
+    await queryClient.cancelQueries({ queryKey: ckKey });
+    setActiveItem(prev => prev ? { ...prev, photoUrls: newPhotoUrls } : null);
+    queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+      (old ?? []).map(i => i.id === itemId ? { ...i, photoUrls: newPhotoUrls } : i)
+    );
+    try {
+      await fetchWithAuth(`/api/inspections/${id}/checklist/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrls: newPhotoUrls }),
+      });
+    } catch {
+      setActiveItem(prev => prev ? { ...prev, photoUrls: snapshot.photoUrls } : null);
+      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+        (old ?? []).map(i => i.id === itemId ? snapshot : i)
+      );
+      Alert.alert("Error", "Could not reorder photos. Please try again.");
+    }
+  };
+
   const removePhotoFromItem = useCallback(async (itemId: number, photoPath: string) => {
     // Cancel any in-flight refetches first to prevent them overwriting our optimistic update
     await queryClient.cancelQueries({ queryKey: ckKey });
@@ -936,6 +960,7 @@ export default function ConductInspectionScreen() {
             onUploadPhoto={uploadPhoto}
             onTakePhoto={takePhoto}
             onRemovePhoto={removePhoto}
+            onReorderPhotos={reorderPhotos}
             onAnnotateDoc={(doc) => annotateDocument(doc, activeItem.id)}
             saving={savingItem}
             uploadingPhoto={uploadingPhoto}
@@ -2187,7 +2212,7 @@ function ItemModal({
   item, result, notes, severity, location, tradeAllocated, recommendedAction,
   baseUrl, documents, internalStaff, contractors, onResultChange, onNotesChange, onSeverityChange, onLocationChange,
   onTradeAllocatedChange, onRecommendedActionChange, onSave, onClose,
-  onUploadPhoto, onTakePhoto, onRemovePhoto, onAnnotateDoc, saving, uploadingPhoto, insets,
+  onUploadPhoto, onTakePhoto, onRemovePhoto, onReorderPhotos, onAnnotateDoc, saving, uploadingPhoto, insets,
   inspectionId,
 }: {
   item: ChecklistItem; result: ResultKey; notes: string; baseUrl: string;
@@ -2200,6 +2225,7 @@ function ItemModal({
   onTradeAllocatedChange: (t: string) => void; onRecommendedActionChange: (r: string) => void;
   onSave: () => void; onClose: () => void; onUploadPhoto: () => void;
   onTakePhoto: () => void; onRemovePhoto: (p: string) => void;
+  onReorderPhotos: (newUrls: string[]) => void;
   onAnnotateDoc: (doc: ProjectDocument) => void;
   saving: boolean; uploadingPhoto: boolean; insets: any;
   inspectionId?: string;
@@ -2208,6 +2234,7 @@ function ItemModal({
   const suggestions = getSuggestionsForItem(item.category, item.description);
   const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [reorderMode, setReorderMode] = useState(false);
   const [tradePickerOpen, setTradePickerOpen] = useState(false);
   const [suggestionsModalOpen, setSuggestionsModalOpen] = useState(false);
   const [pendingTrades, setPendingTrades] = useState<string[]>(() =>
@@ -2516,11 +2543,31 @@ function ItemModal({
 
         {/* Photos */}
         <View style={modalStyles.section}>
-          <Text style={modalStyles.sectionLabel}>
-            Photos ({photoUrls.length}){photoUrls.length > 0 ? " — tap to view" : ""}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <Text style={[modalStyles.sectionLabel, { marginBottom: 0 }]}>
+              Photos ({photoUrls.length}){photoUrls.length > 0 && !reorderMode ? " — tap to view" : ""}
+            </Text>
+            {photoUrls.length > 1 && (
+              <Pressable
+                onPress={() => setReorderMode(m => !m)}
+                style={({ pressed }) => ({
+                  flexDirection: "row", alignItems: "center", gap: 4,
+                  paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6,
+                  borderWidth: 1,
+                  borderColor: reorderMode ? Colors.secondary : Colors.border,
+                  backgroundColor: reorderMode ? "#EEF3FF" : "transparent",
+                  opacity: pressed ? 0.75 : 1,
+                })}
+              >
+                <Feather name="list" size={13} color={reorderMode ? Colors.secondary : Colors.textSecondary} />
+                <Text style={{ fontSize: 12, fontWeight: "600", color: reorderMode ? Colors.secondary : Colors.textSecondary }}>
+                  {reorderMode ? "Done" : "Reorder"}
+                </Text>
+              </Pressable>
+            )}
+          </View>
 
-          {photoUrls.length > 0 && (
+          {photoUrls.length > 0 && !reorderMode && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={modalStyles.photoRow}>
               {photoUrls.map((photoPath, idx) => {
                 const markup: MarkupData | undefined = item.photoMarkups?.[photoPath];
@@ -2528,7 +2575,7 @@ function ItemModal({
                 return (
                   <Pressable key={idx} style={modalStyles.photoThumb} onPress={() => openLightbox(idx)}>
                     <Image
-                      source={{ uri: `${baseUrl}/api/storage${photoPath}` }}
+                      source={{ uri: `${baseUrl}/api/storage${photoPath}?w=400` }}
                       style={modalStyles.thumbImage}
                       resizeMode="cover"
                     />
@@ -2577,7 +2624,76 @@ function ItemModal({
             </ScrollView>
           )}
 
-          <View style={modalStyles.photoButtons}>
+          {/* Reorder mode — vertical list with up/down arrows */}
+          {photoUrls.length > 0 && reorderMode && (
+            <View style={{ gap: 8 }}>
+              {photoUrls.map((photoPath, idx) => {
+                const markup: MarkupData | undefined = item.photoMarkups?.[photoPath];
+                const hasMarkup = markup && markup.strokes.length > 0;
+                const moveUp = () => {
+                  if (idx === 0) return;
+                  const newUrls = [...photoUrls];
+                  [newUrls[idx - 1], newUrls[idx]] = [newUrls[idx], newUrls[idx - 1]];
+                  onReorderPhotos(newUrls);
+                };
+                const moveDown = () => {
+                  if (idx === photoUrls.length - 1) return;
+                  const newUrls = [...photoUrls];
+                  [newUrls[idx], newUrls[idx + 1]] = [newUrls[idx + 1], newUrls[idx]];
+                  onReorderPhotos(newUrls);
+                };
+                return (
+                  <View key={photoPath} style={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: Colors.borderLight, borderRadius: 10, padding: 8 }}>
+                    <View style={{ position: "relative", width: 56, height: 56, borderRadius: 8, overflow: "hidden" }}>
+                      <Image
+                        source={{ uri: `${baseUrl}/api/storage${photoPath}?w=400` }}
+                        style={{ width: 56, height: 56 }}
+                        resizeMode="cover"
+                      />
+                      {hasMarkup && (
+                        <View style={{ position: "absolute", bottom: 2, left: 2, backgroundColor: Colors.secondary, borderRadius: 3, paddingHorizontal: 3, paddingVertical: 1 }}>
+                          <Text style={{ fontSize: 7, color: "#fff", fontWeight: "700" }}>Markup</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={{ flex: 1, fontSize: 12, color: Colors.textSecondary }} numberOfLines={1}>
+                      Photo {idx + 1}
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 6 }}>
+                      <Pressable
+                        onPress={moveUp}
+                        disabled={idx === 0}
+                        style={({ pressed }) => ({
+                          width: 36, height: 36, borderRadius: 8, alignItems: "center", justifyContent: "center",
+                          backgroundColor: pressed ? Colors.border : Colors.background,
+                          borderWidth: 1, borderColor: Colors.border,
+                          opacity: idx === 0 ? 0.3 : 1,
+                        })}
+                        hitSlop={6}
+                      >
+                        <Feather name="chevron-up" size={18} color={Colors.text} />
+                      </Pressable>
+                      <Pressable
+                        onPress={moveDown}
+                        disabled={idx === photoUrls.length - 1}
+                        style={({ pressed }) => ({
+                          width: 36, height: 36, borderRadius: 8, alignItems: "center", justifyContent: "center",
+                          backgroundColor: pressed ? Colors.border : Colors.background,
+                          borderWidth: 1, borderColor: Colors.border,
+                          opacity: idx === photoUrls.length - 1 ? 0.3 : 1,
+                        })}
+                        hitSlop={6}
+                      >
+                        <Feather name="chevron-down" size={18} color={Colors.text} />
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          <View style={[modalStyles.photoButtons, reorderMode && { marginTop: 12 }]}>
             <Pressable style={modalStyles.photoBtnCamera} onPress={onTakePhoto} disabled={uploadingPhoto}>
               <Feather name="camera" size={18} color="#fff" />
               <Text style={modalStyles.photoBtnCameraText}>Take Photo</Text>

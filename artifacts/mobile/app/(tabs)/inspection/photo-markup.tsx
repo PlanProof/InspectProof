@@ -180,9 +180,11 @@ export default function PhotoMarkupScreen() {
     setSavedObjectPath(null);
 
     (async () => {
+      let uploadedPath: string | null = null;
       try {
         const objectPath = await uploadPhoto(currentPhotoUri);
         if (cancelled) return;
+        uploadedPath = objectPath;
         await appendPhotoToChecklist(objectPath);
         if (cancelled) return;
         setSavedObjectPath(objectPath);
@@ -191,6 +193,15 @@ export default function PhotoMarkupScreen() {
         if (cancelled) return;
         console.error("[photo-markup] auto-upload error:", err);
         setUploadState("error");
+        // If upload succeeded but DB attachment failed, clean up the orphaned object
+        if (uploadedPath) {
+          try {
+            await fetch(`${baseUrl}/api/storage${uploadedPath}`, {
+              method: "DELETE",
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+          } catch { /* best-effort cleanup */ }
+        }
       }
     })();
 

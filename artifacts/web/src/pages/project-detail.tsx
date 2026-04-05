@@ -2764,7 +2764,7 @@ function ReportHTMLViewer({ report, inspection, project }: { report: any; inspec
                               style={{ width: 88, height: 88 }}
                             >
                               <img
-                                src={`${apiBase()}/api/storage${photoPath}`}
+                                src={`${apiBase()}/api/storage${photoPath}?w=400`}
                                 alt={`Photo ${pi + 1}`}
                                 className="w-full h-full object-cover"
                               />

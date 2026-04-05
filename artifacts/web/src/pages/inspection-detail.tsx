@@ -2342,6 +2342,144 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 type ResultKey = "pass" | "fail" | "monitor" | "na" | "pending";
 
+/**
+ * Compress an image File using the Canvas API before upload.
+ * Target: quality 0.8 JPEG, longest edge capped at 1920 px.
+ * Falls back to the original file if compression fails.
+ */
+async function compressImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;
+  return new Promise<File>((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX_EDGE = 1920;
+      let { width, height } = img;
+      if (width > MAX_EDGE || height > MAX_EDGE) {
+        const ratio = Math.min(MAX_EDGE / width, MAX_EDGE / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(file); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { resolve(file); return; }
+          // Use a named Blob with extra properties to satisfy TypeScript without Node's File conflict
+          const outBlob = blob as Blob & { name: string; lastModified: number };
+          outBlob.name = file.name.replace(/\.[^.]+$/, ".jpg");
+          outBlob.lastModified = Date.now();
+          const compressed = outBlob as unknown as File;
+          resolve(compressed.size < file.size ? compressed : file);
+        },
+        "image/jpeg",
+        0.8,
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
+/**
+ * Photo Lightbox Dialog – full-size modal with prev/next navigation.
+ */
+function PhotoLightbox({
+  photos,
+  startIndex,
+  onClose,
+}: {
+  photos: { photoPath: string; markup?: ChecklistMarkupData }[];
+  startIndex: number;
+  onClose: () => void;
+}) {
+  const [idx, setIdx] = useState(startIndex);
+  const photo = photos[idx];
+  if (!photo) return null;
+
+  const prev = () => setIdx(i => Math.max(0, i - 1));
+  const next = () => setIdx(i => Math.min(photos.length - 1, i + 1));
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft") prev();
+      if (e.key === "ArrowRight") next();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90" onClick={onClose}>
+      <div className="relative flex flex-col items-center w-full max-w-4xl max-h-[90vh] mx-4" onClick={e => e.stopPropagation()}>
+        {/* Close */}
+        <button
+          onClick={onClose}
+          className="absolute -top-10 right-0 text-white/80 hover:text-white transition-colors text-sm font-medium flex items-center gap-1.5"
+        >
+          <X className="h-5 w-5" /> Close
+        </button>
+
+        {/* Image */}
+        <div className="relative w-full max-h-[80vh] flex items-center justify-center">
+          <img
+            src={`${apiBase()}/api/storage${photo.photoPath}`}
+            alt={`Photo ${idx + 1} of ${photos.length}`}
+            className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+          />
+          {photo.markup && photo.markup.strokes.length > 0 && (
+            <svg
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              viewBox={`0 0 ${photo.markup.w} ${photo.markup.h}`}
+              preserveAspectRatio="xMidYMid meet"
+            >
+              {photo.markup.strokes.map((stroke, si) => (
+                <path
+                  key={si}
+                  d={stroke.points.map((p, i2) => `${i2 === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ")}
+                  stroke={stroke.color}
+                  strokeWidth={stroke.width}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              ))}
+            </svg>
+          )}
+        </div>
+
+        {/* Nav row */}
+        {photos.length > 1 && (
+          <div className="flex items-center gap-4 mt-4">
+            <button
+              onClick={prev}
+              disabled={idx === 0}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-white/80 hover:text-white disabled:opacity-30 transition-colors border border-white/20 hover:border-white/50"
+            >
+              ← Prev
+            </button>
+            <span className="text-white/60 text-sm">{idx + 1} / {photos.length}</span>
+            <button
+              onClick={next}
+              disabled={idx === photos.length - 1}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-white/80 hover:text-white disabled:opacity-30 transition-colors border border-white/20 hover:border-white/50"
+            >
+              Next →
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface ItemDraft {
   result: ResultKey;
   notes: string;
@@ -2390,25 +2528,50 @@ function ChecklistTab({
   const docInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadRef = useRef<{ itemId: number; type: "photo" | "doc" } | null>(null);
 
+  // Lightbox state
+  const [lightbox, setLightbox] = useState<{
+    photos: { photoPath: string; markup?: ChecklistMarkupData }[];
+    startIndex: number;
+  } | null>(null);
+
+  // Drag-and-drop reorder state
+  const [dragState, setDragState] = useState<{
+    itemId: number;
+    dragIndex: number;
+    overIndex: number;
+  } | null>(null);
+
   const handleItemFileUpload = async (file: File, itemId: number, type: "photo" | "doc") => {
     setUploadingItemId(itemId);
+    let uploadedPath: string | null = null;
     try {
+      // Compress images before upload (Canvas API)
+      const uploadFile = type === "photo" ? await compressImage(file) : file;
       const { objectPath } = await apiFetch("/api/storage/uploads/file", {
         method: "POST",
-        headers: { "Content-Type": "application/octet-stream", "X-File-Content-Type": file.type || "application/octet-stream" },
-        body: file,
+        headers: { "Content-Type": uploadFile.type || "application/octet-stream", "X-File-Content-Type": uploadFile.type || "application/octet-stream" },
+        body: uploadFile,
       });
+      uploadedPath = objectPath;
 
       if (type === "photo") {
         const item = localResults.find(r => r.id === itemId);
         const existing = item?.photoUrls ?? [];
         const updated = [...existing, objectPath];
-        await apiFetch(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ photoUrls: updated }),
-        });
-        setLocalResults(rs => rs.map(r => r.id !== itemId ? r : { ...r, photoUrls: updated }));
+        try {
+          await apiFetch(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ photoUrls: updated }),
+          });
+          setLocalResults(rs => rs.map(r => r.id !== itemId ? r : { ...r, photoUrls: updated }));
+        } catch (dbErr) {
+          // DB update failed after upload — delete the orphaned object
+          try {
+            await apiFetch(`/api/storage${objectPath}`, { method: "DELETE" });
+          } catch { /* best-effort */ }
+          throw dbErr;
+        }
       } else {
         await apiFetch(`/api/projects/${inspection.projectId}/documents`, {
           method: "POST",
@@ -2425,9 +2588,24 @@ function ChecklistTab({
         onReload();
       }
     } catch (err: any) {
-      alert(err?.message || "Upload failed. Please try again.");
+      const msg = err?.message || "Upload failed. Please try again.";
+      alert(msg);
     } finally {
       setUploadingItemId(null);
+    }
+  };
+
+  const handleReorderPhotos = async (itemId: number, newPhotoUrls: string[]) => {
+    setLocalResults(rs => rs.map(r => r.id !== itemId ? r : { ...r, photoUrls: newPhotoUrls }));
+    try {
+      await apiFetch(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrls: newPhotoUrls }),
+      });
+    } catch {
+      // Revert optimistic update on failure
+      setLocalResults(initialResults);
     }
   };
 
@@ -2734,35 +2912,74 @@ ${checklistRows}
                       {item.recommendedAction && !isEditing && (
                         <p className="text-xs text-amber-700 mt-1 font-medium">→ {item.recommendedAction}</p>
                       )}
-                      {/* Photos */}
+                      {/* Photos — lightbox + drag-and-drop reorder */}
                       {item.photoUrls && item.photoUrls.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-2">
                           {item.photoUrls.map((photoPath, pi) => {
                             const markup = item.photoMarkups?.[photoPath];
+                            const isDragging = dragState?.itemId === item.id && dragState.dragIndex === pi;
+                            const isDragOver = dragState?.itemId === item.id && dragState.overIndex === pi;
                             return (
-                              <div key={pi} className="relative group flex-shrink-0" style={{ width: 72, height: 72 }}>
-                                <a
-                                  href={`${apiBase()}/api/storage${photoPath}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                              <div
+                                key={`${photoPath}-${pi}`}
+                                className={cn(
+                                  "relative group flex-shrink-0 cursor-grab active:cursor-grabbing transition-all",
+                                  isDragging && "opacity-40 scale-95",
+                                  isDragOver && dragState?.dragIndex !== pi && "ring-2 ring-secondary ring-offset-1",
+                                )}
+                                style={{ width: 72, height: 72 }}
+                                draggable
+                                onDragStart={e => {
+                                  e.dataTransfer.effectAllowed = "move";
+                                  setDragState({ itemId: item.id, dragIndex: pi, overIndex: pi });
+                                }}
+                                onDragOver={e => {
+                                  e.preventDefault();
+                                  e.dataTransfer.dropEffect = "move";
+                                  if (dragState?.itemId === item.id && dragState.overIndex !== pi) {
+                                    setDragState(s => s ? { ...s, overIndex: pi } : null);
+                                  }
+                                }}
+                                onDrop={e => {
+                                  e.preventDefault();
+                                  if (!dragState || dragState.itemId !== item.id) return;
+                                  const { dragIndex, overIndex } = dragState;
+                                  if (dragIndex === overIndex) { setDragState(null); return; }
+                                  const newUrls = [...(item.photoUrls ?? [])];
+                                  const [moved] = newUrls.splice(dragIndex, 1);
+                                  newUrls.splice(overIndex, 0, moved);
+                                  handleReorderPhotos(item.id, newUrls);
+                                  setDragState(null);
+                                }}
+                                onDragEnd={() => setDragState(null)}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => setLightbox({
+                                    photos: (item.photoUrls ?? []).map(p => ({ photoPath: p, markup: item.photoMarkups?.[p] })),
+                                    startIndex: pi,
+                                  })}
                                   className="relative block w-full h-full rounded-md overflow-hidden border border-border hover:border-secondary/60 transition-colors"
                                 >
-                                  <img src={`${apiBase()}/api/storage${photoPath}`} alt={`Photo ${pi + 1}`} className="w-full h-full object-cover" />
+                                  <img src={`${apiBase()}/api/storage${photoPath}?w=400`} alt={`Photo ${pi + 1}`} className="w-full h-full object-cover" />
                                   {markup && markup.strokes.length > 0 && (
                                     <>
-                                      <svg className="absolute inset-0 w-full h-full" viewBox={`0 0 ${markup.w} ${markup.h}`} preserveAspectRatio="xMidYMid meet">
+                                      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`0 0 ${markup.w} ${markup.h}`} preserveAspectRatio="xMidYMid meet">
                                         {markup.strokes.map((stroke, si) => (
                                           <path key={si} d={stroke.points.map((p, i2) => `${i2 === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ")} stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" fill="none" />
                                         ))}
                                       </svg>
-                                      <span className="absolute bottom-1 left-1 bg-secondary text-white text-[8px] px-1 rounded leading-tight font-semibold">Markup</span>
+                                      <span className="absolute bottom-1 left-1 bg-secondary text-white text-[8px] px-1 rounded leading-tight font-semibold pointer-events-none">Markup</span>
                                     </>
                                   )}
-                                </a>
+                                  <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-colors">
+                                    <ExternalLink className="h-3.5 w-3.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </span>
+                                </button>
                                 <button
                                   onClick={e => { e.preventDefault(); e.stopPropagation(); handleRemovePhoto(item.id, photoPath); }}
                                   title="Remove photo"
-                                  className="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm z-10"
+                                  className="absolute -top-1.5 -right-1.5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm z-10"
                                   style={{ width: 18, height: 18 }}
                                 >
                                   <X className="h-2.5 w-2.5" />
@@ -2770,6 +2987,9 @@ ${checklistRows}
                               </div>
                             );
                           })}
+                          {item.photoUrls.length > 1 && (
+                            <p className="w-full text-[10px] text-muted-foreground mt-0.5">Drag to reorder photos</p>
+                          )}
                         </div>
                       )}
                       {/* Linked docs */}
@@ -2979,6 +3199,15 @@ ${checklistRows}
           </div>
         </div>
       ))}
+
+      {/* Photo Lightbox */}
+      {lightbox && (
+        <PhotoLightbox
+          photos={lightbox.photos}
+          startIndex={lightbox.startIndex}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
   );
 }
