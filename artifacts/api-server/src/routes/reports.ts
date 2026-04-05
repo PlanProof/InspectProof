@@ -1078,7 +1078,9 @@ router.post("/:id/send", requireAuth, async (req, res) => {
         reportTitle: report.title || "Inspection Report",
         reportType: report.reportType || "summary",
         projectName: project?.name || "Unknown Project",
-        projectAddress: project?.address || undefined,
+        projectAddress: project
+          ? [project.siteAddress, project.suburb, project.state, project.postcode].filter(Boolean).join(", ") || undefined
+          : undefined,
         senderName,
         senderCompany,
         reportId: id,
@@ -1680,6 +1682,25 @@ function buildPdf(
   return doc;
 }
 
+// ── PDF filename helper ────────────────────────────────────────────────────────
+
+function sanitiseSegment(s: string, fallback: string, maxLen = 40): string {
+  return (
+    s
+      .replace(/[^a-z0-9 \-_]/gi, "")   // keep alphanumeric, space, dash, underscore
+      .trim()
+      .replace(/\s+/g, "_")
+      .slice(0, maxLen) || fallback
+  );
+}
+
+function buildPdfFilename(report: { title?: string | null }, project: { name?: string | null } | null): string {
+  const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const projectPart = sanitiseSegment(project?.name || "", "Project");
+  const titlePart   = sanitiseSegment(report.title || "", "Report");
+  return `InspectProof_${projectPart}_${titlePart}_${dateStr}.pdf`;
+}
+
 // Download report as PDF
 router.get("/:id/pdf", async (req, res) => {
   // Support ?_token= query param for browser-based access (mobile in-app browser)
@@ -2004,24 +2025,18 @@ router.get("/:id/pdf", async (req, res) => {
       const mergedBytes = await merged.save();
       const mergedBuffer = Buffer.from(mergedBytes);
 
-      const safeName = (report.title || "report")
-        .replace(/[^a-z0-9\s\-_]/gi, "")
-        .replace(/\s+/g, "_")
-        .slice(0, 80);
+      const downloadFilename = buildPdfFilename(report, project);
 
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="${safeName}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${downloadFilename}"`);
       res.end(mergedBuffer);
       return;
     }
 
-    const safeName = (report.title || "report")
-      .replace(/[^a-z0-9\s\-_]/gi, "")
-      .replace(/\s+/g, "_")
-      .slice(0, 80);
+    const downloadFilename = buildPdfFilename(report, project);
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="${safeName}.pdf"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${downloadFilename}"`);
     doc.pipe(res);
     doc.end();
   } catch (err) {

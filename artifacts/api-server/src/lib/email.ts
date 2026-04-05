@@ -609,15 +609,14 @@ function reportEmailHtml(opts: {
 }): string {
   const { recipientName, reportTitle, reportType, projectName, projectAddress, senderName, senderCompany, reportId } = opts;
   const typeLabel = reportType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  const pdfLink = `${APP_BASE_URL}/api/reports/${reportId}/pdf`;
-  const viewLink = `${APP_BASE_URL}/api/reports/${reportId}/pdf`;
+  const fullPdfLink = `${APP_BASE_URL}/api/reports/${reportId}/pdf`;
   const senderLine = senderCompany ? `${senderName}, ${senderCompany}` : senderName;
   const greeting_line = recipientName ? `Hi ${recipientName},` : "Hello,";
 
   const content = `
     <p style="margin:0 0 4px;font-size:14px;color:#6b7280;font-family:${BASE_FONT};">${greeting_line}</p>
     ${sectionTitle("You've received an InspectProof report")}
-    ${bodyText(`${senderLine} has shared a <strong>${typeLabel}</strong> with you. The report PDF is attached to this email and can also be downloaded below.`)}
+    ${bodyText(`<strong>${senderLine}</strong> has shared a <strong>${typeLabel}</strong> with you for <strong>${projectName}</strong>. A summary PDF is attached to this email for your records.`)}
     ${infoTable([
       { label: "Report Title", value: reportTitle, highlight: true },
       { label: "Report Type", value: typeLabel },
@@ -625,8 +624,14 @@ function reportEmailHtml(opts: {
       ...(projectAddress ? [{ label: "Site Address", value: projectAddress }] : []),
       { label: "Sent By", value: senderLine },
     ])}
-    ${ctaButton(pdfLink, "Download PDF Report →")}
-    <p style="margin:0 0 8px;font-size:13px;color:#6b7280;line-height:1.7;font-family:${BASE_FONT};">You can also <a href="${viewLink}" style="color:#466DB5;text-decoration:underline;">view this report online</a>. If you have any questions, please contact ${senderLine} directly.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:14px 18px;margin-bottom:24px;">
+      <tr><td>
+        <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.5px;font-family:${BASE_FONT};">About the attached PDF</p>
+        <p style="margin:0;font-size:13px;color:#0c4a6e;line-height:1.7;font-family:${BASE_FONT};">The attached PDF is a summary of this report. The full version — including the complete photo appendix and all marked-up documents — is available via the download link below.</p>
+      </td></tr>
+    </table>
+    ${ctaButton(fullPdfLink, "Download Full PDF Report →")}
+    <p style="margin:0 0 8px;font-size:13px;color:#6b7280;line-height:1.7;font-family:${BASE_FONT};">If you have any questions about this report, please contact <strong>${senderLine}</strong> directly.</p>
     <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;font-family:${BASE_FONT};">This report was generated using InspectProof — Australian building certification and compliance management platform.</p>`;
 
   return emailWrapper({ title: `InspectProof Report: ${reportTitle}`, tag: "Report Delivery", content });
@@ -660,6 +665,13 @@ export async function sendPasswordResetEmail(
   }
 }
 
+function buildEmailPdfFilename(reportTitle: string, projectName: string): string {
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const sanitise = (s: string, max = 40) =>
+    s.replace(/[^a-z0-9 \-_]/gi, "").trim().replace(/\s+/g, "_").slice(0, max) || "Unknown";
+  return `InspectProof_${sanitise(projectName)}_${sanitise(reportTitle)}_${dateStr}.pdf`;
+}
+
 export async function sendReportEmail(opts: {
   to: string;
   recipientName?: string;
@@ -677,16 +689,18 @@ export async function sendReportEmail(opts: {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping report email"); return; }
 
   const html = reportEmailHtml(opts);
-  const safeName = opts.reportTitle.replace(/[^a-z0-9\s\-_]/gi, "").replace(/\s+/g, "_").slice(0, 60) || "report";
+  const typeLabel = opts.reportType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const subject = `${typeLabel} — ${opts.projectName} (InspectProof)`;
+  const attachmentFilename = buildEmailPdfFilename(opts.reportTitle, opts.projectName);
 
   const payload: any = {
     from: SMTP_FROM,
     to,
-    subject: `InspectProof Report: ${opts.reportTitle}`,
+    subject,
     html,
   };
   if (pdfBuffer) {
-    payload.attachments = [{ filename: `${safeName}.pdf`, content: pdfBuffer.toString("base64") }];
+    payload.attachments = [{ filename: attachmentFilename, content: pdfBuffer.toString("base64") }];
   }
 
   const { error } = await getResend().emails.send(payload);
