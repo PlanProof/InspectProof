@@ -2,7 +2,7 @@ import React, { useRef, useState, useCallback, useEffect, useMemo } from "react"
 import {
   View, Text, StyleSheet, Pressable, Alert, ActivityIndicator,
   useWindowDimensions, Platform, Modal, TextInput,
-  KeyboardAvoidingView, Image, ScrollView, Linking,
+  KeyboardAvoidingView, Image, ScrollView, Linking, FlatList,
 } from "react-native";
 import * as Sharing from "expo-sharing";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -13,13 +13,16 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import * as FileSystem from "expo-file-system/legacy";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
 import Svg, { Path } from "react-native-svg";
-import { captureRef } from "react-native-view-shot";
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@/context/AuthContext";
 import { Colors } from "@/constants/colors";
 import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 import * as ScreenOrientation from "expo-screen-orientation";
+
+const OFFLINE_QUEUE_KEY = "inspectproof_markup_offline_queue";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -249,11 +252,16 @@ export default function DocumentViewerScreen() {
   const [pendingPos, setPendingPos] = useState({ x: 100, y: 100 });
   const [textInputValue, setTextInputValue] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [capturing, setCapturing] = useState(false);
-  const [renderingPage, setRenderingPage] = useState<number | null>(null);
+  const [offlineSaved, setOfflineSaved] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [webLoading, setWebLoading] = useState(true);
   const [webError, setWebError] = useState(false);
+
+  // Issue-linking state
+  const [showIssuePicker, setShowIssuePicker] = useState(false);
+  const [projectIssues, setProjectIssues] = useState<{ id: number; title: string; severity: string }[]>([]);
+  const [selectedIssueId, setSelectedIssueId] = useState<number | null>(null);
+  const [issuesLoading, setIssuesLoading] = useState(false);
 
   const containerRef = useRef<View>(null);
   const drawLayerRef = useRef<View>(null);
@@ -280,8 +288,43 @@ export default function DocumentViewerScreen() {
     setSelectedTextId(null);
     setCurrentPage(1);
     setDrawing(false);
+    setSelectedIssueId(null);
+    setOfflineSaved(false);
     currentPageRef.current = 1;
   }, [url]);
+
+  // ── Offline queue: drain queued payloads when connectivity is restored ────────
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const unsubscribe = NetInfo.addEventListener(async (state) => {
+      if (!state.isConnected) return;
+      try {
+        const raw = await AsyncStorage.getItem(OFFLINE_QUEUE_KEY);
+        if (!raw) return;
+        const queue: any[] = JSON.parse(raw);
+        if (!queue.length) return;
+
+        const remaining: any[] = [];
+        for (const payload of queue) {
+          try {
+            const res = await fetch(`${baseUrl}/api/markup/generate`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify(payload),
+            });
+            if (!res.ok) remaining.push(payload);
+          } catch {
+            remaining.push(payload);
+          }
+        }
+        await AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(remaining));
+      } catch { /* non-critical */ }
+    });
+    return () => unsubscribe();
+  }, [baseUrl, token]);
 
   const tabBarHeight = useTabBarHeight();
   const headerH = 56;
@@ -606,42 +649,6 @@ export default function DocumentViewerScreen() {
     setTextInputValue("");
   };
 
-  // ── Web-only: capture annotation layer as PNG via Canvas API ────────────────
-  const captureAnnotationsOnWeb = useCallback(
-    async (pageNumber: number): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        try {
-          // @ts-ignore — document is available on web
-          const canvas = document.createElement("canvas");
-          canvas.width = screenW;
-          canvas.height = bodyH;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) { reject(new Error("No 2D context")); return; }
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          const pageStrokes = strokes.filter((s) => s.pageNumber === pageNumber);
-          for (const stroke of pageStrokes) {
-            if (stroke.points.length < 2) continue;
-            ctx.strokeStyle = stroke.color;
-            ctx.lineWidth = stroke.width;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            ctx.beginPath();
-            stroke.points.forEach((p, i) => {
-              if (i === 0) ctx.moveTo(p.x, p.y);
-              else ctx.lineTo(p.x, p.y);
-            });
-            ctx.stroke();
-          }
-          const dataUrl = canvas.toDataURL("image/png");
-          resolve(dataUrl.split(",")[1]);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    },
-    [strokes, screenW, bodyH]
-  );
-
   // ── Save markup ──────────────────────────────────────────────────────────────
 
   const fetchWithAuth = useCallback(
@@ -658,6 +665,22 @@ export default function DocumentViewerScreen() {
     },
     [baseUrl, token]
   );
+
+  // ── Issue picker: load project issues ─────────────────────────────────────
+  const openIssuePicker = useCallback(async () => {
+    if (!projectId) return;
+    setIssuesLoading(true);
+    setShowIssuePicker(true);
+    try {
+      const data = await fetchWithAuth(`/api/projects/${projectId}/issues`);
+      const list = Array.isArray(data) ? data : (data?.issues ?? []);
+      setProjectIssues(list.map((i: any) => ({ id: i.id, title: i.title, severity: i.severity })));
+    } catch {
+      setProjectIssues([]);
+    } finally {
+      setIssuesLoading(false);
+    }
+  }, [projectId, fetchWithAuth]);
 
   const goBack = useCallback(() => {
     if (inspectionId) {
@@ -701,148 +724,78 @@ export default function DocumentViewerScreen() {
         .join(" - ");
       const docName = nameParts;
 
-      setSelectedTextId(null); // clear selection ring before capture
+      setSelectedTextId(null); // clear selection ring before save
 
-      // ── PDF path: per-page overlay via /api/markup/generate ──────────────
-      if (isPdf && url) {
-        // Capture each annotated page's annotation layer as PNG base64
-        const annotatedPages: { pageNumber: number; pngBase64: string }[] = [];
+      if (!url) throw new Error("No document URL");
 
-        for (const pageNum of annotatedPageNumbers) {
-          setRenderingPage(pageNum);
-          await new Promise<void>((r) => setTimeout(r, 80)); // let render flush
+      // ── Build per-page structured annotation payload ──────────────────────
+      // We send the raw stroke/text data to the server, which renders them
+      // server-side onto the PDF at the correct scale.  This approach works
+      // equally on iOS and Android because it never screenshots the WebView.
+      const annotatedPages = annotatedPageNumbers.map((pageNum) => ({
+        pageNumber: pageNum,
+        strokes: strokes
+          .filter((s) => s.pageNumber === pageNum)
+          .map((s) => ({ points: s.points, color: s.color, width: s.width })),
+        textAnnotations: textAnnotations
+          .filter((a) => a.pageNumber === pageNum)
+          .map((a) => ({ text: a.text, x: a.x, y: a.y, fontSize: a.fontSize, color: a.color })),
+        viewportW: screenW,
+        viewportH: bodyH,
+      }));
 
-          setCapturing(true);
-          await new Promise<void>((r) => setTimeout(r, 60));
-          let uri: string;
-          if (Platform.OS === "web") {
-            uri = await captureAnnotationsOnWeb(pageNum);
-          } else {
-            uri = await captureRef(drawLayerRef, {
-              format: "png",
-              quality: 1,
-              result: "base64",
-            });
-          }
-          setCapturing(false);
+      const payload = {
+        documentUrl: url,
+        mimeType: mimeType || undefined,
+        annotatedPages,
+        documentName: docName,
+        projectId: projectId ? parseInt(projectId) : undefined,
+        inspectionId: inspectionId ? parseInt(inspectionId) : undefined,
+        itemId: itemId ? parseInt(itemId) : undefined,
+        issueId: selectedIssueId ?? undefined,
+      };
 
-          annotatedPages.push({ pageNumber: pageNum, pngBase64: uri });
-        }
-
-        setRenderingPage(null);
-
-        const result = await fetchWithAuth("/api/markup/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            documentUrl: url,
-            annotatedPages,
-            documentName: docName,
-            projectId: projectId ? parseInt(projectId) : undefined,
-            inspectionId: inspectionId ? parseInt(inspectionId) : undefined,
-            itemId: itemId ? parseInt(itemId) : undefined,
-          }),
-        });
-
-        if (!result?.success) throw new Error("Markup generation failed");
-
-        Alert.alert("Saved", `Marked-up PDF "${docName}" saved.`, [
-          { text: "OK", onPress: goBack },
-        ]);
-        return; // navigation handled by alert callback
-      } else {
-        // ── Image / non-PDF path: capture the full container (image + annotations)
-        if (Platform.OS === "web") {
-          Alert.alert("Mobile only", "Image markup saving is only supported in the mobile app. Download InspectProof on iOS or Android to save annotated images.");
-          setUploading(false);
-          return;
-        }
-        // Use containerRef so the underlying image is included in the composite.
-        // captureRef works on native Image components without the WKWebView black issue.
-        setCapturing(true);
-        await new Promise<void>((r) => setTimeout(r, 100));
-        const capturedUri = await captureRef(containerRef, {
-          format: "jpg",
-          quality: 0.92,
-          result: "tmpfile",
-        });
-        setCapturing(false);
-
-        const safeName = (name || "doc").replace(/[^a-z0-9]/gi, "-").toLowerCase();
-        const markupFileName = `markup-${safeName}-${Date.now()}.jpg`;
-
-        const urlRes = await fetchWithAuth("/api/storage/uploads/request-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: markupFileName,
-            size: 0,
-            contentType: "image/jpeg",
-          }),
-        });
-
-        const blob = await (await fetch(capturedUri)).blob();
-        await fetch(urlRes.uploadURL, {
-          method: "PUT",
-          headers: { "Content-Type": "image/jpeg" },
-          body: blob,
-        });
-        const objectPath: string = urlRes.objectPath;
-
-        if (inspectionId && itemId) {
-          const currentItem = await fetchWithAuth(
-            `/api/inspections/${inspectionId}/checklist`
-          );
-          const item = Array.isArray(currentItem)
-            ? currentItem.find((i: any) => i.id === parseInt(itemId))
-            : null;
-          const existingUrls: string[] = item?.photoUrls || [];
-          await fetchWithAuth(
-            `/api/inspections/${inspectionId}/checklist/${itemId}`,
-            {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ photoUrls: [...existingUrls, objectPath] }),
-            }
-          );
-          if (projectId) {
-            await fetchWithAuth(`/api/projects/${projectId}/documents`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name: docName,
-                fileName: markupFileName,
-                fileSize: 0,
-                mimeType: "image/jpeg",
-                fileUrl: objectPath,
-                folder: "Markups",
-                includedInInspection: true,
-              }),
-            });
-          }
-          Alert.alert("Saved", `Markup saved and attached to checklist item.`);
-        } else if (projectId) {
-          await fetchWithAuth(`/api/projects/${projectId}/documents`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: docName,
-              fileName: markupFileName,
-              fileSize: 0,
-              mimeType: "image/jpeg",
-              fileUrl: objectPath,
-              folder: "Markups",
-              includedInInspection: true,
-            }),
-          });
-          Alert.alert("Markup saved", `"${docName}" has been added to your project documents.`);
-        }
+      // ── Offline-first: check connectivity ─────────────────────────────────
+      let isOnline = true;
+      if (Platform.OS !== "web") {
+        const netState = await NetInfo.fetch();
+        isOnline = !!netState.isConnected;
       }
 
-      goBack();
+      if (!isOnline) {
+        // Queue the payload for later upload
+        try {
+          const raw = await AsyncStorage.getItem(OFFLINE_QUEUE_KEY);
+          const queue: any[] = raw ? JSON.parse(raw) : [];
+          queue.push(payload);
+          await AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+        } catch { /* non-critical */ }
+
+        setOfflineSaved(true);
+        setUploading(false);
+        Alert.alert(
+          "Saved locally",
+          "No network connection detected. Your markup has been saved on this device and will upload automatically when connectivity returns.",
+          [{ text: "OK", onPress: goBack }]
+        );
+        return;
+      }
+
+      // ── Online: send to server ─────────────────────────────────────────────
+      const result = await fetchWithAuth("/api/markup/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!result?.success) throw new Error("Markup generation failed");
+
+      const issueNote = selectedIssueId ? " and linked to the selected issue" : "";
+      Alert.alert("Saved", `Marked-up PDF "${docName}" saved${issueNote}.`, [
+        { text: "OK", onPress: goBack },
+      ]);
+      return; // navigation handled by alert callback
     } catch {
-      setCapturing(false);
-      setRenderingPage(null);
       Alert.alert("Save failed", "Could not save the markup. Please try again.");
     } finally {
       setUploading(false);
@@ -863,16 +816,10 @@ export default function DocumentViewerScreen() {
         ? !!pdfRenderUri                      // native PDF: remote URL ready immediately
         : isReady && !!webviewUri;            // other files: wait for local download
 
-  // When saving, renderingPage is set to a specific page number so only that
-  // page's annotations appear in the capture. In normal view mode (null),
-  // show only the annotations for the currently displayed page so strokes
-  // from other pages don't "bleed through" onto the current view.
-  const visibleStrokes = renderingPage !== null
-    ? strokes.filter((s) => s.pageNumber === renderingPage)
-    : strokes.filter((s) => s.pageNumber === currentPage);
-  const visibleTexts = renderingPage !== null
-    ? textAnnotations.filter((a) => a.pageNumber === renderingPage)
-    : textAnnotations.filter((a) => a.pageNumber === currentPage);
+  // Show only annotations for the current page so strokes from other pages
+  // don't bleed through onto the visible view.
+  const visibleStrokes = strokes.filter((s) => s.pageNumber === currentPage);
+  const visibleTexts = textAnnotations.filter((a) => a.pageNumber === currentPage);
 
   const annotatedPageNumbers = Array.from(
     new Set([...strokes.map((s) => s.pageNumber), ...textAnnotations.map((a) => a.pageNumber)])
@@ -1151,6 +1098,24 @@ export default function DocumentViewerScreen() {
           )}
 
           <View style={{ flex: 1 }} />
+
+          {/* Link to issue button — only when projectId available */}
+          {projectId && (
+            <Pressable
+              onPress={openIssuePicker}
+              hitSlop={8}
+              style={[
+                styles.iconBtn,
+                selectedIssueId && { backgroundColor: "rgba(197,217,45,0.2)", borderRadius: 6 },
+              ]}
+            >
+              <Feather
+                name="link"
+                size={16}
+                color={selectedIssueId ? Colors.secondary : "rgba(255,255,255,0.6)"}
+              />
+            </Pressable>
+          )}
 
           {/* Undo / clear — scoped to the current page */}
           {activeTool === "pen" && (
@@ -1642,6 +1607,80 @@ export default function DocumentViewerScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* ── Issue picker modal ── */}
+      <Modal
+        visible={showIssuePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowIssuePicker(false)}
+      >
+        <View style={styles.issuePickerBackdrop}>
+          <View style={styles.issuePickerBox}>
+            <View style={styles.issuePickerHeader}>
+              <Text style={styles.issuePickerTitle}>Link to Issue</Text>
+              <Pressable onPress={() => setShowIssuePicker(false)} hitSlop={8}>
+                <Feather name="x" size={20} color={Colors.text} />
+              </Pressable>
+            </View>
+            <Text style={styles.issuePickerSub}>
+              Select an issue to link this markup to. The markup will appear inline in reports for that issue.
+            </Text>
+
+            {/* Clear selection option */}
+            {selectedIssueId !== null && (
+              <Pressable
+                onPress={() => {
+                  setSelectedIssueId(null);
+                  setShowIssuePicker(false);
+                }}
+                style={styles.issuePickerClearBtn}
+              >
+                <Feather name="x-circle" size={14} color={Colors.textSecondary} />
+                <Text style={styles.issuePickerClearText}>Remove link</Text>
+              </Pressable>
+            )}
+
+            {issuesLoading ? (
+              <ActivityIndicator size="small" color={Colors.secondary} style={{ marginVertical: 24 }} />
+            ) : projectIssues.length === 0 ? (
+              <Text style={styles.issuePickerEmpty}>No open issues found for this project.</Text>
+            ) : (
+              <FlatList
+                data={projectIssues}
+                keyExtractor={(item) => String(item.id)}
+                style={{ maxHeight: 300 }}
+                renderItem={({ item }) => {
+                  const isSelected = selectedIssueId === item.id;
+                  return (
+                    <Pressable
+                      onPress={() => {
+                        setSelectedIssueId(item.id);
+                        setShowIssuePicker(false);
+                      }}
+                      style={[
+                        styles.issuePickerItem,
+                        isSelected && styles.issuePickerItemSelected,
+                      ]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.issuePickerItemTitle} numberOfLines={2}>
+                          {item.title}
+                        </Text>
+                        <Text style={styles.issuePickerItemSev}>{item.severity}</Text>
+                      </View>
+                      {isSelected && (
+                        <Feather name="check" size={16} color={Colors.secondary} />
+                      )}
+                    </Pressable>
+                  );
+                }}
+                ItemSeparatorComponent={() => <View style={styles.issuePickerSep} />}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1944,4 +1983,79 @@ const styles = StyleSheet.create({
   modalBtnCancelText: { color: Colors.textSecondary, fontWeight: "600" },
   modalBtnConfirm: { backgroundColor: Colors.secondary },
   modalBtnConfirmText: { color: "#fff", fontWeight: "700" },
+
+  issuePickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  issuePickerBox: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 36,
+    maxHeight: "70%",
+  },
+  issuePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  issuePickerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  issuePickerSub: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  issuePickerClearBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  issuePickerClearText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  issuePickerEmpty: {
+    fontSize: 13,
+    color: Colors.textTertiary,
+    textAlign: "center",
+    marginVertical: 24,
+  },
+  issuePickerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    gap: 10,
+  },
+  issuePickerItemSelected: {
+    backgroundColor: "rgba(197,217,45,0.08)",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+  },
+  issuePickerItemTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.text,
+  },
+  issuePickerItemSev: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    textTransform: "capitalize",
+    marginTop: 2,
+  },
+  issuePickerSep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(0,0,0,0.08)",
+  },
 });

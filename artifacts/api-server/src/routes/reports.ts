@@ -167,6 +167,7 @@ function generateReportHtml(
   checklistResults: any[],
   issues: any[],
   inspector: any,
+  storageBaseUrl?: string,
 ): string {
   const typeLabel = REPORT_TYPE_LABELS[reportType] || reportType;
   const passItems = checklistResults.filter(i => i.result === "pass");
@@ -311,15 +312,19 @@ function generateReportHtml(
     <!-- Open Issues -->
     <div style="margin-bottom:20px;">
       <div style="font-weight:600;color:#0B1933;font-size:13px;margin-bottom:8px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;">Open Issues / Defects (${failIssues.length})</div>
-      ${failIssues.map((iss, i) => {
+      ${failIssues.map((iss) => {
         const sevColor: Record<string, string> = { critical: "#b91c1c", major: "#c2410c", high: "#c2410c", minor: "#b45309", medium: "#b45309", low: "#15803d", cosmetic: "#6b7280" };
         const sevBg: Record<string, string> = { critical: "#fef2f2", major: "#fff7ed", high: "#fff7ed", minor: "#fffbeb", medium: "#fffbeb", low: "#f0fdf4", cosmetic: "#f9fafb" };
         const sc = sevColor[iss.severity ?? ""] ?? "#6b7280";
         const sb = sevBg[iss.severity ?? ""] ?? "#f9fafb";
-        return `<div style="background:${sb};border-left:3px solid ${sc};padding:8px 12px;margin-bottom:6px;border-radius:0 4px 4px 0;">
+        const markupImgHtml = (iss.markupFileUrl && storageBaseUrl)
+          ? `<div style="margin-top:8px;"><div style="font-size:10px;color:#6b7280;font-weight:600;margin-bottom:4px;">PLAN MARKUP</div><a href="${storageBaseUrl}${iss.markupFileUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;color:#1d4ed8;font-size:11px;font-weight:600;text-decoration:none;">&#128196; View Annotated Plan (PDF)</a></div>`
+          : "";
+        return `<div style="background:${sb};border-left:3px solid ${sc};padding:8px 12px;margin-bottom:8px;border-radius:0 4px 4px 0;">
           <div style="font-size:11px;font-weight:700;color:${sc};text-transform:uppercase;">${iss.severity || "Issue"} — ${iss.category || ""}</div>
           <div style="font-size:12px;color:#111827;margin-top:2px;">${iss.description || ""}</div>
           ${iss.nccReference ? `<div style="font-size:10px;color:#6b7280;margin-top:2px;">NCC: ${iss.nccReference}</div>` : ""}
+          ${markupImgHtml}
         </div>`;
       }).join("")}
     </div>` : ""}
@@ -858,8 +863,16 @@ router.post("/generate", requireAuth, async (req, res) => {
       }));
     }
 
-    const issues = await db.select().from(issuesTable)
+    const rawIssues = await db.select().from(issuesTable)
       .where(eq(issuesTable.inspectionId, inspection.id));
+
+    // Enrich issues with the markup file URL from linked documents
+    const issues = await Promise.all(rawIssues.map(async (iss) => {
+      if (!iss.markupDocumentId) return iss;
+      const [doc] = await db.select({ fileUrl: documentsTable.fileUrl }).from(documentsTable)
+        .where(eq(documentsTable.id, iss.markupDocumentId));
+      return { ...iss, markupFileUrl: doc?.fileUrl ?? null };
+    }));
 
     let inspector: any = null;
     if (inspection.inspectorId) {
@@ -877,7 +890,10 @@ router.post("/generate", requireAuth, async (req, res) => {
     const title = inspType
       ? `${typeLabel} — ${inspType} — ${projectLabel}`
       : `${typeLabel} — ${projectLabel}`;
-    const content = generateReportHtml(reportType, project, inspection, checklistResults, issues, inspector);
+
+    // Build a storage base URL so the report HTML can reference markup images directly
+    const storageBaseUrl = req.protocol + "://" + req.get("host") + "/api/storage";
+    const content = generateReportHtml(reportType, project, inspection, checklistResults, issues, inspector, storageBaseUrl);
 
     // Check if a report already exists for this inspection + reportType.
     // If so, regenerate it in place (update content, reset to draft) rather
