@@ -289,6 +289,9 @@ export default function ProjectDetail() {
             <p className="text-sm text-muted-foreground">
               Archived projects are hidden from the active project list. No data will be deleted and the project can be restored at any time.
             </p>
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              Archiving does not free a project slot — all projects count permanently toward your plan limit.
+            </p>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setArchiveOpen(false)} disabled={archiving}>

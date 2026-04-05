@@ -1,6 +1,6 @@
 import { Router, type IRouter } from 'express';
 import { db, usersTable, projectsTable, inspectionsTable, planConfigsTable } from '@workspace/db';
-import { eq, count, and, ne, gte, sql, inArray } from 'drizzle-orm';
+import { eq, count, and, gte, sql, inArray } from 'drizzle-orm';
 import { getUncachableStripeClient, getStripePublishableKey } from '../stripeClient';
 import { getLimits, PLAN_LIMITS } from '../lib/planLimits';
 
@@ -87,14 +87,12 @@ router.get('/billing/subscription', async (req: any, res) => {
     .where(eq(usersTable.adminUserId, String(billingOwner.id)));
   const orgMemberIds = [billingOwner.id, ...teamMemberRows.map(m => m.id)];
 
-  // Count active projects across the entire org pool
+  // Count ALL projects across the entire org pool — archived projects are NOT
+  // excluded because archiving does not free a quota slot.
   const [{ projectCount }] = await db
     .select({ projectCount: count() })
     .from(projectsTable)
-    .where(and(
-      inArray(projectsTable.createdById, orgMemberIds),
-      ne(projectsTable.status, 'archived')
-    ));
+    .where(inArray(projectsTable.createdById, orgMemberIds));
 
   // Count inspections across the entire org pool (respecting plan's quota type)
   let inspectionCount = 0;

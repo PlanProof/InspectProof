@@ -209,7 +209,7 @@ function ProjectUsageBar({ current, max, planLabel }: { current: number; max: nu
         atLimit ? "text-red-700" : nearLimit ? "text-amber-700" : "text-muted-foreground"
       )}>
         {atLimit || nearLimit ? <AlertTriangle className="h-3.5 w-3.5" /> : <TrendingUp className="h-3.5 w-3.5" />}
-        <span>Active projects:</span>
+        <span>Projects used:</span>
       </div>
       <div className="flex items-center gap-2 flex-1">
         <div className="flex-1 max-w-32 bg-muted/40 rounded-full h-1.5 overflow-hidden">
@@ -233,12 +233,11 @@ function ProjectUsageBar({ current, max, planLabel }: { current: number; max: nu
         {atLimit && (
           <>
             <span>·</span>
-            <span className="text-muted-foreground">Archive a project to free a slot, or</span>
             <button
               onClick={() => navigate("/billing")}
               className="text-secondary font-semibold hover:underline"
             >
-              upgrade
+              upgrade plan
             </button>
           </>
         )}
@@ -327,8 +326,8 @@ export default function Projects() {
               <div className="absolute right-0 top-full mt-1.5 w-72 bg-popover border border-border rounded-lg shadow-lg p-3 text-sm hidden group-hover:block z-10">
                 <p className="font-medium text-sidebar mb-1">Project limit reached</p>
                 <p className="text-muted-foreground text-xs mb-2">
-                  Your {planLabel} plan allows up to {maxProjects} active project{maxProjects === 1 ? "" : "s"}.
-                  Archive an existing project to free a slot, or upgrade your plan.
+                  Your {planLabel} plan allows up to {maxProjects} project{maxProjects === 1 ? "" : "s"}.
+                  Upgrade your plan to create more.
                 </p>
                 <button
                   onClick={() => navigate("/billing")}
@@ -457,7 +456,7 @@ export default function Projects() {
                     {search
                       ? `No projects found matching "${search}"`
                       : statusTab === "archived"
-                        ? "No archived projects. Archive a project from its detail page to free up a slot in your plan."
+                        ? "No archived projects yet. Archive a project from its detail page to hide it from the active list."
                         : statusTab === "completed"
                           ? "No completed projects yet."
                           : statusTab === "on_hold"
@@ -558,7 +557,7 @@ function NewProjectDialog({
       onError: (err: any) => {
         const body = err?.data ?? err;
         if (body?.error === "project_limit_reached") {
-          setLimitError(body.message ?? "Project limit reached. Archive a project or upgrade your plan.");
+          setLimitError(body.message ?? "Project limit reached. Upgrade your plan to create more.");
         }
       }
     }
@@ -615,8 +614,8 @@ function NewProjectDialog({
               </p>
               {maxProjects !== null && (
                 <p className="text-xs text-red-600 mt-0.5">
-                  You have {maxProjects} active project{maxProjects === 1 ? "" : "s"} allowed.
-                  Archive a project from its detail page to free a slot.
+                  Your plan allows up to {maxProjects} project{maxProjects === 1 ? "" : "s"} total.
+                  Upgrade your plan to create more.
                 </p>
               )}
               <button

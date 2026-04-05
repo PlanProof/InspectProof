@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { db, projectsTable, inspectionsTable, usersTable } from '@workspace/db';
-import { eq, sql, count, and, gte, ne, inArray } from 'drizzle-orm';
+import { eq, sql, count, and, gte, inArray } from 'drizzle-orm';
 import { getLimits } from './planLimits';
 
 async function getUser(userId: number) {
@@ -70,23 +70,20 @@ export async function checkProjectQuota(req: Request, res: Response, next: NextF
   const overrideMax = owner.planOverrideProjects ? Number(owner.planOverrideProjects) : null;
   const effectiveMax = overrideMax ?? limits.maxProjects;
 
-  // Count projects across the entire org (billing owner + all team members)
+  // Count ALL projects across the entire org (billing owner + all team members).
+  // Archived projects are NOT excluded — archiving does not free a quota slot.
+  // Once a project is created it permanently counts against the org's limit.
   const orgMemberIds = await getOrgMemberIds(owner.id);
 
   const [{ value }] = await db
     .select({ value: count() })
     .from(projectsTable)
-    .where(
-      and(
-        inArray(projectsTable.createdById, orgMemberIds),
-        ne(projectsTable.status, 'archived')
-      )
-    );
+    .where(inArray(projectsTable.createdById, orgMemberIds));
 
   if (value >= effectiveMax) {
     return res.status(403).json({
       error: 'project_limit_reached',
-      message: `Your organisation's ${limits.label} plan allows up to ${effectiveMax} active project${effectiveMax === 1 ? '' : 's'}. Archive a project or upgrade to create more.`,
+      message: `Your organisation's ${limits.label} plan allows up to ${effectiveMax} project${effectiveMax === 1 ? '' : 's'}. Upgrade your plan to create more.`,
       plan: owner.plan,
       limit: effectiveMax,
       current: value,
