@@ -632,7 +632,6 @@ export default function GenerateReportScreen() {
   const [sending, setSending] = useState(false);
   const [clientEmail, setClientEmail] = useState("");
   const [showEmailModal, setShowEmailModal] = useState(false);
-  const [includeMarkup, setIncludeMarkup] = useState(false);
 
   const fetchWithAuth = useCallback(async (url: string, opts?: RequestInit) => {
     const res = await fetch(`${baseUrl}${url}`, {
@@ -663,13 +662,6 @@ export default function GenerateReportScreen() {
     queryFn: () => fetchWithAuth("/api/doc-templates"),
     enabled: !!token,
   });
-
-  const { data: markupDocs = [] } = useQuery<any[]>({
-    queryKey: ["markup-docs", id, token],
-    queryFn: () => fetchWithAuth(`/api/documents?inspectionId=${id}&folder=Markups`),
-    enabled: !!token && !!id && step === "preview",
-  });
-  const markupCount = (markupDocs as any[]).length;
 
   // Build the "choose type" list from admin-configured doc templates.
   const reportTypes: Array<{ key: string; label: string; icon: string; desc: string; docTemplateId?: number }> =
@@ -793,11 +785,10 @@ export default function GenerateReportScreen() {
 
   const viewPDF = () => {
     if (!report || !token) return;
-    const markupParam = includeMarkup && markupCount > 0 ? "&includeMarkup=true" : "";
     router.push({
       pathname: "/inspection/document-viewer" as any,
       params: {
-        url: `${baseUrl}/api/reports/${report.id}/pdf?_token=${encodeURIComponent(token)}${markupParam}`,
+        url: `${baseUrl}/api/reports/${report.id}/pdf?_token=${encodeURIComponent(token)}&includeMarkup=true`,
         name: templateName || report.reportType || "Report",
         mimeType: "application/pdf",
       },
@@ -1044,36 +1035,6 @@ export default function GenerateReportScreen() {
 
           {/* Action bar */}
           <View style={[styles.actionBar, { paddingBottom: tabBarHeight + 16 }]}>
-            {/* Include Markup toggle */}
-            <Pressable
-              style={styles.markupToggleRow}
-              onPress={() => markupCount > 0 && setIncludeMarkup((v) => !v)}
-              disabled={markupCount === 0}
-            >
-              <View style={styles.markupToggleLeft}>
-                <Feather name="layers" size={16} color={markupCount > 0 ? BRAND_BLUE : "#94a3b8"} />
-                <View style={styles.markupToggleText}>
-                  <Text style={[styles.markupToggleLabel, markupCount === 0 && { color: "#94a3b8" }]}>
-                    Include Markup
-                  </Text>
-                  <Text style={styles.markupToggleSub}>
-                    {markupCount > 0
-                      ? `${markupCount} marked-up document${markupCount !== 1 ? "s" : ""} from this inspection`
-                      : "No markups available for this inspection"}
-                  </Text>
-                </View>
-              </View>
-              <View style={[
-                styles.markupToggleSwitch,
-                includeMarkup && markupCount > 0 ? styles.markupToggleSwitchOn : styles.markupToggleSwitchOff,
-              ]}>
-                <View style={[
-                  styles.markupToggleThumb,
-                  includeMarkup && markupCount > 0 ? styles.markupToggleThumbOn : styles.markupToggleThumbOff,
-                ]} />
-              </View>
-            </Pressable>
-
             {/* View PDF — full width primary button */}
             <Pressable
               style={[styles.actionBtnFull, styles.actionBtnPDF]}
@@ -1390,49 +1351,6 @@ const styles = StyleSheet.create({
   },
   actionBtnPDF: { backgroundColor: Colors.secondary },
   actionBtnPDFText: { fontSize: 15, fontFamily: "PlusJakartaSans_700Bold", color: "#fff" },
-
-  markupToggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#f8fafc",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 10,
-  },
-  markupToggleLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
-  markupToggleText: { flex: 1 },
-  markupToggleLabel: {
-    fontSize: 13,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: BRAND_NAVY,
-  },
-  markupToggleSub: {
-    fontSize: 11,
-    color: "#64748b",
-    fontFamily: "PlusJakartaSans_400Regular",
-    marginTop: 1,
-  },
-  markupToggleSwitch: {
-    width: 40,
-    height: 22,
-    borderRadius: 11,
-    justifyContent: "center",
-    paddingHorizontal: 2,
-  },
-  markupToggleSwitchOn: { backgroundColor: BRAND_BLUE },
-  markupToggleSwitchOff: { backgroundColor: "#cbd5e1" },
-  markupToggleThumb: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#fff",
-  },
-  markupToggleThumbOn: { alignSelf: "flex-end" },
-  markupToggleThumbOff: { alignSelf: "flex-start" },
 
   actionSecondaryRow: { flexDirection: "row", gap: 10 },
   actionBtnSm: {
