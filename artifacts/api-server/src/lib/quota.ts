@@ -3,18 +3,6 @@ import { db, projectsTable, inspectionsTable, usersTable } from '@workspace/db';
 import { eq, sql, count, and, gte, ne, inArray } from 'drizzle-orm';
 import { getLimits } from './planLimits';
 
-function getUserId(req: Request): number | null {
-  const auth = req.headers.authorization;
-  if (!auth?.startsWith('Bearer ')) return null;
-  try {
-    const decoded = Buffer.from(auth.slice(7), 'base64').toString();
-    const [userId] = decoded.split(':');
-    return Number(userId);
-  } catch {
-    return null;
-  }
-}
-
 async function getUser(userId: number) {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   return user ?? null;
@@ -22,12 +10,12 @@ async function getUser(userId: number) {
 
 /**
  * Resolve the billing owner for quota purposes.
- * Team members (non-admins) share the org admin's plan and usage bucket.
+ * Team members share the org admin's plan and usage bucket.
  * Returns the admin user if adminUserId is set, otherwise the user itself.
  */
 async function resolveBillingOwner(user: Awaited<ReturnType<typeof getUser>>) {
   if (!user) return null;
-  if (user.isCompanyAdmin) return user;
+  if (user.isCompanyAdmin || user.isAdmin) return user;
   if (user.adminUserId) {
     const adminId = parseInt(user.adminUserId);
     if (!isNaN(adminId)) {
@@ -35,14 +23,15 @@ async function resolveBillingOwner(user: Awaited<ReturnType<typeof getUser>>) {
       if (admin) return admin;
     }
   }
+  // Standalone user with no org linkage — they are their own billing owner
   return user;
 }
 
 /**
- * Get all user IDs in the org: the admin plus all team members whose adminUserId = admin.id.
- * Used for shared-pool quota counting.
+ * Get all user IDs in the org: the billing-owner admin plus all team members
+ * whose adminUserId = admin.id. Used for shared-pool quota counting.
  */
-async function getOrgMemberIds(adminId: number): Promise<number[]> {
+export async function getOrgMemberIds(adminId: number): Promise<number[]> {
   const members = await db
     .select({ id: usersTable.id })
     .from(usersTable)
@@ -50,12 +39,19 @@ async function getOrgMemberIds(adminId: number): Promise<number[]> {
   return [adminId, ...members.map(m => m.id)];
 }
 
+/**
+ * Project creation quota guard.
+ * MUST be preceded by requireAuth in the middleware chain — uses req.authUser.
+ */
 export async function checkProjectQuota(req: Request, res: Response, next: NextFunction) {
-  const userId = getUserId(req);
-  if (!userId) return next();
+  if (!req.authUser) {
+    return res.status(401).json({ error: 'unauthorized', message: 'Authentication required.' });
+  }
 
-  const user = await getUser(userId);
-  if (!user) return next();
+  const user = await getUser(req.authUser.id);
+  if (!user) {
+    return res.status(401).json({ error: 'unauthorized', message: 'User not found.' });
+  }
 
   // mobileOnly users cannot create projects at all
   if (user.mobileOnly) {
@@ -74,7 +70,7 @@ export async function checkProjectQuota(req: Request, res: Response, next: NextF
   const overrideMax = owner.planOverrideProjects ? Number(owner.planOverrideProjects) : null;
   const effectiveMax = overrideMax ?? limits.maxProjects;
 
-  // Count projects across the entire org (admin + all team members with adminUserId = admin.id)
+  // Count projects across the entire org (billing owner + all team members)
   const orgMemberIds = await getOrgMemberIds(owner.id);
 
   const [{ value }] = await db
@@ -100,16 +96,22 @@ export async function checkProjectQuota(req: Request, res: Response, next: NextF
   next();
 }
 
+/**
+ * Inspection creation quota guard.
+ * MUST be preceded by requireAuth in the middleware chain — uses req.authUser.
+ */
 export async function checkInspectionQuota(req: Request, res: Response, next: NextFunction) {
-  const userId = getUserId(req);
-  if (!userId) return next();
+  if (!req.authUser) {
+    return res.status(401).json({ error: 'unauthorized', message: 'Authentication required.' });
+  }
 
-  const user = await getUser(userId);
-  if (!user) return next();
+  const user = await getUser(req.authUser.id);
+  if (!user) {
+    return res.status(401).json({ error: 'unauthorized', message: 'User not found.' });
+  }
 
-  // Note: mobileOnly team members are permitted to create inspections via the mobile app.
-  // The mobileOnly flag restricts web-portal access (handled by AppLayout redirect), not
-  // inspection-creation itself. Quota is still enforced via the billing owner's org pool below.
+  // Note: mobileOnly team members ARE permitted to create inspections via the mobile app.
+  // Quota is still enforced via the billing owner's org-wide pool below.
 
   const owner = await resolveBillingOwner(user);
   if (!owner) return next();
@@ -123,7 +125,6 @@ export async function checkInspectionQuota(req: Request, res: Response, next: Ne
   if (limits.maxInspectionsTotal !== null) {
     const effectiveMax = overrideMax ?? limits.maxInspectionsTotal;
 
-    // Count inspections across all org member projects
     const [{ value }] = await db
       .select({ value: count() })
       .from(inspectionsTable)
@@ -146,7 +147,6 @@ export async function checkInspectionQuota(req: Request, res: Response, next: Ne
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    // Count this-month inspections across all org member projects
     const [{ value }] = await db
       .select({ value: count() })
       .from(inspectionsTable)

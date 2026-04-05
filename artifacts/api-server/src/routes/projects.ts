@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
 import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable, internalStaffTable, orgContractorsTable, orgContractorProjectAssignmentsTable } from "@workspace/db";
 import { sendContractorDefectReportEmail } from "../lib/email";
-import { checkProjectQuota } from "../lib/quota";
+import { checkProjectQuota, getOrgMemberIds } from "../lib/quota";
 import { optionalAuth, requireAuth, type AuthUser } from "../middleware/auth";
 
 const router: IRouter = Router();
@@ -98,16 +98,18 @@ router.get("/", optionalAuth, async (req, res) => {
     const { status, search } = req.query;
     let projects = await db.select().from(projectsTable).orderBy(sql`${projectsTable.updatedAt} DESC`);
 
-    // Scope projects to the requesting user and their organisation
+    // Scope projects to the requesting user's organisation (all members share visibility)
     if (req.authUser) {
       if (!req.authUser.isAdmin) {
+        // Resolve the billing/org admin for this user
         const adminId = effectiveAdminId(req.authUser);
-        projects = projects.filter(p =>
-          p.createdById === req.authUser!.id ||
-          p.createdById === adminId
-        );
+        // All org member IDs: the admin + every team member under them
+        const orgMemberIds = await getOrgMemberIds(adminId);
+        // Ensure the requesting user is always included even if adminUserId is unset
+        const orgSet = new Set([...orgMemberIds, req.authUser.id]);
+        projects = projects.filter(p => orgSet.has(p.createdById));
       }
-      // Platform admins see all projects
+      // Platform admins (isAdmin=true) see all projects — no filter applied
     } else {
       // Unauthenticated — return nothing
       projects = [];
@@ -141,10 +143,10 @@ router.get("/", optionalAuth, async (req, res) => {
   }
 });
 
-router.post("/", checkProjectQuota, async (req, res) => {
+router.post("/", requireAuth, checkProjectQuota, async (req, res) => {
   try {
     const data = req.body;
-    const createdById = getUserIdFromRequest(req);
+    const createdById = req.authUser!.id;
     const [project] = await db.insert(projectsTable).values({
       name: data.name,
       siteAddress: data.siteAddress,
@@ -162,7 +164,7 @@ router.post("/", checkProjectQuota, async (req, res) => {
       stage: "pre_construction",
       assignedCertifierId: data.assignedCertifierId,
       assignedInspectorId: data.assignedInspectorId,
-      createdById: createdById ?? undefined,
+      createdById,
       startDate: data.startDate,
       expectedCompletionDate: data.expectedCompletionDate,
     }).returning();
@@ -172,7 +174,7 @@ router.post("/", checkProjectQuota, async (req, res) => {
       entityId: project.id,
       action: "created",
       description: `Project "${project.name}" created`,
-      userId: createdById ?? 1,
+      userId: createdById,
     });
 
     res.status(201).json(formatProject(project, 0, 0));

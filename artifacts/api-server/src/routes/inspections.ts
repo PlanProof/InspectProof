@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, ilike } from "drizzle-orm";
 import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable, reportsTable } from "@workspace/db";
-import { checkInspectionQuota } from "../lib/quota";
+import { checkInspectionQuota, getOrgMemberIds } from "../lib/quota";
 import { optionalAuth, requireAuth, isInspectorOnly, type AuthUser } from "../middleware/auth";
 
 import { sendInspectionAssignedEmail } from "../lib/email";
@@ -100,14 +100,24 @@ router.get("/", optionalAuth, async (req, res) => {
     if (req.authUser && isInspectorOnly(req.authUser)) {
       inspections = inspections.filter(i => i.inspectorId === req.authUser!.id);
     } else if (req.authUser) {
-      // All other authenticated users (managers, company admins, platform admins) are scoped
-      // to inspections belonging to projects they created
-      const allProjects = await db.select({ id: projectsTable.id, createdById: projectsTable.createdById })
-        .from(projectsTable);
-      const accessibleProjectIds = allProjects
-        .filter(p => p.createdById === req.authUser!.id)
-        .map(p => p.id);
-      inspections = inspections.filter(i => i.projectId !== null && accessibleProjectIds.includes(i.projectId));
+      if (req.authUser.isAdmin) {
+        // Platform admins see all inspections — no filter applied
+      } else {
+        // All other authenticated users are scoped to their organisation's inspections.
+        // Resolve the billing/org admin, then include ALL org members' projects.
+        const adminId = req.authUser.isCompanyAdmin
+          ? req.authUser.id
+          : (req.authUser.adminUserId ? parseInt(req.authUser.adminUserId) : req.authUser.id);
+        const orgMemberIds = await getOrgMemberIds(adminId);
+        // Ensure the requesting user is always included even if adminUserId is unset
+        const orgSet = new Set([...orgMemberIds, req.authUser.id]);
+        const allProjects = await db.select({ id: projectsTable.id, createdById: projectsTable.createdById })
+          .from(projectsTable);
+        const accessibleProjectIds = allProjects
+          .filter(p => orgSet.has(p.createdById))
+          .map(p => p.id);
+        inspections = inspections.filter(i => i.projectId !== null && accessibleProjectIds.includes(i.projectId));
+      }
     } else {
       // Unauthenticated – only show the test project inspections
       const testProjects = await db.select({ id: projectsTable.id }).from(projectsTable)
@@ -128,9 +138,10 @@ router.get("/", optionalAuth, async (req, res) => {
   }
 });
 
-router.post("/", checkInspectionQuota, async (req, res) => {
+router.post("/", requireAuth, checkInspectionQuota, async (req, res) => {
   try {
     const data = req.body;
+    const actorId = req.authUser!.id;
 
     // Auto-resolve checklistTemplateId from inspectionType if not explicitly provided
     let resolvedTemplateId: number | null = data.checklistTemplateId ?? null;
@@ -174,7 +185,7 @@ router.post("/", checkInspectionQuota, async (req, res) => {
       entityId: inspection.id,
       action: "scheduled",
       description: `${inspection.inspectionType} inspection scheduled for ${inspection.scheduledDate}`,
-      userId: getUserIdFromRequest(req) ?? 1,
+      userId: actorId,
     });
 
     const formatted = await formatInspection(inspection);

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from 'express';
 import { db, usersTable, projectsTable, inspectionsTable, planConfigsTable } from '@workspace/db';
-import { eq, count, and, ne, gte, sql } from 'drizzle-orm';
+import { eq, count, and, ne, gte, sql, inArray } from 'drizzle-orm';
 import { getUncachableStripeClient, getStripePublishableKey } from '../stripeClient';
 import { getLimits, PLAN_LIMITS } from '../lib/planLimits';
 
@@ -68,54 +68,80 @@ router.get('/billing/subscription', async (req: any, res) => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   if (!user) return res.status(404).json({ error: 'User not found' });
 
-  const limits = getLimits(user.plan ?? 'free_trial');
+  // Resolve billing owner: team members share their org admin's plan and quota pool.
+  let billingOwner = user;
+  if (!user.isCompanyAdmin && !user.isAdmin && user.adminUserId) {
+    const adminId = parseInt(user.adminUserId);
+    if (!isNaN(adminId)) {
+      const [admin] = await db.select().from(usersTable).where(eq(usersTable.id, adminId));
+      if (admin) billingOwner = admin;
+    }
+  }
 
+  const limits = getLimits(billingOwner.plan ?? 'free_trial');
+
+  // Get all org member IDs (billing owner + all their team members)
+  const teamMemberRows = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.adminUserId, String(billingOwner.id)));
+  const orgMemberIds = [billingOwner.id, ...teamMemberRows.map(m => m.id)];
+
+  // Count active projects across the entire org pool
   const [{ projectCount }] = await db
     .select({ projectCount: count() })
     .from(projectsTable)
-    .where(and(eq(projectsTable.createdById, userId), ne(projectsTable.status, 'archived')));
+    .where(and(
+      inArray(projectsTable.createdById, orgMemberIds),
+      ne(projectsTable.status, 'archived')
+    ));
 
+  // Count inspections across the entire org pool (respecting plan's quota type)
   let inspectionCount = 0;
-  if (limits.maxInspectionsTotal !== null) {
-    const [{ val }] = await db
-      .select({ val: count() })
-      .from(inspectionsTable)
-      .where(
-        sql`project_id IN (SELECT id FROM projects WHERE created_by_id = ${userId})`
-      );
-    inspectionCount = val;
-  } else if (limits.maxInspectionsMonthly !== null) {
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0);
-    const [{ val }] = await db
-      .select({ val: count() })
-      .from(inspectionsTable)
-      .where(
-        and(
-          sql`project_id IN (SELECT id FROM projects WHERE created_by_id = ${userId})`,
-          gte(inspectionsTable.createdAt, startOfMonth)
-        )
-      );
-    inspectionCount = val;
+  if (limits.maxInspectionsTotal !== null || limits.maxInspectionsMonthly !== null) {
+    const idList = orgMemberIds.join(',');
+    if (limits.maxInspectionsTotal !== null) {
+      const [{ val }] = await db
+        .select({ val: count() })
+        .from(inspectionsTable)
+        .where(
+          sql`project_id IN (SELECT id FROM projects WHERE created_by_id = ANY(ARRAY[${sql.raw(idList)}]::int[]))`
+        );
+      inspectionCount = val;
+    } else if (limits.maxInspectionsMonthly !== null) {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0);
+      const [{ val }] = await db
+        .select({ val: count() })
+        .from(inspectionsTable)
+        .where(
+          and(
+            sql`project_id IN (SELECT id FROM projects WHERE created_by_id = ANY(ARRAY[${sql.raw(idList)}]::int[]))`,
+            gte(inspectionsTable.createdAt, startOfMonth)
+          )
+        );
+      inspectionCount = val;
+    }
   }
 
+  // Stripe subscription details come from the billing owner's record
   let stripeSubscription = null;
-  if (user.stripeSubscriptionId) {
+  if (billingOwner.stripeSubscriptionId) {
     try {
       const stripe = await getUncachableStripeClient();
-      stripeSubscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+      stripeSubscription = await stripe.subscriptions.retrieve(billingOwner.stripeSubscriptionId);
     } catch {}
   }
 
   return res.json({
-    plan: user.plan ?? 'free_trial',
+    plan: billingOwner.plan ?? 'free_trial',
     limits,
     usage: {
       projects: projectCount,
       inspections: inspectionCount,
     },
-    stripeCustomerId: user.stripeCustomerId,
-    stripeSubscriptionId: user.stripeSubscriptionId,
+    stripeCustomerId: billingOwner.stripeCustomerId,
+    stripeSubscriptionId: billingOwner.stripeSubscriptionId,
     subscription: stripeSubscription ? {
       status: stripeSubscription.status,
       currentPeriodEnd: (stripeSubscription as any).current_period_end,
