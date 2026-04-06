@@ -1552,22 +1552,20 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
     .text(footerRight, pageW - MARGIN - 60, footerY, { width: 60, align: "right", lineBreak: false });
 
-  // Custom footer text on a second line (supports **bold** and *italic* inline markers)
+  // Custom footer text on a second line — rendered as plain single line to prevent
+  // any PDFKit page-overflow when the disclaimer is long or contains inline markup.
   if (orgInfo?.reportFooterText) {
-    const segs = parseInlineMarkdown(orgInfo.reportFooterText);
+    const plainDisclaimer = orgInfo.reportFooterText
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/\s*\n\s*/g, "  ");
     const maxW = pageW - MARGIN * 2;
-    let curX = MARGIN;
-    segs.forEach((seg, i) => {
-      const font = seg.bold ? FB : FM;
-      doc.font(font).fontSize(6.5).fillColor("#6B7280");
-      const isLast = i === segs.length - 1;
-      if (i === 0) {
-        doc.text(seg.text, curX, footerY + 12, { width: maxW, lineBreak: false, continued: !isLast, ellipsis: isLast });
-      } else {
-        doc.text(seg.text, { lineBreak: false, continued: !isLast, ellipsis: isLast });
-      }
-      curX += doc.widthOfString(seg.text);
-    });
+    const disclaimerY = footerY + 12;
+    // Guard: only draw if we are still within the footer band (never below page)
+    if (disclaimerY < pageH - 4) {
+      doc.font(F).fontSize(6.5).fillColor("#6B7280")
+        .text(plainDisclaimer, MARGIN, disclaimerY, { width: maxW, lineBreak: false, ellipsis: true });
+    }
   }
 
   doc.restore();
