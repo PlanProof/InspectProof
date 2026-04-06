@@ -14,6 +14,7 @@ import {
   Smartphone, X, Info, ZoomIn, User as UserIcon, ShieldCheck, UserCheck, Paperclip
 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
+import { PDFViewer } from "@/components/PDFViewer";
 import { useListUsers, useCreateInspection, useGetMe, type User } from "@workspace/api-client-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -3563,20 +3564,15 @@ function ReportsTab({ projectId, project }: { projectId: number; project: any })
             </div>
           </div>
 
-          {/* PDF iframe viewer */}
-          <div className="flex-1 bg-muted/20" style={{ height: "75vh" }}>
+          {/* PDF canvas viewer */}
+          <div className="flex-1" style={{ height: "75vh" }}>
             {reportViewLoading ? (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
                 <Loader2 className="h-6 w-6 animate-spin" />
                 <span className="text-sm">Loading PDF…</span>
               </div>
             ) : pdfViewUrl ? (
-              <iframe
-                src={pdfViewUrl}
-                className="w-full h-full"
-                title={selectedReport?.title ?? "Report PDF"}
-                style={{ border: "none" }}
-              />
+              <PDFViewer url={pdfViewUrl} className="h-full" />
             ) : (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
                 <FileText className="h-8 w-8 opacity-30" />

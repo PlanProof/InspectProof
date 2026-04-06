@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { PDFViewer } from "@/components/PDFViewer";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1261,19 +1262,14 @@ export default function InspectionDetail() {
               {viewingReport?.createdAt ? ` · ${new Date(viewingReport.createdAt).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}` : ""}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 min-h-0 rounded-lg overflow-hidden border border-border bg-muted/20" style={{ height: "70vh" }}>
+          <div className="flex-1 min-h-0 rounded-lg overflow-hidden border border-border" style={{ height: "70vh" }}>
             {pdfViewLoading ? (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
                 <Loader2 className="h-6 w-6 animate-spin" />
                 <span className="text-sm">Loading PDF…</span>
               </div>
             ) : pdfViewUrl ? (
-              <iframe
-                src={pdfViewUrl}
-                className="w-full h-full"
-                title={viewingReport?.title ?? "Report PDF"}
-                style={{ border: "none" }}
-              />
+              <PDFViewer url={pdfViewUrl} className="h-full" />
             ) : (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
                 <FileText className="h-8 w-8 opacity-30" />
