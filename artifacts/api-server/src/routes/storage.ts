@@ -58,10 +58,12 @@ function isSupabasePath(objectPath: string): boolean {
  * If a DB update later fails, callers are responsible for cleanup (see PATCH routes).
  * This route itself only uploads the object; it does NOT write to DB.
  */
+const MAX_NON_IMAGE_BYTES = 50 * 1024 * 1024; // 50 MB cap for non-image uploads
+
 router.post(
   "/storage/uploads/file",
   requireAuth,
-  express.raw({ type: "*/*", limit: "200mb" }),
+  express.raw({ type: "*/*", limit: "50mb" }),
   async (req: Request, res: Response) => {
     try {
       const buffer = req.body as Buffer;
@@ -76,8 +78,8 @@ router.post(
         "application/octet-stream"
       ).split(";")[0].trim();
 
-      // If caller declares an image content-type, validate magic bytes and size
       if (isImageContentType(declaredCt)) {
+        // Image uploads: enforce 20 MB limit and magic-byte validation
         if (buffer.length > MAX_IMAGE_BYTES) {
           res.status(413).json({
             error: "file_too_large",
@@ -95,9 +97,6 @@ router.post(
           return;
         }
 
-        // Enforce that the declared subtype is compatible with the detected type.
-        // Allow HEIC/HEIF to be declared as image/heic or image/heif (they share the ftyp box).
-        // Allow image/jpg as an alias for image/jpeg.
         const normalizedDeclared = declaredCt === "image/jpg" ? "image/jpeg"
           : declaredCt === "image/heif" ? "image/heic"
           : declaredCt;
@@ -107,6 +106,15 @@ router.post(
           res.status(415).json({
             error: "content_type_mismatch",
             message: `Declared Content-Type (${declaredCt}) does not match detected image type (${detected}).`,
+          });
+          return;
+        }
+      } else {
+        // Non-image uploads: enforce 50 MB cap
+        if (buffer.length > MAX_NON_IMAGE_BYTES) {
+          res.status(413).json({
+            error: "file_too_large",
+            message: `File must be ≤ 50 MB (received ${(buffer.length / 1024 / 1024).toFixed(1)} MB)`,
           });
           return;
         }
@@ -230,40 +238,54 @@ router.get("/storage/objects/{*path}", requireAuth, async (req: Request, res: Re
 
   try {
     if (isSupabasePath(objectPath)) {
+      // Supabase path — redirect is already streaming-friendly
       const signedUrl = await getSupabaseSignedDownloadURL(objectPath);
       res.redirect(302, signedUrl);
       return;
     }
 
-    const { buffer: rawBuffer, contentType } = await replitStorage.fetchObjectBuffer(objectPath);
-
     // Determine if the asset is effectively immutable (UUID path = content-addressed)
-    // UUID regex: 8-4-4-4-12 hex chars
     const isContentAddressed = /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(rawPath);
     const maxAge = isContentAddressed ? 86400 : 3600;
 
-    let outBuffer = rawBuffer;
-    let outContentType = contentType;
-
-    // Apply thumbnail resize if requested and file is an image
-    if (wantsThumb && thumbWidth && contentType.startsWith("image/") && contentType !== "image/gif") {
-      try {
-        outBuffer = await sharp(rawBuffer)
-          .resize({ width: thumbWidth, height: thumbWidth, fit: "inside", withoutEnlargement: true })
-          .jpeg({ quality: 82 })
-          .toBuffer();
-        outContentType = "image/jpeg";
-      } catch (resizeErr) {
-        // Fall back to original if resize fails (e.g. unsupported format)
-        req.log.warn({ resizeErr }, "Thumbnail resize failed, serving original");
+    if (wantsThumb) {
+      // Thumbnail resize requires the full buffer — fetch into memory only when needed
+      const { buffer: rawBuffer, contentType } = await replitStorage.fetchObjectBuffer(objectPath);
+      let outBuffer = rawBuffer;
+      let outContentType = contentType;
+      if (thumbWidth && contentType.startsWith("image/") && contentType !== "image/gif") {
+        try {
+          outBuffer = await sharp(rawBuffer)
+            .resize({ width: thumbWidth, height: thumbWidth, fit: "inside", withoutEnlargement: true })
+            .jpeg({ quality: 82 })
+            .toBuffer();
+          outContentType = "image/jpeg";
+        } catch (resizeErr) {
+          req.log.warn({ resizeErr }, "Thumbnail resize failed, serving original");
+        }
       }
+      res.setHeader("Content-Type", outContentType);
+      res.setHeader("Content-Disposition", "inline");
+      res.setHeader("Cache-Control", `private, max-age=${maxAge}`);
+      res.setHeader("Content-Length", outBuffer.length);
+      res.send(outBuffer);
+    } else {
+      // Stream directly from GCS — no buffering into server memory
+      const { nodeStream, contentType, contentLength } = await replitStorage.streamObject(objectPath);
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Disposition", "inline");
+      res.setHeader("Cache-Control", `private, max-age=${maxAge}`);
+      if (contentLength !== undefined) {
+        res.setHeader("Content-Length", contentLength);
+      }
+      nodeStream.pipe(res);
+      nodeStream.on("error", (streamErr) => {
+        req.log.error({ err: streamErr }, "Stream object error");
+        if (!res.headersSent) {
+          res.status(500).json({ error: "internal_error" });
+        }
+      });
     }
-
-    res.setHeader("Content-Type", outContentType);
-    res.setHeader("Content-Disposition", "inline");
-    res.setHeader("Cache-Control", `private, max-age=${maxAge}`);
-    res.setHeader("Content-Length", outBuffer.length);
-    res.send(outBuffer);
   } catch (err) {
     if (err instanceof ObjectNotFoundError) {
       res.status(404).json({ error: "not_found" });

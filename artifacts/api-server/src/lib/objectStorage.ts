@@ -199,6 +199,26 @@ export class ObjectStorageService {
     return { buffer: Buffer.from(arrayBuf), contentType };
   }
 
+  /**
+   * Stream an object from GCS directly into a Node.js Writable (e.g. an Express Response).
+   * Returns { contentType, contentLength? } so the caller can set headers before piping.
+   * Throws ObjectNotFoundError on 404 from GCS.
+   */
+  async streamObject(objectPath: string): Promise<{ nodeStream: Readable; contentType: string; contentLength?: number }> {
+    const downloadUrl = await this.getTokenDownloadURL(objectPath);
+    const res = await fetch(downloadUrl, { redirect: "follow", signal: AbortSignal.timeout(30_000) });
+    if (res.status === 404) throw new ObjectNotFoundError();
+    if (!res.ok) throw new Error(`GCS download failed: ${res.status}`);
+    const contentType = res.headers.get("content-type") || "application/octet-stream";
+    const contentLengthHeader = res.headers.get("content-length");
+    const contentLength = contentLengthHeader ? parseInt(contentLengthHeader, 10) : undefined;
+    if (!res.body) {
+      throw new Error("GCS stream response has no body");
+    }
+    const nodeStream = Readable.fromWeb(res.body);
+    return { nodeStream, contentType, contentLength };
+  }
+
   async getObjectEntityFile(objectPath: string): Promise<File> {
     if (!objectPath.startsWith("/objects/")) {
       throw new ObjectNotFoundError();

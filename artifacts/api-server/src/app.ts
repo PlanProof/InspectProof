@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import path from "path";
@@ -9,6 +9,42 @@ import { logger } from "./lib/logger";
 import { WebhookHandlers } from "./webhookHandlers";
 import { syncPlanFromStripeByCustomerId } from "./routes/billing";
 import { getStripeSecretKey } from "./stripeClient";
+
+/** Default request timeout (30 s) applied to all routes. */
+const GLOBAL_TIMEOUT_MS = 30_000;
+/**
+ * Longer timeout for report generation / send endpoints (60 s).
+ * These routes do PDF + image processing which can be CPU-intensive.
+ */
+const REPORT_TIMEOUT_MS = 60_000;
+
+/** Pattern matching report routes that need the longer timeout. */
+const REPORT_ROUTE_PATTERN = /^\/api\/reports\/[^/]+\/(generate|send|pdf)/;
+
+/**
+ * Single unified timeout middleware.
+ * Report-generation routes get REPORT_TIMEOUT_MS; everything else gets GLOBAL_TIMEOUT_MS.
+ * Only one timer is active per request — report routes are NOT additionally gated by the
+ * global limit because this middleware selects the budget based on the path at request time.
+ */
+function timeoutMiddleware(req: Request, res: Response, next: NextFunction) {
+  const timeoutMs = REPORT_ROUTE_PATTERN.test(req.path)
+    ? REPORT_TIMEOUT_MS
+    : GLOBAL_TIMEOUT_MS;
+
+  const timer = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(503).json({
+        error: "request_timeout",
+        message: `Request timed out after ${timeoutMs / 1000}s`,
+      });
+    }
+  }, timeoutMs);
+
+  res.on("finish", () => clearTimeout(timer));
+  res.on("close", () => clearTimeout(timer));
+  next();
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -120,6 +156,10 @@ app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
+// Unified timeout middleware: 30 s global, 60 s for report-generation paths.
+// Applied after express.json() so the Stripe webhook (raw handler above) is excluded.
+app.use(timeoutMiddleware);
+
 app.use(
   "/api/storage/sample-plans",
   express.static(path.join(__dirname, "..", "static", "sample-plans"), {
@@ -131,6 +171,20 @@ app.use(
 );
 
 app.use("/api", router);
+
+// Centralized error handler for body-parser / multer PayloadTooLargeError.
+// Ensures oversized request bodies always return a structured 413 JSON response
+// rather than an HTML Express default error page.
+app.use((err: Error & { type?: string; status?: number }, _req: Request, res: Response, next: NextFunction) => {
+  if (err.type === "entity.too.large" || err.status === 413) {
+    res.status(413).json({
+      error: "payload_too_large",
+      message: "Request body exceeds the allowed size limit.",
+    });
+    return;
+  }
+  next(err);
+});
 
 /**
  * Validate Stripe webhook route ordering by sending a synthetic POST to the webhook endpoint.

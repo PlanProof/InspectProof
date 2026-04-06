@@ -364,7 +364,7 @@ await ensureAdminSeed();
 await ensurePlanConfigsSeed();
 
 // Start listening immediately so the port is open for deployment health checks
-app.listen(port, (err) => {
+const server = app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
@@ -377,4 +377,18 @@ app.listen(port, (err) => {
 
   // Run seeds and integrations in the background after port is open
   runBackgroundTasks().catch((err) => logger.error({ err }, "Background tasks failed"));
+});
+
+// Graceful shutdown: on SIGTERM, stop accepting new connections and wait for
+// in-flight requests to drain before exiting, preventing abrupt connection resets.
+process.on("SIGTERM", () => {
+  logger.info("SIGTERM received — starting graceful shutdown");
+  server.close((closeErr) => {
+    if (closeErr) {
+      logger.error({ err: closeErr }, "Error during graceful shutdown");
+      process.exit(1);
+    }
+    logger.info("All connections drained — process exiting");
+    process.exit(0);
+  });
 });

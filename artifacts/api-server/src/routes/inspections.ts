@@ -30,14 +30,16 @@ function getUserIdFromRequest(req: any): number | null {
   return valid ? userId : null;
 }
 
+/** Fetch pass/fail/monitor/na counts for a single inspection via SQL aggregates. */
 async function getInspectionCounts(inspectionId: number) {
-  const results = await db.select().from(checklistResultsTable)
+  const [row] = await db.select({
+    passCount:    sql<number>`count(*) filter (where ${checklistResultsTable.result} = 'pass')::int`,
+    failCount:    sql<number>`count(*) filter (where ${checklistResultsTable.result} = 'fail')::int`,
+    monitorCount: sql<number>`count(*) filter (where ${checklistResultsTable.result} = 'monitor')::int`,
+    naCount:      sql<number>`count(*) filter (where ${checklistResultsTable.result} = 'na')::int`,
+  }).from(checklistResultsTable)
     .where(eq(checklistResultsTable.inspectionId, inspectionId));
-  const passCount = results.filter(r => r.result === "pass").length;
-  const failCount = results.filter(r => r.result === "fail").length;
-  const monitorCount = results.filter(r => r.result === "monitor").length;
-  const naCount = results.filter(r => r.result === "na").length;
-  return { passCount, failCount, monitorCount, naCount };
+  return row ?? { passCount: 0, failCount: 0, monitorCount: 0, naCount: 0 };
 }
 
 async function formatInspection(i: any) {
@@ -89,44 +91,115 @@ async function formatInspection(i: any) {
 router.get("/", optionalAuth, async (req, res) => {
   try {
     const { projectId, status, inspectorId, fromDate, toDate } = req.query;
-    let inspections = await db.select().from(inspectionsTable)
-      .orderBy(sql`${inspectionsTable.scheduledDate} DESC`);
 
-    // Inspector-role users only see inspections assigned to them
+    // Determine which project IDs the caller may access — resolved once, used in SQL
+    // Values: "all" = unrestricted, "none" = deny all, number[] = specific project IDs
+    let accessibleProjectIds: number[] | string = "none";
+
     if (req.authUser && isInspectorOnly(req.authUser)) {
-      inspections = inspections.filter(i => i.inspectorId === req.authUser!.id);
+      // Inspector-role: handled per-row below via inspectorId filter; allow all projects
+      accessibleProjectIds = "all";
     } else if (req.authUser) {
       if (req.authUser.isAdmin) {
-        // Platform admins see all inspections — no filter applied
+        accessibleProjectIds = "all";
       } else {
-        // All other authenticated users are scoped to their organisation's inspections.
-        // Resolve the billing/org admin, then include ALL org members' projects.
         const adminId = req.authUser.isCompanyAdmin
           ? req.authUser.id
           : (req.authUser.adminUserId ? parseInt(req.authUser.adminUserId) : req.authUser.id);
         const orgMemberIds = await getOrgMemberIds(adminId);
-        // Ensure the requesting user is always included even if adminUserId is unset
         const orgSet = new Set([...orgMemberIds, req.authUser.id]);
         const allProjects = await db.select({ id: projectsTable.id, createdById: projectsTable.createdById })
           .from(projectsTable);
-        const accessibleProjectIds = allProjects
+        accessibleProjectIds = allProjects
           .filter(p => orgSet.has(p.createdById))
           .map(p => p.id);
-        inspections = inspections.filter(i => i.projectId !== null && accessibleProjectIds.includes(i.projectId));
       }
     } else {
-      // Unauthenticated – only show the test project inspections
+      // Unauthenticated – only show test project inspections
       const testProjects = await db.select({ id: projectsTable.id }).from(projectsTable)
         .where(eq(projectsTable.name, "Test Project"));
-      const testIds = testProjects.map(p => p.id);
-      inspections = inspections.filter(i => i.projectId !== null && testIds.includes(i.projectId));
+      accessibleProjectIds = testProjects.map(p => p.id);
     }
 
-    if (projectId) inspections = inspections.filter(i => i.projectId === parseInt(projectId as string));
-    if (status) inspections = inspections.filter(i => i.status === status);
-    if (inspectorId) inspections = inspections.filter(i => i.inspectorId === parseInt(inspectorId as string));
+    // Build a single JOIN query that fetches inspections + project info + counts together.
+    // Avoids N+1 by joining projects and aggregating checklist counts inline.
+    const conditions: ReturnType<typeof sql>[] = [];
 
-    const result = await Promise.all(inspections.map(formatInspection));
+    if (accessibleProjectIds === "none") {
+      res.json([]);
+      return;
+    }
+
+    if (accessibleProjectIds !== "all") {
+      if (accessibleProjectIds.length === 0) {
+        res.json([]);
+        return;
+      }
+      const idList = sql.join(accessibleProjectIds.map(id => sql`${id}`), sql`, `);
+      conditions.push(sql`i.project_id IN (${idList})`);
+    }
+
+    // Inspector-only users: further restrict to their own assignments
+    if (req.authUser && isInspectorOnly(req.authUser)) {
+      conditions.push(sql`i.inspector_id = ${req.authUser.id}`);
+    }
+
+    if (projectId) conditions.push(sql`i.project_id = ${parseInt(projectId as string)}`);
+    if (status)    conditions.push(sql`i.status = ${status as string}`);
+    if (inspectorId) conditions.push(sql`i.inspector_id = ${parseInt(inspectorId as string)}`);
+    if (fromDate) conditions.push(sql`i.scheduled_date >= ${fromDate as string}`);
+    if (toDate)   conditions.push(sql`i.scheduled_date <= ${toDate as string}`);
+
+    const whereClause = conditions.length > 0
+      ? sql`WHERE ${sql.join(conditions, sql` AND `)}`
+      : sql``;
+
+    const rows = await db.execute(sql`
+      SELECT
+        i.id,
+        i.project_id AS "projectId",
+        p.name AS "projectName",
+        p.site_address AS "projectAddress",
+        p.suburb AS "projectSuburb",
+        i.inspection_type AS "inspectionType",
+        i.status,
+        i.scheduled_date AS "scheduledDate",
+        i.scheduled_time AS "scheduledTime",
+        i.completed_date AS "completedDate",
+        i.inspector_id AS "inspectorId",
+        TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS "inspectorName",
+        i.duration,
+        i.notes AS "siteNotes",
+        i.weather_conditions AS "weatherConditions",
+        i.checklist_template_id AS "checklistTemplateId",
+        ct.name AS "checklistTemplateName",
+        ct.discipline AS "checklistTemplateDiscipline",
+        COUNT(cr.id) FILTER (WHERE cr.result = 'pass')::int    AS "passCount",
+        COUNT(cr.id) FILTER (WHERE cr.result = 'fail')::int    AS "failCount",
+        COUNT(cr.id) FILTER (WHERE cr.result = 'monitor')::int AS "monitorCount",
+        COUNT(cr.id) FILTER (WHERE cr.result = 'na')::int      AS "naCount",
+        i.created_at AS "createdAt"
+      FROM inspections i
+      LEFT JOIN projects p ON p.id = i.project_id
+      LEFT JOIN users u ON u.id = i.inspector_id
+      LEFT JOIN checklist_templates ct ON ct.id = i.checklist_template_id
+      LEFT JOIN checklist_results cr ON cr.inspection_id = i.id
+      ${whereClause}
+      GROUP BY i.id, p.name, p.site_address, p.suburb, u.first_name, u.last_name, ct.name, ct.discipline
+      ORDER BY i.scheduled_date DESC
+    `);
+
+    type InspectionListRow = Record<string, unknown> & {
+      inspectorName: string | null;
+      createdAt: Date | string | null;
+    };
+    const rawRows: InspectionListRow[] = (rows as { rows: InspectionListRow[] }).rows ?? [];
+    const result = rawRows.map(r => ({
+      ...r,
+      inspectorName: typeof r.inspectorName === "string" ? r.inspectorName.trim() || null : null,
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+    }));
+
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "List inspections error");
