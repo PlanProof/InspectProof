@@ -321,6 +321,7 @@ type AccountDetails = {
   password: string;
   confirmPassword: string;
   organization: string;
+  marketingOptIn: boolean;
 };
 
 function SignUpFlow() {
@@ -332,6 +333,7 @@ function SignUpFlow() {
     password: "",
     confirmPassword: "",
     organization: "",
+    marketingOptIn: false,
   });
 
   return step === 1 ? (
@@ -481,6 +483,19 @@ function AccountStep({
               </button>
             </div>
           </div>
+          {/* Marketing opt-in */}
+          <label className="flex items-start gap-2.5 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={account.marketingOptIn}
+              onChange={e => setAccount(a => ({ ...a, marketingOptIn: e.target.checked }))}
+              className="mt-0.5 h-4 w-4 rounded border-muted-foreground/30 accent-primary cursor-pointer shrink-0"
+            />
+            <span className="text-xs text-muted-foreground leading-relaxed group-hover:text-foreground transition-colors">
+              I'd like to receive product updates, inspection tips, and compliance news from InspectProof. You can unsubscribe at any time.
+            </span>
+          </label>
+
           <Button
             type="submit"
             className="w-full mt-2 h-11 text-base shadow-lg shadow-primary/25 hover:-translate-y-0.5 transition-all"
@@ -591,6 +606,7 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
           password: account.password,
           organization: account.organization,
           plan: selected,
+          marketingOptIn: account.marketingOptIn,
         }),
       });
       const regData = await regRes.json();
@@ -728,28 +744,31 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
                 badge={null}
               />
 
-              {/* Stripe plans */}
-              {plans.map((plan) => {
-                const price = plan.prices.find((p) => p.interval === billingInterval);
-                const savings = annualSavings[plan.plan];
-                const cfg = planConfigs[plan.plan];
-                return (
-                  <PlanCard
-                    key={plan.id}
-                    planKey={plan.plan}
-                    name={cfg?.label || plan.name}
-                    description={cfg?.description || plan.description || ""}
-                    price={price?.unit_amount ?? null}
-                    interval={billingInterval}
-                    features={cfg?.features ?? []}
-                    selected={selected === plan.plan}
-                    onSelect={() => handleSelect(plan.plan, plan)}
-                    icon={PLAN_ICONS[plan.plan] ?? null}
-                    badge={billingInterval === "year" && savings > 0 ? `Save ${fmt(savings)}/yr` : null}
-                    highlighted={plan.plan === "professional"}
-                  />
-                );
-              })}
+              {/* Paid plans — sourced from DB configs; Stripe prices merged in when available */}
+              {Object.values(planConfigs)
+                .filter(cfg => cfg.planKey !== "free_trial" && cfg.planKey !== "enterprise")
+                .map((cfg) => {
+                  const stripePlan = plans.find((p) => p.plan === cfg.planKey);
+                  const price = stripePlan?.prices.find((p) => p.interval === billingInterval) ?? null;
+                  const savings = stripePlan ? annualSavings[cfg.planKey] ?? 0 : 0;
+                  return (
+                    <PlanCard
+                      key={cfg.planKey}
+                      planKey={cfg.planKey}
+                      name={cfg.label}
+                      description={cfg.description}
+                      price={price?.unit_amount ?? null}
+                      interval={billingInterval}
+                      features={cfg.features ?? []}
+                      selected={selected === cfg.planKey}
+                      onSelect={() => handleSelect(cfg.planKey, stripePlan)}
+                      icon={PLAN_ICONS[cfg.planKey] ?? null}
+                      badge={billingInterval === "year" && savings > 0 ? `Save ${fmt(savings)}/yr` : null}
+                      highlighted={cfg.planKey === "professional"}
+                      noPrice={!stripePlan}
+                    />
+                  );
+                })}
 
               {/* Enterprise */}
               <PlanCard
@@ -802,6 +821,7 @@ function PlanCard({
   badge,
   highlighted = false,
   enterpriseLabel,
+  noPrice = false,
 }: {
   planKey: string;
   name: string;
@@ -815,6 +835,7 @@ function PlanCard({
   badge: string | null;
   highlighted?: boolean;
   enterpriseLabel?: string;
+  noPrice?: boolean;
 }) {
   return (
     <button
@@ -862,6 +883,8 @@ function PlanCard({
         <div className="shrink-0 text-right">
           {enterpriseLabel ? (
             <span className="text-sm font-semibold text-muted-foreground">{enterpriseLabel}</span>
+          ) : noPrice ? (
+            <span className="text-xs font-medium text-muted-foreground text-right leading-snug">Contact<br />us</span>
           ) : price !== null ? (
             <>
               <div className="text-lg font-bold leading-none">

@@ -138,7 +138,7 @@ router.post("/login", loginLimiter, async (req, res) => {
 
 router.post("/register", registerLimiter, async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role, organization, plan, profession } = req.body;
+    const { email, password, firstName, lastName, role, organization, plan, profession, marketingOptIn } = req.body;
 
     if (!email || !password || !firstName || !lastName) {
       res.status(400).json({ error: "bad_request", message: "First name, last name, email and password are required." });
@@ -185,6 +185,7 @@ router.post("/register", registerLimiter, async (req, res) => {
       isCompanyAdmin: true,
       userType: "user",
       permissions: JSON.stringify({ editTemplates: true, addInspectors: true, createProjects: true }),
+      notificationPrefs: JSON.stringify({ marketingOptIn: marketingOptIn === true }),
     }).returning();
 
     const token = createSessionToken(newUser.id);
