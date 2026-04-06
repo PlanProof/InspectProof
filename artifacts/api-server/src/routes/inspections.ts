@@ -7,6 +7,7 @@ import { decodeSessionToken } from "../lib/session-token";
 
 import { sendInspectionAssignedEmail } from "../lib/email";
 import { sendExpoPush } from "../lib/expoPush";
+import { createCalendarEvent, updateCalendarEvent, deleteCalendarEvent } from "../lib/calendarEventService";
 
 /** Returns true if the authenticated user may access the inspection (via its project). */
 async function canAccessInspection(inspection: { projectId: number | null; inspectorId?: number | null }, user: AuthUser): Promise<boolean> {
@@ -436,6 +437,11 @@ router.post("/", requireAuth, checkInspectionQuota, async (req, res) => {
         }
       }
     }
+
+    // Calendar event — fire-and-forget (only if inspector is assigned and has a scheduled date)
+    if (inspection.inspectorId && inspection.scheduledDate) {
+      createCalendarEvent(inspection.id, inspection.inspectorId, req.log).catch(() => {});
+    }
   } catch (err) {
     req.log.error({ err }, "Create inspection error");
     res.status(500).json({ error: "internal_error" });
@@ -785,6 +791,11 @@ router.put("/:id", requireAuth, async (req, res) => {
           ).catch(() => {});
         }
       }
+    }
+
+    // Calendar event update — fire-and-forget
+    if (inspection.inspectorId && inspection.scheduledDate) {
+      updateCalendarEvent(inspection.id, inspection.inspectorId, req.log).catch(() => {});
     }
   } catch (err) {
     req.log.error({ err }, "Update inspection error");
@@ -1211,6 +1222,12 @@ router.delete("/:id", requireAuth, async (req, res) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
+
+    // Delete calendar event before removing from DB
+    if (inspection.inspectorId && inspection.calendarEventId) {
+      deleteCalendarEvent(id, inspection.inspectorId, req.log).catch(() => {});
+    }
+
     // Delete child records first (no CASCADE in schema)
     await db.delete(checklistResultsTable).where(eq(checklistResultsTable.inspectionId, id));
     await db.delete(notesTable).where(eq(notesTable.inspectionId, id));

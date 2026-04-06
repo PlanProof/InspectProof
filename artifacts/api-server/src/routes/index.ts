@@ -24,6 +24,7 @@ import activityRouter from "./activity";
 import shareRouter from "./share";
 import inductionsRouter from "./inductions";
 import internalRouter from "./internal";
+import calendarIntegrationsRouter from "./calendarIntegrations";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use("/activity", activityRouter);
 router.use(shareRouter);
 router.use(inductionsRouter);
 router.use(internalRouter);
+router.use(calendarIntegrationsRouter);
 
 export default router;

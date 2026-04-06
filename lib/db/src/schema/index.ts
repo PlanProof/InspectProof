@@ -16,3 +16,4 @@ export * from "./orgContractors";
 export * from "./inductions";
 export * from "./emailLogs";
 export * from "./shareAcknowledgements";
+export * from "./calendarIntegrations";

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View, Text, ScrollView, StyleSheet, Pressable,
-  Platform, Switch, Image, Alert, Linking,
+  Platform, Switch, Image, Alert, Linking, ActivityIndicator,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -88,12 +88,62 @@ export default function SettingsScreen() {
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [marketingSaving, setMarketingSaving] = useState(false);
 
+  const [calendarStatus, setCalendarStatus] = useState<{
+    google: { connected: boolean; calendarName?: string };
+    microsoft: { connected: boolean; calendarName?: string };
+    googleAvailable: boolean;
+    microsoftAvailable: boolean;
+  } | null>(null);
+  const [calendarLoading, setCalendarLoading] = useState(true);
+  const [disconnectingCal, setDisconnectingCal] = useState<string | null>(null);
+
   const [orgDetails, setOrgDetails] = useState<{
     name?: string; abn?: string; acn?: string; phone?: string;
     address?: string; suburb?: string; state?: string; postcode?: string;
     accredBody?: string; accredNum?: string; accredExpiry?: string;
     logoUrl?: string;
   } | null>(null);
+
+  const fetchCalendarStatus = useCallback(async () => {
+    if (!token) return;
+    setCalendarLoading(true);
+    try {
+      const res = await fetch(getApiUrl("/api/integrations/calendar/status"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCalendarStatus(data);
+      }
+    } catch {}
+    setCalendarLoading(false);
+  }, [token]);
+
+  useEffect(() => {
+    fetchCalendarStatus();
+  }, [fetchCalendarStatus]);
+
+  async function handleCalendarDisconnect(provider: string) {
+    setDisconnectingCal(provider);
+    try {
+      await fetch(getApiUrl(`/api/integrations/calendar/${provider}/disconnect`), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await fetchCalendarStatus();
+    } catch {
+      Alert.alert("Error", "Failed to disconnect. Please try again.");
+    } finally {
+      setDisconnectingCal(null);
+    }
+  }
+
+  function handleCalendarConnect(provider: string) {
+    const connectUrl = getApiUrl(`/api/integrations/calendar/${provider}/connect?token=${encodeURIComponent(token || "")}`);
+    Linking.openURL(connectUrl).catch(() => {
+      Alert.alert("Error", "Could not open the browser. Please try again.");
+    });
+  }
 
   useEffect(() => {
     if (!token) return;
@@ -340,6 +390,108 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Calendar Integration */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Calendar Integration</Text>
+          <View style={styles.group}>
+            {calendarLoading ? (
+              <View style={[styles.row, { justifyContent: "center" }]}>
+                <ActivityIndicator size="small" color={Colors.secondary} />
+              </View>
+            ) : (
+              <>
+                {/* Google Calendar */}
+                <View style={styles.calRow}>
+                  <View style={[styles.rowIcon, { backgroundColor: "#EEF2FF" }]}>
+                    <Feather name="calendar" size={17} color="#4B6CC1" />
+                  </View>
+                  <View style={styles.rowBody}>
+                    <Text style={styles.rowLabel}>Google Calendar</Text>
+                    {calendarStatus?.google?.connected ? (
+                      <Text style={[styles.rowSublabel, { color: Colors.success }]}>
+                        Connected{calendarStatus.google.calendarName ? ` — ${calendarStatus.google.calendarName}` : ""}
+                      </Text>
+                    ) : (
+                      <Text style={styles.rowSublabel}>Not connected</Text>
+                    )}
+                  </View>
+                  {calendarStatus?.google?.connected ? (
+                    <Pressable
+                      onPress={() => {
+                        Alert.alert("Disconnect Google Calendar", "Remove the Google Calendar connection?", [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Disconnect", style: "destructive", onPress: () => handleCalendarDisconnect("google") },
+                        ]);
+                      }}
+                      disabled={disconnectingCal === "google"}
+                      style={({ pressed }) => [styles.calBtn, styles.calBtnDanger, pressed && { opacity: 0.75 }]}
+                    >
+                      {disconnectingCal === "google" ? (
+                        <ActivityIndicator size="small" color={Colors.danger} />
+                      ) : (
+                        <Text style={styles.calBtnDangerText}>Disconnect</Text>
+                      )}
+                    </Pressable>
+                  ) : calendarStatus?.googleAvailable ? (
+                    <Pressable
+                      onPress={() => handleCalendarConnect("google")}
+                      style={({ pressed }) => [styles.calBtn, styles.calBtnPrimary, pressed && { opacity: 0.75 }]}
+                    >
+                      <Text style={styles.calBtnPrimaryText}>Connect</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={[styles.rowSublabel, { fontStyle: "italic" }]}>N/A</Text>
+                  )}
+                </View>
+
+                {/* Microsoft Outlook */}
+                <View style={[styles.calRow, { borderBottomWidth: 0 }]}>
+                  <View style={[styles.rowIcon, { backgroundColor: "#EEF2FF" }]}>
+                    <Feather name="calendar" size={17} color="#6366F1" />
+                  </View>
+                  <View style={styles.rowBody}>
+                    <Text style={styles.rowLabel}>Outlook</Text>
+                    {calendarStatus?.microsoft?.connected ? (
+                      <Text style={[styles.rowSublabel, { color: Colors.success }]}>
+                        Connected{calendarStatus.microsoft.calendarName ? ` — ${calendarStatus.microsoft.calendarName}` : ""}
+                      </Text>
+                    ) : (
+                      <Text style={styles.rowSublabel}>Not connected</Text>
+                    )}
+                  </View>
+                  {calendarStatus?.microsoft?.connected ? (
+                    <Pressable
+                      onPress={() => {
+                        Alert.alert("Disconnect Outlook", "Remove the Outlook Calendar connection?", [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Disconnect", style: "destructive", onPress: () => handleCalendarDisconnect("microsoft") },
+                        ]);
+                      }}
+                      disabled={disconnectingCal === "microsoft"}
+                      style={({ pressed }) => [styles.calBtn, styles.calBtnDanger, pressed && { opacity: 0.75 }]}
+                    >
+                      {disconnectingCal === "microsoft" ? (
+                        <ActivityIndicator size="small" color={Colors.danger} />
+                      ) : (
+                        <Text style={styles.calBtnDangerText}>Disconnect</Text>
+                      )}
+                    </Pressable>
+                  ) : calendarStatus?.microsoftAvailable ? (
+                    <Pressable
+                      onPress={() => handleCalendarConnect("microsoft")}
+                      style={({ pressed }) => [styles.calBtn, styles.calBtnPrimary, pressed && { opacity: 0.75 }]}
+                    >
+                      <Text style={styles.calBtnPrimaryText}>Connect</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={[styles.rowSublabel, { fontStyle: "italic" }]}>N/A</Text>
+                  )}
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+
         {/* App */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>App</Text>
@@ -546,6 +698,18 @@ const styles = StyleSheet.create({
   confirmBtnDangerText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
   confirmSuccess: { flexDirection: "row", alignItems: "center", gap: 8 },
   confirmSuccessText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.success },
+
+  calRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    padding: 14, borderBottomWidth: 1, borderBottomColor: Colors.borderLight,
+  },
+  calBtn: {
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, minWidth: 80, alignItems: "center",
+  },
+  calBtnPrimary: { backgroundColor: Colors.secondary },
+  calBtnPrimaryText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+  calBtnDanger: { borderWidth: 1, borderColor: Colors.danger },
+  calBtnDangerText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.danger },
 
   orgLogoRow: {
     paddingHorizontal: 14, paddingVertical: 12,

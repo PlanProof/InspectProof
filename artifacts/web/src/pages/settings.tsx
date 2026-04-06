@@ -6,6 +6,7 @@ import {
   CheckCircle2, ChevronRight, Shield, Database, Download,
   ToggleLeft, Upload, Trash2, PenLine, CreditCard, Zap, BarChart3,
   ArrowRight, Eye, EyeOff, Plus, X, Edit2, Check, Mail, BookUser,
+  Link2, Calendar,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -28,7 +29,7 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return res.json();
 }
 
-type Tab = "profile" | "security" | "notifications" | "organisation" | "platform" | "billing";
+type Tab = "profile" | "security" | "notifications" | "organisation" | "platform" | "billing" | "integrations";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "profile",       label: "Profile",        icon: User },
@@ -36,6 +37,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "notifications", label: "Notifications",  icon: Bell },
   { id: "organisation",  label: "Organisation",   icon: Building2 },
   { id: "platform",      label: "Platform",       icon: Palette },
+  { id: "integrations",  label: "Integrations",   icon: Link2 },
   { id: "billing",       label: "Billing",        icon: CreditCard },
 ];
 
@@ -165,7 +167,8 @@ export default function Settings() {
   const { token, user: authUser } = useAuth();
   const [, setLocation] = useLocation();
   const isOnboarding = new URLSearchParams(window.location.search).get("onboarding") === "1";
-  const [activeTab, setActiveTab] = useState<Tab>("profile");
+  const urlTab = new URLSearchParams(window.location.search).get("tab");
+  const [activeTab, setActiveTab] = useState<Tab>((urlTab as Tab) || "profile");
   const [onboardingStep, setOnboardingStep] = useState<"profile" | "organisation" | "done">(
     isOnboarding ? "profile" : "done"
   );
@@ -248,10 +251,197 @@ export default function Settings() {
           {activeTab === "notifications" && <NotificationsTab />}
           {activeTab === "organisation"  && <OrganisationTab isOnboarding={isOnboarding && onboardingStep === "organisation"} onOnboardingComplete={handleOrgOnboardingComplete} />}
           {activeTab === "platform"      && <PlatformTab />}
+          {activeTab === "integrations"  && <IntegrationsTab />}
           {activeTab === "billing"       && (canManageBilling ? <BillingTab /> : null)}
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+// ── Integrations Tab ──────────────────────────────────────────────────────────
+function IntegrationsTab() {
+  const { data: status, isLoading, refetch } = useQuery({
+    queryKey: ["calendar-integration-status"],
+    queryFn: () => apiFetch("/api/integrations/calendar/status"),
+  });
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlSuccess = urlParams.get("success");
+  const urlError = urlParams.get("error");
+
+  useEffect(() => {
+    if (urlSuccess === "google_connected") {
+      setNotification({ type: "success", msg: "Google Calendar connected successfully." });
+      window.history.replaceState({}, "", window.location.pathname + "?tab=integrations");
+      refetch();
+    } else if (urlSuccess === "microsoft_connected") {
+      setNotification({ type: "success", msg: "Outlook Calendar connected successfully." });
+      window.history.replaceState({}, "", window.location.pathname + "?tab=integrations");
+      refetch();
+    } else if (urlError) {
+      const msgs: Record<string, string> = {
+        google_oauth_denied: "Google Calendar access was denied.",
+        google_oauth_failed: "Failed to connect Google Calendar. Please try again.",
+        google_not_configured: "Google Calendar integration is not configured.",
+        microsoft_oauth_denied: "Outlook access was denied.",
+        microsoft_oauth_failed: "Failed to connect Outlook Calendar. Please try again.",
+        microsoft_not_configured: "Outlook integration is not configured.",
+      };
+      setNotification({ type: "error", msg: msgs[urlError] ?? "Connection failed." });
+      window.history.replaceState({}, "", window.location.pathname + "?tab=integrations");
+    }
+  }, []);
+
+  async function handleDisconnect(provider: string) {
+    setDisconnecting(provider);
+    try {
+      await apiFetch(`/api/integrations/calendar/${provider}/disconnect`, { method: "POST" });
+      setNotification({ type: "success", msg: `${provider === "google" ? "Google Calendar" : "Outlook"} disconnected.` });
+      refetch();
+    } catch {
+      setNotification({ type: "error", msg: "Failed to disconnect. Please try again." });
+    } finally {
+      setDisconnecting(null);
+    }
+  }
+
+  function handleConnect(provider: string) {
+    const token = localStorage.getItem("inspectproof_token") || "";
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    window.location.href = `${base}/api/integrations/calendar/${provider}/connect?token=${encodeURIComponent(token)}`;
+  }
+
+  const googleConnected = status?.google?.connected ?? false;
+  const msConnected = status?.microsoft?.connected ?? false;
+  const googleAvail = status?.googleAvailable ?? false;
+  const msAvail = status?.microsoftAvailable ?? false;
+
+  return (
+    <>
+      {notification && (
+        <div className={cn(
+          "mb-4 flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium",
+          notification.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200",
+        )}>
+          {notification.type === "success" ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <X className="h-4 w-4 shrink-0" />}
+          {notification.msg}
+          <button onClick={() => setNotification(null)} className="ml-auto opacity-60 hover:opacity-100">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      <SectionCard
+        title="Calendar Integration"
+        description="Connect your calendar to automatically create events for new inspection bookings."
+      >
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Google Calendar */}
+            <div className="flex items-center justify-between gap-4 py-3 border-b last:border-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+                  <Calendar className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-sidebar">Google Calendar</p>
+                  {googleConnected ? (
+                    <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Connected{status?.google?.calendarName ? ` — ${status.google.calendarName}` : ""}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Not connected</p>
+                  )}
+                </div>
+              </div>
+              <div className="shrink-0">
+                {googleConnected ? (
+                  <Button
+                    variant="danger"
+                    onClick={() => handleDisconnect("google")}
+                    disabled={disconnecting === "google"}
+                  >
+                    {disconnecting === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Disconnect
+                  </Button>
+                ) : googleAvail ? (
+                  <Button onClick={() => handleConnect("google")} variant="outline">
+                    <Link2 className="h-4 w-4" />
+                    Connect Google Calendar
+                  </Button>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">Not available</span>
+                )}
+              </div>
+            </div>
+
+            {/* Microsoft Outlook */}
+            <div className="flex items-center justify-between gap-4 py-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+                  <Calendar className="h-5 w-5 text-indigo-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-sidebar">Microsoft Outlook</p>
+                  {msConnected ? (
+                    <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Connected{status?.microsoft?.calendarName ? ` — ${status.microsoft.calendarName}` : ""}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Not connected</p>
+                  )}
+                </div>
+              </div>
+              <div className="shrink-0">
+                {msConnected ? (
+                  <Button
+                    variant="danger"
+                    onClick={() => handleDisconnect("microsoft")}
+                    disabled={disconnecting === "microsoft"}
+                  >
+                    {disconnecting === "microsoft" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Disconnect
+                  </Button>
+                ) : msAvail ? (
+                  <Button onClick={() => handleConnect("microsoft")} variant="outline">
+                    <Link2 className="h-4 w-4" />
+                    Connect Outlook
+                  </Button>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">Not available</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard title="How it works" description="">
+        <ul className="space-y-2.5 text-sm text-muted-foreground">
+          {[
+            "When you connect a calendar, new inspection bookings assigned to you are automatically added as events.",
+            "Events include the inspection type, project name, address, and a direct link back to the inspection.",
+            "If an inspection is rescheduled, the calendar event is updated automatically.",
+            "If an inspection is cancelled or deleted, the calendar event is removed.",
+            "You can connect both Google Calendar and Outlook at the same time.",
+          ].map((text, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <CheckCircle2 className="h-4 w-4 text-secondary shrink-0 mt-0.5" />
+              {text}
+            </li>
+          ))}
+        </ul>
+      </SectionCard>
+    </>
   );
 }
 

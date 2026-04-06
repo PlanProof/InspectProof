@@ -23,6 +23,7 @@ export const inspectionsTable = pgTable("inspections", {
   signedOffAt: timestamp("signed_off_at"),
   signedOffById: integer("signed_off_by_id"),
   reminderSentAt: timestamp("reminder_sent_at"),
+  calendarEventId: text("calendar_event_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
