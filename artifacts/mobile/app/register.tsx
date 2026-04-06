@@ -533,9 +533,9 @@ export default function RegisterScreen() {
 
             <Text style={styles.termsText}>
               By creating an account you agree to our{" "}
-              <Text style={styles.termsLink}>Terms & Conditions</Text>
+              <Text style={styles.termsLink} onPress={() => Linking.openURL("https://inspectproof.com.au/terms")}>Terms & Conditions</Text>
               {" "}and{" "}
-              <Text style={styles.termsLink}>Privacy Policy</Text>.
+              <Text style={styles.termsLink} onPress={() => Linking.openURL("https://inspectproof.com.au/privacy")}>Privacy Policy</Text>.
             </Text>
           </View>
         )}

@@ -115,7 +115,7 @@ export default function SettingsScreen() {
       if (!res.ok) throw new Error("Request failed");
       await logout();
     } catch {
-      Alert.alert("Error", "Failed to delete account. Please try again or contact support@inspectproof.com.au.");
+      Alert.alert("Error", "Failed to delete account. Please try again or email contact@inspectproof.com.au.");
     } finally {
       setDeleting(false);
     }

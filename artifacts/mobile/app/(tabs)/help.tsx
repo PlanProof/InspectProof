@@ -15,7 +15,7 @@ const WEB_TOP = 0;
 function getBaseUrl() {
   const { EXPO_PUBLIC_API_URL } = process.env as any;
   if (EXPO_PUBLIC_API_URL) return EXPO_PUBLIC_API_URL.replace(/\/$/, "");
-  return "http://localhost:8080";
+  return "https://inspectproof.com.au";
 }
 
 const FAQS = [

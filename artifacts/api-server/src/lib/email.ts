@@ -9,8 +9,8 @@ function getResend(): Resend {
 const SMTP_FROM = process.env.SMTP_FROM || "InspectProof <noreply@inspectproof.com.au>";
 const APP_BASE_URL = process.env.APP_BASE_URL || "https://inspectproof.com.au";
 const FEEDBACK_TO = process.env.FEEDBACK_EMAIL || "contact@inspectproof.com.au";
-const IOS_APP_URL = process.env.IOS_APP_URL || "https://apps.apple.com/au/app/inspectproof";
-const ANDROID_APP_URL = process.env.ANDROID_APP_URL || "https://play.google.com/store/apps/details?id=com.inspectproof";
+const IOS_APP_URL = process.env.IOS_APP_URL || "https://apps.apple.com/au/app/inspectproof/idAPP_STORE_ID_PLACEHOLDER";
+const ANDROID_APP_URL = process.env.ANDROID_APP_URL || "https://play.google.com/store/apps/details?id=com.planproof.inspectproof";
 
 const LOGO_URL = `${APP_BASE_URL}/logo-light.png`;
 
