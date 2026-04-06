@@ -1,163 +1,53 @@
 # InspectProof — Australian Building Certification Platform
 
 ## Overview
+InspectProof is a full-stack platform for Australian building certifiers and surveyors, designed to streamline certification workflows. It includes a desktop web application for administration, a mobile application for field inspections, and a shared API server with PostgreSQL. The platform aims to enhance efficiency in project management, inspections, reporting, and team collaboration within the Australian building certification industry.
 
-InspectProof is a full-stack platform designed for Australian building certifiers and surveyors. It streamlines certification workflows through a comprehensive suite of tools. The platform features a desktop web application for office administration, a mobile application for field inspections, and a shared API server with PostgreSQL.
-
-Key capabilities:
-- **Project Management**: Projects, inspections, issues with full metadata and status filters
-- **Inspection Tools**: Mobile photo markup with SVG annotation, digital checklists, NCC 2022 code references
-- **Reporting & Analytics**: Inspection certificates, PDF reports, live dashboard stats
-- **Template Library**: Full checklist templates for Building Surveyor (Class 1, 10, 2-9, Pool), Structural Engineer, Plumbing Officer, Builder/QC, Site Supervisor, WHS Officer, Pre-Purchase Inspector, Fire Safety Engineer
-- **Team & Permissions**: Company-linked invite flow, granular permissions (`isCompanyAdmin`, `editTemplates`, `addInspectors`, `createProjects`), plan limits
-- **Discipline Filtering**: Inspection Types automatically filtered to the logged-in user's assigned discipline
+Key capabilities include:
+- **Project Management**: Comprehensive tools for managing projects, inspections, and issues with detailed metadata and status filtering.
+- **Inspection Tools**: Mobile-first features such as SVG photo markup, digital checklists, and integrated NCC 2022 code references.
+- **Reporting & Analytics**: Generation of inspection certificates, PDF reports, and real-time dashboard statistics.
+- **Template Library**: A wide range of checklist templates for various disciplines (e.g., Building Surveyor, Structural Engineer, Plumbing Officer) and roles.
+- **Team & Permissions**: Company-linked user management with granular permissions and plan-based limits.
+- **Discipline Filtering**: Automated filtering of inspection types based on the logged-in user's assigned discipline.
 
 ## User Preferences
-
 Simple language and detailed explanations. Iterative development with clear communication. Do not make changes to files in the `lib/db` folder without explicit approval.
 
 ## System Architecture
+The project is structured as a pnpm workspace monorepo, comprising three deployable artifacts: a React + Vite Single Page Application for the web (`artifacts/web`), an Express 5 + Node 24 API server (`artifacts/api-server`), and an Expo React Native mobile application (`artifacts/mobile`).
 
-pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vite SPA), `artifacts/api-server` (Express 5 + Node 24), `artifacts/mobile` (Expo React Native).
+**UI/UX Decisions:**
+- **Color Palette:** Primary `#0B1933`, Secondary `#466DB5`, Accent `#C5D92D`.
+- **Logo Rule:** `logo-dark.png` for dark backgrounds, `logo-light.png` for light backgrounds.
+- **Web App Routes:** Key routes include `/`, `/login`, `/dashboard`, `/projects`, `/inspections`, `/calendar`, `/issues`, `/activity`, `/share/:token`, `/analytics`, `/templates`, `/doc-templates`, `/inspectors`, `/settings`, `/billing`, `/admin`, `/terms`, `/privacy`.
+- **Specific UI/UX Components:**
+    - Reports are accessed via the "Reports" tab within project detail pages.
+    - Contractors are managed per-project and globally via a dedicated "Contractor Library" page.
+    - Public share portal (`/share/:token`) for client access to inspection details.
+    - Two-step onboarding process for new users.
+    - Address Autocomplete using Nominatim OpenStreetMap API in the web app.
+    - Inspection Calendar view powered by `react-big-calendar` with various views, color-coding, and filtering.
 
-**Color Palette:** Primary `#0B1933`, Secondary `#466DB5`, Accent `#C5D92D`
-
-**Logo rule:** `logo-dark.png` = dark/navy background; `logo-light.png` = light/white background
-
-## Technical Implementation
-
-- **Auth:** Token-based (JWT), `req.authUser` in middleware (NOT `req.user`)
-- **Plan limits:** `free_trial`=1, `starter`=3, `professional`=10, `enterprise`=null
-- **API startup order:** schema migrations → admin seed → listen on port 8080 → background (templates + Stripe + storage)
-- **Photo Markup:** Mobile SVG free-hand annotations stored as JSON keyed by `objectPath`; dedup on both client and server side
-- **Inspection Types filter:** `GET /api/projects/:id/inspection-types?discipline=...` — WHERE clause must precede GROUP BY in Drizzle query
-- **Checklist Templates:** 71 global templates across all disciplines, seeded via `ensureGlobalTemplatesSeed()` on startup
-
-## Routes (Web App)
-
-`/`, `/login`, `/dashboard`, `/projects`, `/projects/:id`, `/inspections`, `/inspections/:id`, `/calendar`, `/issues`, `/activity`, `/share/:token`, `/analytics`, `/templates`, `/doc-templates`, `/inspectors`, `/settings`, `/settings/contractor-library`, `/billing`, `/admin`, `/terms`, `/privacy`
-
-**Reports:** Accessed via the "Reports" tab inside each project's detail page (`/projects/:id`) — no standalone `/reports` route.
-
-**Contractors:** Managed per-project via the "Contractors" tab inside `/projects/:id` — linked specifically to that project.
-
-**Contractor Library:** Dedicated page at `/settings/contractor-library` — lists and manages all org-level contractors with search, trade category grouping, and performance history. Navigation card in Settings > Organisation tab.
-
-**Public Share Portal:** `/share/:token` — public (no auth) client portal for sharing an inspection with clients. Generated via `POST /api/inspections/:id/share`.
-
-## Recent Feature Additions
-
-- **Project Contractors**: `project_contractors` table, full CRUD API at `/api/projects/:id/contractors`, "Contractors" tab in project detail with add/edit/delete + Send Defect Report email per inspection
-- **Trade Allocated dropdown**: Inspection checklist items use a `<select>` populated from project contractors + internal staff (falls back to text input if none configured)
-- **Internal Staff email + invite**: `email` column on `internal_staff` table, Send Invite button in Settings
-- **Dashboard Defects + Upcoming stats**: Dashboard now shows 5 KPI cards: Active Projects, Inspections (Month), Reports Pending, Open Defects (links to /issues), Upcoming 7 Days
-- **Issues page** (`/issues`): Full issues listing with stat bar (Open/Overdue/Resolved), close-out dialog with evidence photo upload, overdue reminder email button
-- **Audit Trail** (`/activity`): Filterable audit log with entity type tabs and search. API: `GET /api/activity`
-- **Client Portal** (`/share/:token`): Public token-based inspection portal (no auth). Generated via `POST /api/inspections/:id/share`
-- **Digital Sign-off**: `POST /api/inspections/:id/sign-off` sets status=completed + signedOffAt. Sign Off + Share buttons in inspection detail header
-- **Recurring Templates**: `recurrence_type` + `recurrence_interval` fields on `checklist_templates`. Edit form + display badge in templates page
-- **Overdue Reminders**: `POST /api/issues/send-overdue-reminders` sends emails for all overdue open issues (admin/company-admin only)
-- **Organisation settings → DB** (critical fix): Org fields (`abn`, `companyPhone`, `companyEmail`, `companyAddress`, `companySuburb`, `companyState`, `companyPostcode`, `companyWebsite`, `logoUrl`, `accreditationBody`, `accreditationNumber`) are now stored in the `users` table. API: `GET/PATCH /api/auth/organisation`. localStorage fallback for migration only.
-- **Company Logo Upload**: Upload button in Organisation tab → presigned URL → object storage → `logoUrl` saved to DB. Preview shown inline.
-- **Notification Preferences → DB**: `notificationPrefs` JSON column on `users` table. API: `GET/PATCH /api/auth/notification-prefs`. `inspectproof_notif_prefs` localStorage cleared on save.
-- **Two-step onboarding**: `?onboarding=1` now shows Step 1 (Profile/Profession) → Step 2 (Organisation Details) with progress banner. "Save & Start Inspecting →" button and "Skip for now" link on Step 2.
-- **Report Email Sending Fixed**: `POST /api/reports/:id/send` now generates a PDF buffer and sends it via Resend with the PDF as email attachment. `sendReportEmail()` added to `lib/email.ts`. Returns `email_failed` error if email delivery fails.
-- **Org data in PDF footer**: PDF reports show company name, ABN, and address in the navy footer bar (instead of generic "InspectProof · Confidential"). Org data fetched from the inspector's user record at PDF generation time.
-- **Address Autocomplete (Web)**: `AddressAutocomplete` component in `artifacts/web/src/components/` uses free Nominatim OpenStreetMap API (no API key required). Searches Australian addresses, parses house/street/suburb/state/postcode fields. Used in the New Project dialog. Falls back to manual entry mode with unverified warning banner.
-- **Generate Report UX fix**: Removed the confusing "Generate" button from the `generate-report.tsx` header. Now shows a clear sticky footer CTA: grayed-out "Select a report type above" when no type selected, active "Generate Report" button once a type is selected.
-- **Contractor Library page** (`/settings/contractor-library`): Dedicated page with full contractor management (add, edit, remove, performance history). Two-column layout: main contractor list with search/filter + sidebar with Trade Categories management. Settings > Organisation tab replaced embedded library with navigation card.
-- **Trade Categories**: New `trade_categories` DB table (scoped per company). CRUD API at `/api/org-contractors/trade-categories`. Categories shown on contractor cards as violet badges. Contractors can be grouped by category on the library page.
-- **Org Contractor Combobox**: Project Contractors tab replaces flat checklist with `OrgContractorCombobox` — assigned contractors shown as removable emerald chips, unassigned searchable via text input dropdown (filters by name/trade/company).
-- **Inspection Calendar** (`/calendar`): Web calendar view powered by `react-big-calendar` with month/week/agenda views, colour-coded by status (scheduled/in_progress/completed/overdue), click-to-preview card with project/inspector info, drag-to-reschedule (PATCH `/api/inspections/:id/reschedule`), inspector/project/discipline filters. RBAC: inspector-role users see only their own inspections. New API endpoint `GET /api/inspections/calendar?start=&end=&inspectorId=&projectId=&discipline=`. Sidebar item added. Mobile home screen updated with "Upcoming Agenda" section showing Today, Tomorrow and Next 7 Days agenda list with one-tap navigation.
-- **Calendar Integration (Google & Outlook)**: Per-user OAuth calendar sync. DB: `user_calendar_integrations` table (provider, access_token, refresh_token, token_expiry, calendar_id, calendar_name) + `calendar_event_id` column on `inspections`. API routes at `/api/integrations/calendar/{provider}/connect|callback|disconnect` and `/api/integrations/calendar/status`. Service: `calendarEventService.ts` with createEvent/updateEvent/deleteEvent (transparent token refresh, fail-silent). Hooked into POST/PUT/DELETE inspection lifecycle. Web: new "Integrations" tab in Settings with connect/disconnect UI. Mobile: Calendar Integration section in Settings screen using `Linking.openURL` for OAuth. Credentials: `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, `MS_CALENDAR_CLIENT_ID`, `MS_CALENDAR_CLIENT_SECRET`, `MS_CALENDAR_TENANT_ID`.
-
-## Security Architecture
-
-### API Route Auth Model
-- **`requireAuth`**: Middleware that validates Bearer token and populates `req.authUser`. Returns 401 if missing/invalid.
-- **`optionalAuth`**: Sets `req.authUser` if token present, but does not reject unauthenticated requests.
-- **Org Isolation**: Every resource route (project, inspection, report detail/update/delete) now checks that the requester belongs to the same org as the resource creator. Isolation helper pattern: `canAccessProject(createdById, req.authUser)` checks direct ownership OR cross-team (team member with same adminUserId).
-- **Upload routes**: Both `POST /api/storage/uploads/file` and `POST /api/storage/uploads/request-url` require auth. `GET /api/storage/objects/*` is public (needed for email image links).
-- **Reports PDF**: `GET /api/reports/:id/pdf` is intentionally public to support `?_token=` email link access.
-
-### Org Boundary
-- Company admin (`isCompanyAdmin=true`): owns their org. `adminUserId` is null in DB.
-- Team member: `adminUserId` in DB points to their company admin's `id`.
-- Effective admin ID for access checks: `user.isCompanyAdmin ? user.id : parseInt(user.adminUserId)`.
-- Cross-team access (colleague A sees colleague B's projects): resolved via one extra DB lookup of `creator.adminUserId`.
-
-## Pre-Launch Audit Completed (A001–A011)
-
-### Security Fixes Applied
-- **A005**: All project, inspection, and report CRUD routes now enforce `requireAuth` + org isolation
-- **A005**: Removed unauthenticated "Test Project" leak from `GET /api/projects`
-- **A005**: `POST /storage/uploads/*` now requires auth
-- **A005**: `getUserIdFromRequest(req) ?? 1` anti-pattern removed from main CRUD routes
-- **A001**: Forgot-password flow built end-to-end (HMAC-signed stateless tokens, Resend email, web + mobile UI)
-- **A007**: Mobile demo credentials removed, `expo-location` + `expo-notifications` added to app.json plugins
-- **A003**: Email templates verified production-ready (Australian English, proper branding, no TODO text)
-- **A002**: Stripe webhook handler verified (signature verification, `STRIPE_WEBHOOK_SECRET` required)
-
-## Email System (Resend)
-
-### Email Logging
-- All sent emails are logged to `email_logs` table (`lib/db/src/schema/emailLogs.ts`)
-- Columns: `id`, `type`, `status` (sent/failed), `recipient` (email address), `subject`, `resendMessageId` (Resend's message ID), `errorMessage`, `metadata` (JSONB), `createdAt`
-- `email_verified_at` column added to `users` table via SQL migration (column not in Drizzle schema; added via `pool.query` in `runSchemaMigrations`)
-- Startup logs a warning if `RESEND_API_KEY` is not set
-
-### Email Types (logged type strings)
-`inspection_assigned`, `inspection_reminder`, `feedback_notification`, `app_invite`, `token_invite`, `welcome_credentials`, `password_reset`, `report_delivery`, `contractor_defect_report`, `welcome`, `email_verification`, `generic` (sendEmail fallback)
-
-### Retry Support
-Admin retry (`POST /api/admin/emails/:id/retry`) supports: `inspection_assigned`, `inspection_reminder`, `welcome`. Other types return 422 with a message to re-trigger the original action.
-
-### Admin Email Log UI
-- **Admin → Emails tab**: Paginated table of all email logs with type/status filters and retry button for failed emails
-- **API**: `GET /api/admin/emails?page=&limit=&type=&status=` (admin-only)
-- **Retry API**: `POST /api/admin/emails/:id/retry` — supports `inspection_assigned` and `inspection_reminder` types
-
-### Inspection Reminder Cron
-- **Endpoint**: `POST /api/internal/send-inspection-reminders`
-- **Auth**: `X-Internal-Secret` header must match `INTERNAL_API_SECRET` env var
-- **Logic**: Sends reminder emails to inspectors for inspections scheduled `INSPECTION_REMINDER_DAYS_BEFORE` days from today (default: 1)
-- **Setup**: Call nightly via cron or scheduler (e.g. GitHub Actions, cron-job.org)
+**Technical Implementations:**
+- **Authentication:** Token-based (JWT) with `req.authUser` for middleware.
+- **Authorization:** Granular permissions (`isCompanyAdmin`, `editTemplates`, `addInspectors`, `createProjects`) and plan limits are enforced.
+- **API Server Startup:** Follows a specific order: schema migrations, admin seed, listen on port, then background tasks (templates, Stripe, storage).
+- **Photo Markup:** Mobile SVG free-hand annotations stored as JSON.
+- **Data Filtering:** Inspection types are filtered by discipline using WHERE clause before GROUP BY in Drizzle queries.
+- **Security:**
+    - API routes enforce authentication (`requireAuth`) and organization isolation checks (`canAccessProject`).
+    - Upload routes require authentication, while `GET /api/storage/objects/*` is public.
+    - `GET /api/reports/:id/pdf` is public to support email link access.
+    - Robust forgot-password flow with HMAC-signed stateless tokens.
+- **Email System:** Utilizes Resend for transactional emails, logging all sent emails to an `email_logs` table. Supports retry functionality for certain email types via an admin UI. An internal cron endpoint (`/api/internal/send-inspection-reminders`) sends inspection reminders.
 
 ## External Dependencies
 
-- **Database:** PostgreSQL via `SUPABASE_DATABASE_URL`
-- **File Storage:** Replit Object Storage (bucket `replit-objstore-97d074d9-8576-42de-97b0-9bf4a2a327c8`) via `PRIVATE_OBJECT_DIR`; Supabase Storage optional fallback
-- **Email:** Resend (`RESEND_API_KEY`) from `noreply@inspectproof.com.au`
-- **Stripe:** Replit Stripe connector (development); `STRIPE_SECRET_KEY` in production
-- **Expo Project ID:** `b93ea21e-4b89-4be9-9ca7-c37bd022f2aa`; `newArchEnabled: false` in `app.json`
-
-## Required Environment Variables
-
-| Variable | Scope | Description |
-|---|---|---|
-| `APP_SECRET` | shared | Long random string used to HMAC-sign session tokens and password-reset tokens. **Required at startup — server throws if unset.** |
-| `APP_BASE_URL` | shared | Public base URL of the production web app (e.g. `https://inspectproof.com.au`). Used in password-reset email links. |
-| `RESEND_API_KEY` | secret | Resend transactional email API key. |
-| `STRIPE_WEBHOOK_SECRET` | secret | Stripe webhook signing secret for payment event verification. |
-| `DATABASE_URL` / `PGHOST` etc. | secret (runtime) | PostgreSQL connection credentials (Replit-managed). |
-| `PRIVATE_OBJECT_DIR` | secret | Replit Object Storage private directory path. |
-
-## Deployment Configuration
-
-### API Server (`artifacts/api-server/.replit-artifact/artifact.toml`)
-- Production build: `pnpm --filter @workspace/api-server run build`
-- Production run: `node --enable-source-maps artifacts/api-server/dist/index.mjs`
-- Health check: `GET /api/healthz` → `{"status":"ok","db":"connected"}`
-- PORT: 8080
-
-### Web App (`artifacts/web/.replit-artifact/artifact.toml`)
-- Production build: `pnpm --filter @workspace/web run build`
-- Serve: static from `artifacts/web/dist/public`
-- SPA rewrite: `/*` → `/index.html`
-
-## Admin Credentials
-
-- Email: `contact@inspectproof.com.au`
-- Password: `InspectProof2024!`
-- Profession: Building Surveyor
-- Plan: enterprise (admin)
+- **Database:** PostgreSQL (via `SUPABASE_DATABASE_URL`).
+- **File Storage:** Replit Object Storage (primary) or Supabase Storage (fallback).
+- **Email Service:** Resend (`RESEND_API_KEY`).
+- **Payment Gateway:** Stripe (Replit Stripe connector for development, `STRIPE_SECRET_KEY` for production).
+- **Mobile Development:** Expo (`newArchEnabled: false`).
+- **Address Autocomplete:** Nominatim OpenStreetMap API.
+- **Calendar Integration:** Google Calendar and Outlook Calendar via OAuth.
