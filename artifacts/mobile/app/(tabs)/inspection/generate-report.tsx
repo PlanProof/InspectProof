@@ -13,6 +13,7 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -634,6 +635,9 @@ export default function GenerateReportScreen() {
   const [sending, setSending] = useState(false);
   const [clientEmail, setClientEmail] = useState("");
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [includeCoverPage, setIncludeCoverPage] = useState(true);
+  const [includeSummary, setIncludeSummary] = useState(true);
+  const [includeSignOff, setIncludeSignOff] = useState(true);
 
   const fetchWithAuth = useCallback(async (url: string, opts?: RequestInit) => {
     const res = await fetch(`${baseUrl}${url}`, {
@@ -722,6 +726,9 @@ export default function GenerateReportScreen() {
           inspectionId: parseInt(id),
           reportType: reportTypeKey,
           userId: (user as any)?.id || 1,
+          includeCoverPage,
+          includeSummary,
+          includeSignOff,
           ...(docTemplateId ? { docTemplateId } : {}),
         }),
       });
@@ -790,7 +797,7 @@ export default function GenerateReportScreen() {
     router.push({
       pathname: "/inspection/document-viewer" as any,
       params: {
-        url: `${baseUrl}/api/reports/${report.id}/pdf?_token=${encodeURIComponent(token)}&includeMarkup=true`,
+        url: `${baseUrl}/api/reports/${report.id}/pdf?_token=${encodeURIComponent(token)}&includeMarkup=true&includeCoverPage=${includeCoverPage}&includeSummary=${includeSummary}&includeSignOff=${includeSignOff}`,
         name: templateName || report.reportType || "Report",
         mimeType: "application/pdf",
       },
@@ -999,6 +1006,47 @@ export default function GenerateReportScreen() {
       {/* ── Step 1: Sticky generate bar ── */}
       {step === "select" && (
         <View style={[styles.generateSelectBar, { paddingBottom: tabBarHeight + 12 }]}>
+          {/* Report options toggles */}
+          <View style={styles.reportOptionsContainer}>
+            <Text style={styles.reportOptionsTitle}>Report Options</Text>
+            <View style={styles.reportOptionRow}>
+              <View style={styles.reportOptionLeft}>
+                <Feather name="book-open" size={14} color={Colors.textSecondary} />
+                <Text style={styles.reportOptionLabel}>Cover Page</Text>
+              </View>
+              <Switch
+                value={includeCoverPage}
+                onValueChange={setIncludeCoverPage}
+                trackColor={{ false: Colors.border, true: Colors.primary + "55" }}
+                thumbColor={includeCoverPage ? Colors.primary : Colors.textTertiary}
+              />
+            </View>
+            <View style={styles.reportOptionRow}>
+              <View style={styles.reportOptionLeft}>
+                <Feather name="align-left" size={14} color={Colors.textSecondary} />
+                <Text style={styles.reportOptionLabel}>Executive Summary</Text>
+              </View>
+              <Switch
+                value={includeSummary}
+                onValueChange={setIncludeSummary}
+                trackColor={{ false: Colors.border, true: Colors.primary + "55" }}
+                thumbColor={includeSummary ? Colors.primary : Colors.textTertiary}
+              />
+            </View>
+            <View style={styles.reportOptionRow}>
+              <View style={styles.reportOptionLeft}>
+                <Feather name="edit-3" size={14} color={Colors.textSecondary} />
+                <Text style={styles.reportOptionLabel}>Sign-off Page</Text>
+              </View>
+              <Switch
+                value={includeSignOff}
+                onValueChange={setIncludeSignOff}
+                trackColor={{ false: Colors.border, true: Colors.primary + "55" }}
+                thumbColor={includeSignOff ? Colors.primary : Colors.textTertiary}
+              />
+            </View>
+          </View>
+
           <Pressable
             style={[styles.generateSelectBtn, !selectedReportType && styles.generateSelectBtnDisabled]}
             onPress={generateReport}
@@ -1161,6 +1209,40 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
     paddingHorizontal: 16,
     paddingTop: 12,
+  },
+  reportOptionsContainer: {
+    marginBottom: 12,
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 2,
+  },
+  reportOptionsTitle: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  reportOptionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+  },
+  reportOptionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  reportOptionLabel: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_500Medium",
+    color: Colors.text,
   },
   generateSelectBtn: {
     flexDirection: "row",

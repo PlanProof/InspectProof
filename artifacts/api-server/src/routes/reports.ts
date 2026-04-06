@@ -168,6 +168,9 @@ function generateReportHtml(
   issues: any[],
   inspector: any,
   storageBaseUrl?: string,
+  orgInfo?: OrgInfo,
+  reportOptions?: { includeCoverPage?: boolean; includeSummary?: boolean; includeSignOff?: boolean },
+  certifier?: any,
 ): string {
   const typeLabel = REPORT_TYPE_LABELS[reportType] || reportType;
   const passItems = checklistResults.filter(i => i.result === "pass");
@@ -182,7 +185,7 @@ function generateReportHtml(
   const isPending = pendingItems.length > 0;
   const hasFails = failItems.length > 0;
 
-  const formatDate = (d: string | null) =>
+  const formatDate = (d: string | null | undefined) =>
     d ? new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }) : "—";
 
   const inspType = (inspection?.inspectionType || "")
@@ -197,12 +200,41 @@ function generateReportHtml(
     ? `${inspector.firstName} ${inspector.lastName}`
     : inspection?.inspectorName || "—";
 
-  const today = new Date().toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+  const inspectionDate = formatDate(inspection?.scheduledDate);
+  const issuedDate = formatDate(inspection?.completedDate || new Date().toISOString().split("T")[0]);
+
+  const reportRef = `INS-${String(inspection?.id || 0).padStart(4, "0")}`;
+
+  const companyName = orgInfo?.companyName || "InspectProof";
+  const abnLine = orgInfo?.abn
+    ? `${companyName} · ABN ${orgInfo.abn}`
+    : orgInfo?.acn
+    ? `${companyName} · ACN ${orgInfo.acn}`
+    : companyName;
+
+  const opts = {
+    includeCoverPage: reportOptions?.includeCoverPage !== false,
+    includeSummary: reportOptions?.includeSummary !== false,
+    includeSignOff: reportOptions?.includeSignOff !== false,
+  };
+
+  const statusLabel = inspection?.status
+    ? inspection.status.replace(/_/g, " ").toUpperCase()
+    : "DRAFT";
+
+  const statusBg: Record<string, string> = {
+    draft: "#f1f5f9", approved: "#f0fdf4", sent: "#fefce8", pending_review: "#eff6ff",
+  };
+  const statusColor: Record<string, string> = {
+    draft: "#475569", approved: "#16a34a", sent: "#b45309", pending_review: "#2563eb",
+  };
+  const statusBadgeBg = statusBg[inspection?.status ?? "draft"] ?? "#f1f5f9";
+  const statusBadgeColor = statusColor[inspection?.status ?? "draft"] ?? "#475569";
 
   // Accent colors based on report type
   const accentMap: Record<string, { titleBg: string; titleBorder: string; titleColor: string; titleText: string; resultBg: string; resultBorder: string; resultColor: string }> = {
     inspection_certificate:  { titleBg: "#f9fafb", titleBorder: "#C5D92D", titleColor: "#0B1933", titleText: "Inspection Certificate", resultBg: "#f0fdf4", resultBorder: "#86efac", resultColor: "#15803d" },
-    defect_notice:           { titleBg: "#fff7ed", titleBorder: "#f97316", titleColor: "#c2410c", titleText: "⚠ Defect Notice",        resultBg: "#fef2f2", resultBorder: "#fca5a5", resultColor: "#991b1b" },
+    defect_notice:           { titleBg: "#fff7ed", titleBorder: "#f97316", titleColor: "#c2410c", titleText: "Defect Notice",          resultBg: "#fef2f2", resultBorder: "#fca5a5", resultColor: "#991b1b" },
     non_compliance_notice:   { titleBg: "#fef2f2", titleBorder: "#ef4444", titleColor: "#991b1b", titleText: "Non-Compliance Notice",  resultBg: "#fef2f2", resultBorder: "#fca5a5", resultColor: "#991b1b" },
     compliance_report:       { titleBg: "#f0fdf4", titleBorder: "#22c55e", titleColor: "#15803d", titleText: "Compliance Report",       resultBg: "#f0fdf4", resultBorder: "#86efac", resultColor: "#15803d" },
     quality_control_report:  { titleBg: "#eff6ff", titleBorder: "#466DB5", titleColor: "#1e40af", titleText: "Quality Control Report",  resultBg: "#eff6ff", resultBorder: "#bfdbfe", resultColor: "#1e40af" },
@@ -214,12 +246,17 @@ function generateReportHtml(
     resultBg: "#f0fdf4", resultBorder: "#86efac", resultColor: "#15803d",
   };
 
+  const overallOutcome = isPending ? "PENDING" : hasFails ? "FAIL" : "PASS";
+  const overallBg = isPending ? "#f5f3ff" : hasFails ? "#fef2f2" : "#f0fdf4";
+  const overallBorder = isPending ? "#c4b5fd" : hasFails ? "#fca5a5" : "#86efac";
+  const overallColor = isPending ? "#6d28d9" : hasFails ? "#b91c1c" : "#15803d";
+
   // Result summary box
   const resultLabel = isPending
     ? "PENDING — Inspection not yet fully conducted"
     : hasFails
-      ? `RESULT: ${passItems.length} Pass / ${failItems.length} Fail — Non-Compliances Identified`
-      : `✓ RESULT: ${passItems.length} Pass / ${failItems.length} Fail${passRate !== null ? ` (${passRate}% pass rate)` : ""}`;
+      ? `FAIL — ${passItems.length} Pass / ${failItems.length} Fail / ${monitorItems.length} Monitor — Non-Compliances Identified`
+      : `PASS — ${passItems.length} Pass / ${failItems.length} Fail${passRate !== null ? ` (${passRate}% pass rate)` : ""}`;
 
   const resultBody = isPending
     ? "Some checklist items have not yet been assessed. A final result will be available once all items are completed."
@@ -232,7 +269,7 @@ function generateReportHtml(
   const resultBoxClr  = isPending ? "#6d28d9" : hasFails ? "#991b1b" : accent.resultColor;
 
   const summaryRows = [
-    ["Total Items", String(total)],
+    ["Total", String(total)],
     ["Pass", `<span style="color:#15803d;font-weight:700;">${passItems.length}</span>`],
     ["Fail", `<span style="color:#b91c1c;font-weight:700;">${failItems.length}</span>`],
     ["Monitor", `<span style="color:#b45309;font-weight:700;">${monitorItems.length}</span>`],
@@ -244,74 +281,212 @@ function generateReportHtml(
   const detailRows: [string, string][] = [
     ["Project Name",     project?.name || inspection?.projectName || "—"],
     ["Site Address",     siteAddress],
-    ["Lot / DP Number",  project?.lotNumber || "—"],
     ["DA / BA Number",   project?.daNumber || "—"],
-    ["Council / Permit", project?.councilRef || "—"],
+    ["Certification No", project?.certificationNumber || "—"],
     ["NCC Building Class", project?.buildingClassification || project?.nccClass || "—"],
     ["Inspection Type",  inspType],
-    ["Inspection Date",  formatDate(inspection?.scheduledDate)],
-    ["Inspection Time",  inspection?.scheduledTime || "—"],
-    ["Inspector Name",   inspectorName],
+    ["Inspection Date",  inspectionDate],
+    ["Date Issued",      issuedDate],
+    ["Inspector",        inspectorName],
+    ...(inspector?.licenceNumber ? [["Licence No.", inspector.licenceNumber] as [string, string]] : []),
+    ["Report Ref.",      reportRef],
+    ["Status",           `<span style="background:${statusBadgeBg};color:${statusBadgeColor};font-weight:700;padding:2px 8px;border-radius:4px;font-size:11px;">${statusLabel}</span>`],
+  ];
+
+  // Parties section rows
+  const partyRows: [string, string][] = [
+    ["Inspector / Certifier", inspectorName],
+    ...(inspector?.profession || inspector?.role ? [["Inspector Role", inspector?.profession || ROLE_LABELS[inspector?.role ?? ""] || inspector?.role || "—"] as [string, string]] : []),
+    ...(inspector?.licenceNumber ? [["Licence No.", inspector.licenceNumber] as [string, string]] : []),
+    ...(orgInfo?.accreditationNumber ? [["Accreditation No.", orgInfo.accreditationNumber] as [string, string]] : []),
+    ...(project?.clientName ? [["Client", project.clientName] as [string, string]] : []),
+    ...(project?.ownerName ? [["Owner", project.ownerName] as [string, string]] : []),
+    ...(project?.builderName ? [["Builder", project.builderName] as [string, string]] : []),
+    ...(project?.designerName ? [["Designer / Architect", project.designerName] as [string, string]] : []),
+    ...(certifier ? [["Council / Certifier", `${certifier.firstName} ${certifier.lastName}`] as [string, string]] : project?.assignedCertifierId ? [["Certifier Ref.", `Ref #${project.assignedCertifierId}`] as [string, string]] : []),
   ];
 
   const checklistHtml = buildHtmlChecklistTable(checklistResults);
 
   const failIssues = issues.filter(i => i.status !== "resolved");
 
-  return `<div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:40px;">
-  <!-- Header -->
-  <div style="background:#0B1933;color:#fff;padding:24px 32px;display:flex;justify-content:space-between;align-items:center;border-radius:8px 8px 0 0;">
-    <div>
-      <div style="font-size:22px;font-weight:700;letter-spacing:1px;">InspectProof</div>
-      <div style="font-size:11px;color:#C5D92D;margin-top:4px;letter-spacing:0.5px;">Licensed Building Certifier · ABN —</div>
+  const topFailItems = [...failItems].sort((a, b) => {
+    const sevOrder: Record<string, number> = { critical: 0, major: 1, high: 2, medium: 3, minor: 4, low: 5, cosmetic: 6 };
+    return (sevOrder[a.severity ?? ""] ?? 7) - (sevOrder[b.severity ?? ""] ?? 7);
+  }).slice(0, 5);
+
+  const sectionHeading = (title: string) =>
+    `<div style="background:#e8ecf2;border-left:3px solid #466DB5;padding:7px 14px;font-size:11px;font-weight:700;color:#0B1933;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">${title}</div>`;
+
+  const coverPageHtml = opts.includeCoverPage ? `
+  <!-- Cover Page -->
+  <div style="background:#0B1933;min-height:240px;padding:40px 40px 32px;border-radius:8px 8px 0 0;position:relative;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div style="font-size:26px;font-weight:700;color:#C5D92D;letter-spacing:1.5px;font-family:'Courier New',monospace;">InspectProof</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px;">${abnLine}</div>
+        ${orgInfo?.address ? `<div style="font-size:10px;color:#64748b;margin-top:2px;">${orgInfo.address}</div>` : ""}
+        ${orgInfo?.phone ? `<div style="font-size:10px;color:#64748b;margin-top:1px;">${orgInfo.phone}</div>` : ""}
+      </div>
+      <div style="text-align:right;">
+        <div style="background:rgba(197,217,45,0.15);border:1px solid rgba(197,217,45,0.3);border-radius:6px;padding:6px 12px;display:inline-block;">
+          <div style="font-size:10px;color:#94a3b8;letter-spacing:0.5px;">REPORT REF</div>
+          <div style="font-size:15px;font-weight:700;color:#fff;letter-spacing:1px;">${reportRef}</div>
+        </div>
+      </div>
     </div>
-    <div style="text-align:right;font-size:11px;color:#ccc;">
-      <div>${today}</div>
-      <div style="margin-top:2px;color:#9ca3af;font-size:10px;">${typeLabel.toUpperCase()}</div>
+    <div style="margin-top:32px;border-top:1px solid rgba(255,255,255,0.1);padding-top:24px;">
+      <div style="font-size:28px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">${typeLabel}</div>
+      <div style="font-size:16px;color:#94a3b8;margin-bottom:6px;">${project?.name || inspection?.projectName || "Inspection Report"}</div>
+      <div style="font-size:13px;color:#64748b;">${siteAddress}</div>
+    </div>
+    <div style="display:flex;gap:24px;margin-top:28px;">
+      <div>
+        <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Inspection Date</div>
+        <div style="font-size:13px;color:#cbd5e1;font-weight:600;margin-top:2px;">${inspectionDate}</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Date Issued</div>
+        <div style="font-size:13px;color:#cbd5e1;font-weight:600;margin-top:2px;">${issuedDate}</div>
+      </div>
+    </div>
+    <div style="margin-top:20px;">
+      <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Prepared By</div>
+      <div style="font-size:13px;color:#cbd5e1;font-weight:600;margin-top:2px;">${inspectorName}</div>
+      ${inspector?.profession || inspector?.role ? `<div style="font-size:11px;color:#64748b;">${inspector?.profession || ROLE_LABELS[inspector?.role ?? ""] || inspector?.role || ""}</div>` : ""}
+      ${inspector?.licenceNumber ? `<div style="font-size:10px;color:#64748b;">Lic. No. ${inspector.licenceNumber}</div>` : ""}
     </div>
   </div>
+  <!-- Cover accent bar -->
+  <div style="height:5px;background:#C5D92D;"></div>` : "";
+
+  const summaryHtml = opts.includeSummary ? `
+  <!-- Executive Summary -->
+  <div style="margin-bottom:20px;">
+    ${sectionHeading("Executive Summary")}
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
+      <div style="background:${overallBg};border:2px solid ${overallBorder};border-radius:8px;padding:10px 20px;text-align:center;">
+        <div style="font-size:10px;color:${overallColor};font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Overall Result</div>
+        <div style="font-size:22px;font-weight:700;color:${overallColor};margin-top:2px;">${overallOutcome}</div>
+      </div>
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:12px;color:#374151;line-height:1.6;">${resultBody}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+      ${summaryRows.map(([k, v]) => `
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px 12px;min-width:70px;text-align:center;">
+        <div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">${k}</div>
+        <div style="font-size:16px;font-weight:700;color:#0B1933;margin-top:2px;">${v}</div>
+      </div>`).join("")}
+    </div>
+    ${topFailItems.length > 0 ? `
+    <div style="background:#fef9f0;border:1px solid #fde8c8;border-radius:6px;padding:10px 14px;">
+      <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:6px;">Key Findings — Items Requiring Attention</div>
+      ${topFailItems.map(item => `<div style="font-size:11px;color:#374151;padding:3px 0;border-bottom:1px solid #fde8c8;">&#x2022; ${item.description || ""}${item.severity ? ` <span style="font-size:9px;color:#b45309;font-weight:700;">[${(item.severity || "").toUpperCase()}]</span>` : ""}</div>`).join("")}
+    </div>` : ""}
+  </div>` : "";
+
+  const signOffHtml = opts.includeSignOff ? `
+  <!-- Sign-Off Section -->
+  <div style="border-top:2px solid #e5e7eb;padding-top:20px;margin-top:8px;">
+    ${sectionHeading("Certification & Sign-Off")}
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;color:#374151;line-height:1.7;margin-bottom:12px;">
+        I, the undersigned, certify that I have carried out the inspection described in this report and that the findings are accurate to the best of my knowledge and belief.
+      </div>
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:20px;margin-top:16px;">
+        <div style="min-width:200px;">
+          <div style="border-top:1px solid #374151;width:220px;margin-bottom:4px;padding-top:4px;"></div>
+          <div style="font-size:11px;color:#6b7280;">Inspector Signature</div>
+          <div style="font-size:12px;font-weight:600;color:#0B1933;margin-top:2px;">${inspectorName}</div>
+          ${inspector?.profession || inspector?.role ? `<div style="font-size:11px;color:#6b7280;">${inspector?.profession || ROLE_LABELS[inspector?.role ?? ""] || ""}</div>` : ""}
+          ${inspector?.licenceNumber ? `<div style="font-size:10px;color:#6b7280;">Lic. No. ${inspector.licenceNumber}</div>` : ""}
+          ${inspector?.accreditationNumber ? `<div style="font-size:10px;color:#6b7280;">Acc. No. ${inspector.accreditationNumber}</div>` : ""}
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:#6b7280;">Date Signed</div>
+          <div style="font-size:13px;font-weight:600;color:#0B1933;margin-top:2px;">${issuedDate}</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:14px;">
+      <div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">Acknowledgement</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        ${project?.clientName ? `
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:11px;color:#6b7280;margin-bottom:2px;">Client: ${project.clientName}</div>
+          <div style="border-top:1px solid #9ca3af;width:200px;margin-bottom:3px;"></div>
+          <div style="font-size:10px;color:#9ca3af;">Signature &amp; Date</div>
+        </div>` : ""}
+        ${project?.builderName ? `
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:11px;color:#6b7280;margin-bottom:2px;">Builder: ${project.builderName}</div>
+          <div style="border-top:1px solid #9ca3af;width:200px;margin-bottom:3px;"></div>
+          <div style="font-size:10px;color:#9ca3af;">Signature &amp; Date</div>
+        </div>` : ""}
+      </div>
+    </div>
+  </div>` : "";
+
+  const footerOrgLine = orgInfo?.companyName
+    ? `${orgInfo.companyName}${orgInfo.abn ? ` · ABN ${orgInfo.abn}` : ""}${orgInfo.address ? ` · ${orgInfo.address}` : ""}`
+    : "InspectProof";
+
+  return `<div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;">
+  ${coverPageHtml}
   <!-- Title Banner -->
-  <div style="border:2px solid ${accent.titleBorder};padding:18px 32px;background:${accent.titleBg};">
+  <div style="border:2px solid ${accent.titleBorder};padding:14px 32px;background:${accent.titleBg};${opts.includeCoverPage ? "" : "border-radius:8px 8px 0 0;"}">
     <div style="font-size:18px;font-weight:700;color:${accent.titleColor};letter-spacing:1px;text-align:center;text-transform:uppercase;">${accent.titleText}</div>
     <div style="text-align:center;font-size:11px;color:#466DB5;margin-top:4px;">Issued under the Environmental Planning and Assessment Act 1979</div>
+    <div style="text-align:center;margin-top:6px;"><span style="background:${statusBadgeBg};color:${statusBadgeColor};font-weight:700;padding:2px 10px;border-radius:4px;font-size:11px;">${statusLabel}</span></div>
   </div>
   <!-- Body -->
-  <div style="padding:28px 32px;background:#fff;border:1px solid #e5e7eb;border-top:none;">
-    <!-- Details table -->
-    <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-      ${detailRows.map(([label, value]) => `
-      <tr>
-        <td style="padding:8px;background:#f1f5f9;font-weight:600;color:#0B1933;width:36%;font-size:13px;">${label}</td>
-        <td style="padding:8px;font-size:13px;border-bottom:1px solid #e5e7eb;">${value}</td>
-      </tr>`).join("")}
-    </table>
+  <div style="padding:24px 32px;background:#fff;border:1px solid #e5e7eb;border-top:none;">
+    ${summaryHtml}
 
-    <!-- Result box -->
-    <div style="background:${resultBoxBg};border:1px solid ${resultBoxBdr};border-radius:6px;padding:14px 18px;margin-bottom:20px;">
-      <div style="font-weight:700;color:${resultBoxClr};font-size:13px;margin-bottom:4px;">${resultLabel}</div>
-      <div style="font-size:12px;color:${resultBoxClr};">${resultBody}</div>
+    <!-- Project Details -->
+    <div style="margin-bottom:20px;">
+      ${sectionHeading("Project Details")}
+      <table style="width:100%;border-collapse:collapse;margin-bottom:0;">
+        ${detailRows.map(([label, value], idx) => `
+        <tr style="background:${idx % 2 === 0 ? "#f9fafb" : "#fff"};">
+          <td style="padding:7px 10px;font-weight:600;color:#0B1933;width:36%;font-size:12px;border-bottom:1px solid #f1f5f9;">${label}</td>
+          <td style="padding:7px 10px;font-size:12px;border-bottom:1px solid #f1f5f9;">${value}</td>
+        </tr>`).join("")}
+      </table>
     </div>
 
-    <!-- Summary stats -->
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
-      ${summaryRows.map(([k, v]) => `
-      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px 14px;min-width:80px;text-align:center;">
-        <div style="font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">${k}</div>
-        <div style="font-size:18px;font-weight:700;color:#0B1933;margin-top:2px;">${v}</div>
-      </div>`).join("")}
+    ${partyRows.length > 0 ? `
+    <!-- Parties -->
+    <div style="margin-bottom:20px;">
+      ${sectionHeading("Parties")}
+      <table style="width:100%;border-collapse:collapse;">
+        ${partyRows.map(([label, value], idx) => `
+        <tr style="background:${idx % 2 === 0 ? "#f9fafb" : "#fff"};">
+          <td style="padding:7px 10px;font-weight:600;color:#0B1933;width:36%;font-size:12px;border-bottom:1px solid #f1f5f9;">${label}</td>
+          <td style="padding:7px 10px;font-size:12px;border-bottom:1px solid #f1f5f9;">${value}</td>
+        </tr>`).join("")}
+      </table>
+    </div>` : ""}
+
+    <!-- Result box -->
+    <div style="background:${resultBoxBg};border:1px solid ${resultBoxBdr};border-radius:6px;padding:12px 16px;margin-bottom:16px;">
+      <div style="font-weight:700;color:${resultBoxClr};font-size:13px;margin-bottom:4px;">${resultLabel}</div>
+      <div style="font-size:12px;color:${resultBoxClr};">${resultBody}</div>
     </div>
 
     ${inspection?.notes ? `
     <!-- Inspector Notes -->
     <div style="margin-bottom:20px;">
-      <div style="font-weight:600;color:#0B1933;font-size:13px;margin-bottom:8px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;">Inspector Notes</div>
-      <div style="font-size:13px;color:#374151;line-height:1.6;white-space:pre-wrap;">${inspection.notes}</div>
+      ${sectionHeading("Inspector Notes")}
+      <div style="font-size:12px;color:#374151;line-height:1.7;white-space:pre-wrap;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;">${inspection.notes}</div>
     </div>` : ""}
 
     ${failIssues.length > 0 ? `
-    <!-- Open Issues -->
+    <!-- Open Issues / Defects -->
     <div style="margin-bottom:20px;">
-      <div style="font-weight:600;color:#0B1933;font-size:13px;margin-bottom:8px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;">Open Issues / Defects (${failIssues.length})</div>
+      ${sectionHeading(`Open Issues / Defects (${failIssues.length})`)}
       ${failIssues.map((iss) => {
         const sevColor: Record<string, string> = { critical: "#b91c1c", major: "#c2410c", high: "#c2410c", minor: "#b45309", medium: "#b45309", low: "#15803d", cosmetic: "#6b7280" };
         const sevBg: Record<string, string> = { critical: "#fef2f2", major: "#fff7ed", high: "#fff7ed", minor: "#fffbeb", medium: "#fffbeb", low: "#f0fdf4", cosmetic: "#f9fafb" };
@@ -323,7 +498,10 @@ function generateReportHtml(
         return `<div style="background:${sb};border-left:3px solid ${sc};padding:8px 12px;margin-bottom:8px;border-radius:0 4px 4px 0;">
           <div style="font-size:11px;font-weight:700;color:${sc};text-transform:uppercase;">${iss.severity || "Issue"} — ${iss.category || ""}</div>
           <div style="font-size:12px;color:#111827;margin-top:2px;">${iss.description || ""}</div>
+          ${iss.location ? `<div style="font-size:10px;color:#6b7280;margin-top:2px;">Location: ${iss.location}</div>` : ""}
           ${iss.nccReference ? `<div style="font-size:10px;color:#6b7280;margin-top:2px;">NCC: ${iss.nccReference}</div>` : ""}
+          ${iss.recommendedAction ? `<div style="font-size:10px;color:#374151;margin-top:4px;font-weight:600;">Recommended: ${iss.recommendedAction}</div>` : ""}
+          ${iss.responsibleParty ? `<div style="font-size:10px;color:#6b7280;margin-top:2px;">Responsible Party: ${iss.responsibleParty}</div>` : ""}
           ${markupImgHtml}
         </div>`;
       }).join("")}
@@ -331,28 +509,15 @@ function generateReportHtml(
 
     <!-- Checklist -->
     <div style="margin-bottom:24px;">
-      <div style="font-weight:600;color:#0B1933;font-size:13px;margin-bottom:12px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;">Inspection Checklist — Full Results</div>
+      ${sectionHeading("Inspection Checklist — Full Results")}
       ${checklistHtml}
     </div>
 
-    <!-- Signature -->
-    <div style="border-top:2px solid #e5e7eb;padding-top:20px;">
-      <div style="display:flex;justify-content:space-between;margin-top:16px;">
-        <div>
-          <div style="border-top:1px solid #374151;width:220px;margin-bottom:4px;padding-top:4px;"></div>
-          <div style="font-size:11px;color:#6b7280;">Certifier Signature</div>
-          <div style="font-size:12px;font-weight:600;color:#0B1933;margin-top:2px;">${inspectorName}</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:11px;color:#6b7280;">Date Issued</div>
-          <div style="font-size:13px;font-weight:600;color:#0B1933;margin-top:2px;">${today}</div>
-        </div>
-      </div>
-    </div>
+    ${signOffHtml}
   </div>
   <!-- Footer -->
   <div style="background:#0B1933;color:#9ca3af;font-size:10px;padding:10px 32px;text-align:center;border-radius:0 0 8px 8px;">
-    This document was generated by InspectProof · ${project?.name || inspection?.projectName || ""} · ${today}
+    ${footerOrgLine} · ${project?.name || inspection?.projectName || ""} · ${issuedDate}
   </div>
 </div>`;
 }
@@ -364,6 +529,7 @@ async function generateReportContent(
   checklistResults: any[],
   issues: any[],
   inspector: any,
+  certifier?: any,
 ): Promise<string> {
   const typeLabel = REPORT_TYPE_LABELS[reportType] || reportType;
   const passItems = checklistResults.filter(i => i.result === "pass");
@@ -404,6 +570,17 @@ Building Class:       ${project?.buildingClassification || inspection?.buildingC
 Client / Owner:       ${project?.clientName || inspection?.clientName || "—"}
 Builder:              ${project?.builderName || "—"}
 Designer / Architect:  ${project?.designerName || "—"}
+
+────────────────────────────────────────────────────────
+PARTIES
+────────────────────────────────────────────────────────
+Inspector / Certifier: ${inspector ? `${inspector.firstName} ${inspector.lastName}` : "—"}
+Inspector Role:       ${ROLE_LABELS[inspector?.role ?? ""] || inspector?.role || "Built Environment Professional"}
+${inspector?.licenceNumber ? `Licence No.:          ${inspector.licenceNumber}
+` : ""}Client / Owner:       ${project?.clientName || inspection?.clientName || "—"}
+Builder:              ${project?.builderName || "—"}
+Designer / Architect: ${project?.designerName || "—"}
+Council / Certifier:  ${certifier ? `${certifier.firstName} ${certifier.lastName}` : "—"}
 
 ────────────────────────────────────────────────────────
 INSPECTION DETAILS
@@ -801,7 +978,12 @@ router.get("/", optionalAuth, async (req, res) => {
 // Generate report content from inspection data and save as draft
 router.post("/generate", requireAuth, async (req, res) => {
   try {
-    const { inspectionId, reportType, userId } = req.body;
+    const { inspectionId, reportType, userId, includeCoverPage, includeSummary, includeSignOff } = req.body;
+    const reportOptions = {
+      includeCoverPage: includeCoverPage !== false,
+      includeSummary: includeSummary !== false,
+      includeSignOff: includeSignOff !== false,
+    };
 
     const inspections = await db.select().from(inspectionsTable)
       .where(eq(inspectionsTable.id, parseInt(inspectionId)));
@@ -880,6 +1062,13 @@ router.post("/generate", requireAuth, async (req, res) => {
       inspector = users[0] || null;
     }
 
+    let certifierForHtml: any = null;
+    const certifierIdForHtml = project?.assignedCertifierId ?? null;
+    if (certifierIdForHtml) {
+      const cRows = await db.select().from(usersTable).where(eq(usersTable.id, certifierIdForHtml));
+      certifierForHtml = cRows[0] ?? null;
+    }
+
     const inspType = inspection.inspectionType
       ? (INSPECTION_TYPE_LABELS[inspection.inspectionType]
           || inspection.inspectionType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()))
@@ -893,7 +1082,60 @@ router.post("/generate", requireAuth, async (req, res) => {
 
     // Build a storage base URL so the report HTML can reference markup images directly
     const storageBaseUrl = req.protocol + "://" + req.get("host") + "/api/storage";
-    const content = generateReportHtml(reportType, project, inspection, checklistResults, issues, inspector, storageBaseUrl);
+
+    // Fetch org info for branding in the HTML report
+    let generateOrgInfo: OrgInfo | undefined;
+    if (inspection.inspectorId) {
+      try {
+        const [inspUser] = await db.select({
+          companyName: usersTable.companyName,
+          abn: usersTable.abn,
+          acn: usersTable.acn,
+          companyAddress: usersTable.companyAddress,
+          companySuburb: usersTable.companySuburb,
+          companyState: usersTable.companyState,
+          companyPhone: usersTable.companyPhone,
+          accreditationNumber: usersTable.accreditationNumber,
+          reportFooterText: usersTable.reportFooterText,
+          isCompanyAdmin: usersTable.isCompanyAdmin,
+          adminUserId: usersTable.adminUserId,
+        }).from(usersTable).where(eq(usersTable.id, inspection.inspectorId));
+        let orgUser = inspUser;
+        if (inspUser && !inspUser.isCompanyAdmin && inspUser.adminUserId) {
+          const adminId = parseInt(inspUser.adminUserId);
+          if (!isNaN(adminId)) {
+            const [adminRec] = await db.select({
+              companyName: usersTable.companyName,
+              abn: usersTable.abn,
+              acn: usersTable.acn,
+              companyAddress: usersTable.companyAddress,
+              companySuburb: usersTable.companySuburb,
+              companyState: usersTable.companyState,
+              companyPhone: usersTable.companyPhone,
+              accreditationNumber: usersTable.accreditationNumber,
+              reportFooterText: usersTable.reportFooterText,
+              isCompanyAdmin: usersTable.isCompanyAdmin,
+              adminUserId: usersTable.adminUserId,
+            }).from(usersTable).where(eq(usersTable.id, adminId));
+            if (adminRec) orgUser = adminRec;
+          }
+        }
+        if (orgUser?.companyName) {
+          const addrParts = [orgUser.companyAddress, orgUser.companySuburb, orgUser.companyState].filter(Boolean);
+          generateOrgInfo = {
+            companyName: orgUser.companyName || undefined,
+            abn: orgUser.abn || undefined,
+            acn: orgUser.acn || undefined,
+            address: addrParts.length ? addrParts.join(", ") : undefined,
+            phone: orgUser.companyPhone || undefined,
+            accreditationNumber: orgUser.accreditationNumber || undefined,
+            reportFooterText: orgUser.reportFooterText || undefined,
+          };
+        }
+      } catch { /* ignore org fetch errors */ }
+    }
+
+    const content = generateReportHtml(reportType, project, inspection, checklistResults, issues, inspector, storageBaseUrl, generateOrgInfo, reportOptions, certifierForHtml);
 
     // Check if a report already exists for this inspection + reportType.
     // If so, regenerate it in place (update content, reset to draft) rather
@@ -907,7 +1149,7 @@ router.post("/generate", requireAuth, async (req, res) => {
     let report;
     if (existing.length > 0) {
       const [updated] = await db.update(reportsTable)
-        .set({ title, content, status: "draft", generatedById: userId || 1 })
+        .set({ title, content, status: "draft", generatedById: userId || 1, reportOptions })
         .where(eq(reportsTable.id, existing[0].id))
         .returning();
       report = updated;
@@ -920,6 +1162,7 @@ router.post("/generate", requireAuth, async (req, res) => {
         status: "draft",
         content,
         generatedById: userId || 1,
+        reportOptions,
       }).returning();
       report = inserted;
     }
@@ -1065,8 +1308,14 @@ router.post("/:id/send", requireAuth, async (req, res) => {
               const uRows = await db.select().from(usersTable).where(eq(usersTable.id, insp.inspectorId));
               inspectorForPdf = uRows[0] ?? null;
             }
+            let certifierForPdf: any = null;
+            const certifierId = project?.assignedCertifierId ?? null;
+            if (certifierId) {
+              const cRows = await db.select().from(usersTable).where(eq(usersTable.id, certifierId));
+              certifierForPdf = cRows[0] ?? null;
+            }
             const issRows = await db.select().from(issuesTable).where(eq(issuesTable.inspectionId, insp.id));
-            const plainText = await generateReportContent(report.reportType || "summary", project ?? null, insp, clResults, issRows, inspectorForPdf);
+            const plainText = await generateReportContent(report.reportType || "summary", project ?? null, insp, clResults, issRows, inspectorForPdf, certifierForPdf);
             formatted = { ...formatted, content: plainText };
           }
         } catch (convErr) {
@@ -1252,6 +1501,8 @@ interface OrgInfo {
   phone?: string;
   accreditationNumber?: string;
   reportFooterText?: string;
+  inspectorRole?: string;
+  inspectorLicenceNumber?: string;
 }
 
 function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number, orgInfo?: OrgInfo) {
@@ -1305,7 +1556,15 @@ function buildPdf(
   checklistPhotos?: ChecklistPhotoEntry[],     // ordered list for photo appendix
   orgInfo?: OrgInfo,
   logoBuffer?: Buffer,
+  pdfReportOptions?: { includeCoverPage?: boolean; includeSummary?: boolean; includeSignOff?: boolean },
+  inspectionForPdf?: any,                      // raw inspection record for cover page data
 ): PDFKit.PDFDocument {
+  const pdfOpts = {
+    includeCoverPage: pdfReportOptions?.includeCoverPage !== false,
+    includeSummary: pdfReportOptions?.includeSummary !== false,
+    includeSignOff: pdfReportOptions?.includeSignOff !== false,
+  };
+
   const doc = new PDFDocument({
     size: "A4",
     margins: { top: 88, bottom: 0, left: MARGIN, right: MARGIN },
@@ -1323,7 +1582,106 @@ function buildPdf(
   const contentW = pageW - MARGIN * 2;
   const typeLabel = (report.reportTypeLabel || report.reportType || "Report").toUpperCase();
 
-  // Header on first page
+  const formatDatePdf = (d: string | null | undefined) =>
+    d ? new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }) : "—";
+
+  // ── Cover page ──────────────────────────────────────────────────────────────
+  if (pdfOpts.includeCoverPage) {
+    // Full navy background cover page
+    doc.rect(0, 0, pageW, doc.page.height).fill(COLOR_NAVY);
+
+    // Pear accent bar at top
+    doc.rect(0, 0, pageW, 8).fill(COLOR_PEAR);
+
+    // Brand block
+    const companyDisplayName = orgInfo?.companyName || "InspectProof";
+    doc.fillColor(COLOR_PEAR).fontSize(28).font(FODDLINI)
+      .text("InspectProof", MARGIN, 50, { width: contentW, lineBreak: false });
+
+    if (companyDisplayName !== "InspectProof" || orgInfo?.companyName) {
+      doc.fillColor("#94a3b8").fontSize(11).font(F)
+        .text(companyDisplayName, MARGIN, 85, { width: contentW / 2, lineBreak: false });
+    }
+
+    const abnCoverLine = orgInfo?.abn
+      ? `ABN ${orgInfo.abn}`
+      : orgInfo?.acn
+      ? `ACN ${orgInfo.acn}`
+      : "";
+    if (abnCoverLine) {
+      doc.fillColor("#64748b").fontSize(9).font(F)
+        .text(abnCoverLine, MARGIN, 100, { width: contentW / 2, lineBreak: false });
+    }
+    if (orgInfo?.address) {
+      doc.fillColor("#64748b").fontSize(9).font(F)
+        .text(orgInfo.address, MARGIN, abnCoverLine ? 113 : 100, { width: contentW / 2 });
+    }
+
+    // Report reference block (right side)
+    const refBoxX = pageW - MARGIN - 120;
+    doc.roundedRect(refBoxX, 50, 120, 48, 4).fillAndStroke("#1C2B0A", COLOR_PEAR);
+    doc.fillColor("#94a3b8").fontSize(8).font(FB)
+      .text("REPORT REF", refBoxX, 58, { width: 120, align: "center", lineBreak: false });
+    const reportRef = inspectionForPdf?.id ? `INS-${String(inspectionForPdf.id).padStart(4, "0")}` : "INS-0000";
+    doc.fillColor("#ffffff").fontSize(16).font(FB)
+      .text(reportRef, refBoxX, 72, { width: 120, align: "center", lineBreak: false });
+
+    // Divider bar
+    const divY = 160;
+    doc.moveTo(MARGIN, divY).lineTo(pageW - MARGIN, divY)
+      .strokeColor("#1E3260").lineWidth(1).stroke();
+
+    // Report type (large)
+    doc.fillColor("#ffffff").fontSize(30).font(FB)
+      .text(typeLabel, MARGIN, divY + 24, { width: contentW });
+    const typeLabelH = doc.currentLineHeight() * Math.ceil(typeLabel.length / 35);
+
+    // Project name & address
+    const projNameY = divY + 24 + typeLabelH + 16;
+    doc.fillColor("#94a3b8").fontSize(14).font(FSB)
+      .text(report.projectName || "Inspection Report", MARGIN, projNameY, { width: contentW });
+    doc.fillColor("#64748b").fontSize(11).font(F)
+      .text(
+        inspectionForPdf
+          ? [inspectionForPdf.siteAddress, inspectionForPdf.suburb, inspectionForPdf.state, inspectionForPdf.postcode].filter(Boolean).join(", ")
+          : "",
+        MARGIN, doc.y + 4, { width: contentW }
+      );
+
+    // Date issued / inspection date info block
+    const dateBlockY = doc.y + 24;
+    const dateColW = 130;
+    doc.fillColor("#64748b").fontSize(8).font(FSB)
+      .text("INSPECTION DATE", MARGIN, dateBlockY, { width: dateColW, lineBreak: false });
+    doc.fillColor("#cbd5e1").fontSize(11).font(FB)
+      .text(formatDatePdf(inspectionForPdf?.scheduledDate), MARGIN, dateBlockY + 14, { width: dateColW, lineBreak: false });
+    doc.fillColor("#64748b").fontSize(8).font(FSB)
+      .text("DATE ISSUED", MARGIN + dateColW + 20, dateBlockY, { width: dateColW, lineBreak: false });
+    doc.fillColor("#cbd5e1").fontSize(11).font(FB)
+      .text(formatDatePdf(inspectionForPdf?.completedDate || new Date().toISOString().split("T")[0]), MARGIN + dateColW + 20, dateBlockY + 14, { width: dateColW, lineBreak: false });
+
+    // Prepared by block at bottom
+    const preparedY = doc.page.height - 140;
+    doc.moveTo(MARGIN, preparedY).lineTo(pageW - MARGIN, preparedY)
+      .strokeColor("#162040").lineWidth(1).stroke();
+    doc.fillColor("#64748b").fontSize(8).font(FSB)
+      .text("PREPARED BY", MARGIN, preparedY + 14, { width: contentW, lineBreak: false });
+    const inspectorDisplayName = report.generatedByName || "—";
+    doc.fillColor("#cbd5e1").fontSize(12).font(FB)
+      .text(inspectorDisplayName, MARGIN, preparedY + 28, { width: contentW, lineBreak: false });
+    if (orgInfo?.companyName) {
+      doc.fillColor("#64748b").fontSize(9).font(F)
+        .text(orgInfo.companyName, MARGIN, preparedY + 44, { width: contentW, lineBreak: false });
+    }
+
+    // Pear accent bar at bottom
+    doc.rect(0, doc.page.height - 6, pageW, 6).fill(COLOR_PEAR);
+
+    // Start a new page for the actual report content
+    doc.addPage();
+  }
+
+  // Header on content pages
   addPageHeader(doc, typeLabel, logoBuffer, orgInfo?.companyName);
 
   // ── Document title ─────────────────────────────────────────────────────────
@@ -1357,7 +1715,7 @@ function buildPdf(
     .strokeColor(COLOR_PEAR).lineWidth(1.5).stroke();
   doc.moveDown(1.2);
 
-  // ── Parse and render content ───────────────────────────────────────────────
+  // ── Parse and render content — setup ─────────────────────────────────────
   const lines = (report.content || "").split("\n");
   const bottomLimit = doc.page.height - FOOTER_H - 30;
 
@@ -1368,6 +1726,95 @@ function buildPdf(
     }
   };
 
+  // ── Executive Summary section ─────────────────────────────────────────────
+  if (pdfOpts.includeSummary) {
+    checkPageBreak(100);
+    const sumHeaderY = doc.y;
+    doc.rect(MARGIN, sumHeaderY, contentW, 22).fill("#E8ECF2");
+    doc.rect(MARGIN, sumHeaderY, 3, 22).fill(COLOR_BLUE);
+    doc.fillColor(COLOR_NAVY).fontSize(9).font(FB)
+      .text("EXECUTIVE SUMMARY", MARGIN + 10, sumHeaderY + 7, { width: contentW - 16 });
+    doc.y = sumHeaderY + 30;
+
+    // Derive quick stats from the content text
+    const rawLines = (report.content || "").split("\n");
+    const passCount = rawLines.filter(l => /\[✓ PASS\]/.test(l)).length;
+    const failCount = rawLines.filter(l => /\[✗ FAIL\]/.test(l)).length;
+    const monCount  = rawLines.filter(l => /\[◎ MONITOR\]/.test(l)).length;
+    const totalCount = passCount + failCount + monCount + rawLines.filter(l => /\[○ PENDING\]/.test(l)).length + rawLines.filter(l => /\[— N\/A\]/.test(l)).length;
+    const passRate = totalCount > 0 ? Math.round((passCount / totalCount) * 100) : null;
+    const outcome = failCount === 0 ? "COMPLIANT" : "NON-COMPLIANT";
+    const outcomeColor = failCount === 0 ? "#16A34A" : "#DC2626";
+
+    // Outcome badge
+    const badgeW = 120;
+    doc.roundedRect(MARGIN, doc.y, badgeW, 20, 3).fill(outcomeColor);
+    doc.fillColor("#ffffff").fontSize(9).font(FB)
+      .text(outcome, MARGIN, doc.y + 5, { width: badgeW, align: "center", lineBreak: false });
+    doc.y += 28;
+
+    // Summary metrics row — 5 columns
+    const metricColW = (contentW - 16) / 5;
+    const metrics: [string, string | number, string][] = [
+      ["Total Items", totalCount || "—", COLOR_BLUE],
+      ["Compliant", passCount, "#16A34A"],
+      ["Non-Compliant", failCount, "#DC2626"],
+      ["Monitor", monCount, "#D97706"],
+      ["Pass Rate", passRate !== null ? `${passRate}%` : "—", COLOR_BLUE],
+    ];
+    const mY = doc.y;
+    metrics.forEach(([label, val, accentColor], mi) => {
+      const mx = MARGIN + mi * (metricColW + 4);
+      doc.roundedRect(mx, mY, metricColW, 44, 4).fill("#F8FAFC");
+      doc.rect(mx, mY, metricColW, 2).fill(accentColor);
+      doc.fillColor(COLOR_NAVY).fontSize(14).font(FB)
+        .text(String(val), mx, mY + 10, { width: metricColW, align: "center", lineBreak: false });
+      doc.fillColor("#6B7280").fontSize(7.5).font(FSB)
+        .text(label.toUpperCase(), mx, mY + 30, { width: metricColW, align: "center", lineBreak: false });
+    });
+    doc.y = mY + 56;
+
+    // Narrative — use scheduledDate for inspection date, completedDate for issued date
+    const inspType = inspectionForPdf?.inspectionType
+      ? inspectionForPdf.inspectionType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())
+      : "inspection";
+    const dateConducted = inspectionForPdf?.scheduledDate
+      ? new Date(inspectionForPdf.scheduledDate).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })
+      : new Date().toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+    const narrative = failCount === 0
+      ? `This ${inspType} was conducted on ${dateConducted}. All ${totalCount} inspection item${totalCount !== 1 ? "s" : ""} assessed were found to be compliant with the applicable building standards and requirements.`
+      : `This ${inspType} was conducted on ${dateConducted}. Of the ${totalCount} items assessed, ${failCount} non-compliance${failCount !== 1 ? "s were" : " was"} identified requiring rectification prior to re-inspection. ${monCount > 0 ? `${monCount} item${monCount !== 1 ? "s require" : " requires"} ongoing monitoring.` : ""}`;
+    doc.fillColor("#374151").fontSize(9.5).font(F)
+      .text(narrative, MARGIN, doc.y, { width: contentW });
+    doc.moveDown(0.8);
+
+    // Key findings: top-severity fail items (up to 5)
+    const failLines = rawLines.filter(l => /\[✗ FAIL\]/.test(l));
+    if (failLines.length > 0) {
+      doc.fillColor(COLOR_NAVY).fontSize(8.5).font(FSB)
+        .text("KEY FINDINGS:", MARGIN, doc.y, { width: contentW });
+      doc.moveDown(0.3);
+      const topFails = failLines.slice(0, 5);
+      topFails.forEach(fl => {
+        const cleaned = fl.replace(/\[✗ FAIL\]\s*/g, "").replace(/^\s*[\[\]•·◦\-]+\s*/, "").trim();
+        if (cleaned) {
+          checkPageBreak(14);
+          const bullet = doc.y;
+          doc.fillColor("#DC2626").fontSize(7).font(FB).text("✗", MARGIN, bullet, { width: 12, lineBreak: false });
+          doc.fillColor("#374151").fontSize(8.5).font(F).text(cleaned, MARGIN + 14, bullet, { width: contentW - 14 });
+          doc.moveDown(0.3);
+        }
+      });
+      if (failLines.length > 5) {
+        doc.fillColor("#6B7280").fontSize(8).font(F)
+          .text(`… and ${failLines.length - 5} more non-compliant item${failLines.length - 5 !== 1 ? "s" : ""}.`, MARGIN, doc.y, { width: contentW });
+        doc.moveDown(0.3);
+      }
+    }
+    doc.moveDown(0.5);
+  }
+
+  // ── Parse and render content ───────────────────────────────────────────────
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
     const line = raw.trimEnd();
@@ -1539,31 +1986,33 @@ function buildPdf(
     }
 
     // Signature line: "Inspector Signature: {{SIGNATURE}}"
+    // Skip entirely when formal sign-off page is enabled (avoids duplication)
     if (line.includes("{{SIGNATURE}}")) {
-      checkPageBreak(70);
-      const sigLabelY = doc.y;
-      doc.fillColor(COLOR_NAVY).fontSize(9).font(FB)
-        .text("Inspector Signature:", MARGIN, sigLabelY, { width: contentW, lineBreak: false });
-      doc.y = sigLabelY + 16;
+      if (!pdfOpts.includeSignOff) {
+        // Only render inline signature when formal sign-off page is disabled
+        checkPageBreak(70);
+        const sigLabelY = doc.y;
+        doc.fillColor(COLOR_NAVY).fontSize(9).font(FB)
+          .text("Inspector Signature:", MARGIN, sigLabelY, { width: contentW, lineBreak: false });
+        doc.y = sigLabelY + 16;
 
-      if (signatureBuffer) {
-        try {
-          const sigH = 48;
-          doc.image(signatureBuffer, MARGIN, doc.y, { height: sigH, fit: [200, sigH] });
-          doc.y = doc.y + sigH + 4;
-        } catch {
-          // fallback if image fails
+        if (signatureBuffer) {
+          try {
+            const sigH = 48;
+            doc.image(signatureBuffer, MARGIN, doc.y, { height: sigH, fit: [200, sigH] });
+            doc.y = doc.y + sigH + 4;
+          } catch {
+            doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 200, doc.y + 2)
+              .strokeColor("#9CA3AF").lineWidth(0.75).stroke();
+            doc.y = doc.y + 16;
+          }
+        } else {
           doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 200, doc.y + 2)
             .strokeColor("#9CA3AF").lineWidth(0.75).stroke();
           doc.y = doc.y + 16;
         }
-      } else {
-        // Blank signature line
-        doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 200, doc.y + 2)
-          .strokeColor("#9CA3AF").lineWidth(0.75).stroke();
-        doc.y = doc.y + 16;
+        doc.moveDown(0.3);
       }
-      doc.moveDown(0.3);
       continue;
     }
 
@@ -1572,6 +2021,109 @@ function buildPdf(
     doc.fillColor("#1F2937").fontSize(9.5).font(F)
       .text(line.trim(), MARGIN, doc.y, { width: contentW });
     doc.moveDown(0.3);
+  }
+
+  // ── Formal Sign-Off Section ───────────────────────────────────────────────
+  if (pdfOpts.includeSignOff) {
+    checkPageBreak(180);
+    doc.addPage();
+    addPageHeader(doc, typeLabel, logoBuffer, orgInfo?.companyName);
+
+    const soHeaderY = doc.y;
+    doc.rect(MARGIN, soHeaderY, contentW, 22).fill("#E8ECF2");
+    doc.rect(MARGIN, soHeaderY, 3, 22).fill(COLOR_BLUE);
+    doc.fillColor(COLOR_NAVY).fontSize(9).font(FB)
+      .text("ACKNOWLEDGEMENT & SIGN-OFF", MARGIN + 10, soHeaderY + 7, { width: contentW - 16 });
+    doc.y = soHeaderY + 36;
+
+    // Certification statement
+    const certStatement = `I, the undersigned, confirm that I have reviewed this report and understand the findings and requirements as set out herein. This report was prepared following an inspection carried out in accordance with applicable statutory and professional requirements. Any non-compliances identified require rectification and re-inspection prior to the next stage of works proceeding.`;
+    doc.fillColor("#374151").fontSize(9.5).font(F)
+      .text(certStatement, MARGIN, doc.y, { width: contentW });
+    doc.moveDown(1.5);
+
+    // Inspector sign-off block
+    const signoffBlockW = (contentW - 24) / 2;
+    const inspBlockX = MARGIN;
+    const clientBlockX = MARGIN + signoffBlockW + 24;
+    const blockY = doc.y;
+
+    // Inspector column
+    doc.fillColor("#6B7280").fontSize(8).font(FSB)
+      .text("INSPECTOR / CERTIFIER", inspBlockX, blockY, { width: signoffBlockW, lineBreak: false });
+    doc.y = blockY + 14;
+    doc.fillColor(COLOR_NAVY).fontSize(10).font(FB)
+      .text(report.generatedByName || "—", inspBlockX, doc.y, { width: signoffBlockW, lineBreak: false });
+    doc.moveDown(0.2);
+    // Inspector role, licence and accreditation
+    if (orgInfo?.inspectorRole) {
+      doc.fillColor("#6B7280").fontSize(8).font(F)
+        .text(orgInfo.inspectorRole, inspBlockX, doc.y, { width: signoffBlockW, lineBreak: false });
+      doc.moveDown(0.2);
+    } else if (orgInfo?.companyName) {
+      doc.fillColor("#6B7280").fontSize(8).font(F)
+        .text(orgInfo.companyName, inspBlockX, doc.y, { width: signoffBlockW, lineBreak: false });
+      doc.moveDown(0.2);
+    }
+    if (orgInfo?.inspectorLicenceNumber) {
+      doc.fillColor("#6B7280").fontSize(8).font(F)
+        .text(`Licence No. ${orgInfo.inspectorLicenceNumber}`, inspBlockX, doc.y, { width: signoffBlockW, lineBreak: false });
+      doc.moveDown(0.2);
+    }
+    if (orgInfo?.accreditationNumber) {
+      doc.fillColor("#6B7280").fontSize(8).font(F)
+        .text(`Accreditation No. ${orgInfo.accreditationNumber}`, inspBlockX, doc.y, { width: signoffBlockW, lineBreak: false });
+      doc.moveDown(0.2);
+    }
+    doc.moveDown(0.2);
+    if (signatureBuffer) {
+      try {
+        doc.image(signatureBuffer, inspBlockX, doc.y, { height: 44, fit: [160, 44] });
+        doc.y += 50;
+      } catch {
+        doc.moveTo(inspBlockX, doc.y + 2).lineTo(inspBlockX + 180, doc.y + 2)
+          .strokeColor("#9CA3AF").lineWidth(0.75).stroke();
+        doc.y += 14;
+      }
+    } else {
+      doc.moveTo(inspBlockX, doc.y + 2).lineTo(inspBlockX + 180, doc.y + 2)
+        .strokeColor("#9CA3AF").lineWidth(0.75).stroke();
+      doc.y += 14;
+    }
+    doc.fillColor("#6B7280").fontSize(8).font(F)
+      .text("Signature", inspBlockX, doc.y, { width: signoffBlockW, lineBreak: false });
+    doc.moveDown(0.8);
+    doc.fillColor("#6B7280").fontSize(8).font(FSB)
+      .text("Date: ____________________", inspBlockX, doc.y, { width: signoffBlockW, lineBreak: false });
+
+    // Client / Owner column
+    const clientY = blockY;
+    doc.fillColor("#6B7280").fontSize(8).font(FSB)
+      .text("CLIENT / OWNER ACKNOWLEDGEMENT", clientBlockX, clientY, { width: signoffBlockW, lineBreak: false });
+    doc.fillColor(COLOR_NAVY).fontSize(10).font(FB)
+      .text(_project?.clientName || inspectionForPdf?.clientName || "—", clientBlockX, clientY + 14, { width: signoffBlockW, lineBreak: false });
+    doc.moveTo(clientBlockX, clientY + 34).lineTo(clientBlockX + 180, clientY + 34)
+      .strokeColor("#9CA3AF").lineWidth(0.75).stroke();
+    doc.fillColor("#6B7280").fontSize(8).font(F)
+      .text("Signature", clientBlockX, clientY + 38, { width: signoffBlockW, lineBreak: false });
+    doc.fillColor("#6B7280").fontSize(8).font(FSB)
+      .text("Date: ____________________", clientBlockX, clientY + 54, { width: signoffBlockW, lineBreak: false });
+
+    // Builder column (below)
+    doc.y = Math.max(doc.y, clientY + 68) + 24;
+    const builderY = doc.y;
+    doc.fillColor("#6B7280").fontSize(8).font(FSB)
+      .text("BUILDER / CONTRACTOR ACKNOWLEDGEMENT", inspBlockX, builderY, { width: contentW, lineBreak: false });
+    doc.fillColor(COLOR_NAVY).fontSize(10).font(FB)
+      .text(_project?.builderName || inspectionForPdf?.builderName || "—", inspBlockX, builderY + 14, { width: signoffBlockW, lineBreak: false });
+    doc.moveTo(inspBlockX, builderY + 34).lineTo(inspBlockX + 180, builderY + 34)
+      .strokeColor("#9CA3AF").lineWidth(0.75).stroke();
+    doc.fillColor("#6B7280").fontSize(8).font(F)
+      .text("Signature", inspBlockX, builderY + 38, { width: signoffBlockW, lineBreak: false });
+    doc.fillColor("#6B7280").fontSize(8).font(FSB)
+      .text("Date: ____________________", inspBlockX, builderY + 54, { width: signoffBlockW, lineBreak: false });
+
+    doc.moveDown(2);
   }
 
   // ── Photo Documentation Appendix ──────────────────────────────────────────
@@ -1730,6 +2282,21 @@ router.get("/:id/pdf", async (req, res) => {
     const report = reports[0];
     if (!report) { res.status(404).json({ error: "not_found" }); return; }
 
+    // Report options: query params take precedence (explicit caller intent); fall back to
+    // persisted options saved at generation time; default to true for all toggles.
+    const savedOpts = (report.reportOptions as Record<string, boolean> | null) ?? {};
+    const pdfReportOptions = {
+      includeCoverPage: req.query.includeCoverPage !== undefined
+        ? req.query.includeCoverPage !== "false"
+        : (savedOpts.includeCoverPage !== false),
+      includeSummary: req.query.includeSummary !== undefined
+        ? req.query.includeSummary !== "false"
+        : (savedOpts.includeSummary !== false),
+      includeSignOff: req.query.includeSignOff !== undefined
+        ? req.query.includeSignOff !== "false"
+        : (savedOpts.includeSignOff !== false),
+    };
+
     const projects = report.projectId
       ? await db.select().from(projectsTable).where(eq(projectsTable.id, report.projectId))
       : [];
@@ -1737,11 +2304,13 @@ router.get("/:id/pdf", async (req, res) => {
 
     // Fetch inspector's signature if available
     let signatureBuffer: Buffer | undefined;
+    let pdfInspection: any = null;
     if (report.inspectionId) {
       try {
         const inspections = await db.select().from(inspectionsTable)
           .where(eq(inspectionsTable.id, report.inspectionId));
-        const inspectorId = inspections[0]?.inspectorId;
+        pdfInspection = inspections[0] ?? null;
+        const inspectorId = pdfInspection?.inspectorId;
         if (inspectorId) {
           const users = await db.select().from(usersTable).where(eq(usersTable.id, inspectorId));
           const signatureUrl = users[0]?.signatureUrl;
@@ -1866,13 +2435,53 @@ router.get("/:id/pdf", async (req, res) => {
               const uRows = await db.select().from(usersTable).where(eq(usersTable.id, insp.inspectorId));
               inspectorForPdf = uRows[0] ?? null;
             }
+            let certifierForPdf2: any = null;
+            const certifierId2 = proj?.assignedCertifierId ?? null;
+            if (certifierId2) {
+              const cRows = await db.select().from(usersTable).where(eq(usersTable.id, certifierId2));
+              certifierForPdf2 = cRows[0] ?? null;
+            }
             const issRows = await db.select().from(issuesTable).where(eq(issuesTable.inspectionId, insp.id));
-            const plainText = await generateReportContent(report.reportType || "summary", proj, insp, clResults, issRows, inspectorForPdf);
+            const plainText = await generateReportContent(report.reportType || "summary", proj, insp, clResults, issRows, inspectorForPdf, certifierForPdf2);
             formatted = { ...formatted, content: plainText };
           }
         }
       } catch (htmlFallbackErr) {
         req.log.warn({ htmlFallbackErr }, "Could not regenerate plain text for PDF; using stored content as-is");
+      }
+    }
+
+    // ── Fetch plan documents for this project (Plans Appendix) ────────────────
+    let planBuffers: Buffer[] = [];
+    let planNames: string[] = [];
+    let planMimeTypes: string[] = [];
+    if (report.projectId) {
+      try {
+        const planDocs = await db
+          .select()
+          .from(documentsTable)
+          .where(
+            and(
+              eq(documentsTable.projectId, report.projectId),
+              eq(documentsTable.category, "plan")
+            )
+          );
+        const storageService = new ObjectStorageService();
+        await Promise.allSettled(
+          planDocs.map(async (pdoc) => {
+            if (!pdoc.fileUrl) return;
+            try {
+              const { buffer } = await storageService.fetchObjectBuffer(pdoc.fileUrl);
+              planBuffers.push(buffer);
+              planNames.push(pdoc.name);
+              planMimeTypes.push(pdoc.mimeType || "application/pdf");
+            } catch {
+              // skip unavailable plan
+            }
+          })
+        );
+      } catch (planErr) {
+        req.log.warn({ planErr }, "Could not load plan documents — omitting from PDF");
       }
     }
 
@@ -1935,6 +2544,8 @@ router.get("/:id/pdf", async (req, res) => {
           logoUrl: usersTable.logoUrl,
           isCompanyAdmin: usersTable.isCompanyAdmin,
           adminUserId: usersTable.adminUserId,
+          role: usersTable.role,
+          licenceNumber: usersTable.licenceNumber,
         }).from(usersTable).where(eq(usersTable.id, inspectorId));
 
         // For team members, inherit company branding from the admin's record
@@ -1955,6 +2566,8 @@ router.get("/:id/pdf", async (req, res) => {
               logoUrl: usersTable.logoUrl,
               isCompanyAdmin: usersTable.isCompanyAdmin,
               adminUserId: usersTable.adminUserId,
+              role: usersTable.role,
+              licenceNumber: usersTable.licenceNumber,
             }).from(usersTable).where(eq(usersTable.id, adminId));
             if (adminRecord) orgUser = adminRecord;
           }
@@ -1962,6 +2575,18 @@ router.get("/:id/pdf", async (req, res) => {
 
         if (orgUser?.companyName) {
           const addrParts = [orgUser.companyAddress, orgUser.companySuburb, orgUser.companyState].filter(Boolean);
+          const ROLE_LABELS_PDF: Record<string, string> = {
+            building_surveyor: "Building Surveyor / Certifier",
+            structural_engineer: "Structural Engineer",
+            plumbing_inspector: "Plumbing Inspector",
+            building_inspector: "Building Inspector",
+            certifier: "Building Certifier / Surveyor",
+            fire_safety_engineer: "Fire Safety Engineer",
+            whs_officer: "WHS Officer",
+            site_supervisor: "Site Supervisor",
+            builder: "Builder / QC Inspector",
+            pre_purchase_inspector: "Pre-Purchase Inspector",
+          };
           orgInfo = {
             companyName: orgUser.companyName || undefined,
             abn: orgUser.abn || undefined,
@@ -1970,6 +2595,8 @@ router.get("/:id/pdf", async (req, res) => {
             phone: orgUser.companyPhone || undefined,
             accreditationNumber: orgUser.accreditationNumber || undefined,
             reportFooterText: orgUser.reportFooterText || undefined,
+            inspectorRole: orgUser.role ? (ROLE_LABELS_PDF[orgUser.role] || orgUser.role) : undefined,
+            inspectorLicenceNumber: inspectorUser?.licenceNumber || undefined,
           };
           // Fetch company logo if set
           if (orgUser.logoUrl) {
@@ -1987,10 +2614,11 @@ router.get("/:id/pdf", async (req, res) => {
       req.log.warn({ orgErr }, "Could not load org info for PDF");
     }
 
-    const doc = buildPdf(formatted, project, signatureBuffer, photosByDesc, photoBuffers, checklistPhotos, orgInfo, logoBuffer);
+    const doc = buildPdf(formatted, project, signatureBuffer, photosByDesc, photoBuffers, checklistPhotos, orgInfo, logoBuffer, pdfReportOptions, pdfInspection);
 
-    // ── Append markup pages at end of report ─────────────────────────────────
-    if (markupBuffers.length > 0) {
+    // ── Append markup/plan pages at end of report ─────────────────────────────
+    const needsMerge = markupBuffers.length > 0 || planBuffers.length > 0;
+    if (needsMerge) {
       const { PDFDocument: LibPdf } = await import("pdf-lib");
       const reportBytes = await new Promise<Buffer>((resolve, reject) => {
         const chunks: Buffer[] = [];
@@ -2008,33 +2636,83 @@ router.get("/:id/pdf", async (req, res) => {
       const basePagesCopied = await merged.copyPages(basePdf, Array.from({ length: basePageCount }, (_, i) => i));
       basePagesCopied.forEach((p) => merged.addPage(p));
 
-      // Add a "Markups" cover page
-      const coverPage = merged.addPage([595.28, 841.89]); // A4
       const { rgb } = await import("pdf-lib");
-      coverPage.drawRectangle({ x: 0, y: 821.89, width: 595.28, height: 20, color: rgb(0.773, 0.851, 0.176) }); // pear bar
-      coverPage.drawRectangle({ x: 0, y: 0, width: 595.28, height: 821.89, color: rgb(0.97, 0.98, 0.99) });
-      coverPage.drawText("MARKUPS", {
-        x: 40,
-        y: 800,
-        size: 18,
-        color: rgb(0.043, 0.098, 0.2),
-      });
-      coverPage.drawText(`${markupBuffers.length} marked-up document${markupBuffers.length !== 1 ? "s" : ""} attached to this inspection.`, {
-        x: 40,
-        y: 775,
-        size: 11,
-        color: rgb(0.28, 0.43, 0.71),
-      });
 
-      // Embed each markup PDF
-      for (let mi = 0; mi < markupBuffers.length; mi++) {
-        try {
-          const markupPdf = await LibPdf.load(markupBuffers[mi]);
-          const markupPageCount = markupPdf.getPageCount();
-          const copiedPages = await merged.copyPages(markupPdf, Array.from({ length: markupPageCount }, (_, i) => i));
-          copiedPages.forEach((p) => merged.addPage(p));
-        } catch {
-          // skip malformed markup PDF
+      // ── Markups Appendix (before Plans) ──────────────────────────────────────
+      if (markupBuffers.length > 0) {
+        const coverPage = merged.addPage([595.28, 841.89]); // A4
+        coverPage.drawRectangle({ x: 0, y: 821.89, width: 595.28, height: 20, color: rgb(0.773, 0.851, 0.176) }); // pear bar
+        coverPage.drawRectangle({ x: 0, y: 0, width: 595.28, height: 821.89, color: rgb(0.97, 0.98, 0.99) });
+        coverPage.drawText("MARKUPS", {
+          x: 40, y: 800, size: 18, color: rgb(0.043, 0.098, 0.2),
+        });
+        coverPage.drawText(`${markupBuffers.length} marked-up document${markupBuffers.length !== 1 ? "s" : ""} attached to this inspection.`, {
+          x: 40, y: 775, size: 11, color: rgb(0.28, 0.43, 0.71),
+        });
+        for (let mi = 0; mi < markupBuffers.length; mi++) {
+          try {
+            const markupPdf = await LibPdf.load(markupBuffers[mi]);
+            const markupPageCount = markupPdf.getPageCount();
+            const copiedPages = await merged.copyPages(markupPdf, Array.from({ length: markupPageCount }, (_, i) => i));
+            copiedPages.forEach((p) => merged.addPage(p));
+          } catch {
+            // skip malformed markup PDF
+          }
+        }
+      }
+
+      // ── Plans Appendix (terminal appendix) ───────────────────────────────────
+      if (planBuffers.length > 0) {
+        const planCoverPage = merged.addPage([595.28, 841.89]);
+        planCoverPage.drawRectangle({ x: 0, y: 821.89, width: 595.28, height: 20, color: rgb(0.773, 0.851, 0.176) });
+        planCoverPage.drawRectangle({ x: 0, y: 0, width: 595.28, height: 821.89, color: rgb(0.97, 0.98, 0.99) });
+        planCoverPage.drawText("PLANS APPENDIX", {
+          x: 40, y: 800, size: 18, color: rgb(0.043, 0.098, 0.2),
+        });
+        planCoverPage.drawText(`${planBuffers.length} plan document${planBuffers.length !== 1 ? "s" : ""} attached for this project.`, {
+          x: 40, y: 775, size: 11, color: rgb(0.28, 0.43, 0.71),
+        });
+        for (let pi = 0; pi < planBuffers.length; pi++) {
+          const mime = planMimeTypes[pi] || "application/pdf";
+          const name = planNames[pi] || `Plan ${pi + 1}`;
+          try {
+            if (mime === "image/jpeg" || mime === "image/jpg") {
+              // Embed JPEG image as a full-page PDF page (landscape if wider than tall)
+              const embedImg = await merged.embedJpg(planBuffers[pi]);
+              const { width: iw, height: ih } = embedImg;
+              const landscape = iw > ih;
+              const pageW = landscape ? 841.89 : 595.28;
+              const pageH = landscape ? 595.28 : 841.89;
+              const scaleFactor = Math.min((pageW - 40) / iw, (pageH - 60) / ih);
+              const drawW = iw * scaleFactor;
+              const drawH = ih * scaleFactor;
+              const imgPage = merged.addPage([pageW, pageH]);
+              imgPage.drawRectangle({ x: 0, y: pageH - 20, width: pageW, height: 20, color: rgb(0.043, 0.098, 0.2) });
+              imgPage.drawText(name, { x: 10, y: pageH - 14, size: 9, color: rgb(1, 1, 1) });
+              imgPage.drawImage(embedImg, { x: (pageW - drawW) / 2, y: (pageH - drawH - 20) / 2, width: drawW, height: drawH });
+            } else if (mime === "image/png") {
+              const embedImg = await merged.embedPng(planBuffers[pi]);
+              const { width: iw, height: ih } = embedImg;
+              const landscape = iw > ih;
+              const pageW = landscape ? 841.89 : 595.28;
+              const pageH = landscape ? 595.28 : 841.89;
+              const scaleFactor = Math.min((pageW - 40) / iw, (pageH - 60) / ih);
+              const drawW = iw * scaleFactor;
+              const drawH = ih * scaleFactor;
+              const imgPage = merged.addPage([pageW, pageH]);
+              imgPage.drawRectangle({ x: 0, y: pageH - 20, width: pageW, height: 20, color: rgb(0.043, 0.098, 0.2) });
+              imgPage.drawText(name, { x: 10, y: pageH - 14, size: 9, color: rgb(1, 1, 1) });
+              imgPage.drawImage(embedImg, { x: (pageW - drawW) / 2, y: (pageH - drawH - 20) / 2, width: drawW, height: drawH });
+            } else {
+              // Default: treat as PDF
+              const planPdf = await LibPdf.load(planBuffers[pi]);
+              const planPageCount = planPdf.getPageCount();
+              const copiedPlanPages = await merged.copyPages(planPdf, Array.from({ length: planPageCount }, (_, i) => i));
+              copiedPlanPages.forEach((p) => merged.addPage(p));
+            }
+          } catch {
+            // skip malformed / unsupported plan document
+          }
         }
       }
 
