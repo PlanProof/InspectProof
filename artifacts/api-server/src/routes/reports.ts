@@ -647,8 +647,7 @@ Duration:             ${inspection?.duration ? `${inspection.duration} minutes` 
 
   // ── Helper: defects / non-conformance block ─────────────────────────────────
   const defectsBlock = (heading: string, actionLabel: string) => {
-    const relevantIssues = issues.filter(i => i.status !== "resolved");
-    if (failItems.length === 0 && monitorItems.length === 0 && relevantIssues.length === 0) return "";
+    if (failItems.length === 0 && monitorItems.length === 0) return "";
     let block = `\n────────────────────────────────────────────────────────\n${heading}\n────────────────────────────────────────────────────────\n`;
     [...failItems, ...monitorItems].forEach((item, idx) => {
       block += `\nItem ${idx + 1}: ${item.description}\n`;
@@ -660,16 +659,6 @@ Duration:             ${inspection?.duration ? `${inspection.duration} minutes` 
       if (item.notes)             block += `  Inspector Notes: ${item.notes}\n`;
       block += `  ${actionLabel}\n`;
     });
-    if (relevantIssues.length > 0) {
-      block += `\nOUTSTANDING ISSUES (${relevantIssues.length})\n`;
-      relevantIssues.forEach((issue, idx) => {
-        block += `\n${idx + 1}. ${issue.title} [${(issue.severity || "medium").toUpperCase()}]\n`;
-        if (issue.description)     block += `   ${issue.description}\n`;
-        if (issue.location)        block += `   Location: ${issue.location}\n`;
-        if (issue.codeReference)   block += `   Code Ref: ${issue.codeReference}\n`;
-        if (issue.responsibleParty) block += `   Responsible: ${issue.responsibleParty}\n`;
-      });
-    }
     return block;
   };
 
