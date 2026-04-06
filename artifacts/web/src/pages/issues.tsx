@@ -430,7 +430,7 @@ export default function Issues() {
       case "severity":     return ((SEVERITY_ORDER[a.severity] ?? 4) - (SEVERITY_ORDER[b.severity] ?? 4)) * dir;
       case "status":       return a.status.localeCompare(b.status) * dir;
       case "projectName":  return (a.projectName ?? "").localeCompare(b.projectName ?? "") * dir;
-      case "assigneeName": return (a.assigneeName ?? "").localeCompare(b.assigneeName ?? "") * dir;
+      case "assigneeName": return ((a.assigneeName || (a as any).responsibleParty) ?? "").localeCompare(((b.assigneeName || (b as any).responsibleParty) ?? "")) * dir;
       case "createdAt":    return (a.createdAt ?? "").localeCompare(b.createdAt ?? "") * dir;
       default: return 0;
     }
@@ -750,7 +750,7 @@ export default function Issues() {
                     </TableCell>
                     <TableCell><StatusBadge status={issue.status} /></TableCell>
                     <TableCell className="text-muted-foreground">{issue.projectName}</TableCell>
-                    <TableCell>{(issue as any).assigneeName || <span className="text-muted-foreground italic">Unassigned</span>}</TableCell>
+                    <TableCell>{(issue as any).assigneeName || (issue as any).responsibleParty || <span className="text-muted-foreground italic">Unassigned</span>}</TableCell>
                     <TableCell className="text-right text-muted-foreground text-sm">{formatDate(issue.createdAt)}</TableCell>
                   </TableRow>
                 );
