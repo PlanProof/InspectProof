@@ -15,13 +15,30 @@ interface NominatimResult {
   place_id: number;
   display_name: string;
   address: {
+    // House number variants
     house_number?: string;
+    house?: string;
+    // Road/street variants — different states use different keys
     road?: string;
+    pedestrian?: string;
+    path?: string;
+    footway?: string;
+    cycleway?: string;
+    residential?: string;
+    living_street?: string;
+    service?: string;
+    // Suburb/locality variants — SA and others differ
     suburb?: string;
+    neighbourhood?: string;
+    quarter?: string;
+    locality?: string;
+    city_district?: string;
+    // Fallback locality fields
     town?: string;
     city?: string;
     village?: string;
     hamlet?: string;
+    county?: string;
     state?: string;
     postcode?: string;
   };
@@ -45,39 +62,84 @@ function abbreviateState(state?: string): string {
 }
 
 /**
+ * Resolve the street name from whichever Nominatim field is populated.
+ * Different Australian states tag roads differently in OpenStreetMap.
+ */
+function resolveRoad(a: NominatimResult["address"]): string | undefined {
+  return (
+    a.road ??
+    a.pedestrian ??
+    a.path ??
+    a.footway ??
+    a.cycleway ??
+    a.residential ??
+    a.living_street ??
+    a.service
+  );
+}
+
+/**
+ * Resolve the suburb/locality from whichever Nominatim field is populated.
+ * SA often uses locality or neighbourhood rather than suburb.
+ */
+function resolveSuburb(a: NominatimResult["address"]): string {
+  return (
+    a.suburb ??
+    a.neighbourhood ??
+    a.quarter ??
+    a.locality ??
+    a.city_district ??
+    a.town ??
+    a.city ??
+    a.village ??
+    a.hamlet ??
+    a.county ??
+    ""
+  );
+}
+
+/**
  * Extract the best possible street address from a Nominatim result.
  *
  * Priority order:
- *  1. address.house_number + address.road   (ideal — Nominatim gave us both)
- *  2. display_name first segment starts with a digit  (e.g. "42, Smith Street, …")
- *  3. address.road only  (street-level result — no number found)
- *  4. display_name first segment as fallback
+ *  1. house_number/house + resolved road field (ideal — structured data present)
+ *  2. road field already starts with a digit (Nominatim embedded number in road)
+ *  3. display_name first segment is just a number → combine with second segment
+ *  4. display_name first segment starts with a digit (e.g. "42 Smith Street")
+ *  5. road-only fallback (no number found — user can type it in)
+ *  6. display_name first segment as last resort
  */
 function parseNominatimAddress(result: NominatimResult): AddressFields {
   const a = result.address;
+  const road = resolveRoad(a);
+  const houseNum = a.house_number ?? a.house;
+
   let siteAddress: string;
 
-  if (a.house_number && a.road) {
-    // Best case: Nominatim returned both fields explicitly.
-    siteAddress = `${a.house_number} ${a.road}`;
+  if (houseNum && road) {
+    // Best case: structured fields have both number and street
+    siteAddress = `${houseNum} ${road}`;
+  } else if (road && /^\d/.test(road)) {
+    // Road field already contains the house number (e.g. "42 Smith Street")
+    siteAddress = road;
   } else {
-    // Try to pull the number from display_name.
-    // Nominatim formats specific addresses as "42, Smith Street, Suburb, …"
-    // or sometimes "42 Smith Street, Suburb, …" (no comma after number).
+    // Fall back to parsing display_name
+    // Nominatim formats specific addresses as:
+    //   "42, Smith Street, Suburb, …"  or  "42 Smith Street, Suburb, …"
     const segments = result.display_name.split(",").map(s => s.trim());
     const first = segments[0];
 
-    // Case A: first segment is just a number and second segment is road
+    // Case A: first segment is just a number — combine with second segment (road)
     if (/^\d+[A-Za-z]?$/.test(first) && segments[1]) {
       siteAddress = `${first} ${segments[1]}`;
     }
-    // Case B: first segment starts with a number (e.g. "42 Smith Street")
+    // Case B: first segment starts with a digit (e.g. "42 Smith Street")
     else if (/^\d/.test(first)) {
       siteAddress = first;
     }
-    // Case C: fall back to road-only (user will need to type number in)
-    else if (a.road) {
-      siteAddress = a.road;
+    // Case C: fall back to road name (user will type number in)
+    else if (road) {
+      siteAddress = road;
     }
     // Case D: last resort
     else {
@@ -85,7 +147,7 @@ function parseNominatimAddress(result: NominatimResult): AddressFields {
     }
   }
 
-  const suburb = a.suburb ?? a.town ?? a.city ?? a.village ?? a.hamlet ?? "";
+  const suburb = resolveSuburb(a);
   const state = abbreviateState(a.state);
   const postcode = a.postcode ?? "";
   return { siteAddress, suburb, state, postcode };
@@ -141,11 +203,12 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
       url.searchParams.set("addressdetails", "1");
       url.searchParams.set("countrycodes", "au");
       url.searchParams.set("limit", "8");
-      // When the query starts with a digit the user is searching for a
-      // specific numbered address — restrict results to address-level features
-      // so Nominatim returns house_number instead of just the street.
+      // When the query starts with a digit the user is typing a specific
+      // numbered address — use layer=address so Nominatim returns address-level
+      // features (which carry house_number) rather than street-level results.
+      // Note: layer= is the correct Nominatim 4.x parameter for this purpose.
       if (/^\d/.test(q.trim())) {
-        url.searchParams.set("featuretype", "address");
+        url.searchParams.set("layer", "address");
       }
       const res = await fetch(url.toString(), {
         signal: abortRef.current.signal,
