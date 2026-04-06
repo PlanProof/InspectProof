@@ -1565,7 +1565,8 @@ function ContractorLibrarySection() {
   );
 }
 
-function InternalStaffSection() {
+function _InternalStaffSection_REMOVED() {
+  // Moved to /settings/internal-staff — see artifacts/web/src/pages/internal-staff.tsx
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -2144,7 +2145,23 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
         title="Internal Staff"
         description="Your organisation's employees who can be assigned as responsible parties on defects. They appear alongside contractors in the trade allocation picker."
       >
-        <InternalStaffSection />
+        <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-colors">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-secondary/10 flex items-center justify-center shrink-0">
+              <User className="h-5 w-5 text-secondary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-sidebar">Open Internal Staff</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Add, edit, and manage your organisation's team members.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setLocation("/settings/internal-staff")}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sidebar text-white text-sm font-semibold hover:bg-sidebar/90 transition-colors shrink-0"
+          >
+            Open <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
       </SectionCard>
 
       <SectionCard

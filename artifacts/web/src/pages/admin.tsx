@@ -739,13 +739,6 @@ export default function Admin() {
     enabled: tab === "support",
   });
 
-  const [activityEntityType, setActivityEntityType] = useState("");
-  const [activityDateFrom, setActivityDateFrom] = useState("");
-  const [activityDateTo, setActivityDateTo] = useState("");
-  const [activityPage, setActivityPage] = useState(0);
-  const ACTIVITY_LIMIT = 50;
-
-
   const { data: activityData, isLoading: activityLoading, refetch: refetchActivity } = useQuery({
     queryKey: ["admin-activity", activityEntityType, activityDateFrom, activityDateTo, activityPage],
     queryFn: async () => {

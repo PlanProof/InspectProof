@@ -32,6 +32,7 @@ import Issues from "@/pages/issues";
 import ResetPassword from "@/pages/reset-password";
 import VerifyEmail from "@/pages/verify-email";
 import ContractorLibrary from "@/pages/contractor-library";
+import InternalStaff from "@/pages/internal-staff";
 import CalendarPage from "@/pages/calendar";
 import ContractorPortal from "@/pages/contractor-portal";
 
@@ -97,6 +98,7 @@ function Router() {
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/settings/contractor-library" component={ContractorLibrary} />
+      <Route path="/settings/internal-staff" component={InternalStaff} />
       <Route path="/calendar" component={CalendarPage} />
       <Route component={NotFound} />
     </Switch>
