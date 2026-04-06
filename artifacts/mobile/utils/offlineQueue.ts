@@ -95,10 +95,55 @@ async function saveQueue(queue: QueuedMutation[]): Promise<void> {
   } catch {}
 }
 
+/**
+ * Deduplication key for a mutation — identical mutations from rapid double-taps
+ * share the same key and the later one is silently dropped.
+ *
+ * Mutations that naturally differ (e.g. same item toggled pass→pending→pass) will
+ * have the same key, so the LAST queued value wins: we replace the existing pending
+ * item rather than appending a duplicate. This is correct for idempotent patches.
+ */
+function mutationDedupeKey(mutation: Omit<QueuedMutation, "id" | "syncStatus" | "failCount" | "createdAt">): string | null {
+  if (mutation.type === "checklist_result") {
+    const { inspectionId, resultId } = mutation.payload as { inspectionId: number; resultId: number };
+    return `checklist_result:${inspectionId}:${resultId}`;
+  }
+  if (mutation.type === "inspection_status") {
+    const { inspectionId } = mutation.payload as { inspectionId: number };
+    return `inspection_status:${inspectionId}`;
+  }
+  // photo_upload and defect_create are not deduplicated — each upload/defect is unique
+  return null;
+}
+
 export async function enqueue(
   mutation: Omit<QueuedMutation, "id" | "syncStatus" | "failCount" | "createdAt">
 ): Promise<QueuedMutation> {
   return withQueueLock(async () => {
+    const queue = await loadQueue();
+    const dedupeKey = mutationDedupeKey(mutation);
+
+    if (dedupeKey) {
+      // Find an existing pending item with the same deduplication key
+      const existingIdx = queue.findIndex(q =>
+        q.syncStatus === "pending" &&
+        mutationDedupeKey(q) === dedupeKey
+      );
+      if (existingIdx !== -1) {
+        // Replace the payload of the existing pending item (last write wins)
+        queue[existingIdx] = {
+          ...queue[existingIdx],
+          payload: mutation.payload,
+          lastAttemptAt: undefined,
+          nextAttemptAt: undefined,
+          errorMessage: undefined,
+          failCount: 0,
+        };
+        await saveQueue(queue);
+        return queue[existingIdx];
+      }
+    }
+
     const item: QueuedMutation = {
       ...mutation,
       id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -106,7 +151,6 @@ export async function enqueue(
       failCount: 0,
       createdAt: new Date().toISOString(),
     };
-    const queue = await loadQueue();
     queue.push(item);
     await saveQueue(queue);
     return item;

@@ -27,8 +27,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
-import { cacheInspectionData, getCachedInspectionData, patchCachedChecklistItem, InspectionCacheEntry, CachedChecklistItem, CachedDocument, loadQueue, removeQueueItem, resetItemForRetry } from "@/utils/offlineQueue";
-import { OfflineBanner, SyncStatusIndicator, FailedSyncCard } from "@/components/OfflineBanner";
+import { cacheInspectionData, getCachedInspectionData, patchCachedChecklistItem, InspectionCacheEntry, CachedChecklistItem, CachedDocument, loadQueue, removeQueueItem, resetItemForRetry, updateQueueItem } from "@/utils/offlineQueue";
+import { SyncStatusIndicator, FailedSyncCard } from "@/components/OfflineBanner";
 import { getSuggestionsForItem } from "@/constants/noteSuggestions";
 import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 import { INSPECTION_TYPES } from "@/constants/api";
@@ -108,7 +108,7 @@ export default function ConductInspectionScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
-  const { isOnline, addToQueue, failedItems, retrySingleItem, triggerSync, pendingCount: syncPendingCount } = useOfflineSync();
+  const { isOnline, isSyncing, addToQueue, failedItems, retrySingleItem, triggerSync, pendingCount: syncPendingCount } = useOfflineSync();
   const queryClient = useQueryClient();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
   const [conflictInspection, setConflictInspection] = useState<{ serverId: string; serverUpdatedAt: string; localCachedAt: string } | null>(null);
@@ -165,6 +165,49 @@ export default function ConductInspectionScreen() {
     enabled: !!token && !!id,
     refetchOnWindowFocus: false,
   });
+
+  const prevSyncPendingCountRef = useRef(syncPendingCount);
+  const queuedPhotoUrisRef = useRef<Map<string, "pending" | "syncing" | "failed">>(new Map());
+  const ckKeyRef = useRef<unknown[]>(["inspection-checklist", id, token]);
+  useEffect(() => {
+    ckKeyRef.current = ["inspection-checklist", id, token];
+  }, [id, token]);
+  useEffect(() => {
+    if (prevSyncPendingCountRef.current > syncPendingCount && syncPendingCount === 0 && isOnline) {
+      refetchChecklist().then(async () => {
+        const currentQueuedPhotos = queuedPhotoUrisRef.current;
+        if (currentQueuedPhotos.size > 0) {
+          const queue = await loadQueue();
+          const inspId = parseInt(id);
+          const localPhotoByItem = new Map<number, string[]>();
+          queue
+            .filter(q => q.inspectionId === inspId && q.type === "photo_upload")
+            .forEach(q => {
+              const uri = (q.payload as { photoDataUri?: string; resultId?: number }).photoDataUri;
+              const rid = (q.payload as { resultId?: number }).resultId;
+              if (uri && rid && currentQueuedPhotos.has(uri)) {
+                const arr = localPhotoByItem.get(rid) ?? [];
+                arr.push(uri);
+                localPhotoByItem.set(rid, arr);
+              }
+            });
+          if (localPhotoByItem.size > 0) {
+            queryClient.setQueryData<ChecklistItem[]>(ckKeyRef.current, old => {
+              if (!old) return old;
+              return old.map(serverItem => {
+                const localUris = localPhotoByItem.get(serverItem.id);
+                if (!localUris || localUris.length === 0) return serverItem;
+                const existing = serverItem.photoUrls ?? [];
+                const merged = [...existing, ...localUris.filter(u => !existing.includes(u))];
+                return { ...serverItem, photoUrls: merged };
+              });
+            });
+          }
+        }
+      }).catch(() => {});
+    }
+    prevSyncPendingCountRef.current = syncPendingCount;
+  }, [syncPendingCount, isOnline, refetchChecklist, id, queryClient]);
 
   const { data: projectDocuments = [], refetch: refetchDocuments } = useQuery<ProjectDocument[]>({
     queryKey: ["project-documents", inspection?.projectId, token],
@@ -444,18 +487,131 @@ export default function ConductInspectionScreen() {
   const ckKey = ["inspection-checklist", id, token];
 
   const [pendingSyncResultIds, setPendingSyncResultIds] = useState<Set<number>>(new Set());
-  useEffect(() => {
-    loadQueue().then(queue => {
-      const inspId = parseInt(id);
-      const ids = new Set<number>(
-        queue
-          .filter(q => q.inspectionId === inspId && q.syncStatus === "pending" && q.type === "checklist_result")
-          .map(q => (q.payload as { resultId?: number }).resultId)
-          .filter((rid): rid is number => typeof rid === "number")
-      );
-      setPendingSyncResultIds(ids);
+  const [syncingResultIds, setSyncingResultIds] = useState<Set<number>>(new Set());
+  const [confirmedSyncResultIds, setConfirmedSyncResultIds] = useState<Set<number>>(new Set());
+  const [failedSyncResultIds, setFailedSyncResultIds] = useState<Set<number>>(new Set());
+  const [queuedPhotoUris, setQueuedPhotoUris] = useState<Map<string, "pending" | "syncing" | "failed">>(new Map());
+  const [failedPhotoQueueIds, setFailedPhotoQueueIds] = useState<Map<string, string>>(new Map());
+  const [confirmedPhotoUris, setConfirmedPhotoUris] = useState<Set<string>>(new Set());
+  const [dismissedFailIds, setDismissedFailIds] = useState<Set<string>>(new Set());
+  const confirmedTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const confirmedPhotoTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const dismissFailedCard = useCallback((queueId: string) => {
+    setDismissedFailIds(prev => new Set(prev).add(queueId));
+  }, []);
+
+  const loadQueueState = useCallback(async () => {
+    const queue = await loadQueue();
+    const inspId = parseInt(id);
+    const pendingIds = new Set<number>(
+      queue
+        .filter(q => q.inspectionId === inspId && q.syncStatus === "pending" && q.type === "checklist_result")
+        .map(q => (q.payload as { resultId?: number }).resultId)
+        .filter((rid): rid is number => typeof rid === "number")
+    );
+    const syncingIds = new Set<number>(
+      queue
+        .filter(q => q.inspectionId === inspId && q.syncStatus === "syncing" && q.type === "checklist_result")
+        .map(q => (q.payload as { resultId?: number }).resultId)
+        .filter((rid): rid is number => typeof rid === "number")
+    );
+    const failedIds = new Set<number>(
+      queue
+        .filter(q => q.inspectionId === inspId && q.syncStatus === "failed" && q.type === "checklist_result")
+        .map(q => (q.payload as { resultId?: number }).resultId)
+        .filter((rid): rid is number => typeof rid === "number")
+    );
+
+    setPendingSyncResultIds(prev => {
+      const confirmedNow: number[] = [];
+      for (const rid of prev) {
+        if (!pendingIds.has(rid) && !syncingIds.has(rid) && !failedIds.has(rid)) {
+          confirmedNow.push(rid);
+        }
+      }
+      if (confirmedNow.length > 0) {
+        setConfirmedSyncResultIds(existing => {
+          const next = new Set(existing);
+          for (const rid of confirmedNow) {
+            next.add(rid);
+            const existing2 = confirmedTimersRef.current.get(rid);
+            if (existing2) clearTimeout(existing2);
+            confirmedTimersRef.current.set(
+              rid,
+              setTimeout(() => {
+                setConfirmedSyncResultIds(s => { const n = new Set(s); n.delete(rid); return n; });
+                confirmedTimersRef.current.delete(rid);
+              }, 3000)
+            );
+          }
+          return next;
+        });
+      }
+      return pendingIds;
     });
-  }, [id, syncPendingCount]);
+    setSyncingResultIds(syncingIds);
+    setFailedSyncResultIds(failedIds);
+
+    const photoMap = new Map<string, "pending" | "syncing" | "failed">();
+    const photoQueueIdMap = new Map<string, string>();
+    queue
+      .filter(q => q.inspectionId === inspId && q.type === "photo_upload")
+      .forEach(q => {
+        const uri = (q.payload as { photoDataUri?: string }).photoDataUri;
+        if (uri) {
+          photoMap.set(uri, q.syncStatus as "pending" | "syncing" | "failed");
+          if (q.syncStatus === "failed") photoQueueIdMap.set(uri, q.id);
+        }
+      });
+
+    const prevPhotoMap = queuedPhotoUrisRef.current;
+    const newlyConfirmedPhotos: string[] = [];
+    for (const [uri, prevState] of prevPhotoMap) {
+      if ((prevState === "pending" || prevState === "syncing") && !photoMap.has(uri)) {
+        newlyConfirmedPhotos.push(uri);
+      }
+    }
+    if (newlyConfirmedPhotos.length > 0) {
+      setConfirmedPhotoUris(existing => {
+        const next = new Set(existing);
+        for (const uri of newlyConfirmedPhotos) {
+          next.add(uri);
+          const existingTimer = confirmedPhotoTimersRef.current.get(uri);
+          if (existingTimer) clearTimeout(existingTimer);
+          confirmedPhotoTimersRef.current.set(
+            uri,
+            setTimeout(() => {
+              setConfirmedPhotoUris(s => { const n = new Set(s); n.delete(uri); return n; });
+              confirmedPhotoTimersRef.current.delete(uri);
+            }, 3000)
+          );
+        }
+        return next;
+      });
+    }
+
+    queuedPhotoUrisRef.current = photoMap;
+    setQueuedPhotoUris(photoMap);
+    setFailedPhotoQueueIds(photoQueueIdMap);
+  }, [id]);
+
+  useEffect(() => {
+    loadQueueState();
+  }, [loadQueueState, syncPendingCount, failedItems]);
+
+  useEffect(() => {
+    if (!isSyncing) return;
+    const interval = setInterval(() => { loadQueueState(); }, 800);
+    return () => clearInterval(interval);
+  }, [isSyncing, loadQueueState]);
+
+  useEffect(() => {
+    return () => {
+      for (const t of confirmedTimersRef.current.values()) clearTimeout(t);
+      for (const t of confirmedPhotoTimersRef.current.values()) clearTimeout(t);
+    };
+  }, []);
 
   const quickPass = async (item: ChecklistItem) => {
     const next = item.result === "pass" ? "pending" : "pass";
@@ -957,9 +1113,6 @@ export default function ConductInspectionScreen() {
         </View>
       )}
 
-      {/* Offline banner */}
-      <OfflineBanner />
-
       {/* Conflict resolution — shown when server was updated while offline */}
       {conflictInspection && (
         <View style={styles.conflictBanner}>
@@ -968,11 +1121,12 @@ export default function ConductInspectionScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.conflictTitle}>Inspection updated on server</Text>
               <Text style={styles.conflictSub}>
-                This inspection was modified elsewhere while you were offline. Choose which version to keep.
+                This inspection was modified elsewhere while you were offline.
               </Text>
             </View>
           </View>
           <View style={styles.conflictActions}>
+            {/* Use Server Version: discard all local queue items, reload from server */}
             <Pressable
               style={[styles.conflictBtn, styles.conflictBtnSecondary]}
               onPress={async () => {
@@ -982,7 +1136,6 @@ export default function ConductInspectionScreen() {
                 for (const q of toDiscard) {
                   await removeQueueItem(q.id);
                 }
-                // Reset the offline baseline so next session uses fresh server data
                 const existing = await getCachedInspectionData(inspId);
                 if (existing) {
                   await cacheInspectionData(inspId, {
@@ -992,17 +1145,94 @@ export default function ConductInspectionScreen() {
                   });
                 }
                 refetchChecklist();
-                triggerSync(); // refresh context counts after discarding queue items
+                triggerSync();
                 setConflictInspection(null);
               }}
             >
-              <Text style={styles.conflictBtnSecondaryText}>Use Server Version</Text>
+              <Text style={styles.conflictBtnSecondaryText}>Use Server</Text>
             </Pressable>
+
+            {/* Merge: union photos, concatenate both notes, advance baseline, retry sync */}
+            <Pressable
+              style={[styles.conflictBtn, styles.conflictBtnMerge]}
+              onPress={async () => {
+                const inspId = parseInt(conflictInspection.serverId);
+                try {
+                  // Fetch current server checklist to merge photos & notes
+                  const serverItems: ChecklistItem[] = await fetchWithAuth(`/api/inspections/${id}/checklist`);
+                  const cached = await getCachedInspectionData(inspId);
+                  if (cached && Array.isArray(serverItems)) {
+                    // Build merged checklist: local notes win, photos are union
+                    const mergedItems = serverItems.map(serverItem => {
+                      const localItem = cached.checklistItems.find(c => c.id === serverItem.id);
+                      if (!localItem) return serverItem;
+                      const serverPhotos: string[] = serverItem.photoUrls ?? [];
+                      const localPhotos: string[] = localItem.photoUrls ?? [];
+                      const unionPhotos = Array.from(new Set([...serverPhotos, ...localPhotos]));
+                      const serverNotes = serverItem.notes?.trim() ?? "";
+                      const localNotes = localItem.notes?.trim() ?? "";
+                      let mergedNotes: string;
+                      if (!localNotes) mergedNotes = serverNotes;
+                      else if (!serverNotes) mergedNotes = localNotes;
+                      else if (localNotes === serverNotes) mergedNotes = localNotes;
+                      else mergedNotes = `${localNotes}\n\n[Server]: ${serverNotes}`;
+                      return {
+                        ...serverItem,
+                        notes: mergedNotes,
+                        result: localItem.result !== "pending" ? localItem.result : serverItem.result,
+                        photoUrls: unionPhotos,
+                        photoMarkups: { ...(serverItem.photoMarkups ?? {}), ...(localItem.photoMarkups ?? {}) },
+                      };
+                    });
+                    // Update the query cache with merged data
+                    queryClient.setQueryData<ChecklistItem[]>(ckKey, mergedItems as ChecklistItem[]);
+                    // Advance the offline baseline to server updatedAt
+                    await cacheInspectionData(inspId, {
+                      ...cached,
+                      checklistItems: mergedItems as unknown as CachedChecklistItem[],
+                      offlineBaselineAt: conflictInspection.serverUpdatedAt,
+                      cachedAt: new Date().toISOString(),
+                    });
+                  }
+                } catch {
+                  // If merge fetch fails, fall back to "keep my changes" path
+                }
+                // Update queued mutation payloads with merged values so sync sends merged data
+                const allQueued = await loadQueue();
+                const conflictFailed = allQueued.filter(
+                  q => q.inspectionId === inspId &&
+                       q.syncStatus === "failed" &&
+                       q.errorMessage?.includes("Conflict")
+                );
+                const mergedItemsFromCache = queryClient.getQueryData<ChecklistItem[]>(ckKey) ?? [];
+                for (const q of conflictFailed) {
+                  if (q.type === "checklist_result") {
+                    const qResultId = (q.payload as { resultId?: number }).resultId;
+                    const mergedItem = mergedItemsFromCache.find(m => m.id === qResultId);
+                    if (mergedItem) {
+                      await updateQueueItem(q.id, {
+                        payload: {
+                          ...q.payload,
+                          notes: mergedItem.notes,
+                          result: mergedItem.result,
+                          photoUrls: mergedItem.photoUrls,
+                        },
+                      });
+                    }
+                  }
+                  await resetItemForRetry(q.id);
+                }
+                triggerSync();
+                setConflictInspection(null);
+              }}
+            >
+              <Text style={styles.conflictBtnMergeText}>Merge</Text>
+            </Pressable>
+
+            {/* Keep My Changes: advance baseline so sync engine won't re-flag */}
             <Pressable
               style={[styles.conflictBtn, styles.conflictBtnPrimary]}
               onPress={async () => {
-                // Advance the baseline to the server's updatedAt so the sync engine
-                // won't re-flag this as a conflict after "Keep My Changes" is chosen.
                 const inspId = parseInt(conflictInspection.serverId);
                 const existing = await getCachedInspectionData(inspId);
                 if (existing) {
@@ -1012,8 +1242,6 @@ export default function ConductInspectionScreen() {
                     cachedAt: existing.cachedAt,
                   });
                 }
-                // Reset any conflict-failed items for this inspection back to
-                // pending so they can re-run immediately — user chose to keep changes
                 const allQueued = await loadQueue();
                 const conflictFailed = allQueued.filter(
                   q => q.inspectionId === inspId &&
@@ -1027,18 +1255,27 @@ export default function ConductInspectionScreen() {
                 setConflictInspection(null);
               }}
             >
-              <Text style={styles.conflictBtnPrimaryText}>Keep My Changes</Text>
+              <Text style={styles.conflictBtnPrimaryText}>Keep Mine</Text>
             </Pressable>
           </View>
         </View>
       )}
 
       {/* Failed sync error cards */}
-      {failedItems.filter(f => f.inspectionId === parseInt(id)).length > 0 && (
+      {failedItems.filter(f => f.inspectionId === parseInt(id) && !dismissedFailIds.has(f.id)).length > 0 && (
         <View style={styles.failedSyncSection}>
-          {failedItems.filter(f => f.inspectionId === parseInt(id)).map(item => (
-            <FailedSyncCard key={item.id} item={item} onRetry={retrySingleItem} />
-          ))}
+          {failedItems.filter(f => f.inspectionId === parseInt(id) && !dismissedFailIds.has(f.id)).map(failItem => {
+            const rid = (failItem.payload as { resultId?: number }).resultId;
+            const ckItem = rid != null ? checklistItems.find(i => i.id === rid) : undefined;
+            return (
+              <FailedSyncCard
+                key={failItem.id}
+                item={{ ...failItem, itemName: ckItem?.description }}
+                onRetry={qId => { setDismissedFailIds(prev => { const s = new Set(prev); s.delete(qId); return s; }); retrySingleItem(qId); }}
+                onDismiss={dismissFailedCard}
+              />
+            );
+          })}
         </View>
       )}
 
@@ -1154,7 +1391,7 @@ export default function ConductInspectionScreen() {
                     onQuickNAAll={() => quickNAAll(items)}
                   />
                   {items.map(item => (
-                    <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} onQuickNA={() => quickNA(item)} hasPendingSync={pendingSyncResultIds.has(item.id)} />
+                    <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} onQuickNA={() => quickNA(item)} hasPendingSync={pendingSyncResultIds.has(item.id)} hasSyncingSync={syncingResultIds.has(item.id)} hasConfirmedSync={confirmedSyncResultIds.has(item.id)} hasFailedSync={failedSyncResultIds.has(item.id)} />
                   ))}
                   <Pressable
                     onPress={() => openAddItemModal(category)}
@@ -1236,6 +1473,10 @@ export default function ConductInspectionScreen() {
             onAddUnlinkedPhoto={addUnlinkedPhoto}
             onDeleteUnlinkedPhoto={deleteUnlinkedPhoto}
             tabBarHeight={tabBarHeight}
+            queuedPhotoUris={queuedPhotoUris}
+            failedPhotoQueueIds={failedPhotoQueueIds}
+            confirmedPhotoUris={confirmedPhotoUris}
+            onRetryPhoto={retrySingleItem}
           />
         </View>
 
@@ -1816,7 +2057,7 @@ function CategoryHeader({ category, items, onQuickPassAll, onQuickNAAll }: {
   );
 }
 
-function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA, hasPendingSync }: { item: ChecklistItem; onPress: () => void; onCamera: () => void; onQuickPass: () => void; onQuickNA: () => void; hasPendingSync?: boolean }) {
+function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA, hasPendingSync, hasSyncingSync, hasConfirmedSync, hasFailedSync }: { item: ChecklistItem; onPress: () => void; onCamera: () => void; onQuickPass: () => void; onQuickNA: () => void; hasPendingSync?: boolean; hasSyncingSync?: boolean; hasConfirmedSync?: boolean; hasFailedSync?: boolean }) {
   const swipeRef = useRef<Swipeable>(null);
   const resultOpt = RESULT_OPTS.find(r => r.key === item.result);
   const isPending = item.result === "pending";
@@ -1908,10 +2149,28 @@ function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA, hasPend
           )}
         </Pressable>
 
-        {/* Pending offline sync indicator */}
-        {hasPendingSync && (
-          <View style={styles.pendingSyncDot} />
-        )}
+        {/* Per-item offline sync state badge */}
+        {hasFailedSync ? (
+          <View style={[styles.itemSyncBadge, styles.itemSyncBadgeFailed]}>
+            <Feather name="alert-circle" size={9} color={Colors.danger} />
+            <Text style={[styles.itemSyncBadgeText, { color: Colors.danger }]}>Failed</Text>
+          </View>
+        ) : hasSyncingSync ? (
+          <View style={[styles.itemSyncBadge, styles.itemSyncBadgeSyncing]}>
+            <Feather name="refresh-cw" size={9} color={Colors.info} />
+            <Text style={[styles.itemSyncBadgeText, { color: Colors.info }]}>Syncing</Text>
+          </View>
+        ) : hasPendingSync ? (
+          <View style={[styles.itemSyncBadge, styles.itemSyncBadgePending]}>
+            <Feather name="upload-cloud" size={9} color={Colors.warning} />
+            <Text style={[styles.itemSyncBadgeText, { color: Colors.warning }]}>Local</Text>
+          </View>
+        ) : hasConfirmedSync ? (
+          <View style={[styles.itemSyncBadge, styles.itemSyncBadgeConfirmed]}>
+            <Feather name="check-circle" size={9} color={Colors.success} />
+            <Text style={[styles.itemSyncBadgeText, { color: Colors.success }]}>Synced</Text>
+          </View>
+        ) : null}
       </Pressable>
     </Swipeable>
   );
@@ -2159,6 +2418,10 @@ function PhotosPanel({
   onAddUnlinkedPhoto,
   onDeleteUnlinkedPhoto,
   tabBarHeight,
+  queuedPhotoUris = new Map(),
+  failedPhotoQueueIds = new Map(),
+  confirmedPhotoUris = new Set<string>(),
+  onRetryPhoto,
 }: {
   items: ChecklistItem[];
   baseUrl: string;
@@ -2170,6 +2433,10 @@ function PhotosPanel({
   onAddUnlinkedPhoto: (source: "camera" | "library") => void;
   onDeleteUnlinkedPhoto: (path: string) => void;
   tabBarHeight: number;
+  queuedPhotoUris?: Map<string, "pending" | "syncing" | "failed">;
+  failedPhotoQueueIds?: Map<string, string>;
+  confirmedPhotoUris?: Set<string>;
+  onRetryPhoto?: (queueId: string) => void;
 }) {
   const { width: screenW, height: screenH } = useWindowDimensions();
   const COLS = 3;
@@ -2476,18 +2743,22 @@ function PhotosPanel({
                 const globalIdx = startIdx + localIdx;
                 const markup = item.photoMarkups?.[path];
                 const hasMarkup = !!(markup && markup.strokes.length > 0);
+                const isLocalUri = path.startsWith("file://");
+                const uploadState = queuedPhotoUris.get(path);
+                const isConfirmedPhoto = confirmedPhotoUris.has(path);
+                const imageUri = isLocalUri ? path : `${baseUrl}/api/storage${path}`;
                 return (
                   <Pressable
                     key={path}
                     style={[galleryStyles.thumb, { width: THUMB, height: THUMB }]}
-                    onPress={() => setLightboxIndex(globalIdx)}
+                    onPress={() => !isLocalUri && setLightboxIndex(globalIdx)}
                   >
                     <Image
-                      source={{ uri: `${baseUrl}/api/storage${path}` }}
+                      source={{ uri: imageUri }}
                       style={{ width: THUMB, height: THUMB }}
                       resizeMode="cover"
                     />
-                    {hasMarkup && markup && (
+                    {hasMarkup && markup && !isLocalUri && (
                       <Svg
                         style={StyleSheet.absoluteFill}
                         width={THUMB}
@@ -2501,10 +2772,46 @@ function PhotosPanel({
                         })}
                       </Svg>
                     )}
-                    <View style={galleryStyles.thumbExpand}>
-                      <Feather name="maximize-2" size={11} color="#fff" />
-                    </View>
-                    {hasMarkup && (
+                    {isConfirmedPhoto ? (
+                      <View style={[galleryStyles.photoUploadOverlay, galleryStyles.photoConfirmedOverlay]}>
+                        <Feather name="check-circle" size={16} color="#fff" />
+                        <Text style={galleryStyles.photoUploadOverlayText}>Uploaded</Text>
+                      </View>
+                    ) : isLocalUri || uploadState ? (
+                      <View style={galleryStyles.photoUploadOverlay}>
+                        {uploadState === "failed" ? (
+                          <>
+                            <Feather name="alert-circle" size={14} color="#fff" />
+                            <Text style={galleryStyles.photoUploadOverlayText}>Upload failed</Text>
+                            {onRetryPhoto && failedPhotoQueueIds.has(path) && (
+                              <Pressable
+                                style={galleryStyles.photoRetryBtn}
+                                onPress={e => { e.stopPropagation?.(); onRetryPhoto(failedPhotoQueueIds.get(path)!); }}
+                                hitSlop={6}
+                              >
+                                <Feather name="refresh-cw" size={10} color="#fff" />
+                                <Text style={galleryStyles.photoRetryBtnText}>Retry</Text>
+                              </Pressable>
+                            )}
+                          </>
+                        ) : uploadState === "syncing" ? (
+                          <>
+                            <Feather name="refresh-cw" size={14} color="#fff" />
+                            <Text style={galleryStyles.photoUploadOverlayText}>Uploading…</Text>
+                          </>
+                        ) : (
+                          <>
+                            <Feather name="upload-cloud" size={14} color="#fff" />
+                            <Text style={galleryStyles.photoUploadOverlayText}>Queued</Text>
+                          </>
+                        )}
+                      </View>
+                    ) : (
+                      <View style={galleryStyles.thumbExpand}>
+                        <Feather name="maximize-2" size={11} color="#fff" />
+                      </View>
+                    )}
+                    {hasMarkup && !isLocalUri && (
                       <View style={galleryStyles.markupBadge}>
                         <Feather name="edit-2" size={8} color="#fff" />
                       </View>
@@ -3313,11 +3620,13 @@ const styles = StyleSheet.create({
   conflictTitle: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.warning, marginBottom: 2 },
   conflictSub: { fontSize: 11, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textSecondary, lineHeight: 15 },
   conflictActions: { flexDirection: "row", gap: 8, justifyContent: "flex-end" },
-  conflictBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 7 },
+  conflictBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 7 },
   conflictBtnPrimary: { backgroundColor: Colors.warning },
   conflictBtnSecondary: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.warningBorder },
+  conflictBtnMerge: { backgroundColor: Colors.info },
   conflictBtnPrimaryText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
   conflictBtnSecondaryText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.warning },
+  conflictBtnMergeText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
   failedSyncSection: { paddingHorizontal: 14, paddingTop: 8 },
   pendingSyncDot: {
     position: "absolute",
@@ -3329,6 +3638,38 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.warning,
     borderWidth: 1,
     borderColor: "#fff",
+  },
+  failedSyncDot: {
+    backgroundColor: Colors.danger,
+  },
+  itemSyncBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  itemSyncBadgePending: {
+    backgroundColor: Colors.warningLight,
+    borderColor: Colors.warningBorder,
+  },
+  itemSyncBadgeSyncing: {
+    backgroundColor: Colors.infoLight,
+    borderColor: Colors.infoBorder,
+  },
+  itemSyncBadgeFailed: {
+    backgroundColor: Colors.dangerLight,
+    borderColor: Colors.dangerBorder,
+  },
+  itemSyncBadgeConfirmed: {
+    backgroundColor: Colors.successLight,
+    borderColor: Colors.successBorder,
+  },
+  itemSyncBadgeText: {
+    fontSize: 9,
+    fontFamily: "PlusJakartaSans_600SemiBold",
   },
   doneEditingBtn: {
     paddingHorizontal: 14, paddingVertical: 7,
@@ -4247,6 +4588,39 @@ const galleryStyles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.6)",
     borderRadius: 4,
     padding: 4,
+  },
+  photoUploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.52)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  photoConfirmedOverlay: {
+    backgroundColor: "rgba(47,133,90,0.75)",
+  },
+  photoUploadOverlayText: {
+    fontSize: 10,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#fff",
+    textAlign: "center",
+  },
+  photoRetryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 4,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.4)",
+  },
+  photoRetryBtnText: {
+    fontSize: 9,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#fff",
   },
   addPhotoBtn: {
     flexDirection: "row",

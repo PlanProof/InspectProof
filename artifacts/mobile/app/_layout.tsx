@@ -19,7 +19,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { NotificationsProvider } from "@/context/NotificationsContext";
 import { OfflineSyncProvider } from "@/context/OfflineSyncContext";
-import { SyncToastContainer } from "@/components/OfflineBanner";
+import { OfflineBanner, SyncToastContainer } from "@/components/OfflineBanner";
 import { Colors } from "@/constants/colors";
 
 // Set base URL at module level for Expo
@@ -84,6 +84,7 @@ export default function RootLayout() {
               <OfflineSyncProvider>
                 <GestureHandlerRootView style={{ flex: 1 }}>
                   <KeyboardProvider>
+                    <OfflineBanner />
                     <RootLayoutNav />
                     <SyncToastContainer />
                   </KeyboardProvider>

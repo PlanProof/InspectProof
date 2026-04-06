@@ -9,6 +9,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
+import * as FileSystem from "expo-file-system/legacy";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useOfflineSync } from "@/context/OfflineSyncContext";
@@ -16,8 +18,31 @@ import { getCachedInspectionData, patchCachedChecklistItem } from "@/utils/offli
 import { Colors } from "@/constants/colors";
 import { pointsToPath, scaleStrokes, type Stroke, type MarkupData } from "@/utils/markup-utils";
 
+const PHOTO_QUEUE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5 MB
+
+/**
+ * Compress a photo URI if its file size exceeds the queue size limit.
+ * Returns the original URI if already small enough or if compression fails.
+ */
+async function maybeCompressPhoto(uri: string): Promise<string> {
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    if (!info.exists || !("size" in info) || (info.size ?? 0) <= PHOTO_QUEUE_SIZE_LIMIT_BYTES) {
+      return uri;
+    }
+    const result = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1920 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+    );
+    return result.uri;
+  } catch {
+    return uri;
+  }
+}
+
 type Phase = "preview" | "markup";
-type UploadState = "uploading" | "saved" | "error";
+type UploadState = "uploading" | "saved" | "queued_offline" | "error";
 
 const PEN_COLORS = [
   { value: "#EF4444", label: "Red" },
@@ -186,11 +211,12 @@ export default function PhotoMarkupScreen() {
       let uploadedPath: string | null = null;
       try {
         if (!isOnline) {
-          // Offline: queue the photo for later upload
+          // Offline: compress large photos before queuing, then queue for later upload
           const cached = await getCachedInspectionData(parseInt(inspectionId));
           const cachedItem = cached?.checklistItems?.find(i => i.id === parseInt(itemId));
           const existingUrls: string[] = (cachedItem?.photoUrls as string[]) ?? [];
-          const localPlaceholder = currentPhotoUri;
+          const compressedUri = await maybeCompressPhoto(currentPhotoUri);
+          const localPlaceholder = compressedUri;
           await addToQueue({
             type: "photo_upload",
             inspectionId: parseInt(inspectionId),
@@ -217,7 +243,7 @@ export default function PhotoMarkupScreen() {
           );
           if (!cancelled) {
             setSavedObjectPath(localPlaceholder);
-            setUploadState("saved");
+            setUploadState("queued_offline");
           }
           return;
         }
@@ -490,7 +516,7 @@ export default function PhotoMarkupScreen() {
 
   // ── Render: preview phase ─────────────────────────────────────────────────
 
-  const isSaved = uploadState === "saved";
+  const isSaved = uploadState === "saved" || uploadState === "queued_offline";
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -502,13 +528,19 @@ export default function PhotoMarkupScreen() {
           {uploadState === "uploading" && (
             <View style={styles.uploadingPill}>
               <ActivityIndicator size="small" color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.uploadingText}>Saving…</Text>
+              <Text style={styles.uploadingText}>Uploading…</Text>
             </View>
           )}
           {uploadState === "saved" && (
             <View style={styles.savedPill}>
               <Feather name="check" size={13} color="#fff" />
               <Text style={styles.savedText}>Saved</Text>
+            </View>
+          )}
+          {uploadState === "queued_offline" && (
+            <View style={styles.queuedPill}>
+              <Feather name="wifi-off" size={13} color="#fff" />
+              <Text style={styles.queuedText}>Queued — uploads when online</Text>
             </View>
           )}
           {uploadState === "error" && (
@@ -619,6 +651,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 4,
   },
   errorPillText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  queuedPill: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "#718096", borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  queuedText: { color: "#fff", fontSize: 12, fontWeight: "500" },
   saveBtn: {
     backgroundColor: Colors.secondary, paddingHorizontal: 16, paddingVertical: 7,
     borderRadius: 8, minWidth: 56, alignItems: "center",

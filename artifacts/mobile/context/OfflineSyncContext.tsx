@@ -30,6 +30,8 @@ interface OfflineSyncContextType {
   failedItems: QueuedMutation[];
   lastSyncTime: string | null;
   toastMessages: SyncToastMessage[];
+  /** True for ~3 seconds immediately after coming back online, for transient "Back online" banner */
+  justCameOnline: boolean;
   dismissToast: (id: string) => void;
   addToQueue: (mutation: Omit<QueuedMutation, "id" | "syncStatus" | "failCount" | "createdAt">) => Promise<QueuedMutation>;
   retryFailed: () => Promise<void>;
@@ -140,6 +142,7 @@ export function OfflineSyncProvider({ children }: { children: React.ReactNode })
   const [failedItems, setFailedItems] = useState<QueuedMutation[]>([]);
   const [lastSyncTime, setLastSyncTimeState] = useState<string | null>(null);
   const [toastMessages, setToastMessages] = useState<SyncToastMessage[]>([]);
+  const [justCameOnline, setJustCameOnline] = useState(false);
   const syncLockRef = useRef(false);
   const justCameOnlineRef = useRef(false);
 
@@ -301,7 +304,11 @@ export function OfflineSyncProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (justCameOnlineRef.current && isOnline && token) {
       justCameOnlineRef.current = false;
-      setTimeout(() => performSync(token), 1500);
+      // Flash the "Back online" banner for 3 seconds
+      setJustCameOnline(true);
+      const bannerTimer = setTimeout(() => setJustCameOnline(false), 3000);
+      const syncTimer = setTimeout(() => performSync(token), 1500);
+      return () => { clearTimeout(bannerTimer); clearTimeout(syncTimer); };
     }
   }, [isOnline, token, performSync]);
 
@@ -364,6 +371,7 @@ export function OfflineSyncProvider({ children }: { children: React.ReactNode })
         failedItems,
         lastSyncTime,
         toastMessages,
+        justCameOnline,
         dismissToast,
         addToQueue,
         retryFailed,
