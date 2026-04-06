@@ -1841,25 +1841,15 @@ function buildPdf(
       && (prevIsDivider || nextIsDivider);
 
     if (looksLikeHeader) {
-      checkPageBreak(36);
-      doc.moveDown(0.7);
+      checkPageBreak(40);
+      doc.moveDown(0.6);
       const headerY = doc.y;
-      const headerText = line.trim();
-      // Measure text width to position the divider lines
-      doc.fontSize(8).font(FB);
-      const textW = doc.widthOfString(headerText) + 16;
-      const lineY = headerY + 8;
-      const halfGap = Math.min((contentW - textW) / 2, contentW * 0.35);
-      // Left divider line
-      doc.moveTo(MARGIN, lineY).lineTo(MARGIN + halfGap - 6, lineY)
-        .strokeColor("#D1D5DB").lineWidth(0.5).stroke();
-      // Right divider line
-      doc.moveTo(MARGIN + halfGap + textW + 6, lineY).lineTo(MARGIN + contentW, lineY)
-        .strokeColor("#D1D5DB").lineWidth(0.5).stroke();
-      // Centered category label
-      doc.fillColor("#6B7280").fontSize(8).font(FB)
-        .text(headerText, MARGIN + halfGap, headerY + 3, { width: textW, align: "center", lineBreak: false });
-      doc.y = headerY + 22;
+      // Grey filled header with blue left accent bar — matches HTML table preview
+      doc.rect(MARGIN, headerY, contentW, 22).fill("#E8ECF2");
+      doc.rect(MARGIN, headerY, 3, 22).fill(COLOR_BLUE);
+      doc.fillColor(COLOR_NAVY).fontSize(9).font(FB)
+        .text(line.trim(), MARGIN + 10, headerY + 7, { width: contentW - 16 });
+      doc.y = headerY + 30;
       continue;
     }
 
@@ -1885,6 +1875,18 @@ function buildPdf(
       const itemNum = checkMatch[1];
       const resultStr = checkMatch[2].trim();
       const desc = checkMatch[3].trim();
+
+      // Look ahead: capture Code Ref from the next indented sub-line so we can render it inline
+      let inlineCodeRef: string | null = null;
+      if (i + 1 < lines.length) {
+        const nextTrimmed = lines[i + 1].trim();
+        const crMatch = nextTrimmed.match(/^Code Ref:\s+(.+)$/);
+        if (crMatch && /^\s{2,}/.test(lines[i + 1])) {
+          inlineCodeRef = crMatch[1].trim();
+          i++; // consume the Code Ref line so it won't be processed again
+        }
+      }
+
       const isPass = resultStr.includes("PASS");
       const isFail = resultStr.includes("FAIL");
       const isMonitor = resultStr.includes("MONITOR");
@@ -1894,23 +1896,24 @@ function buildPdf(
       const badgeText = isPass ? "Pass" : isFail ? "Fail" : isMonitor ? "Monitor" : "N/A";
       const badgeW = isMonitor ? 44 : 34;
 
-      // Layout constants
+      // Layout columns: [num 16px] [desc…] [badge 34-44px]
       const numCircleD = 16;
       const numX = MARGIN;
       const descX = MARGIN + numCircleD + 6;
       const badgeX = MARGIN + contentW - badgeW;
       const descW = contentW - numCircleD - 6 - badgeW - 8;
 
-      // Estimate description height for page break
+      // Estimate row height (desc + optional code ref line)
       doc.fontSize(9).font(F);
       const descH = doc.heightOfString(desc, { width: descW });
-      checkPageBreak(Math.max(22, descH + 8));
+      const rowH = Math.max(22, descH + (inlineCodeRef ? 14 : 0) + 8);
+      checkPageBreak(rowH);
 
       const rowY = doc.y;
 
       // Subtle row bg for fail items
       if (isFail) {
-        doc.rect(MARGIN - 4, rowY - 2, contentW + 8, Math.max(20, descH + 8)).fill("#FFF5F5");
+        doc.rect(MARGIN - 4, rowY - 2, contentW + 8, rowH).fill("#FFF5F5");
       }
 
       // Number circle
@@ -1918,17 +1921,29 @@ function buildPdf(
       doc.fillColor("#6B7280").fontSize(7).font(FB)
         .text(itemNum, numX, rowY + 4.5, { width: numCircleD, align: "center", lineBreak: false });
 
-      // Description
+      // Description text
       doc.fillColor("#1F2937").fontSize(9).font(F)
         .text(desc, descX, rowY, { width: descW });
 
-      // Status badge on the right (vertically centred with first line)
+      // Code ref chip inline, below description — blue, matching HTML preview style
+      if (inlineCodeRef) {
+        doc.fontSize(7.5).font(FB);
+        const chipTextW = doc.widthOfString(inlineCodeRef);
+        const chipW = Math.min(chipTextW + 8, descW);
+        const chipY = doc.y + 1;
+        doc.roundedRect(descX, chipY, chipW, 11, 2).fillAndStroke("#EFF6FF", "#BFDBFE");
+        doc.fillColor("#2563EB").fontSize(7.5).font(FB)
+          .text(inlineCodeRef, descX + 4, chipY + 2, { width: chipW - 8, lineBreak: false });
+        doc.y = chipY + 13;
+      }
+
+      // Status badge on the right (vertically aligned with the first description line)
       doc.roundedRect(badgeX, rowY + 1, badgeW, 13, 3).fillAndStroke(badgeBg, badgeBorder);
       doc.fillColor(badgeColor).fontSize(7).font(FB)
         .text(badgeText, badgeX, rowY + 4, { width: badgeW, align: "center", lineBreak: false });
 
-      doc.y = rowY + Math.max(20, descH + 8);
-      doc.moveDown(0.3);
+      doc.y = rowY + rowH;
+      doc.moveDown(0.2);
 
       // Render photos for this item (if any)
       if (photosByDesc && photoBuffers) {
