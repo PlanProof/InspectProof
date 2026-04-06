@@ -778,3 +778,99 @@ export async function sendWelcomeEmail(
     log?.error({ err, to: opts.toEmail }, "Failed to send welcome email");
   }
 }
+
+/* ── Inspection Reminder Email ─────────────────────────────── */
+
+export interface InspectionReminderEmailOpts {
+  inspectorName: string;
+  inspectorEmail: string;
+  inspectionType: string;
+  projectName: string;
+  projectAddress: string;
+  scheduledDate: string;
+  scheduledTime?: string | null;
+  inspectionId: number;
+  reminderType: "upcoming" | "overdue" | "overdue_admin";
+  daysUntil?: number;
+  daysOverdue?: number;
+  assignedInspectorName?: string;
+}
+
+function inspectionReminderHtml(opts: InspectionReminderEmailOpts): string {
+  const { inspectorName, inspectionType, projectName, projectAddress, scheduledDate, scheduledTime, inspectionId, reminderType, daysUntil, daysOverdue, assignedInspectorName } = opts;
+  const typeLabel = inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const dateLabel = formatDateAU(scheduledDate);
+  const timeLabel = scheduledTime ? ` at ${scheduledTime}` : "";
+  const link = `${APP_BASE_URL}/inspections/${inspectionId}`;
+
+  let heading: string;
+  let tag: string;
+  let intro: string;
+
+  if (reminderType === "upcoming") {
+    const dayWord = daysUntil === 1 ? "tomorrow" : `in ${daysUntil} days`;
+    heading = `Inspection Reminder — ${dayWord.charAt(0).toUpperCase() + dayWord.slice(1)}`;
+    tag = "Inspection Reminder";
+    intro = `This is a reminder that you have an upcoming inspection scheduled ${dayWord}.`;
+  } else if (reminderType === "overdue") {
+    heading = "Overdue Inspection";
+    tag = "Overdue Alert";
+    intro = `Your inspection was scheduled ${daysOverdue === 1 ? "yesterday" : `${daysOverdue} days ago`} and has not yet been completed. Please update the status or reschedule as soon as possible.`;
+  } else {
+    heading = "Overdue Inspection — Admin Alert";
+    tag = "Admin Alert";
+    intro = `An inspection assigned to ${assignedInspectorName ?? "your team"} was scheduled ${daysOverdue === 1 ? "yesterday" : `${daysOverdue} days ago`} and has not been completed.`;
+  }
+
+  const rows = [
+    { label: "Inspection Type", value: typeLabel },
+    { label: "Project", value: projectName },
+    ...(projectAddress ? [{ label: "Site Address", value: projectAddress }] : []),
+    { label: "Scheduled", value: `${dateLabel}${timeLabel}`, highlight: true },
+    ...(reminderType === "overdue" || reminderType === "overdue_admin"
+      ? [{ label: "Status", value: `${daysOverdue} day${daysOverdue === 1 ? "" : "s"} overdue`, highlight: true }]
+      : []),
+    ...(reminderType === "overdue_admin" && assignedInspectorName
+      ? [{ label: "Assigned To", value: assignedInspectorName }]
+      : []),
+  ];
+
+  const content = `
+    ${greeting(inspectorName)}
+    ${sectionTitle(heading)}
+    ${bodyText(intro)}
+    ${infoTable(rows)}
+    ${ctaButton(link, "View Inspection →")}
+    <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.7;font-family:${BASE_FONT};">This is an automated reminder from InspectProof. Please do not reply to this email.</p>`;
+
+  return emailWrapper({ title: heading, tag, content });
+}
+
+export async function sendInspectionReminderEmail(
+  opts: InspectionReminderEmailOpts,
+  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+): Promise<void> {
+  if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping inspection reminder email"); return; }
+  const typeLabel = opts.inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  let subject: string;
+  if (opts.reminderType === "upcoming") {
+    const dayWord = opts.daysUntil === 1 ? "Tomorrow" : `in ${opts.daysUntil} Days`;
+    subject = `Inspection Reminder — ${typeLabel} ${dayWord} at ${opts.projectName}`;
+  } else if (opts.reminderType === "overdue") {
+    subject = `Overdue Inspection — ${typeLabel} at ${opts.projectName}`;
+  } else {
+    subject = `[Admin] Overdue Inspection — ${typeLabel} at ${opts.projectName}`;
+  }
+  try {
+    const { error } = await getResend().emails.send({
+      from: SMTP_FROM,
+      to: opts.inspectorEmail,
+      subject,
+      html: inspectionReminderHtml(opts),
+    });
+    if (error) throw new Error(error.message);
+    log?.info({ to: opts.inspectorEmail, inspectionId: opts.inspectionId, reminderType: opts.reminderType }, "Inspection reminder email sent");
+  } catch (err) {
+    log?.error({ err, to: opts.inspectorEmail }, "Failed to send inspection reminder email");
+  }
+}

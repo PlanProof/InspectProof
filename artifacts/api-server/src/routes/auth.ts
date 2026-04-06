@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
@@ -354,7 +354,9 @@ router.get("/organisation", async (req, res) => {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     if (!user) { res.status(404).json({ error: "not_found" }); return; }
 
-    // Team members inherit org details from their company admin's record
+    // Team members inherit org details from their company admin's record.
+    // For reminder settings, always read from the canonical primary admin (lowest-id company admin
+    // with the same companyName) to ensure GET returns the same record the job and PATCH use.
     let orgUser = user;
     if (!user.isCompanyAdmin && user.adminUserId) {
       const adminId = parseInt(user.adminUserId);
@@ -363,6 +365,21 @@ router.get("/organisation", async (req, res) => {
         if (adminRecord) orgUser = adminRecord;
       }
     }
+
+    // Resolve primary admin for reminder settings
+    let prefsSource = orgUser;
+    if (orgUser.companyName) {
+      const [primaryAdmin] = await db
+        .select()
+        .from(usersTable)
+        .where(and(eq(usersTable.companyName, orgUser.companyName), eq(usersTable.isCompanyAdmin, true), eq(usersTable.isActive, true)))
+        .orderBy(usersTable.id);
+      if (primaryAdmin) prefsSource = primaryAdmin;
+    }
+
+    const orgPrefs: Record<string, unknown> = prefsSource.notificationPrefs
+      ? (() => { try { return JSON.parse(prefsSource.notificationPrefs!) as Record<string, unknown>; } catch { return {}; } })()
+      : {};
 
     res.json({
       name: orgUser.companyName ?? "",
@@ -387,6 +404,10 @@ router.get("/organisation", async (req, res) => {
       piExpiry: orgUser.piExpiry ?? "",
       reportFooterText: orgUser.reportFooterText ?? "",
       isCompanyAdmin: user.isCompanyAdmin ?? false,
+      inspectionRemindersEnabled: orgPrefs.inspectionRemindersEnabled !== false,
+      inspectionReminderLeadDays: Array.isArray(orgPrefs.inspectionReminderLeadDays)
+        ? (orgPrefs.inspectionReminderLeadDays as unknown[]).filter((d): d is number => typeof d === "number" && d > 0)
+        : [1, 3],
     });
   } catch (err) {
     req.log.error({ err }, "Get organisation error");
@@ -411,7 +432,7 @@ router.patch("/organisation", async (req, res) => {
       return;
     }
 
-    const { name, abn, acn, phone, email, address, suburb, state, postcode, website, logoUrl, accredBody, accredNum, accredExpiry, plInsurer, plPolicyNumber, plExpiry, piInsurer, piPolicyNumber, piExpiry, reportFooterText } = req.body;
+    const { name, abn, acn, phone, email, address, suburb, state, postcode, website, logoUrl, accredBody, accredNum, accredExpiry, plInsurer, plPolicyNumber, plExpiry, piInsurer, piPolicyNumber, piExpiry, reportFooterText, inspectionRemindersEnabled, inspectionReminderLeadDays } = req.body;
     const updates: Record<string, any> = { updatedAt: new Date() };
     if (name !== undefined) updates.companyName = name?.trim() || null;
     if (abn !== undefined) updates.abn = abn?.trim() || null;
@@ -434,6 +455,39 @@ router.patch("/organisation", async (req, res) => {
     if (piPolicyNumber !== undefined) updates.piPolicyNumber = piPolicyNumber?.trim() || null;
     if (piExpiry !== undefined) updates.piExpiry = piExpiry?.trim() || null;
     if (reportFooterText !== undefined) updates.reportFooterText = reportFooterText?.trim() || null;
+
+    // Resolve the canonical org admin record: the lowest-id company admin with the same companyName.
+    // Both the job and this endpoint must read/write reminder settings from the same record.
+    let primaryAdminId = userId;
+    if (user.isCompanyAdmin) {
+      const [freshUser] = await db.select({ companyName: usersTable.companyName }).from(usersTable).where(eq(usersTable.id, userId));
+      if (freshUser?.companyName) {
+        const [primaryAdmin] = await db
+          .select({ id: usersTable.id })
+          .from(usersTable)
+          .where(and(eq(usersTable.companyName, freshUser.companyName), eq(usersTable.isCompanyAdmin, true), eq(usersTable.isActive, true)))
+          .orderBy(usersTable.id);
+        if (primaryAdmin) primaryAdminId = primaryAdmin.id;
+      }
+    }
+
+    // Update reminder settings in the primary admin's notificationPrefs JSON
+    if (inspectionRemindersEnabled !== undefined || inspectionReminderLeadDays !== undefined) {
+      const targetId = primaryAdminId;
+      const [targetUser] = await db.select({ notificationPrefs: usersTable.notificationPrefs }).from(usersTable).where(eq(usersTable.id, targetId));
+      const existingPrefs: Record<string, unknown> = targetUser?.notificationPrefs
+        ? (() => { try { return JSON.parse(targetUser.notificationPrefs) as Record<string, unknown>; } catch { return {}; } })()
+        : {};
+      if (inspectionRemindersEnabled !== undefined) existingPrefs.inspectionRemindersEnabled = inspectionRemindersEnabled;
+      if (inspectionReminderLeadDays !== undefined && Array.isArray(inspectionReminderLeadDays)) {
+        existingPrefs.inspectionReminderLeadDays = (inspectionReminderLeadDays as unknown[]).filter(
+          (d): d is number => typeof d === "number" && d > 0
+        );
+      }
+      // Write prefs to primary org admin record; write other fields (name, abn, etc) to authenticated user record
+      await db.update(usersTable).set({ notificationPrefs: JSON.stringify(existingPrefs), updatedAt: new Date() }).where(eq(usersTable.id, targetId));
+      delete updates.notificationPrefs;
+    }
 
     const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, userId)).returning();
     if (!updated) { res.status(404).json({ error: "not_found" }); return; }

@@ -1567,6 +1567,8 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
   const [logoUploading, setLogoUploading] = useState(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const [inspectionRemindersEnabled, setInspectionRemindersEnabled] = useState(true);
+  const [inspectionReminderLeadDays, setInspectionReminderLeadDays] = useState<number[]>([1, 3]);
 
   useEffect(() => {
     apiFetch("/api/auth/organisation")
@@ -1595,6 +1597,8 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
         });
         setLogoUrl(data.logoUrl ?? null);
         setIsAdmin(data.isCompanyAdmin ?? false);
+        setInspectionRemindersEnabled(data.inspectionRemindersEnabled !== false);
+        setInspectionReminderLeadDays(Array.isArray(data.inspectionReminderLeadDays) && data.inspectionReminderLeadDays.length > 0 ? data.inspectionReminderLeadDays : [1, 3]);
         // Migrate any local data if DB is empty
         if (!data.name && !data.abn) {
           try {
@@ -1670,7 +1674,7 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
       await apiFetch("/api/auth/organisation", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, inspectionRemindersEnabled, inspectionReminderLeadDays }),
       });
       localStorage.removeItem("inspectproof_org_details");
       setSaved(true);
@@ -1909,6 +1913,64 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
           >
             Open <ArrowRight className="h-4 w-4" />
           </button>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Inspection Reminders"
+        description="Automatically notify inspectors by email and push notification before and after scheduled inspections."
+      >
+        <div className="divide-y divide-border/50">
+          <SettingRow
+            label="Enable Inspection Reminders"
+            description="Send email and push reminders to inspectors before their scheduled inspection date, and overdue alerts if an inspection is not completed."
+          >
+            <Toggle
+              checked={inspectionRemindersEnabled}
+              onChange={() => { if (!readOnly) setInspectionRemindersEnabled(v => !v); }}
+            />
+          </SettingRow>
+
+          {inspectionRemindersEnabled && (
+            <div className="pt-4 pb-2 space-y-3">
+              <p className="text-sm font-medium text-sidebar">Advance notice windows</p>
+              <p className="text-xs text-muted-foreground">Select how many days before the scheduled date inspectors receive a reminder. Overdue alerts are always sent the day after a missed inspection.</p>
+              <div className="flex flex-wrap gap-2">
+                {[1, 2, 3, 5, 7, 14].map(day => {
+                  const selected = inspectionReminderLeadDays.includes(day);
+                  return (
+                    <button
+                      key={day}
+                      disabled={readOnly}
+                      onClick={() => {
+                        if (readOnly) return;
+                        setInspectionReminderLeadDays(prev =>
+                          selected
+                            ? prev.filter(d => d !== day)
+                            : [...prev, day].sort((a, b) => a - b)
+                        );
+                      }}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
+                        selected
+                          ? "bg-secondary text-sidebar border-secondary"
+                          : "bg-background text-muted-foreground border-border hover:border-secondary/50",
+                        readOnly && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      {day === 1 ? "1 day" : `${day} days`}
+                    </button>
+                  );
+                })}
+              </div>
+              {inspectionReminderLeadDays.length === 0 && (
+                <p className="text-xs text-amber-600">Select at least one lead time to send upcoming reminders.</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-2">
+                Push notifications are suppressed between 10 pm and 7 am local time (quiet hours).
+              </p>
+            </div>
+          )}
         </div>
       </SectionCard>
 

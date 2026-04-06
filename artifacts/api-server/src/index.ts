@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { ensureGlobalTemplatesSeed } from "../../../lib/db/src/seeds/global-templates";
 import { PLAN_LIMITS } from "./lib/planLimits";
+import { startInspectionReminderCron } from "./lib/inspectionReminderJob";
 
 const rawPort = process.env["PORT"];
 
@@ -223,6 +224,22 @@ async function runSchemaMigrations() {
     await pool.query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS induction_id integer REFERENCES inductions(id) ON DELETE SET NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS documents_induction_id_idx ON documents(induction_id)`);
 
+    // inspection reminders (Task #36)
+    await pool.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS reminder_sent_at timestamp`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS inspection_reminders (
+        id serial PRIMARY KEY,
+        inspection_id integer NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+        reminder_type text NOT NULL,
+        sent_at timestamp NOT NULL DEFAULT now(),
+        inspector_id integer,
+        UNIQUE (inspection_id, reminder_type)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS inspection_reminders_inspection_id_idx ON inspection_reminders(inspection_id)`);
+    // org-level inspection reminder settings stored in users.notification_prefs JSON
+    // (uses existing notification_prefs column — no ALTER TABLE needed)
+
     logger.info("Schema migrations applied");
   } catch (err) {
     logger.error({ err }, "Schema migration failed — continuing");
@@ -404,6 +421,9 @@ const server = app.listen(port, (err) => {
   // Validate Stripe webhook route ordering by sending a synthetic probe request.
   // We delay slightly so the server is ready to accept connections on this event loop tick.
   setTimeout(() => validateWebhookRouteOrder(port), 200);
+
+  // Start inspection reminder cron job
+  startInspectionReminderCron();
 
   // Run seeds and integrations in the background after port is open
   runBackgroundTasks().catch((err) => logger.error({ err }, "Background tasks failed"));
