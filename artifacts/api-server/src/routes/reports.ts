@@ -517,7 +517,8 @@ function generateReportHtml(
   </div>
   <!-- Footer -->
   <div style="background:#0B1933;color:#9ca3af;font-size:10px;padding:10px 32px;text-align:center;border-radius:0 0 8px 8px;">
-    ${footerOrgLine} · ${project?.name || inspection?.projectName || ""} · ${issuedDate}
+    <div>${footerOrgLine} · ${project?.name || inspection?.projectName || ""} · ${issuedDate}</div>
+    ${orgInfo?.reportFooterText ? `<div style="margin-top:4px;font-size:9px;color:#6B7280;">${orgInfo.reportFooterText}</div>` : ""}
   </div>
 </div>`;
 }
@@ -1084,8 +1085,10 @@ router.post("/generate", requireAuth, async (req, res) => {
     const storageBaseUrl = req.protocol + "://" + req.get("host") + "/api/storage";
 
     // Fetch org info for branding in the HTML report
+    // Priority: inspection's assigned inspector → authenticated user (fallback when no inspector)
     let generateOrgInfo: OrgInfo | undefined;
-    if (inspection.inspectorId) {
+    const orgLookupId = inspection.inspectorId ?? req.authUser!.id;
+    if (orgLookupId) {
       try {
         const [inspUser] = await db.select({
           companyName: usersTable.companyName,
@@ -1099,7 +1102,7 @@ router.post("/generate", requireAuth, async (req, res) => {
           reportFooterText: usersTable.reportFooterText,
           isCompanyAdmin: usersTable.isCompanyAdmin,
           adminUserId: usersTable.adminUserId,
-        }).from(usersTable).where(eq(usersTable.id, inspection.inspectorId));
+        }).from(usersTable).where(eq(usersTable.id, orgLookupId));
         let orgUser = inspUser;
         if (inspUser && !inspUser.isCompanyAdmin && inspUser.adminUserId) {
           const adminId = parseInt(inspUser.adminUserId);
@@ -1120,7 +1123,7 @@ router.post("/generate", requireAuth, async (req, res) => {
             if (adminRec) orgUser = adminRec;
           }
         }
-        if (orgUser?.companyName) {
+        if (orgUser) {
           const addrParts = [orgUser.companyAddress, orgUser.companySuburb, orgUser.companyState].filter(Boolean);
           generateOrgInfo = {
             companyName: orgUser.companyName || undefined,
@@ -2520,7 +2523,7 @@ router.get("/:id/pdf", async (req, res) => {
       }
     }
 
-    // Fetch org info from the report's inspector for the PDF header/footer
+    // Fetch org info from the report's inspector (or generator) for the PDF header/footer
     let orgInfo: OrgInfo | undefined;
     let logoBuffer: Buffer | undefined;
     try {
@@ -2529,6 +2532,10 @@ router.get("/:id/pdf", async (req, res) => {
         const [insp] = await db.select({ inspectorId: inspectionsTable.inspectorId })
           .from(inspectionsTable).where(eq(inspectionsTable.id, report.inspectionId));
         inspectorId = insp?.inspectorId ?? null;
+      }
+      // Fall back to the report's generator if no inspector is assigned to the inspection
+      if (!inspectorId && report.generatedById) {
+        inspectorId = report.generatedById;
       }
       if (inspectorId) {
         const [inspectorUser] = await db.select({
@@ -2573,7 +2580,7 @@ router.get("/:id/pdf", async (req, res) => {
           }
         }
 
-        if (orgUser?.companyName) {
+        if (orgUser) {
           const addrParts = [orgUser.companyAddress, orgUser.companySuburb, orgUser.companyState].filter(Boolean);
           const ROLE_LABELS_PDF: Record<string, string> = {
             building_surveyor: "Building Surveyor / Certifier",
