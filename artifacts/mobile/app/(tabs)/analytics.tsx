@@ -165,21 +165,27 @@ export default function AnalyticsScreen() {
       {inspectionsByType.length > 0 && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Inspections by Type</Text>
-          <View style={styles.barChart}>
+          {/* Bar track row — fixed height so fills never overflow */}
+          <View style={styles.barChartTrackRow}>
             {(() => {
               const max = Math.max(...inspectionsByType.map((t: any) => t.total));
               return inspectionsByType.map((t: any) => (
-                <View key={t.type} style={styles.barItem}>
-                  <View style={styles.barTrack}>
-                    <View style={[styles.barFill, { height: max > 0 ? (t.total / max) * 100 : 0 }]} />
-                  </View>
+                <View key={t.type} style={styles.barTrackCol}>
                   <Text style={styles.barValue}>{t.total}</Text>
-                  <Text style={styles.barLabel} numberOfLines={2}>
-                    {t.type.charAt(0).toUpperCase() + t.type.slice(1)}
-                  </Text>
+                  <View style={styles.barTrack}>
+                    <View style={[styles.barFill, { height: max > 0 ? (t.total / max) * 100 : 4 }]} />
+                  </View>
                 </View>
               ));
             })()}
+          </View>
+          {/* Labels row — below the tracks, never overlapping */}
+          <View style={styles.barLabelRow}>
+            {inspectionsByType.map((t: any) => (
+              <Text key={t.type} style={styles.barLabel} numberOfLines={2}>
+                {t.type.charAt(0).toUpperCase() + t.type.slice(1)}
+              </Text>
+            ))}
           </View>
         </View>
       )}
@@ -250,12 +256,32 @@ const styles = StyleSheet.create({
   severityBarTrack: { flex: 1, height: 6, borderRadius: 3, flexDirection: "row", backgroundColor: Colors.background, overflow: "hidden" },
   severityBar: { height: 6, borderRadius: 3 },
   severityCount: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, width: 24, textAlign: "right" },
-  barChart: { flexDirection: "row", gap: 8, alignItems: "flex-end", height: 120 },
-  barItem: { flex: 1, alignItems: "center", gap: 4 },
-  barTrack: { width: "100%", height: 100, justifyContent: "flex-end" },
-  barFill: { backgroundColor: Colors.secondary, borderRadius: 4, minHeight: 4 },
-  barValue: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
-  barLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, textAlign: "center" },
+  barChartTrackRow: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "flex-end",
+    height: 120,
+    overflow: "hidden",
+  },
+  barTrackCol: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 3,
+    height: 120,
+  },
+  barTrack: {
+    width: "100%",
+    flex: 1,
+    justifyContent: "flex-end",
+    overflow: "hidden",
+    borderRadius: 4,
+    backgroundColor: Colors.background,
+  },
+  barFill: { width: "100%", backgroundColor: Colors.secondary, borderRadius: 4 },
+  barValue: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  barLabelRow: { flexDirection: "row", gap: 6, marginTop: 6 },
+  barLabel: { flex: 1, fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, textAlign: "center" },
   stageGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   stageItem: {
     flex: 1,
