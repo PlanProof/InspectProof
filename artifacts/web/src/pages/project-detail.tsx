@@ -1493,6 +1493,25 @@ function ChecklistLinkDialog({
   };
 
   const totalItems = groups.reduce((acc, g) => acc + g.items.length, 0);
+  const allSelected = totalItems > 0 && selectedIds.size === totalItems;
+  const noneSelected = selectedIds.size === 0;
+
+  const selectAll = () => {
+    const all = groups.flatMap(g => g.items.map((i: any) => i.id));
+    setSelectedIds(new Set(all));
+  };
+  const deselectAll = () => setSelectedIds(new Set());
+
+  const selectGroup = (group: ChecklistItemGroup) => {
+    const ids = group.items.map((i: any) => i.id);
+    const allGroupSelected = ids.every((id: number) => selectedIds.has(id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allGroupSelected) ids.forEach((id: number) => next.delete(id));
+      else ids.forEach((id: number) => next.add(id));
+      return next;
+    });
+  };
 
   return (
     <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
@@ -1507,7 +1526,37 @@ function ChecklistLinkDialog({
           </p>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto -mx-6 px-6 mt-3">
+        {!loading && totalItems > 0 && (
+          <div className="flex items-center justify-between px-1 -mt-1 mb-1">
+            <span className="text-xs text-muted-foreground">
+              {selectedIds.size} of {totalItems} selected
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={allSelected ? deselectAll : selectAll}
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-secondary/30 bg-secondary/5 text-secondary hover:bg-secondary/10 font-medium transition-colors"
+              >
+                {allSelected ? (
+                  <><X className="h-3 w-3" /> Deselect All</>
+                ) : (
+                  <><CheckSquare className="h-3 w-3" /> Select All</>
+                )}
+              </button>
+              {!noneSelected && !allSelected && (
+                <button
+                  type="button"
+                  onClick={deselectAll}
+                  className="text-xs px-2 py-1 rounded-md border border-muted text-muted-foreground hover:bg-muted/40 transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto -mx-6 px-6 mt-1">
           {loading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading checklist items…
@@ -1520,56 +1569,66 @@ function ChecklistLinkDialog({
             </div>
           ) : (
             <div className="space-y-5">
-              {groups.map(group => (
-                <div key={group.templateId}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{group.templateName}</span>
-                    <span className="flex-1 border-t border-muted/40" />
-                    <span className="text-xs text-muted-foreground">
-                      {group.items.filter(i => selectedIds.has(i.id)).length}/{group.items.length}
-                    </span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {group.items.map((item: any) => (
-                      <label
-                        key={item.id}
-                        className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
-                          selectedIds.has(item.id)
-                            ? "bg-secondary/5 border-secondary/30"
-                            : "bg-card border-muted/40 hover:bg-muted/30 hover:border-muted"
-                        }`}
+              {groups.map(group => {
+                const groupIds = group.items.map((i: any) => i.id);
+                const groupSelectedCount = groupIds.filter((id: number) => selectedIds.has(id)).length;
+                const allGroupSelected = groupSelectedCount === groupIds.length;
+                return (
+                  <div key={group.templateId}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{group.templateName}</span>
+                      <span className="flex-1 border-t border-muted/40" />
+                      <button
+                        type="button"
+                        onClick={() => selectGroup(group)}
+                        className="text-[10px] text-secondary hover:underline font-medium transition-colors"
                       >
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(item.id)}
-                          onChange={() => toggle(item.id)}
-                          className="mt-0.5 h-3.5 w-3.5 rounded border-muted-foreground accent-secondary cursor-pointer"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-sidebar leading-snug">{item.description}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            {item.codeReference && (
-                              <span className="text-[10px] font-mono bg-muted px-1 py-0.5 rounded text-muted-foreground">
-                                {item.codeReference}
-                              </span>
-                            )}
-                            {item.category && (
-                              <span className="text-[10px] text-muted-foreground">{item.category}</span>
-                            )}
+                        {allGroupSelected ? "Deselect all" : "Select all"}
+                      </button>
+                      <span className="text-xs text-muted-foreground tabular-nums">{groupSelectedCount}/{groupIds.length}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {group.items.map((item: any) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                            selectedIds.has(item.id)
+                              ? "bg-secondary/5 border-secondary/30"
+                              : "bg-card border-muted/40 hover:bg-muted/30 hover:border-muted"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(item.id)}
+                            onChange={() => toggle(item.id)}
+                            className="mt-0.5 h-3.5 w-3.5 rounded border-muted-foreground accent-secondary cursor-pointer"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-sidebar leading-snug">{item.description}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              {item.codeReference && (
+                                <span className="text-[10px] font-mono bg-muted px-1 py-0.5 rounded text-muted-foreground">
+                                  {item.codeReference}
+                                </span>
+                              )}
+                              {item.category && (
+                                <span className="text-[10px] text-muted-foreground">{item.category}</span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </label>
-                    ))}
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
         <div className="flex items-center justify-between pt-4 border-t mt-4">
           <span className="text-xs text-muted-foreground">
-            {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} selected
+            {selectedIds.size} item{selectedIds.size !== 1 ? "s" : ""} linked
           </span>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
