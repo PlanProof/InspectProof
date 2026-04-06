@@ -60,6 +60,71 @@ interface Plan {
   };
 }
 
+function StatusBadge({ status, cancelAtPeriodEnd }: { status: string | null; cancelAtPeriodEnd?: boolean }) {
+  if (!status) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />
+        Trial
+      </span>
+    );
+  }
+  if (status === "active" && cancelAtPeriodEnd) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">
+        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />
+        Cancelling
+      </span>
+    );
+  }
+  if (status === "active") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+        Active
+      </span>
+    );
+  }
+  if (status === "past_due") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+        Past Due
+      </span>
+    );
+  }
+  if (status === "unpaid") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+        Unpaid
+      </span>
+    );
+  }
+  if (status === "canceled" || status === "cancelled") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block" />
+        Cancelled
+      </span>
+    );
+  }
+  if (status === "trialing") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />
+        Trial
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 capitalize">
+      <span className="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block" />
+      {status}
+    </span>
+  );
+}
+
 export default function Billing() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -69,6 +134,7 @@ export default function Billing() {
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
+  const [paymentBannerDismissed, setPaymentBannerDismissed] = useState(false);
   const syncedRef = useRef(false);
 
   const canManageBilling = authUser?.isCompanyAdmin || authUser?.isAdmin;
@@ -168,13 +234,20 @@ export default function Billing() {
         headers: authHeader(),
         body: JSON.stringify({ priceId }),
       });
-      return r.json();
+      const data = await r.json();
+      if (!r.ok) throw Object.assign(new Error(data.message ?? "Checkout failed"), { data, status: r.status });
+      return data;
     },
     onSuccess: (data) => {
       if (data.url) window.location.href = data.url;
     },
-    onError: () => {
+    onError: (err: any) => {
       setSelectedPriceId(null);
+      // If server says an active subscription exists, auto-route to portal instead
+      if (err?.data?.usePortal) {
+        portalMutation.mutate();
+        return;
+      }
       toast({ title: "Error", description: "Could not start checkout.", variant: "destructive" });
     },
   });
@@ -187,7 +260,10 @@ export default function Billing() {
     onSuccess: (data) => {
       if (data.url) window.location.href = data.url;
     },
-    onError: () => toast({ title: "Error", description: "Could not open billing portal.", variant: "destructive" }),
+    onError: () => {
+      setSelectedPriceId(null);
+      toast({ title: "Error", description: "Could not open billing portal.", variant: "destructive" });
+    },
   });
 
   const syncPlanMutation = useMutation({
@@ -207,6 +283,8 @@ export default function Billing() {
   const usage = subData?.usage ?? { projects: 0, inspections: 0 };
   const limits = subData?.limits ?? {};
   const subscriptionStatus = subData?.subscription?.status ?? null;
+  const cancelAtPeriodEnd = subData?.subscription?.cancelAtPeriodEnd ?? false;
+  const currentPeriodEnd = subData?.subscription?.currentPeriodEnd ?? null;
   const isPaymentFailing = subscriptionStatus === "past_due" || subscriptionStatus === "unpaid";
 
   const stripePlans: Plan[] = plansData?.plans ?? [];
@@ -274,6 +352,9 @@ export default function Billing() {
   function handlePlanAction(price: StripePrice | null) {
     if (!price) return;
     setSelectedPriceId(price.id);
+    // Existing Stripe customers (any stripeCustomerId) always go to the billing portal
+    // to manage their subscription — this prevents duplicate subscriptions.
+    // Only brand-new users with no customer record go through checkout.
     if (subData?.stripeCustomerId) {
       portalMutation.mutate();
     } else {
@@ -289,7 +370,7 @@ export default function Billing() {
       </div>
 
       {/* Failed payment banner */}
-      {isPaymentFailing && (
+      {isPaymentFailing && !paymentBannerDismissed && (
         <div className="mb-6 flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-red-800">
           <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div className="flex-1">
@@ -306,6 +387,13 @@ export default function Billing() {
           >
             {portalMutation.isPending ? "Opening…" : "Update payment"}
           </Button>
+          <button
+            onClick={() => setPaymentBannerDismissed(true)}
+            className="text-red-400 hover:text-red-600 shrink-0 ml-1"
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -341,29 +429,43 @@ export default function Billing() {
         </div>
       )}
       <div className="max-w-6xl">
-        {/* Current usage */}
+        {/* Current plan summary card */}
         {subData && (
           <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-10">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Current plan</p>
-                <h2 className="text-xl font-bold text-[#0B1933]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {limits.label ?? PLAN_LABELS[currentPlan] ?? currentPlan}
-                </h2>
-                {subData.subscription && (
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {subData.subscription.cancelAtPeriodEnd
-                      ? "Cancels at end of billing period"
-                      : `Renews ${new Date(subData.subscription.currentPeriodEnd * 1000).toLocaleDateString("en-AU")}`}
+            <div className="flex items-start justify-between flex-wrap gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-1.5">Current Plan</p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h2 className="text-xl font-bold text-[#0B1933]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {limits.label ?? PLAN_LABELS[currentPlan] ?? currentPlan}
+                  </h2>
+                  <StatusBadge status={subscriptionStatus} cancelAtPeriodEnd={cancelAtPeriodEnd} />
+                </div>
+
+                {currentPeriodEnd && (
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    {cancelAtPeriodEnd
+                      ? `Cancels on ${new Date(currentPeriodEnd * 1000).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}`
+                      : `Renews ${new Date(currentPeriodEnd * 1000).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}`}
                   </p>
                 )}
               </div>
+
+              {/* Usage stats */}
               <div className="flex gap-6">
                 <div className="text-center">
                   <p className="text-2xl font-bold text-[#0B1933]">{usage.projects}</p>
                   <p className="text-xs text-gray-500">
                     {limits.maxProjects ? `of ${limits.maxProjects} projects` : "projects (unlimited)"}
                   </p>
+                  {limits.maxProjects && (
+                    <div className="w-16 h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-[#466DB5] transition-all"
+                        style={{ width: `${Math.min(100, (usage.projects / limits.maxProjects) * 100)}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="text-center">
                   <p className="text-2xl font-bold text-[#0B1933]">{usage.inspections}</p>
@@ -374,8 +476,18 @@ export default function Billing() {
                       ? `of ${limits.maxInspectionsTotal} total`
                       : "inspections (unlimited)"}
                   </p>
+                  {(limits.maxInspectionsMonthly || limits.maxInspectionsTotal) && (
+                    <div className="w-16 h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-[#C5D92D] transition-all"
+                        style={{ width: `${Math.min(100, (usage.inspections / (limits.maxInspectionsMonthly ?? limits.maxInspectionsTotal)) * 100)}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Action buttons */}
               {subData.stripeCustomerId && (
                 <div className="flex gap-2 flex-wrap">
                   <Button
@@ -404,7 +516,7 @@ export default function Billing() {
                     disabled={portalMutation.isPending}
                   >
                     <CreditCard className="w-4 h-4 mr-2" />
-                    Manage billing
+                    {portalMutation.isPending ? "Opening…" : "Manage billing"}
                   </Button>
                 </div>
               )}
@@ -523,7 +635,7 @@ export default function Billing() {
                   >
                     Contact us <ArrowRight className="w-4 h-4 ml-1" />
                   </Button>
-                ) : isCurrent ? (
+                ) : isCurrent && subscriptionStatus === "active" && !cancelAtPeriodEnd ? (
                   <Button variant="outline" className="w-full border-[#466DB5] text-[#466DB5]" disabled>
                     <CheckCircle2 className="w-4 h-4 mr-1" /> Active
                   </Button>
@@ -543,9 +655,11 @@ export default function Billing() {
                           Loading...
                         </>
                       )
-                      : subData?.stripeCustomerId
-                        ? `Switch to ${plan.name}`
-                        : `Upgrade to ${plan.name}`}
+                      : isCurrent && cancelAtPeriodEnd
+                        ? `Reactivate ${plan.name}`
+                        : subData?.stripeCustomerId
+                          ? `Switch to ${plan.name}`
+                          : `Upgrade to ${plan.name}`}
                     {!isThisButtonPending && <ArrowRight className="w-4 h-4 ml-1" />}
                   </Button>
                 )}

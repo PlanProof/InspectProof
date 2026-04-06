@@ -148,6 +148,19 @@ router.post('/billing/checkout', requireAuth, async (req: any, res) => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, caller.id));
   if (!user) return res.status(404).json({ error: 'User not found' });
 
+  // Server-side guard: if the user already has a Stripe customer ID,
+  // they must use the billing portal to change or start a subscription
+  // (not a new checkout session). This prevents duplicate subscriptions
+  // regardless of the UI path taken. New signups with no customer record
+  // may still use checkout — this endpoint will create the customer for them.
+  if (user.stripeCustomerId) {
+    return res.status(409).json({
+      error: 'existing_customer',
+      message: 'You already have a Stripe billing account. Please use the billing portal to manage your subscription.',
+      usePortal: true,
+    });
+  }
+
   const stripe = await getUncachableStripeClient();
 
   let customerId = user.stripeCustomerId;
@@ -212,15 +225,24 @@ export async function syncPlanFromStripe(userId: number): Promise<{ plan: string
   if (!customerId) return { plan: user.plan ?? 'free_trial', subscriptionId: null };
 
   const stripe = await getUncachableStripeClient();
-  const subscriptions = await stripe.subscriptions.list({
-    customer: customerId,
-    status: 'active',
-    limit: 5,
-    expand: ['data.items.data.price'],
-  });
 
-  if (!subscriptions.data.length) {
-    // No active subscription — downgrade to free_trial and persist the change
+  // Fetch subscriptions in any "live" state — active, trialing, past_due, and unpaid.
+  // We prefer active > trialing > past_due > unpaid (most healthy first).
+  // Subscriptions in all of these states still represent a paid commitment and
+  // should retain the plan key — only fully canceled subscriptions trigger a downgrade.
+  // Specifically: past_due means payment failed but retrying, unpaid means retries exhausted
+  // but not yet canceled — in both cases the user should keep their plan until cancellation.
+  const [activeResult, trialingResult, pastDueResult, unpaidResult] = await Promise.all([
+    stripe.subscriptions.list({ customer: customerId, status: 'active', limit: 1, expand: ['data.items.data.price'] }),
+    stripe.subscriptions.list({ customer: customerId, status: 'trialing', limit: 1, expand: ['data.items.data.price'] }),
+    stripe.subscriptions.list({ customer: customerId, status: 'past_due', limit: 1, expand: ['data.items.data.price'] }),
+    stripe.subscriptions.list({ customer: customerId, status: 'unpaid', limit: 1, expand: ['data.items.data.price'] }),
+  ]);
+
+  const sub = activeResult.data[0] ?? trialingResult.data[0] ?? pastDueResult.data[0] ?? unpaidResult.data[0] ?? null;
+
+  if (!sub) {
+    // No live subscription — downgrade to free_trial and persist the change
     await db.update(usersTable).set({
       plan: 'free_trial',
       stripeSubscriptionId: null,
@@ -228,7 +250,6 @@ export async function syncPlanFromStripe(userId: number): Promise<{ plan: string
     return { plan: 'free_trial', subscriptionId: null };
   }
 
-  const sub = subscriptions.data[0];
   const item = sub.items.data[0];
   const productId = typeof item?.price?.product === 'string'
     ? item.price.product

@@ -103,6 +103,8 @@ app.post(
           } catch (planErr: unknown) {
             logger.error({ err: planErr }, "Failed to sync plan from webhook");
           }
+        } else {
+          logger.warn({ eventType: event.type }, "Plan update event received but no customer ID found — skipping sync");
         }
       }
 
