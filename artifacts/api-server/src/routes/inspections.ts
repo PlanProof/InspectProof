@@ -1059,6 +1059,12 @@ router.patch("/:id/checklist/:resultId", requireAuth, async (req, res) => {
     const resultId = parseInt(req.params.resultId);
     const { result, notes, photoUrls, photoMarkups, severity, issueCategory, issuePriority, location, tradeAllocated, defectStatus, clientVisible, recommendedAction } = req.body;
 
+    // Capture previous result before update so we can detect fault transitions
+    const [prevRow] = await db.select({ result: checklistResultsTable.result })
+      .from(checklistResultsTable)
+      .where(eq(checklistResultsTable.id, resultId));
+    const prevResult = prevRow?.result ?? null;
+
     const updateData: any = { updatedAt: new Date() };
     if (result !== undefined) updateData.result = result;
     if (notes !== undefined) updateData.notes = notes;
@@ -1115,6 +1121,50 @@ router.patch("/:id/checklist/:resultId", requireAuth, async (req, res) => {
 
     const item = await db.select().from(checklistItemsTable)
       .where(eq(checklistItemsTable.id, updated.checklistItemId));
+
+    // ── Auto-create / auto-close issues on fail/monitor transitions ─────────────
+    if (result !== undefined && result !== prevResult) {
+      const isFaultNow  = result    === "fail" || result    === "monitor";
+      const wasFaultPrev = prevResult === "fail" || prevResult === "monitor";
+      // Unique marker embedded in description to find the auto-created issue later
+      const descKey = `[auto:${resultId}]`;
+
+      if (isFaultNow && !wasFaultPrev) {
+        // Transition INTO a fault — create an issue (idempotent: skip if already exists)
+        const existing = await db.select({ id: issuesTable.id })
+          .from(issuesTable)
+          .where(sql`${issuesTable.inspectionId} = ${updated.inspectionId} AND ${issuesTable.description} LIKE ${descKey + "%"}`);
+
+        if (existing.length === 0) {
+          // Fetch inspection to get projectId
+          const [insp] = await db.select({ projectId: inspectionsTable.projectId })
+            .from(inspectionsTable)
+            .where(eq(inspectionsTable.id, updated.inspectionId));
+          const itemDesc = item[0]?.description || "Checklist item";
+          const notesSuffix = updated.notes ? `\n\nNotes: ${updated.notes}` : "";
+          await db.insert(issuesTable).values({
+            inspectionId: updated.inspectionId,
+            projectId: insp?.projectId ?? null,
+            title: itemDesc.length > 160 ? itemDesc.substring(0, 157) + "…" : itemDesc,
+            description: `${descKey} ${itemDesc}${notesSuffix}`,
+            severity: (updated.severity as any) || "medium",
+            category: item[0]?.category || null,
+            codeReference: item[0]?.codeReference || null,
+            location: updated.location || null,
+            responsibleParty: updated.tradeAllocated || null,
+            status: "open",
+          });
+          req.log.info({ resultId, inspectionId: updated.inspectionId }, "Auto-created issue from checklist fail/monitor");
+        }
+      } else if (!isFaultNow && wasFaultPrev) {
+        // Transition OUT of a fault — auto-close the linked issue (if still open)
+        await db.update(issuesTable)
+          .set({ status: "closed", resolvedDate: new Date().toISOString().split("T")[0], updatedAt: new Date() })
+          .where(sql`${issuesTable.inspectionId} = ${updated.inspectionId} AND ${issuesTable.description} LIKE ${descKey + "%"} AND ${issuesTable.status} = 'open'`);
+        req.log.info({ resultId, inspectionId: updated.inspectionId }, "Auto-closed issue — checklist item no longer a fault");
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────────
 
     res.json({
       id: updated.id,
