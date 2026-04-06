@@ -119,13 +119,16 @@ function ChecklistItemRow({
 
   return (
     <View style={[itemStyles.wrap, { borderLeftColor: borderColor }]}>
-      {/* Icon + description + code reference */}
+      {/* Icon + description + code reference chip */}
       <View style={itemStyles.header}>
         <Feather name={iconCfg.name as any} size={22} color={iconCfg.color} style={{ marginTop: 1 }} />
         <View style={itemStyles.headerText}>
           <Text style={itemStyles.desc}>{item.description}</Text>
           {item.codeReference ? (
-            <Text style={itemStyles.code}>{item.codeReference}</Text>
+            <View style={itemStyles.codeChip}>
+              <Feather name="book-open" size={10} color="#2563eb" />
+              <Text style={itemStyles.codeChipText}>{item.codeReference}</Text>
+            </View>
           ) : null}
         </View>
       </View>
@@ -197,7 +200,12 @@ const itemStyles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   headerText: { flex: 1, gap: 4 },
   desc: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: BRAND_NAVY, lineHeight: 20 },
-  code: { fontSize: 11, color: BRAND_BLUE, fontFamily: "PlusJakartaSans_500Medium" },
+  codeChip: {
+    flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start",
+    backgroundColor: "#eff6ff", borderWidth: 1, borderColor: "#bfdbfe",
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+  },
+  codeChipText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: "#2563eb" },
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingLeft: 34 },
   metaChip: {
     flexDirection: "row",

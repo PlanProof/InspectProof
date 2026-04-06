@@ -157,10 +157,13 @@ export default function TemplateDetailScreen() {
                     <View style={styles.itemLeft}>
                       <View style={styles.itemBody}>
                         <Text style={styles.itemDesc}>{item.description}</Text>
-                        {item.codeReference && (
-                          <Text style={styles.itemCode}>{item.codeReference}</Text>
-                        )}
                         <View style={styles.itemTags}>
+                          {item.codeReference && (
+                            <View style={styles.codeChip}>
+                              <Feather name="book-open" size={10} color="#2563eb" />
+                              <Text style={styles.codeChipText}>{item.codeReference}</Text>
+                            </View>
+                          )}
                           {item.isRequired && (
                             <View style={styles.requiredTag}>
                               <Text style={styles.requiredTagText}>Required</Text>
@@ -336,8 +339,13 @@ const styles = StyleSheet.create({
   riskDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 },
   itemBody: { flex: 1, gap: 6 },
   itemDesc: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, lineHeight: 20 },
-  itemCode: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
-  itemTags: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
+  itemTags: { flexDirection: "row", gap: 6, flexWrap: "wrap", marginTop: 2 },
+  codeChip: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "#eff6ff", borderWidth: 1, borderColor: "#bfdbfe",
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+  },
+  codeChipText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: "#2563eb" },
   riskTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   riskTagText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold" },
   requiredTag: { backgroundColor: Colors.infoLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
