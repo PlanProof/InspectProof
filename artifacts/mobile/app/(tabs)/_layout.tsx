@@ -5,6 +5,7 @@ import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { Colors } from "@/constants/colors";
+import { SyncStatusBadge } from "@/components/OfflineBanner";
 
 /**
  * expo-glass-effect calls requireNativeModule('ExpoGlassEffect') on iOS,
@@ -144,12 +145,16 @@ function ClassicTabLayout() {
         name="inspections"
         options={{
           title: "Inspections",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="clipboard" tintColor={color} size={22} />
-            ) : (
-              <Feather name="clipboard" size={20} color={color} />
-            ),
+          tabBarIcon: ({ color }) => (
+            <View>
+              {isIOS ? (
+                <SymbolView name="clipboard" tintColor={color} size={22} />
+              ) : (
+                <Feather name="clipboard" size={20} color={color} />
+              )}
+              <SyncStatusBadge />
+            </View>
+          ),
         }}
       />
       <Tabs.Screen

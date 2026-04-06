@@ -11,6 +11,8 @@ import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
+import { useOfflineSync } from "@/context/OfflineSyncContext";
+import { getCachedInspectionData, patchCachedChecklistItem } from "@/utils/offlineQueue";
 import { Colors } from "@/constants/colors";
 import { pointsToPath, scaleStrokes, type Stroke, type MarkupData } from "@/utils/markup-utils";
 
@@ -37,6 +39,7 @@ export default function PhotoMarkupScreen() {
 
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
+  const { isOnline, addToQueue } = useOfflineSync();
   const queryClient = useQueryClient();
   const { width: screenW, height: screenH } = useWindowDimensions();
 
@@ -182,6 +185,42 @@ export default function PhotoMarkupScreen() {
     (async () => {
       let uploadedPath: string | null = null;
       try {
+        if (!isOnline) {
+          // Offline: queue the photo for later upload
+          const cached = await getCachedInspectionData(parseInt(inspectionId));
+          const cachedItem = cached?.checklistItems?.find(i => i.id === parseInt(itemId));
+          const existingUrls: string[] = (cachedItem?.photoUrls as string[]) ?? [];
+          const localPlaceholder = currentPhotoUri;
+          await addToQueue({
+            type: "photo_upload",
+            inspectionId: parseInt(inspectionId),
+            payload: {
+              inspectionId: parseInt(inspectionId),
+              resultId: parseInt(itemId),
+              photoDataUri: localPlaceholder,
+              existingPhotoUrls: existingUrls,
+            },
+          });
+          // Patch local cache + query cache to reflect the photo immediately
+          const updatedUrls = [...existingUrls, localPlaceholder];
+          patchCachedChecklistItem(parseInt(inspectionId), parseInt(itemId), {
+            photoUrls: updatedUrls,
+          }).catch(() => {});
+          queryClient.setQueryData<{ id: number; photoUrls?: string[] }[]>(
+            ["inspection-checklist", inspectionId, token],
+            (old) =>
+              (old ?? []).map((i) =>
+                i.id === parseInt(itemId)
+                  ? { ...i, photoUrls: updatedUrls }
+                  : i
+              )
+          );
+          if (!cancelled) {
+            setSavedObjectPath(localPlaceholder);
+            setUploadState("saved");
+          }
+          return;
+        }
         const objectPath = await uploadPhoto(currentPhotoUri);
         if (cancelled) return;
         uploadedPath = objectPath;

@@ -26,6 +26,9 @@ import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useOfflineSync } from "@/context/OfflineSyncContext";
+import { cacheInspectionData, getCachedInspectionData, patchCachedChecklistItem, InspectionCacheEntry, CachedChecklistItem, CachedDocument, loadQueue, removeQueueItem, resetItemForRetry } from "@/utils/offlineQueue";
+import { OfflineBanner, SyncStatusIndicator, FailedSyncCard } from "@/components/OfflineBanner";
 import { getSuggestionsForItem } from "@/constants/noteSuggestions";
 import { useTabBarHeight } from "@/hooks/useTabBarHeight";
 import { INSPECTION_TYPES } from "@/constants/api";
@@ -105,8 +108,10 @@ export default function ConductInspectionScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useTabBarHeight();
   const { token } = useAuth();
+  const { isOnline, addToQueue, failedItems, retrySingleItem, triggerSync, pendingCount: syncPendingCount } = useOfflineSync();
   const queryClient = useQueryClient();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
+  const [conflictInspection, setConflictInspection] = useState<{ serverId: string; serverUpdatedAt: string; localCachedAt: string } | null>(null);
 
   const { width: screenW } = useWindowDimensions();
   const [activeItem, setActiveItem] = useState<ChecklistItem | null>(null);
@@ -186,6 +191,78 @@ export default function ConductInspectionScreen() {
       refetchDocuments();
     }, [refetchChecklist, refetchDocuments])
   );
+
+  // Pre-cache full inspection data (inspection + checklist + assigned docs) when online
+  useEffect(() => {
+    if (inspection && checklistItems.length > 0 && isOnline && id) {
+      (async () => {
+        const now = new Date().toISOString();
+        const entry: InspectionCacheEntry = {
+          inspection: inspection as Record<string, unknown>,
+          checklistItems,
+          documents: projectDocuments,
+          // Clear baseline when we have fresh online data; it will be set fresh
+          // when the user next goes offline (by OfflineSyncContext performSync)
+          offlineBaselineAt: undefined,
+          cachedAt: now,
+        };
+        cacheInspectionData(parseInt(id), entry).catch(() => {});
+      })();
+    }
+  }, [inspection, checklistItems, projectDocuments, isOnline, id]);
+
+  // On load: if offline, hydrate from typed cache (inspection + checklist + documents)
+  useEffect(() => {
+    if (!id) return;
+    const tryHydrate = async () => {
+      if (isOnline) return;
+      const cached = await getCachedInspectionData(parseInt(id));
+      if (!cached) return;
+      if (cached.inspection) {
+        queryClient.setQueryData(["inspection", id, token], cached.inspection);
+      }
+      if (cached.checklistItems?.length > 0) {
+        queryClient.setQueryData<ChecklistItem[]>(["inspection-checklist", id, token], cached.checklistItems as ChecklistItem[]);
+      }
+      if (cached.documents && cached.documents.length > 0) {
+        queryClient.setQueryData(["project-documents", (cached.inspection as Record<string, unknown>).projectId, token], cached.documents);
+      }
+    };
+    tryHydrate();
+  }, [isOnline, id, token, queryClient]);
+
+  // Conflict detection: when back online, compare server updatedAt vs offlineBaselineAt
+  // offlineBaselineAt is an immutable snapshot timestamp, never overwritten while offline.
+  // The guard resets every time connectivity drops so it re-checks on every reconnect.
+  const conflictCheckedRef = useRef(false);
+  const prevIsOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    if (!isOnline && prevIsOnlineRef.current) {
+      // Just went offline — reset guard so next reconnect triggers a fresh check
+      conflictCheckedRef.current = false;
+    }
+    prevIsOnlineRef.current = isOnline;
+  }, [isOnline]);
+
+  useEffect(() => {
+    if (!isOnline || !id || !inspection || conflictCheckedRef.current) return;
+    conflictCheckedRef.current = true;
+    const checkConflict = async () => {
+      const cached = await getCachedInspectionData(parseInt(id));
+      if (!cached) return;
+      const baselineAt = cached.offlineBaselineAt ?? cached.cachedAt;
+      const serverUpdatedAt = (inspection as Record<string, unknown>).updatedAt as string | undefined
+        ?? (inspection as Record<string, unknown>).createdAt as string | undefined;
+      if (!serverUpdatedAt || !baselineAt) return;
+      const serverTime = new Date(serverUpdatedAt).getTime();
+      const baselineTime = new Date(baselineAt).getTime();
+      if (serverTime > baselineTime + 5000) {
+        setConflictInspection({ serverId: id, serverUpdatedAt, localCachedAt: baselineAt });
+      }
+    };
+    checkConflict();
+  }, [isOnline, id, inspection]);
+
 
   const sortedItems = [...checklistItems].sort((a, b) => a.orderIndex - b.orderIndex);
   const grouped = sortedItems.reduce<Record<string, ChecklistItem[]>>((acc, item) => {
@@ -366,12 +443,35 @@ export default function ConductInspectionScreen() {
 
   const ckKey = ["inspection-checklist", id, token];
 
+  const [pendingSyncResultIds, setPendingSyncResultIds] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    loadQueue().then(queue => {
+      const inspId = parseInt(id);
+      const ids = new Set<number>(
+        queue
+          .filter(q => q.inspectionId === inspId && q.syncStatus === "pending" && q.type === "checklist_result")
+          .map(q => (q.payload as { resultId?: number }).resultId)
+          .filter((rid): rid is number => typeof rid === "number")
+      );
+      setPendingSyncResultIds(ids);
+    });
+  }, [id, syncPendingCount]);
+
   const quickPass = async (item: ChecklistItem) => {
     const next = item.result === "pass" ? "pending" : "pass";
     // Optimistic update — instant UI response
     queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
       (old ?? []).map(i => i.id === item.id ? { ...i, result: next } : i)
     );
+    if (!isOnline) {
+      await addToQueue({
+        type: "checklist_result",
+        inspectionId: parseInt(id),
+        payload: { inspectionId: parseInt(id), resultId: item.id, result: next, notes: item.notes || null },
+      });
+      patchCachedChecklistItem(parseInt(id), item.id, { result: next }).catch(() => {});
+      return;
+    }
     try {
       await fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
         method: "PATCH",
@@ -380,11 +480,13 @@ export default function ConductInspectionScreen() {
       });
       refetchChecklist(); // silent background sync — no await
     } catch {
-      // Revert on failure
-      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
-        (old ?? []).map(i => i.id === item.id ? { ...i, result: item.result } : i)
-      );
-      Alert.alert("Error", "Failed to update. Please try again.");
+      // Connectivity dropped mid-request — enqueue so change is not lost
+      await addToQueue({
+        type: "checklist_result",
+        inspectionId: parseInt(id),
+        payload: { inspectionId: parseInt(id), resultId: item.id, result: next, notes: item.notes || null },
+      });
+      patchCachedChecklistItem(parseInt(id), item.id, { result: next }).catch(() => {});
     }
   };
 
@@ -396,6 +498,19 @@ export default function ConductInspectionScreen() {
     queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
       (old ?? []).map(i => items.find(x => x.id === i.id) ? { ...i, result: next } : i)
     );
+    if (!isOnline) {
+      await Promise.all(items.map(item =>
+        addToQueue({
+          type: "checklist_result",
+          inspectionId: parseInt(id),
+          payload: { inspectionId: parseInt(id), resultId: item.id, result: next, notes: item.notes || null },
+        })
+      ));
+      await Promise.all(items.map(item =>
+        patchCachedChecklistItem(parseInt(id), item.id, { result: next })
+      ));
+      return;
+    }
     try {
       await Promise.all(items.map(item =>
         fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
@@ -406,11 +521,17 @@ export default function ConductInspectionScreen() {
       ));
       refetchChecklist(); // silent background sync
     } catch {
-      // Revert on failure
-      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
-        (old ?? []).map(i => prevResults[i.id] !== undefined ? { ...i, result: prevResults[i.id] } : i)
-      );
-      Alert.alert("Error", "Failed to update items. Please try again.");
+      // Connectivity dropped mid-request — enqueue so changes are not lost
+      await Promise.all(items.map(item =>
+        addToQueue({
+          type: "checklist_result",
+          inspectionId: parseInt(id),
+          payload: { inspectionId: parseInt(id), resultId: item.id, result: next, notes: item.notes || null },
+        })
+      ));
+      await Promise.all(items.map(item =>
+        patchCachedChecklistItem(parseInt(id), item.id, { result: next })
+      )).catch(() => {});
     }
   };
 
@@ -421,6 +542,19 @@ export default function ConductInspectionScreen() {
     queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
       (old ?? []).map(i => items.find(x => x.id === i.id) ? { ...i, result: next } : i)
     );
+    if (!isOnline) {
+      await Promise.all(items.map(item =>
+        addToQueue({
+          type: "checklist_result",
+          inspectionId: parseInt(id),
+          payload: { inspectionId: parseInt(id), resultId: item.id, result: next, notes: item.notes || null },
+        })
+      ));
+      await Promise.all(items.map(item =>
+        patchCachedChecklistItem(parseInt(id), item.id, { result: next })
+      ));
+      return;
+    }
     try {
       await Promise.all(items.map(item =>
         fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
@@ -431,10 +565,17 @@ export default function ConductInspectionScreen() {
       ));
       refetchChecklist();
     } catch {
-      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
-        (old ?? []).map(i => prevResults[i.id] !== undefined ? { ...i, result: prevResults[i.id] } : i)
-      );
-      Alert.alert("Error", "Failed to update items. Please try again.");
+      // Connectivity dropped mid-request — enqueue so changes are not lost
+      await Promise.all(items.map(item =>
+        addToQueue({
+          type: "checklist_result",
+          inspectionId: parseInt(id),
+          payload: { inspectionId: parseInt(id), resultId: item.id, result: next, notes: item.notes || null },
+        })
+      ));
+      await Promise.all(items.map(item =>
+        patchCachedChecklistItem(parseInt(id), item.id, { result: next })
+      )).catch(() => {});
     }
   };
 
@@ -444,6 +585,15 @@ export default function ConductInspectionScreen() {
     queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
       (old ?? []).map(i => i.id === item.id ? { ...i, result: next } : i)
     );
+    if (!isOnline) {
+      await addToQueue({
+        type: "checklist_result",
+        inspectionId: parseInt(id),
+        payload: { inspectionId: parseInt(id), resultId: item.id, result: next, notes: item.notes || null },
+      });
+      patchCachedChecklistItem(parseInt(id), item.id, { result: next }).catch(() => {});
+      return;
+    }
     try {
       await fetchWithAuth(`/api/inspections/${id}/checklist/${item.id}`, {
         method: "PATCH",
@@ -452,11 +602,13 @@ export default function ConductInspectionScreen() {
       });
       refetchChecklist(); // silent background sync
     } catch {
-      // Revert on failure
-      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
-        (old ?? []).map(i => i.id === item.id ? { ...i, result: item.result } : i)
-      );
-      Alert.alert("Error", "Failed to update. Please try again.");
+      // Connectivity dropped mid-request — enqueue so change is not lost
+      await addToQueue({
+        type: "checklist_result",
+        inspectionId: parseInt(id),
+        payload: { inspectionId: parseInt(id), resultId: item.id, result: next, notes: item.notes || null },
+      });
+      patchCachedChecklistItem(parseInt(id), item.id, { result: next }).catch(() => {});
     }
   };
 
@@ -545,20 +697,38 @@ export default function ConductInspectionScreen() {
         recommendedAction: editRecommendedAction || null,
       } : {}),
     };
-    // Optimistic update — close modal immediately after API call without waiting for refetch
+    // Optimistic update immediately
+    queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
+      (old ?? []).map(i => i.id === activeItem!.id ? { ...i, ...patch } as ChecklistItem : i)
+    );
+    if (!isOnline) {
+      await addToQueue({
+        type: "checklist_result",
+        inspectionId: parseInt(id),
+        payload: { inspectionId: parseInt(id), resultId: activeItem.id, ...patch },
+      });
+      patchCachedChecklistItem(parseInt(id), activeItem.id, patch as Partial<CachedChecklistItem>).catch(() => {});
+      closeModal();
+      setSavingItem(false);
+      return;
+    }
     try {
       await fetchWithAuth(`/api/inspections/${id}/checklist/${activeItem.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
-      queryClient.setQueryData<ChecklistItem[]>(ckKey, old =>
-        (old ?? []).map(i => i.id === activeItem.id ? { ...i, ...patch } as ChecklistItem : i)
-      );
       closeModal();
       refetchChecklist(); // silent background sync
-    } catch (e: any) {
-      Alert.alert("Error", "Failed to save. Please try again.");
+    } catch {
+      // Connectivity dropped mid-request — enqueue so change is not lost
+      await addToQueue({
+        type: "checklist_result",
+        inspectionId: parseInt(id),
+        payload: { inspectionId: parseInt(id), resultId: activeItem.id, ...patch },
+      });
+      patchCachedChecklistItem(parseInt(id), activeItem.id, patch as Partial<CachedChecklistItem>).catch(() => {});
+      closeModal();
     } finally {
       setSavingItem(false);
     }
@@ -755,7 +925,10 @@ export default function ConductInspectionScreen() {
           <Text style={[styles.headerTitle, isEditMode && { color: Colors.secondary }]} numberOfLines={1}>
             {isEditMode ? "Edit Inspection" : (inspection?.inspectionType ? (INSPECTION_TYPES[inspection.inspectionType] || inspection.inspectionType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())) : "Inspection")}
           </Text>
-          <Text style={styles.headerSub} numberOfLines={1}>{inspection?.projectName}</Text>
+          <View style={styles.headerSubRow}>
+            <Text style={styles.headerSub} numberOfLines={1}>{inspection?.projectName}</Text>
+            <SyncStatusIndicator />
+          </View>
         </View>
         {isEditMode ? (
           <Pressable
@@ -781,6 +954,91 @@ export default function ConductInspectionScreen() {
         <View style={styles.editModeBanner}>
           <Feather name="edit-2" size={13} color={Colors.secondary} />
           <Text style={styles.editModeBannerText}>Edit mode — changes are saved automatically</Text>
+        </View>
+      )}
+
+      {/* Offline banner */}
+      <OfflineBanner />
+
+      {/* Conflict resolution — shown when server was updated while offline */}
+      {conflictInspection && (
+        <View style={styles.conflictBanner}>
+          <View style={styles.conflictContent}>
+            <Feather name="alert-triangle" size={16} color={Colors.warning} style={{ marginRight: 8 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.conflictTitle}>Inspection updated on server</Text>
+              <Text style={styles.conflictSub}>
+                This inspection was modified elsewhere while you were offline. Choose which version to keep.
+              </Text>
+            </View>
+          </View>
+          <View style={styles.conflictActions}>
+            <Pressable
+              style={[styles.conflictBtn, styles.conflictBtnSecondary]}
+              onPress={async () => {
+                const inspId = parseInt(conflictInspection.serverId);
+                const queue = await loadQueue();
+                const toDiscard = queue.filter(q => q.inspectionId === inspId);
+                for (const q of toDiscard) {
+                  await removeQueueItem(q.id);
+                }
+                // Reset the offline baseline so next session uses fresh server data
+                const existing = await getCachedInspectionData(inspId);
+                if (existing) {
+                  await cacheInspectionData(inspId, {
+                    ...existing,
+                    offlineBaselineAt: undefined,
+                    cachedAt: new Date().toISOString(),
+                  });
+                }
+                refetchChecklist();
+                triggerSync(); // refresh context counts after discarding queue items
+                setConflictInspection(null);
+              }}
+            >
+              <Text style={styles.conflictBtnSecondaryText}>Use Server Version</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.conflictBtn, styles.conflictBtnPrimary]}
+              onPress={async () => {
+                // Advance the baseline to the server's updatedAt so the sync engine
+                // won't re-flag this as a conflict after "Keep My Changes" is chosen.
+                const inspId = parseInt(conflictInspection.serverId);
+                const existing = await getCachedInspectionData(inspId);
+                if (existing) {
+                  await cacheInspectionData(inspId, {
+                    ...existing,
+                    offlineBaselineAt: conflictInspection.serverUpdatedAt,
+                    cachedAt: existing.cachedAt,
+                  });
+                }
+                // Reset any conflict-failed items for this inspection back to
+                // pending so they can re-run immediately — user chose to keep changes
+                const allQueued = await loadQueue();
+                const conflictFailed = allQueued.filter(
+                  q => q.inspectionId === inspId &&
+                       q.syncStatus === "failed" &&
+                       q.errorMessage?.includes("Conflict")
+                );
+                for (const q of conflictFailed) {
+                  await resetItemForRetry(q.id);
+                }
+                triggerSync();
+                setConflictInspection(null);
+              }}
+            >
+              <Text style={styles.conflictBtnPrimaryText}>Keep My Changes</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* Failed sync error cards */}
+      {failedItems.filter(f => f.inspectionId === parseInt(id)).length > 0 && (
+        <View style={styles.failedSyncSection}>
+          {failedItems.filter(f => f.inspectionId === parseInt(id)).map(item => (
+            <FailedSyncCard key={item.id} item={item} onRetry={retrySingleItem} />
+          ))}
         </View>
       )}
 
@@ -896,7 +1154,7 @@ export default function ConductInspectionScreen() {
                     onQuickNAAll={() => quickNAAll(items)}
                   />
                   {items.map(item => (
-                    <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} onQuickNA={() => quickNA(item)} />
+                    <ChecklistRow key={item.id} item={item} onPress={() => openItemModal(item)} onCamera={() => takePhotoForItem(item)} onQuickPass={() => quickPass(item)} onQuickNA={() => quickNA(item)} hasPendingSync={pendingSyncResultIds.has(item.id)} />
                   ))}
                   <Pressable
                     onPress={() => openAddItemModal(category)}
@@ -1558,7 +1816,7 @@ function CategoryHeader({ category, items, onQuickPassAll, onQuickNAAll }: {
   );
 }
 
-function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA }: { item: ChecklistItem; onPress: () => void; onCamera: () => void; onQuickPass: () => void; onQuickNA: () => void }) {
+function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA, hasPendingSync }: { item: ChecklistItem; onPress: () => void; onCamera: () => void; onQuickPass: () => void; onQuickNA: () => void; hasPendingSync?: boolean }) {
   const swipeRef = useRef<Swipeable>(null);
   const resultOpt = RESULT_OPTS.find(r => r.key === item.result);
   const isPending = item.result === "pending";
@@ -1649,6 +1907,11 @@ function ChecklistRow({ item, onPress, onCamera, onQuickPass, onQuickNA }: { ite
             </View>
           )}
         </Pressable>
+
+        {/* Pending offline sync indicator */}
+        {hasPendingSync && (
+          <View style={styles.pendingSyncDot} />
+        )}
       </Pressable>
     </Swipeable>
   );
@@ -3038,6 +3301,35 @@ const styles = StyleSheet.create({
   headerCenter: { flex: 1 },
   headerTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
   headerSub: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textSecondary, marginTop: 1 },
+  headerSubRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 1 },
+  conflictBanner: {
+    backgroundColor: Colors.warningLight,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.warningBorder,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  conflictContent: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
+  conflictTitle: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.warning, marginBottom: 2 },
+  conflictSub: { fontSize: 11, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textSecondary, lineHeight: 15 },
+  conflictActions: { flexDirection: "row", gap: 8, justifyContent: "flex-end" },
+  conflictBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 7 },
+  conflictBtnPrimary: { backgroundColor: Colors.warning },
+  conflictBtnSecondary: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.warningBorder },
+  conflictBtnPrimaryText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+  conflictBtnSecondaryText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.warning },
+  failedSyncSection: { paddingHorizontal: 14, paddingTop: 8 },
+  pendingSyncDot: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.warning,
+    borderWidth: 1,
+    borderColor: "#fff",
+  },
   doneEditingBtn: {
     paddingHorizontal: 14, paddingVertical: 7,
     backgroundColor: Colors.secondary,
