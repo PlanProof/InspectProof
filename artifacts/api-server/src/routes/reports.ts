@@ -113,17 +113,26 @@ const INSPECTION_TYPE_LABELS: Record<string, string> = {
 };
 
 const ROLE_LABELS: Record<string, string> = {
-  admin:        "Administrator",
-  certifier:    "Building Certifier / Surveyor",
-  inspector:    "Inspector",
-  staff:        "Staff",
-  engineer:     "Structural Engineer",
-  plumber:      "Plumbing Inspector",
-  builder:      "Builder",
-  supervisor:   "Site Supervisor",
-  whs:          "WHS Officer",
-  pre_purchase: "Pre-Purchase Inspector",
-  fire_engineer:"Fire Safety Engineer",
+  admin:                "Administrator",
+  certifier:            "Building Certifier / Surveyor",
+  inspector:            "Inspector",
+  site_inspector:       "Site Inspector",
+  building_inspector:   "Building Inspector",
+  staff:                "Staff",
+  engineer:             "Structural Engineer",
+  structural_engineer:  "Structural Engineer",
+  plumber:              "Plumbing Inspector",
+  plumbing_inspector:   "Plumbing Inspector",
+  builder:              "Builder",
+  supervisor:           "Site Supervisor",
+  site_supervisor:      "Site Supervisor",
+  whs:                  "WHS Officer",
+  whs_officer:          "WHS Officer",
+  pre_purchase:         "Pre-Purchase Inspector",
+  pre_purchase_inspector: "Pre-Purchase Inspector",
+  fire_engineer:        "Fire Safety Engineer",
+  fire_safety_engineer: "Fire Safety Engineer",
+  building_surveyor:    "Building Surveyor / Certifier",
 };
 
 function isHtmlContent(s: string): boolean {
@@ -2196,6 +2205,8 @@ function buildPdf(
     doc.moveDown(0.8);
     doc.fillColor("#6B7280").fontSize(8).font(FSB)
       .text("Date: ____________________", inspBlockX, doc.y, { width: signoffBlockW, lineBreak: false });
+    // Capture inspector column bottom BEFORE client column resets doc.y
+    const inspectorEndY = doc.y + 16;
 
     // Client / Owner column
     const clientY = blockY;
@@ -2210,8 +2221,8 @@ function buildPdf(
     doc.fillColor("#6B7280").fontSize(8).font(FSB)
       .text("Date: ____________________", clientBlockX, clientY + 54, { width: signoffBlockW, lineBreak: false });
 
-    // Builder column (below)
-    doc.y = Math.max(doc.y, clientY + 68) + 24;
+    // Builder column (below) — use the inspector column's true bottom, not the reset doc.y
+    doc.y = Math.max(inspectorEndY, clientY + 68) + 24;
     const builderY = doc.y;
     doc.fillColor("#6B7280").fontSize(8).font(FSB)
       .text("BUILDER / CONTRACTOR ACKNOWLEDGEMENT", inspBlockX, builderY, { width: contentW, lineBreak: false });
@@ -2681,16 +2692,24 @@ router.get("/:id/pdf", async (req, res) => {
         if (orgUser) {
           const addrParts = [orgUser.companyAddress, orgUser.companySuburb, orgUser.companyState].filter(Boolean);
           const ROLE_LABELS_PDF: Record<string, string> = {
-            building_surveyor: "Building Surveyor / Certifier",
-            structural_engineer: "Structural Engineer",
-            plumbing_inspector: "Plumbing Inspector",
-            building_inspector: "Building Inspector",
-            certifier: "Building Certifier / Surveyor",
-            fire_safety_engineer: "Fire Safety Engineer",
-            whs_officer: "WHS Officer",
-            site_supervisor: "Site Supervisor",
-            builder: "Builder / QC Inspector",
+            building_surveyor:      "Building Surveyor / Certifier",
+            structural_engineer:    "Structural Engineer",
+            plumbing_inspector:     "Plumbing Inspector",
+            building_inspector:     "Building Inspector",
+            site_inspector:         "Site Inspector",
+            certifier:              "Building Certifier / Surveyor",
+            fire_safety_engineer:   "Fire Safety Engineer",
+            whs_officer:            "WHS Officer",
+            site_supervisor:        "Site Supervisor",
+            builder:                "Builder / QC Inspector",
             pre_purchase_inspector: "Pre-Purchase Inspector",
+            inspector:              "Inspector",
+            engineer:               "Structural Engineer",
+            plumber:                "Plumbing Inspector",
+            supervisor:             "Site Supervisor",
+            whs:                    "WHS Officer",
+            pre_purchase:           "Pre-Purchase Inspector",
+            fire_engineer:          "Fire Safety Engineer",
           };
           orgInfo = {
             companyName: orgUser.companyName || undefined,
