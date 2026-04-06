@@ -1,6 +1,6 @@
 import { Router, type IRouter } from 'express';
-import { db, usersTable, projectsTable, inspectionsTable, planConfigsTable } from '@workspace/db';
-import { eq, count, desc, sql, and, ne } from 'drizzle-orm';
+import { db, usersTable, projectsTable, inspectionsTable, planConfigsTable, emailLogsTable, reportsTable } from '@workspace/db';
+import { eq, count, desc, sql, and, ne, asc } from 'drizzle-orm';
 import { getUncachableStripeClient } from '../stripeClient';
 import { getLimits } from '../lib/planLimits';
 import bcrypt from 'bcryptjs';
@@ -377,6 +377,143 @@ router.get('/admin/revenue', requireAdmin, async (req, res) => {
 router.get('/admin/plans', requireAdmin, async (_req, res) => {
   const plans = await db.select().from(planConfigsTable).orderBy(planConfigsTable.sortOrder);
   res.json({ plans });
+});
+
+// ── Email Logs ─────────────────────────────────────────────────────────────────
+
+router.get('/admin/emails', requireAdmin, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10));
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10)));
+    const offset = (page - 1) * limit;
+    const typeFilter = req.query.type ? String(req.query.type) : null;
+    const statusFilter = req.query.status ? String(req.query.status) : null;
+
+    let query = db.select().from(emailLogsTable).$dynamic();
+    let countQuery = db.select({ total: count() }).from(emailLogsTable).$dynamic();
+
+    const conditions: ReturnType<typeof eq>[] = [];
+    if (typeFilter) conditions.push(eq(emailLogsTable.type, typeFilter));
+    if (statusFilter) conditions.push(eq(emailLogsTable.status, statusFilter));
+
+    if (conditions.length === 1) {
+      query = query.where(conditions[0]);
+      countQuery = countQuery.where(conditions[0]);
+    } else if (conditions.length > 1) {
+      const where = and(...(conditions as [ReturnType<typeof eq>, ...ReturnType<typeof eq>[]]));
+      query = query.where(where);
+      countQuery = countQuery.where(where);
+    }
+
+    const [logs, [{ total }]] = await Promise.all([
+      query.orderBy(desc(emailLogsTable.createdAt)).limit(limit).offset(offset),
+      countQuery,
+    ]);
+
+    res.json({
+      logs,
+      total: Number(total),
+      page,
+      limit,
+      pages: Math.ceil(Number(total) / limit),
+    });
+  } catch (err) {
+    req.log.error({ err }, 'Email logs fetch error');
+    res.status(500).json({ error: 'Failed to fetch email logs', message: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
+router.post('/admin/emails/:id/retry', requireAdmin, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'invalid_id', message: 'Email log ID must be a valid integer.' });
+    const [log] = await db.select().from(emailLogsTable).where(eq(emailLogsTable.id, id));
+
+    if (!log) return res.status(404).json({ error: 'Email log not found' });
+    if (log.status !== 'failed') return res.status(400).json({ error: 'Only failed emails can be retried' });
+
+    const metadata = (log.metadata ?? {}) as Record<string, unknown>;
+
+    const {
+      sendInspectionAssignedEmail,
+      sendInspectionReminderEmail,
+      sendWelcomeEmail,
+    } = await import('../lib/email');
+
+    let retried = false;
+
+    // ── Inspection emails: reconstruct from inspection/user/project tables ──────
+    if (log.type === 'inspection_assigned' || log.type === 'inspection_reminder') {
+      const inspectionId = typeof metadata.inspectionId === 'number' ? metadata.inspectionId : null;
+      if (inspectionId) {
+        const [inspection] = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, inspectionId));
+        if (inspection && inspection.inspectorId) {
+          const [inspector] = await db.select().from(usersTable).where(eq(usersTable.id, inspection.inspectorId));
+          const project = inspection.projectId
+            ? (await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId)))[0]
+            : null;
+          if (inspector?.email && project) {
+            let sendOk: boolean;
+            if (log.type === 'inspection_assigned') {
+              sendOk = await sendInspectionAssignedEmail({
+                inspectorName: `${inspector.firstName} ${inspector.lastName}`.trim(),
+                inspectorEmail: inspector.email,
+                inspectionType: inspection.inspectionType,
+                projectName: project.name,
+                projectAddress: [project.siteAddress, project.suburb, project.state].filter(Boolean).join(', '),
+                scheduledDate: inspection.scheduledDate,
+                scheduledTime: inspection.scheduledTime ?? null,
+                inspectionId: inspection.id,
+                isReassignment: Boolean(metadata.isReassignment),
+              }, req.log);
+            } else {
+              sendOk = await sendInspectionReminderEmail({
+                inspectorName: `${inspector.firstName} ${inspector.lastName}`.trim(),
+                inspectorEmail: inspector.email,
+                inspectionType: inspection.inspectionType,
+                projectName: project.name,
+                projectAddress: [project.siteAddress, project.suburb, project.state].filter(Boolean).join(', '),
+                scheduledDate: inspection.scheduledDate,
+                scheduledTime: inspection.scheduledTime ?? null,
+                inspectionId: inspection.id,
+                daysUntil: typeof metadata.daysUntil === 'number' ? metadata.daysUntil : 1,
+              }, req.log);
+            }
+            if (!sendOk) {
+              return res.status(502).json({ error: 'send_failed', message: 'Email provider rejected the retry. Check Resend configuration.' });
+            }
+            retried = true;
+          }
+        }
+      }
+    }
+
+    // ── Welcome email: look up user by recipient email ─────────────────────────
+    else if (log.type === 'welcome') {
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.email, log.recipient));
+      if (user) {
+        await sendWelcomeEmail({
+          toEmail: user.email,
+          firstName: user.firstName,
+          companyName: user.companyName ?? (typeof metadata.companyName === 'string' ? metadata.companyName : ''),
+        }, req.log);
+        retried = true;
+      }
+    }
+
+    if (!retried) {
+      const supportedTypes = 'inspection_assigned, inspection_reminder, welcome';
+      return res.status(422).json({
+        error: 'retry_not_supported',
+        message: `Retry via the admin panel is supported for: ${supportedTypes}. For email type '${log.type}', please re-trigger the original action (e.g. re-send invite, re-request password reset).`,
+      });
+    }
+
+    res.json({ success: true, message: 'Email retry triggered' });
+  } catch (err) {
+    req.log.error({ err }, 'Email retry error');
+    res.status(500).json({ error: 'Failed to retry email', message: err instanceof Error ? err.message : 'Unknown error' });
+  }
 });
 
 router.put('/admin/plans/:planKey', requireAdmin, async (req, res) => {

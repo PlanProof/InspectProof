@@ -96,6 +96,31 @@ pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vi
 - **A003**: Email templates verified production-ready (Australian English, proper branding, no TODO text)
 - **A002**: Stripe webhook handler verified (signature verification, `STRIPE_WEBHOOK_SECRET` required)
 
+## Email System (Resend)
+
+### Email Logging
+- All sent emails are logged to `email_logs` table (`lib/db/src/schema/emailLogs.ts`)
+- Columns: `id`, `type`, `status` (sent/failed), `recipient` (email address), `subject`, `resendMessageId` (Resend's message ID), `errorMessage`, `metadata` (JSONB), `createdAt`
+- `email_verified_at` column added to `users` table via SQL migration (column not in Drizzle schema; added via `pool.query` in `runSchemaMigrations`)
+- Startup logs a warning if `RESEND_API_KEY` is not set
+
+### Email Types (logged type strings)
+`inspection_assigned`, `inspection_reminder`, `feedback_notification`, `app_invite`, `token_invite`, `welcome_credentials`, `password_reset`, `report_delivery`, `contractor_defect_report`, `welcome`, `email_verification`, `generic` (sendEmail fallback)
+
+### Retry Support
+Admin retry (`POST /api/admin/emails/:id/retry`) supports: `inspection_assigned`, `inspection_reminder`, `welcome`. Other types return 422 with a message to re-trigger the original action.
+
+### Admin Email Log UI
+- **Admin → Emails tab**: Paginated table of all email logs with type/status filters and retry button for failed emails
+- **API**: `GET /api/admin/emails?page=&limit=&type=&status=` (admin-only)
+- **Retry API**: `POST /api/admin/emails/:id/retry` — supports `inspection_assigned` and `inspection_reminder` types
+
+### Inspection Reminder Cron
+- **Endpoint**: `POST /api/internal/send-inspection-reminders`
+- **Auth**: `X-Internal-Secret` header must match `INTERNAL_API_SECRET` env var
+- **Logic**: Sends reminder emails to inspectors for inspections scheduled `INSPECTION_REMINDER_DAYS_BEFORE` days from today (default: 1)
+- **Setup**: Call nightly via cron or scheduler (e.g. GitHub Actions, cron-job.org)
+
 ## External Dependencies
 
 - **Database:** PostgreSQL via `SUPABASE_DATABASE_URL`

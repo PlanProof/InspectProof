@@ -30,6 +30,7 @@ import ActivityPage from "@/pages/activity";
 import ShareView from "@/pages/share-view";
 import Issues from "@/pages/issues";
 import ResetPassword from "@/pages/reset-password";
+import VerifyEmail from "@/pages/verify-email";
 import ContractorLibrary from "@/pages/contractor-library";
 
 // Global fetch interceptor for auth
@@ -91,6 +92,7 @@ function Router() {
       <Route path="/activity" component={ActivityPage} />
       <Route path="/share/:token" component={ShareView} />
       <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/settings/contractor-library" component={ContractorLibrary} />
       <Route component={NotFound} />
     </Switch>

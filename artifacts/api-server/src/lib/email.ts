@@ -1,9 +1,41 @@
 import { Resend } from "resend";
+import { db, emailLogsTable } from "@workspace/db";
+
+export type EmailLogger = {
+  warn: (obj: Record<string, unknown>, msg: string) => void;
+  error: (obj: Record<string, unknown>, msg: string) => void;
+  info: (obj: Record<string, unknown>, msg: string) => void;
+};
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
   if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
   return _resend;
+}
+
+async function logEmail(opts: {
+  type: string;
+  recipient: string;
+  subject: string;
+  status: "sent" | "failed";
+  resendMessageId?: string | null;
+  errorMessage?: string | null;
+  metadata?: Record<string, any>;
+}): Promise<number | null> {
+  try {
+    const [row] = await db.insert(emailLogsTable).values({
+      type: opts.type,
+      recipient: opts.recipient,
+      subject: opts.subject,
+      status: opts.status,
+      resendMessageId: opts.resendMessageId ?? null,
+      errorMessage: opts.errorMessage ?? null,
+      metadata: opts.metadata ?? null,
+    }).returning({ id: emailLogsTable.id });
+    return row?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 const SMTP_FROM = process.env.SMTP_FROM || "InspectProof <noreply@inspectproof.com.au>";
@@ -186,22 +218,27 @@ export interface InspectionEmailOpts {
 
 export async function sendInspectionAssignedEmail(
   opts: InspectionEmailOpts,
-  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
-): Promise<void> {
-  if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping inspection email"); return; }
+  log?: EmailLogger
+): Promise<boolean> {
+  if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping inspection email"); return false; }
   const typeLabel = opts.inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   const heading = opts.isReassignment ? "Inspection Reassigned to You" : "You've Been Assigned an Inspection";
+  const subject = `${heading} — ${typeLabel} at ${opts.projectName}`;
   try {
-    const { error } = await getResend().emails.send({
+    const { data, error } = await getResend().emails.send({
       from: SMTP_FROM,
       to: opts.inspectorEmail,
-      subject: `${heading} — ${typeLabel} at ${opts.projectName}`,
+      subject,
       html: inspectionAssignedHtml(opts),
     });
     if (error) throw new Error(error.message);
+    await logEmail({ type: "inspection_assigned", recipient: opts.inspectorEmail, subject, status: "sent", resendMessageId: data?.id, metadata: { inspectionId: opts.inspectionId, isReassignment: opts.isReassignment } });
     log?.info({ to: opts.inspectorEmail, inspectionId: opts.inspectionId }, "Inspection assignment email sent");
+    return true;
   } catch (err) {
+    await logEmail({ type: "inspection_assigned", recipient: opts.inspectorEmail, subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err), metadata: { inspectionId: opts.inspectionId } });
     log?.error({ err, to: opts.inspectorEmail }, "Failed to send inspection assignment email");
+    return false;
   }
 }
 
@@ -241,22 +278,25 @@ function feedbackNotificationHtml(opts: { senderName: string | null; senderEmail
 
 export async function sendFeedbackEmail(
   opts: { senderName: string | null; senderEmail: string | null; message: string },
-  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+  log?: EmailLogger
 ): Promise<void> {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping feedback email"); return; }
   const submittedAt = new Date().toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" });
   const displayName = opts.senderName || "Anonymous user";
+  const subject = `New feedback from ${displayName} — InspectProof`;
   try {
-    const { error } = await getResend().emails.send({
+    const { data, error } = await getResend().emails.send({
       from: SMTP_FROM,
       to: FEEDBACK_TO,
       replyTo: opts.senderEmail || undefined,
-      subject: `New feedback from ${displayName} — InspectProof`,
+      subject,
       html: feedbackNotificationHtml({ ...opts, submittedAt }),
     });
     if (error) throw new Error(error.message);
+    await logEmail({ type: "feedback_notification", recipient: FEEDBACK_TO, subject, status: "sent", resendMessageId: data?.id, metadata: { senderEmail: opts.senderEmail } });
     log?.info({ to: FEEDBACK_TO }, "Feedback notification email sent");
   } catch (err) {
+    await logEmail({ type: "feedback_notification", recipient: FEEDBACK_TO, subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err) });
     log?.error({ err }, "Failed to send feedback notification email");
   }
 }
@@ -349,7 +389,7 @@ export interface AppInviteEmailOpts {
 
 export async function sendAppInviteEmail(
   opts: AppInviteEmailOpts,
-  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+  log?: EmailLogger
 ): Promise<void> {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping invite email"); return; }
   const params = new URLSearchParams({ mode: "signup" });
@@ -361,15 +401,17 @@ export async function sendAppInviteEmail(
     ? `${opts.companyName} has invited you to InspectProof`
     : `${opts.inviterName} has invited you to InspectProof`;
   try {
-    const { error } = await getResend().emails.send({
+    const { data, error } = await getResend().emails.send({
       from: SMTP_FROM,
       to: opts.toEmail,
       subject,
       html: appInviteHtml({ inviteeName: opts.inviteeName, inviterName: opts.inviterName, companyName: opts.companyName ?? null, registerUrl, iosUrl: IOS_APP_URL, androidUrl: ANDROID_APP_URL }),
     });
     if (error) throw new Error(error.message);
+    await logEmail({ type: "app_invite", recipient: opts.toEmail, subject, status: "sent", resendMessageId: data?.id, metadata: { inviterName: opts.inviterName } });
     log?.info({ to: opts.toEmail }, "App invite email sent");
   } catch (err) {
+    await logEmail({ type: "app_invite", recipient: opts.toEmail, subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err) });
     log?.error({ err, to: opts.toEmail }, "Failed to send app invite email");
   }
 }
@@ -386,7 +428,7 @@ export interface TokenInviteEmailOpts {
 
 export async function sendTokenInviteEmail(
   opts: TokenInviteEmailOpts,
-  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+  log?: EmailLogger
 ): Promise<void> {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping token invite email"); return; }
   const joinUrl = `${APP_BASE_URL}/join?token=${opts.token}`;
@@ -413,10 +455,12 @@ export async function sendTokenInviteEmail(
   });
 
   try {
-    const { error } = await getResend().emails.send({ from: SMTP_FROM, to: opts.toEmail, subject, html });
+    const { data, error } = await getResend().emails.send({ from: SMTP_FROM, to: opts.toEmail, subject, html });
     if (error) throw new Error(error.message);
+    await logEmail({ type: "token_invite", recipient: opts.toEmail, subject, status: "sent", resendMessageId: data?.id, metadata: { inviterName: opts.inviterName, companyName: opts.companyName } });
     log?.info({ to: opts.toEmail }, "Token invite email sent");
   } catch (err) {
+    await logEmail({ type: "token_invite", recipient: opts.toEmail, subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err) });
     log?.error({ err, to: opts.toEmail }, "Failed to send token invite email");
   }
 }
@@ -457,20 +501,23 @@ function welcomeWithCredentialsHtml(opts: { firstName: string; email: string; te
 
 export async function sendWelcomeWithCredentialsEmail(
   opts: WelcomeWithCredentialsOpts,
-  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+  log?: EmailLogger
 ): Promise<void> {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping welcome email"); return; }
   const loginUrl = `${APP_BASE_URL}/login`;
+  const subject = "Welcome to InspectProof — Your account is ready";
   try {
-    const { error } = await getResend().emails.send({
+    const { data, error } = await getResend().emails.send({
       from: SMTP_FROM,
       to: opts.toEmail,
-      subject: "Welcome to InspectProof — Your account is ready",
+      subject,
       html: welcomeWithCredentialsHtml({ ...opts, email: opts.toEmail, loginUrl }),
     });
     if (error) throw new Error(error.message);
+    await logEmail({ type: "welcome_credentials", recipient: opts.toEmail, subject, status: "sent", resendMessageId: data?.id, metadata: { inviterName: opts.inviterName } });
     log?.info({ to: opts.toEmail }, "Welcome with credentials email sent");
   } catch (err) {
+    await logEmail({ type: "welcome_credentials", recipient: opts.toEmail, subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err) });
     log?.error({ err, to: opts.toEmail }, "Failed to send welcome with credentials email");
   }
 }
@@ -564,25 +611,26 @@ function defectReportHtml(opts: ContractorDefectReportOpts): string {
 
 export async function sendContractorDefectReportEmail(
   opts: ContractorDefectReportOpts,
-  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+  log?: EmailLogger
 ): Promise<void> {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping defect report email"); return; }
   const subject = `Defect Report — ${opts.projectName} (${opts.defects.length} item${opts.defects.length !== 1 ? "s" : ""})`;
-  // Use the sender's company name as the display name if available, otherwise fall back to default
   const fromAddress = SMTP_FROM.match(/<(.+)>/)?.[1] ?? "noreply@inspectproof.com.au";
   const fromField = opts.senderCompany
     ? `${opts.senderCompany} <${fromAddress}>`
     : SMTP_FROM;
   try {
-    const { error } = await getResend().emails.send({
+    const { data, error } = await getResend().emails.send({
       from: fromField,
       to: opts.toEmail,
       subject,
       html: defectReportHtml(opts),
     });
     if (error) throw new Error(error.message);
+    await logEmail({ type: "contractor_defect_report", recipient: opts.toEmail, subject, status: "sent", resendMessageId: data?.id, metadata: { projectName: opts.projectName, defectCount: opts.defects.length } });
     log?.info({ to: opts.toEmail, project: opts.projectName }, "Contractor defect report email sent");
   } catch (err) {
+    await logEmail({ type: "contractor_defect_report", recipient: opts.toEmail, subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err), metadata: { projectName: opts.projectName } });
     log?.error({ err, to: opts.toEmail }, "Failed to send contractor defect report email");
     throw err;
   }
@@ -591,8 +639,12 @@ export async function sendContractorDefectReportEmail(
 export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
   if (!isConfigured()) return;
   const resend = getResend();
-  const { error } = await resend.emails.send({ from: SMTP_FROM, to, subject, html });
-  if (error) throw new Error(error.message);
+  const { data, error } = await resend.emails.send({ from: SMTP_FROM, to, subject, html });
+  if (error) {
+    await logEmail({ type: "generic", recipient: to, subject, status: "failed", errorMessage: error.message });
+    throw new Error(error.message);
+  }
+  await logEmail({ type: "generic", recipient: to, subject, status: "sent", resendMessageId: data?.id });
 }
 
 /* ── Report Email ──────────────────────────────────────────── */
@@ -630,7 +682,16 @@ function reportEmailHtml(opts: {
         <p style="margin:0;font-size:13px;color:#0c4a6e;line-height:1.7;font-family:${BASE_FONT};">The attached PDF is a summary of this report. The full version — including the complete photo appendix and all marked-up documents — is available via the download link below.</p>
       </td></tr>
     </table>
-    ${ctaButton(fullPdfLink, "Download Full PDF Report →")}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+      <tr>
+        <td style="padding-right:12px;">
+          ${ctaButton(fullPdfLink, "Download Full PDF Report →")}
+        </td>
+        <td>
+          <a href="${APP_BASE_URL}/reports/${reportId}" style="display:inline-block;padding:14px 22px;font-size:14px;font-weight:700;color:#466DB5;text-decoration:none;border:2px solid #466DB5;border-radius:8px;font-family:${BASE_FONT};">View Online →</a>
+        </td>
+      </tr>
+    </table>
     <p style="margin:0 0 8px;font-size:13px;color:#6b7280;line-height:1.7;font-family:${BASE_FONT};">If you have any questions about this report, please contact <strong>${senderLine}</strong> directly.</p>
     <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;font-family:${BASE_FONT};">This report was generated using InspectProof — Australian building certification and compliance management platform.</p>`;
 
@@ -639,10 +700,11 @@ function reportEmailHtml(opts: {
 
 export async function sendPasswordResetEmail(
   opts: { toEmail: string; firstName: string; resetUrl: string },
-  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+  log?: EmailLogger
 ): Promise<void> {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping password reset email"); return; }
   const { toEmail, firstName, resetUrl } = opts;
+  const subject = "Reset your InspectProof password";
   const content = `
     ${greeting(firstName)}
     ${sectionTitle("Reset your InspectProof password")}
@@ -650,17 +712,19 @@ export async function sendPasswordResetEmail(
     ${ctaButton(resetUrl, "Reset My Password →")}
     ${bodyText(`If you didn't request a password reset, you can safely ignore this email — your password won't change.`, "font-size:13px;color:#6b7280;")}
     <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;font-family:${BASE_FONT};">For security, this link expires in 1 hour. To get a new link, visit the <a href="${APP_BASE_URL}/login" style="color:#466DB5;text-decoration:underline;">InspectProof login page</a> and click "Forgot password?" again.</p>`;
-  const html = emailWrapper({ title: "Reset your InspectProof password", tag: "Security", content });
+  const html = emailWrapper({ title: subject, tag: "Security", content });
   try {
-    const { error } = await getResend().emails.send({
+    const { data, error } = await getResend().emails.send({
       from: SMTP_FROM,
       to: toEmail,
-      subject: "Reset your InspectProof password",
+      subject,
       html,
     });
     if (error) throw new Error(error.message);
+    await logEmail({ type: "password_reset", recipient: toEmail, subject, status: "sent", resendMessageId: data?.id });
     log?.info({ to: toEmail }, "Password reset email sent");
   } catch (err) {
+    await logEmail({ type: "password_reset", recipient: toEmail, subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err) });
     log?.error({ err, to: toEmail }, "Failed to send password reset email");
   }
 }
@@ -683,7 +747,7 @@ export async function sendReportEmail(opts: {
   senderCompany?: string;
   reportId: number;
   pdfBuffer?: Buffer;
-  log?: { error: (obj: object, msg: string) => void; warn: (obj: object, msg: string) => void };
+  log?: Pick<EmailLogger, "error" | "warn">;
 }): Promise<void> {
   const { to, pdfBuffer, log } = opts;
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping report email"); return; }
@@ -703,10 +767,14 @@ export async function sendReportEmail(opts: {
     payload.attachments = [{ filename: attachmentFilename, content: pdfBuffer.toString("base64") }];
   }
 
-  const { error } = await getResend().emails.send(payload);
-  if (error) {
-    log?.error({ err: error, to }, "Failed to send report email");
-    throw new Error(error.message);
+  try {
+    const { data, error } = await getResend().emails.send(payload);
+    if (error) throw new Error(error.message);
+    await logEmail({ type: "report_delivery", recipient: to, subject, status: "sent", resendMessageId: data?.id, metadata: { reportId: opts.reportId, projectName: opts.projectName, reportType: opts.reportType } });
+  } catch (err) {
+    await logEmail({ type: "report_delivery", recipient: to, subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err), metadata: { reportId: opts.reportId, projectName: opts.projectName } });
+    log?.error({ err, to }, "Failed to send report email");
+    throw err;
   }
 }
 
@@ -761,20 +829,23 @@ function welcomeEmailHtml(opts: { firstName: string; companyName: string; appUrl
 
 export async function sendWelcomeEmail(
   opts: WelcomeEmailOpts,
-  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
+  log?: EmailLogger
 ): Promise<void> {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping welcome email"); return; }
   const appUrl = APP_BASE_URL;
+  const subject = `Welcome to InspectProof, ${opts.firstName}!`;
   try {
-    const { error } = await getResend().emails.send({
+    const { data, error } = await getResend().emails.send({
       from: SMTP_FROM,
       to: opts.toEmail,
-      subject: `Welcome to InspectProof, ${opts.firstName}!`,
+      subject,
       html: welcomeEmailHtml({ firstName: opts.firstName, companyName: opts.companyName, appUrl }),
     });
     if (error) throw new Error(error.message);
+    await logEmail({ type: "welcome", recipient: opts.toEmail, subject, status: "sent", resendMessageId: data?.id, metadata: { companyName: opts.companyName } });
     log?.info({ to: opts.toEmail }, "Welcome email sent");
   } catch (err) {
+    await logEmail({ type: "welcome", recipient: opts.toEmail, subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err) });
     log?.error({ err, to: opts.toEmail }, "Failed to send welcome email");
   }
 }
@@ -848,9 +919,9 @@ function inspectionReminderHtml(opts: InspectionReminderEmailOpts): string {
 
 export async function sendInspectionReminderEmail(
   opts: InspectionReminderEmailOpts,
-  log?: { warn: (obj: any, msg: string) => void; error: (obj: any, msg: string) => void; info: (obj: any, msg: string) => void }
-): Promise<void> {
-  if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping inspection reminder email"); return; }
+  log?: EmailLogger
+): Promise<boolean> {
+  if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping inspection reminder email"); return false; }
   const typeLabel = opts.inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
   let subject: string;
   if (opts.reminderType === "upcoming") {
@@ -862,15 +933,68 @@ export async function sendInspectionReminderEmail(
     subject = `[Admin] Overdue Inspection — ${typeLabel} at ${opts.projectName}`;
   }
   try {
-    const { error } = await getResend().emails.send({
+    const { data, error } = await getResend().emails.send({
       from: SMTP_FROM,
       to: opts.inspectorEmail,
       subject,
       html: inspectionReminderHtml(opts),
     });
     if (error) throw new Error(error.message);
+    await logEmail({ type: "inspection_reminder", recipient: opts.inspectorEmail, subject, status: "sent", resendMessageId: data?.id, metadata: { inspectionId: opts.inspectionId, reminderType: opts.reminderType, daysUntil: opts.daysUntil, daysOverdue: opts.daysOverdue } });
     log?.info({ to: opts.inspectorEmail, inspectionId: opts.inspectionId, reminderType: opts.reminderType }, "Inspection reminder email sent");
+    return true;
   } catch (err) {
+    await logEmail({ type: "inspection_reminder", recipient: opts.inspectorEmail, subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err), metadata: { inspectionId: opts.inspectionId, reminderType: opts.reminderType } });
     log?.error({ err, to: opts.inspectorEmail }, "Failed to send inspection reminder email");
+    return false;
+  }
+}
+
+/* ── Email Verification Email ──────────────────────────────── */
+
+export interface EmailVerificationOpts {
+  toEmail: string;
+  firstName: string;
+  verificationUrl: string;
+}
+
+function emailVerificationHtml(opts: { firstName: string; verificationUrl: string }): string {
+  const { firstName, verificationUrl } = opts;
+
+  const content = `
+    ${greeting(firstName)}
+    ${sectionTitle("Verify your email address")}
+    ${bodyText("Thanks for signing up for InspectProof! To complete your registration, please verify your email address by clicking the button below.")}
+    ${ctaButton(verificationUrl, "Verify Email Address →")}
+    ${bodyText("This link is valid for 24 hours. If you didn't create an InspectProof account, you can safely ignore this email.", "font-size:13px;color:#6b7280;")}
+    <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;font-family:${BASE_FONT};">Or copy this link into your browser: <span style="word-break:break-all;color:#466DB5;">${verificationUrl}</span></p>`;
+
+  return emailWrapper({
+    title: "Verify your InspectProof email",
+    tag: "Email Verification",
+    content,
+    footer: "InspectProof — a product of PlanProof Technologies Pty Ltd<br/>If you weren't expecting this, you can safely ignore this email.",
+  });
+}
+
+export async function sendEmailVerificationEmail(
+  opts: EmailVerificationOpts,
+  log?: EmailLogger
+): Promise<void> {
+  if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping email verification email"); return; }
+  const subject = "Verify your InspectProof email address";
+  try {
+    const { data, error } = await getResend().emails.send({
+      from: SMTP_FROM,
+      to: opts.toEmail,
+      subject,
+      html: emailVerificationHtml({ firstName: opts.firstName, verificationUrl: opts.verificationUrl }),
+    });
+    if (error) throw new Error(error.message);
+    await logEmail({ type: "email_verification", recipient: opts.toEmail, subject, status: "sent", resendMessageId: data?.id });
+    log?.info({ to: opts.toEmail }, "Email verification email sent");
+  } catch (err) {
+    await logEmail({ type: "email_verification", recipient: opts.toEmail, subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err) });
+    log?.error({ err, to: opts.toEmail }, "Failed to send email verification email");
   }
 }

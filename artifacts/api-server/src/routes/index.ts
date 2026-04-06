@@ -23,6 +23,7 @@ import orgContractorsRouter from "./orgContractors";
 import activityRouter from "./activity";
 import shareRouter from "./share";
 import inductionsRouter from "./inductions";
+import internalRouter from "./internal";
 
 const router: IRouter = Router();
 
@@ -50,5 +51,6 @@ router.use("/org-contractors", orgContractorsRouter);
 router.use("/activity", activityRouter);
 router.use(shareRouter);
 router.use(inductionsRouter);
+router.use(internalRouter);
 
 export default router;

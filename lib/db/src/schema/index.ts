@@ -14,3 +14,4 @@ export * from "./internalStaff";
 export * from "./projectContractors";
 export * from "./orgContractors";
 export * from "./inductions";
+export * from "./emailLogs";

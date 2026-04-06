@@ -3,8 +3,8 @@ import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
-import { db, usersTable } from "@workspace/db";
-import { sendPasswordResetEmail, sendWelcomeEmail } from "../lib/email";
+import { db, usersTable, pool } from "@workspace/db";
+import { sendPasswordResetEmail, sendWelcomeEmail, sendEmailVerificationEmail } from "../lib/email";
 import { createSessionToken, decodeSessionToken } from "../lib/session-token";
 
 export { createSessionToken, decodeSessionToken };
@@ -34,6 +34,37 @@ function verifyResetToken(token: string): { userId: number; valid: boolean; expi
     if (parts.length !== 2) return { userId: 0, valid: false, expired: false };
     const userId = parseInt(parts[0], 10);
     const expiry = parseInt(parts[1], 10);
+    if (isNaN(userId) || isNaN(expiry)) return { userId: 0, valid: false, expired: false };
+    const now = Math.floor(Date.now() / 1000);
+    const expected = crypto.createHmac("sha256", APP_SECRET).update(data).digest("hex");
+    if (expected !== sig) return { userId: 0, valid: false, expired: false };
+    if (now > expiry) return { userId, valid: false, expired: true };
+    return { userId, valid: true, expired: false };
+  } catch {
+    return { userId: 0, valid: false, expired: false };
+  }
+}
+
+// ── Email verification token helpers (HMAC-SHA256 signed, 24 hours) ──────────
+
+function createEmailVerificationToken(userId: number): string {
+  const expiry = Math.floor(Date.now() / 1000) + 86400; // 24 hours
+  const data = `ev:${userId}:${expiry}`;
+  const sig = crypto.createHmac("sha256", APP_SECRET).update(data).digest("hex");
+  return Buffer.from(`${data}:${sig}`).toString("base64url");
+}
+
+function verifyEmailVerificationToken(token: string): { userId: number; valid: boolean; expired: boolean } {
+  try {
+    const raw = Buffer.from(token, "base64url").toString("utf-8");
+    const lastColon = raw.lastIndexOf(":");
+    if (lastColon === -1) return { userId: 0, valid: false, expired: false };
+    const sig = raw.slice(lastColon + 1);
+    const data = raw.slice(0, lastColon);
+    const parts = data.split(":");
+    if (parts.length !== 3 || parts[0] !== "ev") return { userId: 0, valid: false, expired: false };
+    const userId = parseInt(parts[1], 10);
+    const expiry = parseInt(parts[2], 10);
     if (isNaN(userId) || isNaN(expiry)) return { userId: 0, valid: false, expired: false };
     const now = Math.floor(Date.now() / 1000);
     const expected = crypto.createHmac("sha256", APP_SECRET).update(data).digest("hex");
@@ -199,6 +230,17 @@ router.post("/register", registerLimiter, async (req, res) => {
       },
       req.log,
     ).catch(() => {});
+
+    // Send email verification link (non-blocking)
+    const APP_BASE_URL = process.env.APP_BASE_URL ?? "";
+    if (APP_BASE_URL) {
+      const verificationToken = createEmailVerificationToken(newUser.id);
+      const verificationUrl = `${APP_BASE_URL}/verify-email?token=${verificationToken}`;
+      sendEmailVerificationEmail(
+        { toEmail: newUser.email, firstName: newUser.firstName, verificationUrl },
+        req.log,
+      ).catch(() => {});
+    }
 
     res.status(201).json({
       token,
@@ -698,6 +740,39 @@ router.post("/reset-password", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Reset password error");
+    res.status(500).json({ error: "internal_error", message: "Server error" });
+  }
+});
+
+// ── Verify email ───────────────────────────────────────────────────────────────
+
+router.post("/verify-email", async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token || typeof token !== "string") {
+      res.status(400).json({ error: "bad_request", message: "Verification token is required." });
+      return;
+    }
+    const { userId, valid, expired } = verifyEmailVerificationToken(token);
+    if (!valid) {
+      if (expired) {
+        res.status(400).json({ error: "token_expired", message: "Verification link has expired. Please request a new one." });
+      } else {
+        res.status(400).json({ error: "invalid_token", message: "Invalid verification token." });
+      }
+      return;
+    }
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (!user) {
+      res.status(404).json({ error: "not_found", message: "User not found." });
+      return;
+    }
+    // Persist verification timestamp (column added via migration — not in Drizzle schema)
+    await pool.query(`UPDATE users SET email_verified_at = NOW() WHERE id = $1`, [userId]);
+    req.log.info({ userId }, "Email verified via token");
+    res.json({ success: true, message: "Email verified successfully." });
+  } catch (err) {
+    req.log.error({ err }, "Verify email error");
     res.status(500).json({ error: "internal_error", message: "Server error" });
   }
 });

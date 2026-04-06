@@ -2,6 +2,13 @@ import app, { validateWebhookRouteOrder } from "./app";
 import { logger } from "./lib/logger";
 import { ensureSupabaseBucket, isSupabaseStorageAvailable } from "./lib/supabaseStorage";
 import { db, pool, usersTable, planConfigsTable } from "@workspace/db";
+
+if (!process.env.RESEND_API_KEY) {
+  logger.warn(
+    "RESEND_API_KEY is not set — emails will be skipped. " +
+    "For production, set RESEND_API_KEY and ensure DKIM/SPF records are configured for your sending domain."
+  );
+}
 import { eq, and } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { ensureGlobalTemplatesSeed } from "../../../lib/db/src/seeds/global-templates";
@@ -239,6 +246,28 @@ async function runSchemaMigrations() {
     await pool.query(`CREATE INDEX IF NOT EXISTS inspection_reminders_inspection_id_idx ON inspection_reminders(inspection_id)`);
     // org-level inspection reminder settings stored in users.notification_prefs JSON
     // (uses existing notification_prefs column — no ALTER TABLE needed)
+
+    // email_logs table (Task #34)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS email_logs (
+        id serial PRIMARY KEY,
+        type text NOT NULL,
+        recipient text NOT NULL,
+        subject text NOT NULL,
+        status text NOT NULL DEFAULT 'sent',
+        resend_message_id text,
+        error_message text,
+        metadata jsonb,
+        created_at timestamp NOT NULL DEFAULT now()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS email_logs_type_idx ON email_logs(type)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS email_logs_status_idx ON email_logs(status)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS email_logs_recipient_idx ON email_logs(recipient)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS email_logs_created_at_idx ON email_logs(created_at DESC)`);
+
+    // email_verified_at column for users (Task #34 verification flow)
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at timestamp`);
 
     logger.info("Schema migrations applied");
   } catch (err) {
