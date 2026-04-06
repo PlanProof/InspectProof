@@ -3822,6 +3822,10 @@ function InductionsTab({ projectId }: { projectId: number }) {
   const [bookTime, setBookTime] = useState("");
   const [bookLocation, setBookLocation] = useState("");
   const [bookConductorName, setBookConductorName] = useState("");
+  const [bookNotes, setBookNotes] = useState("");
+  const [bookDraftAttachments, setBookDraftAttachments] = useState<{ name: string; url: string }[]>([]);
+  const [newAttachName, setNewAttachName] = useState("");
+  const [newAttachUrl, setNewAttachUrl] = useState("");
   const [bookAttendees, setBookAttendees] = useState<BookAttendee[]>([]);
   const [bookError, setBookError] = useState("");
   const [booking, setBooking] = useState(false);
@@ -3892,12 +3896,26 @@ function InductionsTab({ projectId }: { projectId: number }) {
           scheduledTime: bookTime || null,
           location: bookLocation || null,
           conductedByName: bookConductorName || null,
+          notes: bookNotes.trim() || null,
           attendees: bookAttendees,
         }),
       });
+      // Post any draft attachments collected during booking
+      for (const att of bookDraftAttachments) {
+        try {
+          await apiFetch(`/api/inductions/${created.id}/attachments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: att.name, fileName: att.name, fileUrl: att.url || null }),
+          });
+        } catch {}
+      }
       setInductions(prev => [created, ...prev]);
       setBookOpen(false);
-      setBookTitle("Site Induction"); setBookDate(""); setBookTime(""); setBookLocation(""); setBookConductorName(""); setBookAttendees([]); setAttendeeTab("contractors");
+      setBookTitle("Site Induction"); setBookDate(""); setBookTime(""); setBookLocation("");
+      setBookConductorName(""); setBookNotes(""); setBookDraftAttachments([]);
+      setNewAttachName(""); setNewAttachUrl("");
+      setBookAttendees([]); setAttendeeTab("contractors");
     } catch {
       setBookError("Failed to book induction. Please try again.");
     } finally {
@@ -4014,6 +4032,17 @@ function InductionsTab({ projectId }: { projectId: number }) {
               <Input value={bookConductorName} onChange={e => setBookConductorName(e.target.value)} placeholder="Name of person conducting the induction" className="mt-1" />
             </div>
 
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Notes</label>
+              <textarea
+                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                rows={3}
+                value={bookNotes}
+                onChange={e => setBookNotes(e.target.value)}
+                placeholder="Add any notes or agenda items for this induction…"
+              />
+            </div>
+
             {(assignedContractors.length > 0 || staffList.length > 0) && (
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-2 block">Attendees</label>
@@ -4078,6 +4107,56 @@ function InductionsTab({ projectId }: { projectId: number }) {
                 )}
               </div>
             )}
+
+            {/* Draft Attachments */}
+            <div>
+              <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Paperclip className="h-3.5 w-3.5" />
+                Documents
+              </h4>
+              {bookDraftAttachments.length > 0 && (
+                <div className="space-y-1.5 mb-2">
+                  {bookDraftAttachments.map((att, i) => (
+                    <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded border border-border bg-muted/30">
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-xs flex-1 min-w-0 truncate">{att.name}{att.url ? ` — ${att.url}` : ""}</span>
+                      <button type="button" onClick={() => setBookDraftAttachments(prev => prev.filter((_, j) => j !== i))}
+                        className="text-muted-foreground hover:text-red-500 transition-colors shrink-0">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="border border-dashed rounded-lg p-3 space-y-1.5">
+                <Input
+                  placeholder="File name or description"
+                  value={newAttachName}
+                  onChange={e => setNewAttachName(e.target.value)}
+                  className="text-xs h-7"
+                />
+                <Input
+                  placeholder="File URL (optional)"
+                  value={newAttachUrl}
+                  onChange={e => setNewAttachUrl(e.target.value)}
+                  className="text-xs h-7"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  disabled={!newAttachName.trim()}
+                  onClick={() => {
+                    if (!newAttachName.trim()) return;
+                    setBookDraftAttachments(prev => [...prev, { name: newAttachName.trim(), url: newAttachUrl.trim() }]);
+                    setNewAttachName(""); setNewAttachUrl("");
+                  }}
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Add
+                </Button>
+              </div>
+            </div>
 
             {bookError && <p className="text-xs text-red-500">{bookError}</p>}
           </div>

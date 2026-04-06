@@ -146,13 +146,14 @@ router.post("/projects/:projectId/inductions", requireAuth, async (req, res) => 
   const project = await getAuthorizedProject(projectId, req.authUser!);
   if (!project) { res.status(404).json({ error: "not_found" }); return; }
 
-  const { title, scheduledDate, scheduledTime, location, conductedById, conductedByName, attendees } = req.body as {
+  const { title, scheduledDate, scheduledTime, location, conductedById, conductedByName, notes, attendees } = req.body as {
     title?: string;
     scheduledDate?: string;
     scheduledTime?: string;
     location?: string;
     conductedById?: number;
     conductedByName?: string;
+    notes?: string;
     attendees?: Array<{
       orgContractorId?: number;
       internalStaffId?: number;
@@ -177,6 +178,7 @@ router.post("/projects/:projectId/inductions", requireAuth, async (req, res) => 
       location: location?.trim() || null,
       conductedById: conductedById ?? null,
       conductedByName: conductedByName?.trim() || null,
+      notes: notes?.trim() || null,
       status: "scheduled",
     }).returning();
 
