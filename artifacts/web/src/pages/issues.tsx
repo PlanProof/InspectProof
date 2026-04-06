@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useListIssues, useListProjects, useCreateIssue } from "@workspace/api-client-react";
+import { useListIssues, useListProjects, useListUsers, useCreateIssue } from "@workspace/api-client-react";
 import type { Issue, CreateIssueRequestSeverity, CreateIssueRequestPriority, CreateIssueRequestStatus } from "@workspace/api-client-react";
 import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, Label } from "@/components/ui";
-import { Search, Plus, ExternalLink, Camera, ChevronUp, ChevronDown, ChevronsUpDown, Loader2, X, CheckCircle2, Upload, Bell, AlertTriangle, Image, MessageSquare, Clock, User, ArrowRight, Ban } from "lucide-react";
+import { Search, Plus, ExternalLink, Camera, ChevronUp, ChevronDown, ChevronsUpDown, Loader2, X, CheckCircle2, Upload, Bell, AlertTriangle, Image, MessageSquare, Clock, User, ArrowRight, Ban, Square, CheckSquare, Users, Tag, Archive } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -84,6 +84,7 @@ export default function Issues() {
   const [categoryFilter, setCategoryFilter] = useState<string>("All");
   const { data: issues, isLoading } = useListIssues({});
   const { data: projects } = useListProjects({});
+  const { data: users } = useListUsers({});
   const [selectedIssue, setSelectedIssue] = useState<any>(null);
   const [sortCol, setSortCol] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -260,6 +261,18 @@ export default function Issues() {
       }
     }
   };
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+  const [bulkActionPending, setBulkActionPending] = useState(false);
+  const [bulkActionResult, setBulkActionResult] = useState<string | null>(null);
+
+  // Bulk action dialogs
+  const [showBulkAssign, setShowBulkAssign] = useState(false);
+  const [bulkAssignId, setBulkAssignId] = useState<string>("");
+  const [showBulkStatus, setShowBulkStatus] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState<string>("");
 
   const handleCreate = async () => {
     setCreateError("");
@@ -452,6 +465,86 @@ export default function Issues() {
     try { return JSON.parse(selectedIssue.closeoutPhotos) as string[]; } catch { return []; }
   })() : [];
 
+  // Bulk selection helpers
+  const visibleIds = sorted.map(i => i.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+  const someSelected = selectedIds.size > 0;
+  const totalMatchingCount = filtered?.length ?? 0;
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds(new Set());
+      setSelectAllMatching(false);
+    } else {
+      setSelectedIds(new Set(visibleIds));
+    }
+  };
+
+  const toggleSelectOne = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        setSelectAllMatching(false);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectAllMatching(false);
+  };
+
+  const doBulkAction = async (action: string, patch: Record<string, any>) => {
+    setBulkActionPending(true);
+    setBulkActionResult(null);
+    try {
+      const token = localStorage.getItem("inspectproof_token") || "";
+      const body = selectAllMatching
+        ? { filterAll: true, patch, action }
+        : { ids: Array.from(selectedIds), patch, action };
+      const res = await fetch(`${apiBase()}/api/issues/bulk`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Bulk action failed");
+      const data = await res.json();
+      setBulkActionResult(data.description ?? "Bulk action completed");
+      queryClient.invalidateQueries({ queryKey: ["listIssues"] });
+      clearSelection();
+    } catch (err: any) {
+      setBulkActionResult("Error: " + (err.message ?? "Bulk action failed"));
+    } finally {
+      setBulkActionPending(false);
+    }
+  };
+
+  const doBulkRemind = async () => {
+    setBulkActionPending(true);
+    setBulkActionResult(null);
+    try {
+      const token = localStorage.getItem("inspectproof_token") || "";
+      const res = await fetch(`${apiBase()}/api/issues/bulk-remind`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (!res.ok) throw new Error("Failed to send reminders");
+      const data = await res.json();
+      setBulkActionResult(`Sent ${data.remindersSent} reminder email${data.remindersSent !== 1 ? "s" : ""}`);
+      clearSelection();
+    } catch (err: any) {
+      setBulkActionResult("Error: " + (err.message ?? "Failed"));
+    } finally {
+      setBulkActionPending(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
@@ -512,6 +605,16 @@ export default function Issues() {
         </div>
       )}
 
+      {bulkActionResult && (
+        <div className="mb-4 flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {bulkActionResult}
+          <button onClick={() => setBulkActionResult(null)} className="ml-auto text-blue-600 hover:text-blue-800">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-6">
         <div className="p-4 border-b flex flex-wrap items-center gap-3 bg-muted/20">
           <div className="relative flex-1 min-w-[220px] max-w-md">
@@ -563,12 +666,47 @@ export default function Issues() {
           </div>
         </div>
 
+        {/* Select-all-matching banner */}
+        {allVisibleSelected && !selectAllMatching && totalMatchingCount > visibleIds.length && (
+          <div className="px-4 py-2.5 bg-blue-50 border-b border-blue-100 text-sm text-blue-800 flex items-center gap-3">
+            <span>All {visibleIds.length} issues on this page are selected.</span>
+            <button
+              className="font-semibold underline underline-offset-2 hover:text-blue-900"
+              onClick={() => setSelectAllMatching(true)}
+            >
+              Select all {totalMatchingCount} matching issues
+            </button>
+          </div>
+        )}
+        {selectAllMatching && (
+          <div className="px-4 py-2.5 bg-blue-50 border-b border-blue-100 text-sm text-blue-800 flex items-center gap-3">
+            <span>All {totalMatchingCount} matching issues are selected.</span>
+            <button
+              className="font-semibold underline underline-offset-2 hover:text-blue-900"
+              onClick={clearSelection}
+            >
+              Clear selection
+            </button>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground">Loading issues...</div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <button
+                    onClick={toggleSelectAll}
+                    className="text-muted-foreground hover:text-sidebar transition-colors"
+                    title={allVisibleSelected ? "Deselect all" : "Select all on page"}
+                  >
+                    {allVisibleSelected
+                      ? <CheckSquare className="h-4 w-4 text-secondary" />
+                      : <Square className="h-4 w-4" />}
+                  </button>
+                </TableHead>
                 <SortableHead col="id" label="ID" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="title" label="Title" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="severity" label="Severity / Priority" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
@@ -579,35 +717,47 @@ export default function Issues() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((issue) => (
-                <TableRow key={issue.id} className="group cursor-pointer hover:bg-muted/50" onClick={() => handleSelectIssue(issue)}>
-                  <TableCell className="font-mono text-xs text-muted-foreground">#{issue.id}</TableCell>
-                  <TableCell>
-                    <div className="font-medium text-sidebar">{issue.title}</div>
-                    {issue.category && (
-                      <span className="text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">{issue.category}</span>
-                    )}
-                    {issue.dueDate && new Date(issue.dueDate) < new Date() && !["closed", "resolved", "rejected"].includes(issue.status) && (
-                      <span className="text-[10px] text-orange-600 font-semibold flex items-center gap-0.5 mt-0.5">
-                        <AlertTriangle className="h-3 w-3" /> Overdue
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <SeverityBadge severity={issue.severity} />
-                      {issue.priority && <PriorityBadge priority={issue.priority} />}
-                    </div>
-                  </TableCell>
-                  <TableCell><StatusBadge status={issue.status} /></TableCell>
-                  <TableCell className="text-muted-foreground">{issue.projectName}</TableCell>
-                  <TableCell>{issue.assigneeName || <span className="text-muted-foreground italic">Unassigned</span>}</TableCell>
-                  <TableCell className="text-right text-muted-foreground text-sm">{formatDate(issue.createdAt)}</TableCell>
-                </TableRow>
-              ))}
+              {sorted.map((issue) => {
+                const isChecked = selectedIds.has(issue.id) || selectAllMatching;
+                return (
+                  <TableRow
+                    key={issue.id}
+                    className={cn("group cursor-pointer hover:bg-muted/50", isChecked && "bg-blue-50/40")}
+                    onClick={() => handleSelectIssue(issue)}
+                  >
+                    <TableCell onClick={e => toggleSelectOne(issue.id, e)}>
+                      {isChecked
+                        ? <CheckSquare className="h-4 w-4 text-secondary" />
+                        : <Square className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground/80" />}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">#{issue.id}</TableCell>
+                    <TableCell>
+                      <div className="font-medium text-sidebar">{issue.title}</div>
+                      {issue.category && (
+                        <span className="text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">{issue.category}</span>
+                      )}
+                      {issue.dueDate && new Date(issue.dueDate) < new Date() && !["closed", "resolved", "rejected"].includes(issue.status) && (
+                        <span className="text-[10px] text-orange-600 font-semibold flex items-center gap-0.5 mt-0.5">
+                          <AlertTriangle className="h-3 w-3" /> Overdue
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <SeverityBadge severity={issue.severity} />
+                        {issue.priority && <PriorityBadge priority={issue.priority} />}
+                      </div>
+                    </TableCell>
+                    <TableCell><StatusBadge status={issue.status} /></TableCell>
+                    <TableCell className="text-muted-foreground">{issue.projectName}</TableCell>
+                    <TableCell>{(issue as any).assigneeName || <span className="text-muted-foreground italic">Unassigned</span>}</TableCell>
+                    <TableCell className="text-right text-muted-foreground text-sm">{formatDate(issue.createdAt)}</TableCell>
+                  </TableRow>
+                );
+              })}
               {sorted.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center p-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center p-8 text-muted-foreground">
                     No issues found matching filters.
                   </TableCell>
                 </TableRow>
@@ -1221,6 +1371,136 @@ export default function Issues() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Assign Dialog */}
+      <Dialog open={showBulkAssign} onOpenChange={setShowBulkAssign}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-secondary" />
+              Assign {selectAllMatching ? totalMatchingCount : selectedIds.size} Issue{selectedIds.size !== 1 ? "s" : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Assign to</Label>
+              <select
+                value={bulkAssignId}
+                onChange={e => setBulkAssignId(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">Unassigned</option>
+                {(users as any[] ?? []).map((u: any) => (
+                  <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" onClick={() => setShowBulkAssign(false)}>Cancel</Button>
+            <Button
+              disabled={bulkActionPending}
+              onClick={async () => {
+                await doBulkAction("bulk_assign", { assignedToId: bulkAssignId ? parseInt(bulkAssignId) : null });
+                setShowBulkAssign(false);
+              }}
+            >
+              {bulkActionPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : null}
+              Assign
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Status Dialog */}
+      <Dialog open={showBulkStatus} onOpenChange={setShowBulkStatus}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-5 w-5 text-secondary" />
+              Change Status for {selectAllMatching ? totalMatchingCount : selectedIds.size} Issue{selectedIds.size !== 1 ? "s" : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>New Status</Label>
+              <select
+                value={bulkStatus}
+                onChange={e => setBulkStatus(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">Select status…</option>
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" onClick={() => setShowBulkStatus(false)}>Cancel</Button>
+            <Button
+              disabled={bulkActionPending || !bulkStatus}
+              onClick={async () => {
+                await doBulkAction("bulk_status_change", { status: bulkStatus });
+                setShowBulkStatus(false);
+              }}
+            >
+              {bulkActionPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : null}
+              Change Status
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Action Toolbar */}
+      {someSelected && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-sidebar text-white px-5 py-3 rounded-2xl shadow-2xl shadow-sidebar/40 border border-white/10">
+          <span className="text-sm font-semibold mr-1">
+            {selectAllMatching ? totalMatchingCount : selectedIds.size} selected
+          </span>
+          <div className="h-4 w-px bg-white/20" />
+          <button
+            onClick={() => setShowBulkAssign(true)}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            disabled={bulkActionPending}
+          >
+            <Users className="h-3.5 w-3.5" />
+            Assign
+          </button>
+          <button
+            onClick={() => setShowBulkStatus(true)}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            disabled={bulkActionPending}
+          >
+            <Tag className="h-3.5 w-3.5" />
+            Status
+          </button>
+          <button
+            onClick={doBulkRemind}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            disabled={bulkActionPending}
+          >
+            {bulkActionPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bell className="h-3.5 w-3.5" />}
+            Remind
+          </button>
+          <button
+            onClick={() => doBulkAction("archive", { archived: true })}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            disabled={bulkActionPending}
+          >
+            <Archive className="h-3.5 w-3.5" />
+            Archive
+          </button>
+          <div className="h-4 w-px bg-white/20" />
+          <button
+            onClick={clearSelection}
+            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            title="Clear selection"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </AppLayout>
   );
 }

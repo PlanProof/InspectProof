@@ -463,6 +463,100 @@ router.post("/run-sheet/send", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * PATCH /api/inspections/bulk
+ * Bulk update inspections by ID array or filter.
+ * Body: { ids?: number[], filterAll?: boolean, patch: { status?, inspectorId? }, filters?: {...} }
+ */
+router.patch("/bulk", requireAuth, async (req, res) => {
+  try {
+    const { ids, filterAll, patch, filters } = req.body;
+
+    if (!patch || typeof patch !== "object") {
+      res.status(400).json({ error: "bad_request", message: "patch payload is required" });
+      return;
+    }
+
+    const requestingUserId = req.authUser!.id;
+
+    // Resolve which inspection IDs to operate on
+    let targetIds: number[] = [];
+
+    if (filterAll) {
+      let inspList = await db.select({ id: inspectionsTable.id }).from(inspectionsTable);
+
+      // Scope to accessible projects for non-admins
+      if (!req.authUser!.isAdmin) {
+        const adminId = req.authUser!.isCompanyAdmin
+          ? req.authUser!.id
+          : (req.authUser!.adminUserId ? parseInt(req.authUser!.adminUserId) : req.authUser!.id);
+        const orgMemberIds = await getOrgMemberIds(adminId);
+        const orgSet = new Set([...orgMemberIds, req.authUser!.id]);
+        const allProjects = await db.select({ id: projectsTable.id, createdById: projectsTable.createdById }).from(projectsTable);
+        const accessibleProjectIds = new Set(allProjects.filter(p => orgSet.has(p.createdById)).map(p => p.id));
+        const allInsp = await db.select().from(inspectionsTable);
+        inspList = allInsp.filter(i => i.projectId !== null && accessibleProjectIds.has(i.projectId));
+      }
+
+      if (filters?.status) inspList = inspList.filter((i: any) => i.status === filters.status);
+      if (filters?.inspectorId) inspList = inspList.filter((i: any) => i.inspectorId === filters.inspectorId);
+      if (filters?.projectId) inspList = inspList.filter((i: any) => i.projectId === filters.projectId);
+
+      targetIds = inspList.map(i => i.id);
+    } else if (Array.isArray(ids) && ids.length > 0) {
+      targetIds = ids.map(Number).filter(Boolean);
+    }
+
+    if (targetIds.length === 0) {
+      res.status(400).json({ error: "bad_request", message: "No inspections selected" });
+      return;
+    }
+
+    // Build update payload
+    const updateData: any = { updatedAt: new Date() };
+    if (patch.status !== undefined) updateData.status = patch.status;
+    if (patch.inspectorId !== undefined) updateData.inspectorId = patch.inspectorId;
+
+    // Execute the bulk update
+    await db.update(inspectionsTable)
+      .set(updateData)
+      .where(inArray(inspectionsTable.id, targetIds));
+
+    // Build activity log description
+    let actionLabel = "bulk_updated";
+    let descriptionText = "";
+
+    if (patch.status) {
+      actionLabel = "bulk_status_change";
+      descriptionText = `Admin bulk-changed ${targetIds.length} inspection${targetIds.length !== 1 ? "s" : ""} to "${patch.status}"`;
+    } else if (patch.inspectorId !== undefined) {
+      let assigneeName = "unassigned";
+      if (patch.inspectorId) {
+        const [user] = await db.select().from(usersTable).where(eq(usersTable.id, patch.inspectorId));
+        if (user) assigneeName = `${user.firstName} ${user.lastName}`.trim();
+      }
+      actionLabel = "bulk_assign";
+      descriptionText = `Admin bulk-assigned ${targetIds.length} inspection${targetIds.length !== 1 ? "s" : ""} to ${assigneeName}`;
+    } else {
+      descriptionText = `Admin bulk-updated ${targetIds.length} inspection${targetIds.length !== 1 ? "s" : ""}`;
+    }
+
+    // Write a single batched activity log entry
+    await db.insert(activityLogsTable).values({
+      entityType: "inspection",
+      entityId: 0,
+      action: actionLabel,
+      description: descriptionText,
+      userId: requestingUserId,
+    });
+
+    res.json({ success: true, updatedCount: targetIds.length, description: descriptionText });
+  } catch (err) {
+    req.log.error({ err }, "Bulk update inspections error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 router.get("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(String(req.params.id));

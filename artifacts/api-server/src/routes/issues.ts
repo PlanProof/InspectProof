@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, lt, and, ne, desc } from "drizzle-orm";
+import { eq, sql, lt, and, ne, desc, inArray } from "drizzle-orm";
 import { db, issuesTable, issueCommentsTable, projectsTable, activityLogsTable, usersTable } from "@workspace/db";
-import { optionalAuth } from "../middleware/auth";
+import { optionalAuth, requireAuth } from "../middleware/auth";
 import { sendEmail } from "../lib/email";
 import { decodeSessionToken } from "../lib/session-token";
 
@@ -448,6 +448,170 @@ router.post("/:id/comments", optionalAuth, async (req, res) => {
     });
   } catch (err) {
     req.log.error({ err }, "Create issue comment error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+/**
+ * PATCH /api/issues/bulk
+ * Bulk update issues by ID array or filter.
+ * Body: { ids?: number[], filterAll?: boolean, patch: { status?, assignedToId?, archived? }, action?: string }
+ */
+router.patch("/bulk", requireAuth, async (req, res) => {
+  try {
+    const { ids, filterAll, patch, action, filters } = req.body;
+
+    if (!patch || typeof patch !== "object") {
+      res.status(400).json({ error: "bad_request", message: "patch payload is required" });
+      return;
+    }
+
+    const requestingUserId = req.authUser!.id;
+
+    // Resolve which issue IDs to operate on
+    let targetIds: number[] = [];
+
+    if (filterAll) {
+      // Select all matching current filters
+      let query = db.select({ id: issuesTable.id }).from(issuesTable);
+      let issueList = await query;
+
+      // Scope to accessible projects for non-admins
+      if (!req.authUser!.isAdmin) {
+        const allProjects = await db.select({ id: projectsTable.id, createdById: projectsTable.createdById }).from(projectsTable);
+        const accessibleIds = new Set(allProjects.filter(p => p.createdById === requestingUserId).map(p => p.id));
+        issueList = issueList.filter(i => accessibleIds.has((i as any).projectId ?? 0));
+      }
+
+      // Apply optional filters from the request
+      if (filters?.status) issueList = issueList.filter((i: any) => i.status === filters.status);
+      if (filters?.severity) issueList = issueList.filter((i: any) => i.severity === filters.severity);
+      if (filters?.projectId) issueList = issueList.filter((i: any) => i.projectId === filters.projectId);
+
+      targetIds = issueList.map(i => i.id);
+    } else if (Array.isArray(ids) && ids.length > 0) {
+      targetIds = ids.map(Number).filter(Boolean);
+    }
+
+    if (targetIds.length === 0) {
+      res.status(400).json({ error: "bad_request", message: "No issues selected" });
+      return;
+    }
+
+    // Build update payload
+    const updateData: any = { updatedAt: new Date() };
+    if (patch.status !== undefined) updateData.status = patch.status;
+    if (patch.assignedToId !== undefined) updateData.assignedToId = patch.assignedToId;
+    if (patch.archived !== undefined) updateData.status = "archived";
+
+    // Auto-set resolvedDate if bulk-resolving
+    if (patch.status === "resolved") {
+      updateData.resolvedDate = new Date().toISOString().slice(0, 10);
+    }
+
+    // Execute the bulk update
+    await db.update(issuesTable)
+      .set(updateData)
+      .where(inArray(issuesTable.id, targetIds));
+
+    // Determine what actually happened for the activity log description
+    let actionLabel = action || "updated";
+    let descriptionText = "";
+
+    if (patch.status === "archived" || patch.archived) {
+      actionLabel = "archived";
+      descriptionText = `Admin bulk-archived ${targetIds.length} issue${targetIds.length !== 1 ? "s" : ""}`;
+    } else if (patch.status) {
+      actionLabel = "bulk_status_change";
+      descriptionText = `Admin bulk-changed ${targetIds.length} issue${targetIds.length !== 1 ? "s" : ""} to "${patch.status}"`;
+    } else if (patch.assignedToId !== undefined) {
+      // Fetch assignee name for the log
+      let assigneeName = "unassigned";
+      if (patch.assignedToId) {
+        const [user] = await db.select().from(usersTable).where(eq(usersTable.id, patch.assignedToId));
+        if (user) assigneeName = `${user.firstName} ${user.lastName}`.trim();
+      }
+      actionLabel = "bulk_assign";
+      descriptionText = `Admin bulk-assigned ${targetIds.length} issue${targetIds.length !== 1 ? "s" : ""} to ${assigneeName}`;
+    } else {
+      descriptionText = `Admin bulk-updated ${targetIds.length} issue${targetIds.length !== 1 ? "s" : ""}`;
+    }
+
+    // Write a single batched activity log entry
+    await db.insert(activityLogsTable).values({
+      entityType: "issue",
+      entityId: 0,
+      action: actionLabel,
+      description: descriptionText,
+      userId: requestingUserId,
+    });
+
+    res.json({ success: true, updatedCount: targetIds.length, description: descriptionText });
+  } catch (err) {
+    req.log.error({ err }, "Bulk update issues error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+/**
+ * POST /api/issues/bulk-remind
+ * Send overdue reminders for a specific set of issue IDs.
+ */
+router.post("/bulk-remind", requireAuth, async (req, res) => {
+  try {
+    if (!req.authUser?.isAdmin && !req.authUser?.isCompanyAdmin) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: "bad_request", message: "ids array is required" });
+      return;
+    }
+
+    const targetIds = ids.map(Number).filter(Boolean);
+    const selectedIssues = await db.select().from(issuesTable).where(inArray(issuesTable.id, targetIds));
+
+    let sent = 0;
+    for (const issue of selectedIssues) {
+      if (!issue.assignedToId) continue;
+      const users = await db.select().from(usersTable).where(eq(usersTable.id, issue.assignedToId));
+      const user = users[0];
+      if (!user?.email) continue;
+      try {
+        await sendEmail({
+          to: user.email,
+          subject: `Overdue Issue Reminder: ${issue.title}`,
+          html: `<p>Hi ${user.firstName},</p>
+<p>This is a reminder that the following issue is overdue:</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:8px;font-weight:bold">Issue</td><td style="padding:8px">${issue.title}</td></tr>
+  <tr><td style="padding:8px;font-weight:bold">Description</td><td style="padding:8px">${issue.description}</td></tr>
+  <tr><td style="padding:8px;font-weight:bold">Due Date</td><td style="padding:8px">${issue.dueDate}</td></tr>
+  <tr><td style="padding:8px;font-weight:bold">Severity</td><td style="padding:8px">${issue.severity}</td></tr>
+  ${issue.location ? `<tr><td style="padding:8px;font-weight:bold">Location</td><td style="padding:8px">${issue.location}</td></tr>` : ""}
+</table>
+<p>Please action this as soon as possible.</p>
+<p style="color:#888;font-size:12px">InspectProof – a product of PlanProof Technologies Pty Ltd</p>`,
+        });
+        sent++;
+      } catch {
+      }
+    }
+
+    // Write a batched activity log
+    await db.insert(activityLogsTable).values({
+      entityType: "issue",
+      entityId: 0,
+      action: "bulk_remind",
+      description: `Admin bulk-sent overdue reminders for ${targetIds.length} issue${targetIds.length !== 1 ? "s" : ""} (${sent} emails sent)`,
+      userId: req.authUser!.id,
+    });
+
+    res.json({ success: true, remindersSent: sent, issueCount: targetIds.length });
+  } catch (err) {
+    req.log.error({ err }, "Bulk remind error");
     res.status(500).json({ error: "internal_error" });
   }
 });

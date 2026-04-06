@@ -3,11 +3,16 @@ import { useListInspections, useListProjects, useListUsers, useCreateInspection 
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
   Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge,
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, Label,
 } from "@/components/ui";
-import { Search, Calendar as CalendarIcon, CheckCircle2, XCircle, Clock, Plus, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import { Search, Calendar as CalendarIcon, CheckCircle2, XCircle, Clock, Plus, ChevronDown, ChevronUp, ChevronsUpDown, Square, CheckSquare, Users, Tag, Download, Loader2, X } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
+
+function apiBase() {
+  return import.meta.env.BASE_URL.replace(/\/$/, "");
+}
 
 const INSPECTION_TYPES = [
   { group: "Building Certification", items: [
@@ -65,7 +70,6 @@ const INSPECTION_TYPES = [
 const STATUS_FILTERS = ["all", "scheduled", "in_progress", "completed"] as const;
 type StatusFilter = typeof STATUS_FILTERS[number];
 
-// Strip " Template" suffix from checklist template names when used as inspection type labels
 function cleanTypeName(name: string) {
   return name.replace(/\s+template$/i, "").trim();
 }
@@ -138,7 +142,6 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
     if (!form.scheduledDate) { setError("Please set a scheduled date."); return; }
     setSubmitting(true);
     try {
-      // Auto-link the matching checklist template for the selected inspection type
       const matchedTemplateId = allocatedTypes.find(t => t.inspectionType === form.inspectionType)?.templateId;
       await createInspection.mutateAsync({
         data: {
@@ -166,8 +169,6 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
     onClose();
   }
 
-  // Show all team members in the assignment dropdown — the API already scopes the
-  // user list to the admin's own organisation, so every returned user is a valid assignee.
   const inspectors = users ?? [];
 
   return (
@@ -183,7 +184,6 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="mt-1 space-y-4">
-          {/* Project */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Project <span className="text-red-500">*</span></label>
             <div className="relative">
@@ -202,7 +202,6 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
             </div>
           </div>
 
-          {/* Inspection Type */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Inspection Type <span className="text-red-500">*</span></label>
             <div className="relative">
@@ -234,7 +233,6 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
             </div>
           </div>
 
-          {/* Date + Time row */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Date <span className="text-red-500">*</span></label>
@@ -256,7 +254,6 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
             </div>
           </div>
 
-          {/* Inspector */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Inspector <span className="text-muted-foreground font-normal normal-case">(optional)</span></label>
             <div className="relative">
@@ -274,7 +271,6 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
             </div>
           </div>
 
-          {/* Notes */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Notes <span className="text-muted-foreground font-normal normal-case">(optional)</span></label>
             <textarea
@@ -320,8 +316,22 @@ export default function Inspections() {
   const [newOpen, setNewOpen] = useState(false);
   const [, navigate] = useLocation();
   const { data: inspections, isLoading, refetch } = useListInspections({});
+  const { data: users } = useListUsers({});
   const [sortCol, setSortCol] = useState("scheduledDate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const queryClient = useQueryClient();
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+  const [bulkActionPending, setBulkActionPending] = useState(false);
+  const [bulkActionResult, setBulkActionResult] = useState<string | null>(null);
+
+  // Bulk action dialogs
+  const [showBulkAssign, setShowBulkAssign] = useState(false);
+  const [bulkAssignId, setBulkAssignId] = useState<string>("");
+  const [showBulkStatus, setShowBulkStatus] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState<string>("");
 
   const toggleSort = (col: string) => {
     if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -337,7 +347,6 @@ export default function Inspections() {
     return matchesSearch && matchesStatus;
   });
 
-  // Completed inspections always sink to the bottom (unless explicitly sorting by status)
   const sorted = [...(filtered ?? [])].sort((a, b) => {
     if (sortCol !== "status") {
       const aC = a.status === "completed" ? 1 : 0;
@@ -355,6 +364,95 @@ export default function Inspections() {
     }
   });
 
+  // Bulk selection helpers
+  const visibleIds = sorted.map(i => i.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+  const someSelected = selectedIds.size > 0;
+  const totalMatchingCount = filtered?.length ?? 0;
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds(new Set());
+      setSelectAllMatching(false);
+    } else {
+      setSelectedIds(new Set(visibleIds));
+    }
+  };
+
+  const toggleSelectOne = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        setSelectAllMatching(false);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectAllMatching(false);
+  };
+
+  const doBulkAction = async (action: string, patch: Record<string, any>) => {
+    setBulkActionPending(true);
+    setBulkActionResult(null);
+    try {
+      const token = localStorage.getItem("inspectproof_token") || "";
+      const body = selectAllMatching
+        ? { filterAll: true, patch, action }
+        : { ids: Array.from(selectedIds), patch, action };
+      const res = await fetch(`${apiBase()}/api/inspections/bulk`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Bulk action failed");
+      const data = await res.json();
+      setBulkActionResult(data.description ?? "Bulk action completed");
+      queryClient.invalidateQueries({ queryKey: ["listInspections"] });
+      refetch();
+      clearSelection();
+    } catch (err: any) {
+      setBulkActionResult("Error: " + (err.message ?? "Bulk action failed"));
+    } finally {
+      setBulkActionPending(false);
+    }
+  };
+
+  const doExportCsv = () => {
+    const selectedInspections = selectAllMatching
+      ? sorted
+      : sorted.filter(i => selectedIds.has(i.id));
+
+    const headers = ["ID", "Project", "Type", "Date", "Status", "Inspector", "Pass", "Fail"];
+    const rows = selectedInspections.map(i => [
+      i.id,
+      `"${(i.projectName ?? "").replace(/"/g, '""')}"`,
+      `"${(i.inspectionType ?? "").replace(/"/g, '""')}"`,
+      i.scheduledDate ?? "",
+      i.status,
+      `"${(i.inspectorName ?? "").replace(/"/g, '""')}"`,
+      i.passCount ?? 0,
+      i.failCount ?? 0,
+    ]);
+
+    const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `inspections-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setBulkActionResult(`Exported ${selectedInspections.length} inspection${selectedInspections.length !== 1 ? "s" : ""} to CSV`);
+    clearSelection();
+  };
+
   return (
     <AppLayout>
       <div className="flex items-center justify-between mb-8">
@@ -370,6 +468,16 @@ export default function Inspections() {
           New Inspection
         </Button>
       </div>
+
+      {bulkActionResult && (
+        <div className="mb-4 flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {bulkActionResult}
+          <button onClick={() => setBulkActionResult(null)} className="ml-auto text-blue-600 hover:text-blue-800">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
         <div className="p-4 border-b flex flex-wrap items-center gap-4 bg-muted/20">
@@ -399,12 +507,47 @@ export default function Inspections() {
           </div>
         </div>
 
+        {/* Select-all-matching banner */}
+        {allVisibleSelected && !selectAllMatching && totalMatchingCount > visibleIds.length && (
+          <div className="px-4 py-2.5 bg-blue-50 border-b border-blue-100 text-sm text-blue-800 flex items-center gap-3">
+            <span>All {visibleIds.length} inspections on this page are selected.</span>
+            <button
+              className="font-semibold underline underline-offset-2 hover:text-blue-900"
+              onClick={() => setSelectAllMatching(true)}
+            >
+              Select all {totalMatchingCount} matching inspections
+            </button>
+          </div>
+        )}
+        {selectAllMatching && (
+          <div className="px-4 py-2.5 bg-blue-50 border-b border-blue-100 text-sm text-blue-800 flex items-center gap-3">
+            <span>All {totalMatchingCount} matching inspections are selected.</span>
+            <button
+              className="font-semibold underline underline-offset-2 hover:text-blue-900"
+              onClick={clearSelection}
+            >
+              Clear selection
+            </button>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground">Loading inspections...</div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <button
+                    onClick={toggleSelectAll}
+                    className="text-muted-foreground hover:text-sidebar transition-colors"
+                    title={allVisibleSelected ? "Deselect all" : "Select all on page"}
+                  >
+                    {allVisibleSelected
+                      ? <CheckSquare className="h-4 w-4 text-secondary" />
+                      : <Square className="h-4 w-4" />}
+                  </button>
+                </TableHead>
                 <SortableHead col="projectName" label="Project" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="inspectionType" label="Type" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="scheduledDate" label="Date / Time" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
@@ -416,45 +559,53 @@ export default function Inspections() {
             <TableBody>
               {sorted.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                     No inspections found.
                   </TableCell>
                 </TableRow>
-              ) : sorted.map((insp) => (
-                <TableRow
-                  key={insp.id}
-                  className="cursor-pointer hover:bg-muted/50 group"
-                  onClick={() => navigate(`/inspections/${insp.id}`)}
-                >
-                  <TableCell className="font-medium text-sidebar group-hover:text-secondary transition-colors">{insp.projectName}</TableCell>
-                  <TableCell className="capitalize">{
-                    (insp as { checklistTemplateName?: string }).checklistTemplateName
-                      ? cleanTypeName((insp as { checklistTemplateName?: string }).checklistTemplateName!)
-                      : insp.inspectionType.replace(/_/g, ' ')
-                  }</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5 text-sm">
-                      <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                      {formatDate(insp.scheduledDate)}
-                      {insp.scheduledTime && <span className="text-muted-foreground ml-1">at {insp.scheduledTime}</span>}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <InspectionStatusBadge status={insp.status} />
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{insp.inspectorName || "Unassigned"}</TableCell>
-                  <TableCell className="text-right">
-                    {insp.status === 'completed' ? (
-                      <div className="flex items-center justify-end gap-2 text-xs font-medium">
-                        <span className="text-green-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/> {insp.passCount}</span>
-                        <span className="text-red-600 flex items-center gap-1"><XCircle className="h-3 w-3"/> {insp.failCount}</span>
+              ) : sorted.map((insp) => {
+                const isChecked = selectedIds.has(insp.id) || selectAllMatching;
+                return (
+                  <TableRow
+                    key={insp.id}
+                    className={cn("cursor-pointer hover:bg-muted/50 group", isChecked && "bg-blue-50/40")}
+                    onClick={() => navigate(`/inspections/${insp.id}`)}
+                  >
+                    <TableCell onClick={e => toggleSelectOne(insp.id, e)}>
+                      {isChecked
+                        ? <CheckSquare className="h-4 w-4 text-secondary" />
+                        : <Square className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground/80" />}
+                    </TableCell>
+                    <TableCell className="font-medium text-sidebar group-hover:text-secondary transition-colors">{insp.projectName}</TableCell>
+                    <TableCell className="capitalize">{
+                      (insp as { checklistTemplateName?: string }).checklistTemplateName
+                        ? cleanTypeName((insp as { checklistTemplateName?: string }).checklistTemplateName!)
+                        : insp.inspectionType.replace(/_/g, ' ')
+                    }</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        {formatDate(insp.scheduledDate)}
+                        {insp.scheduledTime && <span className="text-muted-foreground ml-1">at {insp.scheduledTime}</span>}
                       </div>
-                    ) : (
-                      <span className="text-muted-foreground text-xs flex items-center justify-end gap-1"><Clock className="h-3 w-3"/> Pending</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      <InspectionStatusBadge status={insp.status} />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{insp.inspectorName || "Unassigned"}</TableCell>
+                    <TableCell className="text-right">
+                      {insp.status === 'completed' ? (
+                        <div className="flex items-center justify-end gap-2 text-xs font-medium">
+                          <span className="text-green-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/> {insp.passCount}</span>
+                          <span className="text-red-600 flex items-center gap-1"><XCircle className="h-3 w-3"/> {insp.failCount}</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs flex items-center justify-end gap-1"><Clock className="h-3 w-3"/> Pending</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}
@@ -465,6 +616,129 @@ export default function Inspections() {
         onClose={() => setNewOpen(false)}
         onCreated={() => { refetch(); }}
       />
+
+      {/* Bulk Assign Inspector Dialog */}
+      <Dialog open={showBulkAssign} onOpenChange={setShowBulkAssign}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-secondary" />
+              Assign Inspector to {selectAllMatching ? totalMatchingCount : selectedIds.size} Inspection{selectedIds.size !== 1 ? "s" : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Assign to</Label>
+              <select
+                value={bulkAssignId}
+                onChange={e => setBulkAssignId(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">Unassigned</option>
+                {(users as any[] ?? []).map((u: any) => (
+                  <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" onClick={() => setShowBulkAssign(false)}>Cancel</Button>
+            <Button
+              disabled={bulkActionPending}
+              onClick={async () => {
+                await doBulkAction("bulk_assign", { inspectorId: bulkAssignId ? parseInt(bulkAssignId) : null });
+                setShowBulkAssign(false);
+              }}
+            >
+              {bulkActionPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : null}
+              Assign
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Status Dialog */}
+      <Dialog open={showBulkStatus} onOpenChange={setShowBulkStatus}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-5 w-5 text-secondary" />
+              Change Status for {selectAllMatching ? totalMatchingCount : selectedIds.size} Inspection{selectedIds.size !== 1 ? "s" : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>New Status</Label>
+              <select
+                value={bulkStatus}
+                onChange={e => setBulkStatus(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">Select status…</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" onClick={() => setShowBulkStatus(false)}>Cancel</Button>
+            <Button
+              disabled={bulkActionPending || !bulkStatus}
+              onClick={async () => {
+                await doBulkAction("bulk_status_change", { status: bulkStatus });
+                setShowBulkStatus(false);
+              }}
+            >
+              {bulkActionPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : null}
+              Change Status
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Action Toolbar */}
+      {someSelected && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-sidebar text-white px-5 py-3 rounded-2xl shadow-2xl shadow-sidebar/40 border border-white/10">
+          <span className="text-sm font-semibold mr-1">
+            {selectAllMatching ? totalMatchingCount : selectedIds.size} selected
+          </span>
+          <div className="h-4 w-px bg-white/20" />
+          <button
+            onClick={() => setShowBulkAssign(true)}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            disabled={bulkActionPending}
+          >
+            <Users className="h-3.5 w-3.5" />
+            Assign Inspector
+          </button>
+          <button
+            onClick={() => setShowBulkStatus(true)}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            disabled={bulkActionPending}
+          >
+            <Tag className="h-3.5 w-3.5" />
+            Status
+          </button>
+          <button
+            onClick={doExportCsv}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            disabled={bulkActionPending}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </button>
+          <div className="h-4 w-px bg-white/20" />
+          <button
+            onClick={clearSelection}
+            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            title="Clear selection"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </AppLayout>
   );
 }
