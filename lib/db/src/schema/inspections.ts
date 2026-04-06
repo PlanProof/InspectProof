@@ -19,6 +19,7 @@ export const inspectionsTable = pgTable("inspections", {
   weatherConditions: text("weather_conditions"),
   checklistTemplateId: integer("checklist_template_id"),
   shareToken: text("share_token"),
+  shareTokenExpiry: timestamp("share_token_expiry"),
   signedOffAt: timestamp("signed_off_at"),
   signedOffById: integer("signed_off_by_id"),
   reminderSentAt: timestamp("reminder_sent_at"),

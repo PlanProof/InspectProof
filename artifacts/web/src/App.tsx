@@ -33,6 +33,7 @@ import ResetPassword from "@/pages/reset-password";
 import VerifyEmail from "@/pages/verify-email";
 import ContractorLibrary from "@/pages/contractor-library";
 import CalendarPage from "@/pages/calendar";
+import ContractorPortal from "@/pages/contractor-portal";
 
 // Global fetch interceptor for auth
 const originalFetch = window.fetch;
@@ -92,6 +93,7 @@ function Router() {
       <Route path="/issues" component={Issues} />
       <Route path="/activity" component={ActivityPage} />
       <Route path="/share/:token" component={ShareView} />
+      <Route path="/contractor-portal/:token" component={ContractorPortal} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/settings/contractor-library" component={ContractorLibrary} />

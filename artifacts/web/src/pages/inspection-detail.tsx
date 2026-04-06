@@ -398,6 +398,14 @@ export default function InspectionDetail() {
   const [sharingLink, setSharingLink] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareExpiryDays, setShareExpiryDays] = useState<string>("");
+  const [contractorShares, setContractorShares] = useState<any[]>([]);
+  const [showContractorShareForm, setShowContractorShareForm] = useState(false);
+  const [contractorShareName, setContractorShareName] = useState("");
+  const [contractorShareEmail, setContractorShareEmail] = useState("");
+  const [contractorShareExpiry, setContractorShareExpiry] = useState("30");
+  const [creatingContractorShare, setCreatingContractorShare] = useState(false);
+  const [contractorShareUrl, setContractorShareUrl] = useState<string | null>(null);
   const [markingComplete, setMarkingComplete] = useState(false);
   const [viewingReport, setViewingReport] = useState<any | null>(null);
   const [pdfViewUrl, setPdfViewUrl] = useState<string | null>(null);
@@ -630,13 +638,63 @@ export default function InspectionDetail() {
     if (!inspection) return;
     setSharingLink(true);
     try {
-      const res = await apiFetch(`/api/inspections/${inspection.id}/share`, { method: "POST" });
+      const res = await apiFetch(`/api/inspections/${inspection.id}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expiryDays: shareExpiryDays ? parseInt(shareExpiryDays) : undefined }),
+      });
       const base = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, "");
       setShareUrl(`${base}/share/${res.shareToken}`);
+      // Load contractor shares
+      const cShares = await apiFetch(`/api/inspections/${inspection.id}/contractor-shares`);
+      setContractorShares(cShares);
       setShowShareDialog(true);
     } catch {
     } finally {
       setSharingLink(false);
+    }
+  };
+
+  const handleCreateContractorShare = async () => {
+    if (!inspection || !contractorShareName.trim()) return;
+    setCreatingContractorShare(true);
+    try {
+      const res = await apiFetch(`/api/inspections/${inspection.id}/contractor-share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contractorName: contractorShareName.trim(),
+          contractorEmail: contractorShareEmail.trim() || undefined,
+          expiryDays: contractorShareExpiry ? parseInt(contractorShareExpiry) : 30,
+        }),
+      });
+      const base = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, "");
+      const url = `${base}/contractor-portal/${res.token}`;
+      setContractorShareUrl(url);
+      // Refresh list
+      const cShares = await apiFetch(`/api/inspections/${inspection.id}/contractor-shares`);
+      setContractorShares(cShares);
+      setContractorShareName("");
+      setContractorShareEmail("");
+      setShowContractorShareForm(false);
+      toast({ title: "Contractor link created", description: `Link ready for ${res.contractorName}` });
+    } catch {
+      toast({ title: "Error", description: "Failed to create contractor link", variant: "destructive" });
+    } finally {
+      setCreatingContractorShare(false);
+    }
+  };
+
+  const handleRevokeContractorShare = async (tokenId: number) => {
+    try {
+      await apiFetch(`/api/contractor-shares/${tokenId}`, { method: "DELETE" });
+      if (inspection) {
+        const cShares = await apiFetch(`/api/inspections/${inspection.id}/contractor-shares`);
+        setContractorShares(cShares);
+      }
+      toast({ title: "Link revoked", description: "The contractor link has been revoked." });
+    } catch {
+      toast({ title: "Error", description: "Failed to revoke link", variant: "destructive" });
     }
   };
 
@@ -926,33 +984,189 @@ export default function InspectionDetail() {
       )}
 
       {/* ── Share Link Dialog ── */}
-      <Dialog open={showShareDialog} onOpenChange={o => { if (!o) { setShowShareDialog(false); } }}>
-        <DialogContent className="max-w-md">
+      <Dialog open={showShareDialog} onOpenChange={o => { if (!o) { setShowShareDialog(false); setContractorShareUrl(null); setShowContractorShareForm(false); } }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Share2 className="h-5 w-5 text-secondary" />
-              Client Portal Link
+              Share & Portal Links
             </DialogTitle>
             <DialogDescription>
-              Share this link with your client so they can view the inspection report without logging in.
+              Manage client and contractor access to this inspection.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-3">
-            <div className="flex items-center gap-2 bg-muted/50 border rounded-lg px-3 py-2.5">
-              <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-sm font-mono text-sidebar flex-1 min-w-0 truncate">{shareUrl}</span>
-              <button
-                onClick={() => shareUrl && navigator.clipboard.writeText(shareUrl)}
-                className="shrink-0 text-muted-foreground hover:text-sidebar transition-colors"
-                title="Copy link"
-              >
-                <Copy className="h-4 w-4" />
-              </button>
+
+          <div className="space-y-5 py-2">
+            {/* Client Portal Link */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Client Portal</p>
+              <div className="flex items-center gap-2 bg-muted/50 border rounded-lg px-3 py-2.5">
+                <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-sm font-mono text-sidebar flex-1 min-w-0 truncate">{shareUrl}</span>
+                <button
+                  onClick={() => shareUrl && navigator.clipboard.writeText(shareUrl)}
+                  className="shrink-0 text-muted-foreground hover:text-sidebar transition-colors"
+                  title="Copy link"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">Link expires in:</label>
+                <select
+                  value={shareExpiryDays}
+                  onChange={e => setShareExpiryDays(e.target.value)}
+                  className="border border-input rounded-md px-2 py-1 text-xs focus:outline-none flex-1"
+                >
+                  <option value="">Never</option>
+                  <option value="7">7 days</option>
+                  <option value="14">14 days</option>
+                  <option value="30">30 days</option>
+                  <option value="60">60 days</option>
+                  <option value="90">90 days</option>
+                </select>
+                <button
+                  onClick={async () => {
+                    if (!inspection) return;
+                    setSharingLink(true);
+                    try {
+                      const res = await apiFetch(`/api/inspections/${inspection.id}/share`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ expiryDays: shareExpiryDays ? parseInt(shareExpiryDays) : undefined }),
+                      });
+                      const base = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, "");
+                      setShareUrl(`${base}/share/${res.shareToken}`);
+                    } catch {
+                    } finally {
+                      setSharingLink(false);
+                    }
+                  }}
+                  disabled={sharingLink}
+                  className="text-xs font-medium text-primary hover:underline disabled:opacity-50 whitespace-nowrap"
+                >
+                  {sharingLink ? "Regenerating…" : "Regenerate"}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Read-only access to the inspection report. Client can acknowledge and download the PDF.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              This link provides read-only access to the inspection report including issues and sign-off status.
-            </p>
+
+            {/* Contractor Portal Links */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Contractor Portals</p>
+                <button
+                  onClick={() => setShowContractorShareForm(f => !f)}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  {showContractorShareForm ? "Cancel" : "+ Create link"}
+                </button>
+              </div>
+
+              {showContractorShareForm && (
+                <div className="border rounded-lg p-3 space-y-2 bg-muted/20 mb-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Contractor Name *</label>
+                      <input
+                        type="text"
+                        value={contractorShareName}
+                        onChange={e => setContractorShareName(e.target.value)}
+                        placeholder="e.g. Bob Builder"
+                        className="mt-1 w-full border border-input rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Email (optional)</label>
+                      <input
+                        type="email"
+                        value={contractorShareEmail}
+                        onChange={e => setContractorShareEmail(e.target.value)}
+                        placeholder="bob@builder.com"
+                        className="mt-1 w-full border border-input rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Expires in (days)</label>
+                    <select
+                      value={contractorShareExpiry}
+                      onChange={e => setContractorShareExpiry(e.target.value)}
+                      className="mt-1 w-full border border-input rounded-md px-2.5 py-1.5 text-sm focus:outline-none"
+                    >
+                      <option value="7">7 days</option>
+                      <option value="14">14 days</option>
+                      <option value="30">30 days</option>
+                      <option value="60">60 days</option>
+                      <option value="90">90 days</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleCreateContractorShare}
+                    disabled={creatingContractorShare || !contractorShareName.trim()}
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 py-1.5 rounded-md text-sm font-medium transition-colors"
+                  >
+                    {creatingContractorShare ? "Creating…" : "Create Contractor Link"}
+                  </button>
+                </div>
+              )}
+
+              {contractorShareUrl && (
+                <div className="mb-3 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2.5">
+                  <ExternalLink className="h-4 w-4 text-green-600 shrink-0" />
+                  <span className="text-sm font-mono text-green-700 flex-1 min-w-0 truncate">{contractorShareUrl}</span>
+                  <button
+                    onClick={() => contractorShareUrl && navigator.clipboard.writeText(contractorShareUrl)}
+                    className="shrink-0 text-green-600 hover:text-green-800"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              {contractorShares.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No contractor links yet.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {contractorShares.map((cs: any) => (
+                    <div key={cs.id} className={`flex items-center gap-2 border rounded-lg px-3 py-2 text-sm ${cs.isRevoked || cs.isExpired ? "opacity-50" : ""}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground truncate">{cs.contractorName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {cs.isRevoked ? "Revoked" : cs.isExpired ? "Expired" : cs.expiresAt ? `Expires ${new Date(cs.expiresAt).toLocaleDateString("en-AU")}` : "No expiry"}
+                        </p>
+                      </div>
+                      {!cs.isRevoked && !cs.isExpired && (
+                        <button
+                          onClick={() => {
+                            const base = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, "");
+                            const url = `${base}/contractor-portal/${cs.token}`;
+                            navigator.clipboard.writeText(url);
+                          }}
+                          className="text-muted-foreground hover:text-sidebar shrink-0"
+                          title="Copy link"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {!cs.isRevoked && (
+                        <button
+                          onClick={() => handleRevokeContractorShare(cs.id)}
+                          className="text-red-400 hover:text-red-600 shrink-0"
+                          title="Revoke link"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+
           <div className="flex justify-end gap-2 border-t pt-3">
             <Button variant="outline" onClick={() => setShowShareDialog(false)}>Close</Button>
             <Button
@@ -960,7 +1174,7 @@ export default function InspectionDetail() {
               className="gap-2"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Open in new tab
+              Open client portal
             </Button>
           </div>
         </DialogContent>
