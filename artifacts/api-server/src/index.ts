@@ -298,6 +298,127 @@ async function runSchemaMigrations() {
     // inspections: scheduled_end_date for calendar duration support (Task #39)
     await pool.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS scheduled_end_date date`);
 
+    // inspections: share token, sign-off, and calendar integration columns
+    await pool.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS share_token text`);
+    await pool.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS share_token_expiry timestamp`);
+    await pool.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS signed_off_at timestamp`);
+    await pool.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS signed_off_by_id integer`);
+    await pool.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS calendar_event_id text`);
+
+    // share_acknowledgements table (client portal sign-off)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS share_acknowledgements (
+        id serial PRIMARY KEY,
+        inspection_id integer NOT NULL,
+        share_token text NOT NULL,
+        client_name text NOT NULL,
+        client_email text NOT NULL,
+        signature_text text,
+        acknowledged_at timestamp NOT NULL DEFAULT now(),
+        created_at timestamp NOT NULL DEFAULT now()
+      )
+    `);
+
+    // contractor_share_tokens table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS contractor_share_tokens (
+        id serial PRIMARY KEY,
+        token text NOT NULL UNIQUE,
+        project_id integer NOT NULL,
+        inspection_id integer,
+        contractor_name text NOT NULL,
+        contractor_email text,
+        expires_at timestamp,
+        revoked_at timestamp,
+        created_by_id integer NOT NULL,
+        created_at timestamp NOT NULL DEFAULT now()
+      )
+    `);
+
+    // trade_categories table (org-level)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trade_categories (
+        id serial PRIMARY KEY,
+        company_name text NOT NULL,
+        name text NOT NULL,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      )
+    `);
+
+    // org_contractor_project_assignments table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS org_contractor_project_assignments (
+        id serial PRIMARY KEY,
+        org_contractor_id integer NOT NULL,
+        project_id integer NOT NULL,
+        created_at timestamp NOT NULL DEFAULT now(),
+        UNIQUE (org_contractor_id, project_id)
+      )
+    `);
+
+    // user_calendar_integrations table (calendar sync)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_calendar_integrations (
+        id serial PRIMARY KEY,
+        user_id integer NOT NULL,
+        provider text NOT NULL,
+        access_token text NOT NULL,
+        refresh_token text,
+        token_expiry timestamp,
+        calendar_id text NOT NULL DEFAULT 'primary',
+        calendar_name text,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now(),
+        UNIQUE (user_id, provider)
+      )
+    `);
+
+    // org_contractors: columns added in later tasks
+    await pool.query(`ALTER TABLE org_contractors ADD COLUMN IF NOT EXISTS trade_category_id integer`);
+    await pool.query(`ALTER TABLE org_contractors ADD COLUMN IF NOT EXISTS licence_number text`);
+    await pool.query(`ALTER TABLE org_contractors ADD COLUMN IF NOT EXISTS registration_number text`);
+    await pool.query(`ALTER TABLE org_contractors ADD COLUMN IF NOT EXISTS licence_expiry date`);
+    await pool.query(`ALTER TABLE org_contractors ADD COLUMN IF NOT EXISTS registration_expiry date`);
+    await pool.query(`ALTER TABLE org_contractors ADD COLUMN IF NOT EXISTS contact_role text`);
+    await pool.query(`ALTER TABLE org_contractors ADD COLUMN IF NOT EXISTS phone text`);
+
+    // project_contractors: columns added in later tasks
+    await pool.query(`ALTER TABLE project_contractors ADD COLUMN IF NOT EXISTS contact_role text`);
+    await pool.query(`ALTER TABLE project_contractors ADD COLUMN IF NOT EXISTS phone text`);
+    await pool.query(`ALTER TABLE project_contractors ADD COLUMN IF NOT EXISTS is_primary boolean NOT NULL DEFAULT false`);
+
+    // reports: report_options jsonb column
+    await pool.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS report_options jsonb`);
+    await pool.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS submitted_at timestamp`);
+
+    // users: org fields stored in DB (Task #32 - organisation settings)
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS abn text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_phone text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_email text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_address text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_suburb text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_state text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_postcode text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_website text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS logo_url text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS acn text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accreditation_body text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accreditation_number text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accreditation_expiry text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pl_insurer text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pl_policy_number text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pl_expiry text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pi_insurer text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pi_policy_number text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pi_expiry text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS report_footer_text text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_email_opt_in boolean NOT NULL DEFAULT false`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_email_opt_in_at timestamp`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_email_source text`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_email_scope text`);
+
     logger.info("Schema migrations applied");
   } catch (err) {
     logger.error({ err }, "Schema migration failed — continuing");
