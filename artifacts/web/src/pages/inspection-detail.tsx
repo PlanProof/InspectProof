@@ -918,9 +918,9 @@ export default function InspectionDetail() {
                 {inspection.issues.length}
               </span>
             )}
-            {t === "Checklist" && total > 0 && (
+            {t === "Checklist" && (inspection.checklistResults ?? []).length > 0 && (
               <span className="text-xs bg-muted text-muted-foreground font-semibold rounded-full px-1.5 py-0.5 leading-none">
-                {total}
+                {(inspection.checklistResults ?? []).length}
               </span>
             )}
             {t === "Reports" && reports.length > 0 && (
