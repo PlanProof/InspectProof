@@ -1831,9 +1831,14 @@ function buildPdf(
       continue;
     }
 
+    // Skip standalone divider lines (both "───────" box chars and "-------" hyphens)
+    // They are structural markers used to detect headers — no visual rendering needed
+    if (/^[-─]{4,}$/.test(line.trim())) continue;
+
     // Section header: ALL CAPS, short, comes after or before a divider line
-    const prevIsDivider = i > 0 && /^─{5,}$/.test(lines[i - 1].trim());
-    const nextIsDivider = i + 1 < lines.length && /^─{5,}$/.test(lines[i + 1].trim());
+    // Dividers can be box-drawing "─" chars (outer sections) or "-" hyphens (category sub-headers)
+    const prevIsDivider = i > 0 && /^[-─]{4,}$/.test(lines[i - 1].trim());
+    const nextIsDivider = i + 1 < lines.length && /^[-─]{4,}$/.test(lines[i + 1].trim());
     const looksLikeHeader = line.trim().length > 2 && line.trim().length < 65
       && line.trim() === line.trim().toUpperCase()
       && /[A-Z]/.test(line.trim())
