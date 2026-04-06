@@ -55,11 +55,12 @@ const PEN_COLORS = [
 const PEN_WIDTHS = [2, 4, 7];
 
 export default function PhotoMarkupScreen() {
-  const { photoUri: initialPhotoUri, inspectionId, itemId, objectPath: existingObjectPath } = useLocalSearchParams<{
+  const { photoUri: initialPhotoUri, inspectionId, itemId, objectPath: existingObjectPath, reopenItemId } = useLocalSearchParams<{
     photoUri: string;
     inspectionId: string;
     itemId: string;
     objectPath?: string;
+    reopenItemId?: string;
   }>();
 
   const insets = useSafeAreaInsets();
@@ -135,12 +136,15 @@ export default function PhotoMarkupScreen() {
     if (inspectionId) {
       router.navigate({
         pathname: "/inspection/conduct/[id]" as any,
-        params: { id: inspectionId },
+        params: {
+          id: inspectionId,
+          ...(reopenItemId ? { reopenItemId } : {}),
+        },
       });
     } else {
       router.back();
     }
-  }, [inspectionId]);
+  }, [inspectionId, reopenItemId]);
 
   // ── Auto-upload on mount ──────────────────────────────────────────────────
 
@@ -457,7 +461,16 @@ export default function PhotoMarkupScreen() {
           >
             {/* Image layer — no pointer events */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
-              <Image source={{ uri: currentPhotoUri }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+              <Image
+              source={{
+                uri: currentPhotoUri,
+                ...(currentPhotoUri && !currentPhotoUri.startsWith("file://") && token
+                  ? { headers: { Authorization: `Bearer ${token}` } }
+                  : {}),
+              }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="contain"
+            />
             </View>
 
             {/* SVG stroke layer — no pointer events so gesture passes through */}
@@ -562,7 +575,16 @@ export default function PhotoMarkupScreen() {
 
       <View style={styles.previewImageWrap}>
         {currentPhotoUri ? (
-          <Image source={{ uri: currentPhotoUri }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+          <Image
+            source={{
+              uri: currentPhotoUri,
+              ...(currentPhotoUri && !currentPhotoUri.startsWith("file://") && token
+                ? { headers: { Authorization: `Bearer ${token}` } }
+                : {}),
+            }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="contain"
+          />
         ) : (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: "#111" }]} />
         )}

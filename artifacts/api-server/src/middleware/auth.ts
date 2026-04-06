@@ -24,9 +24,13 @@ declare global {
 
 function extractToken(req: Request): string | null {
   const authHeader = req.headers.authorization;
-  if (!authHeader) return null;
-  if (authHeader.startsWith("Bearer ")) return authHeader.slice(7);
-  if (authHeader.startsWith("Basic ")) return authHeader.slice(6);
+  if (authHeader) {
+    if (authHeader.startsWith("Bearer ")) return authHeader.slice(7);
+    if (authHeader.startsWith("Basic ")) return authHeader.slice(6);
+  }
+  // Support ?token= query param for <img> tags and Image components that cannot set headers
+  const queryToken = req.query.token;
+  if (typeof queryToken === "string" && queryToken) return queryToken;
   return null;
 }
 

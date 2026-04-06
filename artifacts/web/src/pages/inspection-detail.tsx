@@ -24,6 +24,16 @@ function apiBase() {
   return import.meta.env.BASE_URL.replace(/\/$/, "");
 }
 
+function storageUrl(objectPath: string, width?: number): string {
+  const token = localStorage.getItem("inspectproof_token") || "";
+  const base = `${apiBase()}/api/storage${objectPath}`;
+  const params = new URLSearchParams();
+  if (token) params.set("token", token);
+  if (width) params.set("w", String(width));
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
+}
+
 async function apiFetch(path: string, opts?: RequestInit) {
   const token = localStorage.getItem("inspectproof_token") || "";
   const res = await fetch(`${apiBase()}${path}`, {
@@ -2640,7 +2650,7 @@ function PhotoLightbox({
         {/* Image */}
         <div className="relative w-full max-h-[80vh] flex items-center justify-center">
           <img
-            src={`${apiBase()}/api/storage${photo.photoPath}`}
+            src={storageUrl(photo.photoPath)}
             alt={`Photo ${idx + 1} of ${photos.length}`}
             className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
           />
@@ -3171,7 +3181,7 @@ ${checklistRows}
                                   })}
                                   className="relative block w-full h-full rounded-md overflow-hidden border border-border hover:border-secondary/60 transition-colors"
                                 >
-                                  <img src={`${apiBase()}/api/storage${photoPath}?w=400`} alt={`Photo ${pi + 1}`} className="w-full h-full object-cover" />
+                                  <img src={storageUrl(photoPath, 400)} alt={`Photo ${pi + 1}`} className="w-full h-full object-cover" />
                                   {markup && markup.strokes.length > 0 && (
                                     <>
                                       <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`0 0 ${markup.w} ${markup.h}`} preserveAspectRatio="xMidYMid meet">

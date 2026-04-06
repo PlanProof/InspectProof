@@ -89,6 +89,12 @@ function apiBase() {
   return import.meta.env.BASE_URL.replace(/\/$/, "");
 }
 
+function storageUrl(objectPath: string): string {
+  const token = localStorage.getItem("inspectproof_token") || "";
+  const base = `${apiBase()}/api/storage${objectPath}`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+}
+
 async function apiFetch(path: string, opts?: RequestInit) {
   const token = localStorage.getItem("inspectproof_token") ?? "";
   const res = await fetch(`${apiBase()}${path}`, {
@@ -1122,7 +1128,7 @@ function DocumentsTab({ projectId }: { projectId: number }) {
             </button>
             <p className="absolute top-3 left-3 z-10 text-white/80 text-sm font-medium truncate max-w-xs">{previewDoc.name}</p>
             <img
-              src={`${apiBase()}/api/storage${previewDoc.fileUrl}`}
+              src={storageUrl(previewDoc.fileUrl)}
               alt={previewDoc.name}
               className="w-full max-h-[80vh] object-contain rounded-lg"
             />

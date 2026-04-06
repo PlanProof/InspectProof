@@ -249,7 +249,10 @@ export default function SettingsScreen() {
               {orgDetails.logoUrl && (
                 <View style={styles.orgLogoRow}>
                   <Image
-                    source={{ uri: getApiUrl(`/api/storage${orgDetails.logoUrl}`) }}
+                    source={{
+                      uri: getApiUrl(`/api/storage${orgDetails.logoUrl}`),
+                      ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+                    }}
                     style={styles.orgLogo}
                     resizeMode="contain"
                   />

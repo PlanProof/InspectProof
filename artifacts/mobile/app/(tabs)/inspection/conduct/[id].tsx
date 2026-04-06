@@ -103,7 +103,7 @@ interface ProjectDocument {
 }
 
 export default function ConductInspectionScreen() {
-  const { id, editMode } = useLocalSearchParams<{ id: string; editMode?: string }>();
+  const { id, editMode, reopenItemId } = useLocalSearchParams<{ id: string; editMode?: string; reopenItemId?: string }>();
   const isEditMode = editMode === "1";
   const insets = useSafeAreaInsets();
   const tabBarHeight = useTabBarHeight();
@@ -483,6 +483,17 @@ export default function ConductInspectionScreen() {
     setEditTradeAllocated("");
     setEditRecommendedAction("");
   };
+
+  // Re-open the item modal after returning from photo-markup (pass/fail still needs to be set)
+  useEffect(() => {
+    if (!reopenItemId || !checklistItems.length) return;
+    const targetId = parseInt(reopenItemId, 10);
+    const item = checklistItems.find(i => i.id === targetId);
+    if (item) {
+      openItemModal(item);
+      router.setParams({ reopenItemId: undefined });
+    }
+  }, [reopenItemId, checklistItems]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ckKey = ["inspection-checklist", id, token];
 
@@ -897,6 +908,7 @@ export default function ConductInspectionScreen() {
         photoUri,
         inspectionId: id,
         itemId: String(itemId),
+        reopenItemId: String(itemId),
       },
     });
   };
@@ -1465,6 +1477,7 @@ export default function ConductInspectionScreen() {
           <PhotosPanel
             items={checklistItems}
             baseUrl={baseUrl}
+            authToken={token ?? undefined}
             insets={insets}
             inspectionName={inspection?.inspectionType ? (INSPECTION_TYPES[inspection.inspectionType] || inspection.inspectionType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())) : "Inspection"}
             onDeletePhoto={removePhotoFromItem}
@@ -1510,6 +1523,7 @@ export default function ConductInspectionScreen() {
             tradeAllocated={editTradeAllocated}
             recommendedAction={editRecommendedAction}
             baseUrl={baseUrl}
+            authToken={token ?? undefined}
             documents={projectDocuments}
             internalStaff={internalStaff}
             contractors={contractors}
@@ -2297,7 +2311,10 @@ function DocumentsPanel({
         </View>
         <View style={panelStyles.previewContainer}>
           <Image
-            source={{ uri: `${baseUrl}/api/storage${previewDoc.fileUrl}` }}
+            source={{
+              uri: `${baseUrl}/api/storage${previewDoc.fileUrl}`,
+              ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+            }}
             style={panelStyles.previewImage}
             resizeMode="contain"
           />
@@ -2410,6 +2427,7 @@ interface AllPhotoEntry {
 function PhotosPanel({
   items,
   baseUrl,
+  authToken,
   insets,
   inspectionName,
   onDeletePhoto,
@@ -2425,6 +2443,7 @@ function PhotosPanel({
 }: {
   items: ChecklistItem[];
   baseUrl: string;
+  authToken?: string;
   insets: any;
   inspectionName: string;
   onDeletePhoto: (itemId: number, photoPath: string) => void;
@@ -2438,6 +2457,11 @@ function PhotosPanel({
   confirmedPhotoUris?: Set<string>;
   onRetryPhoto?: (queueId: string) => void;
 }) {
+  const authHeaders = authToken ? { Authorization: `Bearer ${authToken}` } : undefined;
+  const mkImgSrc = (uri: string) =>
+    uri.startsWith("file://") || !authHeaders
+      ? { uri }
+      : { uri, headers: authHeaders };
   const { width: screenW, height: screenH } = useWindowDimensions();
   const COLS = 3;
   const THUMB = Math.floor((screenW - 32 - (COLS - 1) * 4) / COLS);
@@ -2493,7 +2517,7 @@ function PhotosPanel({
         </View>
         <View style={{ flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" }}>
           <Image
-            source={{ uri: `${baseUrl}/api/storage${path}` }}
+            source={mkImgSrc(`${baseUrl}/api/storage${path}`)}
             style={{ width: screenW, height: screenH * 0.72 }}
             resizeMode="contain"
           />
@@ -2559,7 +2583,7 @@ function PhotosPanel({
         <View style={{ flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" }}>
           <View style={{ width: screenW, height: screenH * 0.72 }}>
             <Image
-              source={{ uri: `${baseUrl}/api/storage${photo.path}` }}
+              source={mkImgSrc(`${baseUrl}/api/storage${photo.path}`)}
               style={{ width: screenW, height: screenH * 0.72 }}
               resizeMode="contain"
             />
@@ -2699,7 +2723,7 @@ function PhotosPanel({
                 onPress={() => setUnlinkedLightboxIndex(idx)}
               >
                 <Image
-                  source={{ uri: `${baseUrl}/api/storage${path}` }}
+                  source={mkImgSrc(`${baseUrl}/api/storage${path}`)}
                   style={{ width: THUMB, height: THUMB }}
                   resizeMode="cover"
                 />
@@ -2754,7 +2778,7 @@ function PhotosPanel({
                     onPress={() => !isLocalUri && setLightboxIndex(globalIdx)}
                   >
                     <Image
-                      source={{ uri: imageUri }}
+                      source={mkImgSrc(imageUri)}
                       style={{ width: THUMB, height: THUMB }}
                       resizeMode="cover"
                     />
@@ -2847,13 +2871,13 @@ function PhotosPanel({
 
 function ItemModal({
   item, result, notes, severity, category, priority, location, tradeAllocated, recommendedAction,
-  baseUrl, documents, internalStaff, contractors, onResultChange, onNotesChange, onSeverityChange,
+  baseUrl, authToken, documents, internalStaff, contractors, onResultChange, onNotesChange, onSeverityChange,
   onCategoryChange, onPriorityChange, onLocationChange,
   onTradeAllocatedChange, onRecommendedActionChange, onSave, onClose,
   onUploadPhoto, onTakePhoto, onRemovePhoto, onReorderPhotos, onAnnotateDoc, saving, uploadingPhoto, insets,
   inspectionId,
 }: {
-  item: ChecklistItem; result: ResultKey; notes: string; baseUrl: string;
+  item: ChecklistItem; result: ResultKey; notes: string; baseUrl: string; authToken?: string;
   severity: string | null; category: string; priority: string;
   location: string; tradeAllocated: string; recommendedAction: string;
   documents: ProjectDocument[];
@@ -2871,6 +2895,11 @@ function ItemModal({
   saving: boolean; uploadingPhoto: boolean; insets: any;
   inspectionId?: string;
 }) {
+  const authHeaders = authToken ? { Authorization: `Bearer ${authToken}` } : undefined;
+  const mkImgSrc = (uri: string) =>
+    uri.startsWith("file://") || !authHeaders
+      ? { uri }
+      : { uri, headers: authHeaders };
   const selectedOpt = RESULT_OPTS.find(r => r.key === result);
   const suggestions = getSuggestionsForItem(item.category, item.description);
   const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
@@ -2924,7 +2953,7 @@ function ItemModal({
         <View style={{ flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" }}>
           <View style={{ width: screenW, height: screenH * 0.72 }}>
             <Image
-              source={{ uri: `${baseUrl}/api/storage${photoPath}` }}
+              source={mkImgSrc(`${baseUrl}/api/storage${photoPath}`)}
               style={{ width: screenW, height: screenH * 0.72 }}
               resizeMode="contain"
             />
@@ -3008,7 +3037,7 @@ function ItemModal({
         </View>
         <View style={{ flex: 1 }}>
           <Image
-            source={{ uri: `${baseUrl}/api/storage${previewDoc.fileUrl}` }}
+            source={mkImgSrc(`${baseUrl}/api/storage${previewDoc.fileUrl}`)}
             style={{ flex: 1 }}
             resizeMode="contain"
           />
@@ -3257,7 +3286,7 @@ function ItemModal({
                 return (
                   <Pressable key={idx} style={modalStyles.photoThumb} onPress={() => openLightbox(idx)}>
                     <Image
-                      source={{ uri: `${baseUrl}/api/storage${photoPath}?w=400` }}
+                      source={mkImgSrc(`${baseUrl}/api/storage${photoPath}?w=400`)}
                       style={modalStyles.thumbImage}
                       resizeMode="cover"
                     />
@@ -3328,7 +3357,7 @@ function ItemModal({
                   <View key={photoPath} style={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: Colors.borderLight, borderRadius: 10, padding: 8 }}>
                     <View style={{ position: "relative", width: 56, height: 56, borderRadius: 8, overflow: "hidden" }}>
                       <Image
-                        source={{ uri: `${baseUrl}/api/storage${photoPath}?w=400` }}
+                        source={mkImgSrc(`${baseUrl}/api/storage${photoPath}?w=400`)}
                         style={{ width: 56, height: 56 }}
                         resizeMode="cover"
                       />
@@ -3408,7 +3437,7 @@ function ItemModal({
                         onPress={() => setPreviewDoc(doc)}
                       >
                         <Image
-                          source={{ uri: `${baseUrl}/api/storage${doc.fileUrl}` }}
+                          source={mkImgSrc(`${baseUrl}/api/storage${doc.fileUrl}`)}
                           style={modalStyles.docThumb}
                           resizeMode="cover"
                         />
