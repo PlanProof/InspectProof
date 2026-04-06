@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MapPin, AlertCircle } from "lucide-react";
+import { MapPin, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface AddressFields {
@@ -15,10 +15,8 @@ interface NominatimResult {
   place_id: number;
   display_name: string;
   address: {
-    // House number variants
     house_number?: string;
     house?: string;
-    // Road/street variants — different states use different keys
     road?: string;
     pedestrian?: string;
     path?: string;
@@ -27,13 +25,11 @@ interface NominatimResult {
     residential?: string;
     living_street?: string;
     service?: string;
-    // Suburb/locality variants — SA and others differ
     suburb?: string;
     neighbourhood?: string;
     quarter?: string;
     locality?: string;
     city_district?: string;
-    // Fallback locality fields
     town?: string;
     city?: string;
     village?: string;
@@ -61,10 +57,6 @@ function abbreviateState(state?: string): string {
   return STATE_ABBREVS[lower] ?? state.toUpperCase().slice(0, 3);
 }
 
-/**
- * Resolve the street name from whichever Nominatim field is populated.
- * Different Australian states tag roads differently in OpenStreetMap.
- */
 function resolveRoad(a: NominatimResult["address"]): string | undefined {
   return (
     a.road ??
@@ -78,10 +70,6 @@ function resolveRoad(a: NominatimResult["address"]): string | undefined {
   );
 }
 
-/**
- * Resolve the suburb/locality from whichever Nominatim field is populated.
- * SA often uses locality or neighbourhood rather than suburb.
- */
 function resolveSuburb(a: NominatimResult["address"]): string {
   return (
     a.suburb ??
@@ -98,17 +86,6 @@ function resolveSuburb(a: NominatimResult["address"]): string {
   );
 }
 
-/**
- * Extract the best possible street address from a Nominatim result.
- *
- * Priority order:
- *  1. house_number/house + resolved road field (ideal — structured data present)
- *  2. road field already starts with a digit (Nominatim embedded number in road)
- *  3. display_name first segment is just a number → combine with second segment
- *  4. display_name first segment starts with a digit (e.g. "42 Smith Street")
- *  5. road-only fallback (no number found — user can type it in)
- *  6. display_name first segment as last resort
- */
 function parseNominatimAddress(result: NominatimResult): AddressFields {
   const a = result.address;
   const road = resolveRoad(a);
@@ -117,32 +94,19 @@ function parseNominatimAddress(result: NominatimResult): AddressFields {
   let siteAddress: string;
 
   if (houseNum && road) {
-    // Best case: structured fields have both number and street
     siteAddress = `${houseNum} ${road}`;
   } else if (road && /^\d/.test(road)) {
-    // Road field already contains the house number (e.g. "42 Smith Street")
     siteAddress = road;
   } else {
-    // Fall back to parsing display_name
-    // Nominatim formats specific addresses as:
-    //   "42, Smith Street, Suburb, …"  or  "42 Smith Street, Suburb, …"
     const segments = result.display_name.split(",").map(s => s.trim());
     const first = segments[0];
-
-    // Case A: first segment is just a number — combine with second segment (road)
     if (/^\d+[A-Za-z]?$/.test(first) && segments[1]) {
       siteAddress = `${first} ${segments[1]}`;
-    }
-    // Case B: first segment starts with a digit (e.g. "42 Smith Street")
-    else if (/^\d/.test(first)) {
+    } else if (/^\d/.test(first)) {
       siteAddress = first;
-    }
-    // Case C: fall back to road name (user will type number in)
-    else if (road) {
+    } else if (road) {
       siteAddress = road;
-    }
-    // Case D: last resort
-    else {
+    } else {
       siteAddress = first;
     }
   }
@@ -203,10 +167,6 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
       url.searchParams.set("addressdetails", "1");
       url.searchParams.set("countrycodes", "au");
       url.searchParams.set("limit", "8");
-      // When the query starts with a digit the user is typing a specific
-      // numbered address — use layer=address so Nominatim returns address-level
-      // features (which carry house_number) rather than street-level results.
-      // Note: layer= is the correct Nominatim 4.x parameter for this purpose.
       if (/^\d/.test(q.trim())) {
         url.searchParams.set("layer", "address");
       }
@@ -235,10 +195,19 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
   const handleSelect = (result: NominatimResult) => {
     const fields = parseNominatimAddress(result);
     setSelected(fields);
-    setQuery(fields.siteAddress + (fields.suburb ? `, ${fields.suburb}` : ""));
+    setQuery(fields.siteAddress);
     setSuggestions([]);
     setOpen(false);
     onChange(fields);
+  };
+
+  // Once an address is selected, allow direct editing of the street address in the same input
+  const handleSelectedAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setQuery(val);
+    const next = { ...(selected!), siteAddress: val };
+    setSelected(next);
+    onChange(next);
   };
 
   const handleManualChange = (field: keyof AddressFields, val: string) => {
@@ -257,7 +226,7 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           Manual entry — address is unverified
         </div>
-        <div className="col-span-2 space-y-1.5">
+        <div className="space-y-1.5">
           <Label className={labelCls}>Site Address</Label>
           <Input
             className={inputCls}
@@ -308,19 +277,25 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
 
   return (
     <div className="space-y-3">
-      <div ref={containerRef} className="relative col-span-2">
+      <div ref={containerRef} className="relative">
         <Label className={labelCls}>Site Address</Label>
-        <p className="text-[11px] text-muted-foreground mt-0.5 mb-1.5">
-          Start with the street number for best results — e.g. <span className="font-medium">42 Smith Street, Sydney</span>
-        </p>
-        <div className="relative">
-          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        {!selected && (
+          <p className="text-[11px] text-muted-foreground mt-0.5 mb-1.5">
+            Start with the street number — e.g. <span className="font-medium">42 Smith Street, Adelaide</span>
+          </p>
+        )}
+        <div className="relative mt-1.5">
+          {selected ? (
+            <CheckCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500 pointer-events-none" />
+          ) : (
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          )}
           <Input
-            className={cn("pl-9", inputCls)}
-            placeholder="e.g. 42 Smith Street, Sydney NSW"
+            className={cn("pl-9", inputCls, selected && !selected.siteAddress && "border-amber-400 focus-visible:ring-amber-400")}
+            placeholder="e.g. 42 Smith Street, Adelaide SA"
             value={query}
-            onChange={handleQueryChange}
-            onFocus={() => { if (suggestions.length > 0) setOpen(true); }}
+            onChange={selected ? handleSelectedAddressChange : handleQueryChange}
+            onFocus={() => { if (!selected && suggestions.length > 0) setOpen(true); }}
             autoComplete="off"
           />
           {loading && (
@@ -330,7 +305,8 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
           )}
         </div>
 
-        {open && suggestions.length > 0 && (
+        {/* Suggestion dropdown — only while searching (no selection yet) */}
+        {!selected && open && suggestions.length > 0 && (
           <ul className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-xl overflow-hidden max-h-64 overflow-y-auto">
             {suggestions.map(r => {
               const parsed = parseNominatimAddress(r);
@@ -353,24 +329,12 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
         )}
       </div>
 
+      {/* After selection: show suburb / state / postcode as read-only context */}
       {selected && (
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className={labelCls}>Street Address</Label>
-            <Input
-              className={inputCls}
-              placeholder="e.g. 42 Smith Street"
-              value={selected.siteAddress}
-              onChange={e => {
-                const next = { ...selected, siteAddress: e.target.value };
-                setSelected(next);
-                onChange(next);
-              }}
-            />
-            {!selected.siteAddress && (
-              <p className="text-[11px] text-amber-600">Street number missing — type it in above</p>
-            )}
-          </div>
+        <>
+          {!selected.siteAddress && (
+            <p className="text-[11px] text-amber-600 -mt-1">Street number missing — type it in the field above</p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className={labelCls}>Suburb</Label>
@@ -387,16 +351,25 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
               </div>
             </div>
           </div>
-        </div>
+          <button
+            type="button"
+            onClick={() => { setSelected(null); setQuery(""); setSuggestions([]); onChange({ siteAddress: "", suburb: "", state: "", postcode: "" }); }}
+            className="text-xs text-muted-foreground hover:text-secondary transition-colors"
+          >
+            ← Search for a different address
+          </button>
+        </>
       )}
 
-      <button
-        type="button"
-        onClick={() => setManual(true)}
-        className="text-xs text-muted-foreground hover:text-secondary transition-colors"
-      >
-        Can't find your address? Enter it manually →
-      </button>
+      {!selected && (
+        <button
+          type="button"
+          onClick={() => setManual(true)}
+          className="text-xs text-muted-foreground hover:text-secondary transition-colors"
+        >
+          Can't find your address? Enter it manually →
+        </button>
+      )}
     </div>
   );
 }
