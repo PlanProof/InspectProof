@@ -7,7 +7,8 @@ import {
   Package, X, Plus, GripVertical, Save,
   DollarSign, TrendingUp, TrendingDown, CreditCard,
   Calendar, ExternalLink, AlertOctagon, Activity,
-  Mail, RefreshCw, Filter,
+  Mail, RefreshCw, Ban, MessageSquare, Clock, CheckCheck,
+  List, Filter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +73,7 @@ interface AdminUser {
   isActive: boolean;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  stripeSubscriptionStatus: string | null;
   planOverrideProjects: string | null;
   planOverrideInspections: string | null;
   usage: { projects: number; inspections: number };
@@ -286,16 +288,42 @@ function UserModal({ user, onClose, onSave, saving }: {
 
 // ── User Row ───────────────────────────────────────────────────────────────────
 
-function UserRow({ user, onEdit, onDelete }: { user: AdminUser; onEdit: () => void; onDelete: () => void }) {
+function UserRow({ user, onEdit, onDelete, onCancelSub, onReactivate, cancellingId, reactivatingId }: {
+  user: AdminUser;
+  onEdit: () => void;
+  onDelete: () => void;
+  onCancelSub: (userId: number) => void;
+  onReactivate: (userId: number) => void;
+  cancellingId: number | null;
+  reactivatingId: number | null;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [subscription, setSubscription] = useState<any>(null);
+  const [loadingSub, setLoadingSub] = useState(false);
 
   const projectPct = user.limits.maxProjects
     ? Math.min(100, (user.usage.projects / user.limits.maxProjects) * 100)
     : null;
 
+  const loadSubscription = async () => {
+    if (subscription || !user.stripeSubscriptionId) return;
+    setLoadingSub(true);
+    try {
+      const r = await fetch(API(`/admin/users/${user.id}`), { headers: authHeaders() });
+      const data = await r.json();
+      setSubscription(data.subscription);
+    } catch {}
+    setLoadingSub(false);
+  };
+
+  const handleExpand = () => {
+    setExpanded(e => !e);
+    if (!expanded) loadSubscription();
+  };
+
   return (
     <>
-      <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setExpanded(e => !e)}>
+      <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={handleExpand}>
         <td className="px-4 py-3">
           <div>
             <p className="font-medium text-[#0B1933] text-sm">{user.firstName} {user.lastName}</p>
@@ -327,7 +355,7 @@ function UserRow({ user, onEdit, onDelete }: { user: AdminUser; onEdit: () => vo
             <button onClick={onDelete} className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition">
               <Trash2 className="w-3.5 h-3.5" />
             </button>
-            <button onClick={() => setExpanded(e => !e)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 transition">
+            <button onClick={handleExpand} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 transition">
               {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
           </div>
@@ -336,7 +364,7 @@ function UserRow({ user, onEdit, onDelete }: { user: AdminUser; onEdit: () => vo
       {expanded && (
         <tr className="border-b border-gray-100 bg-blue-50/30">
           <td colSpan={7} className="px-4 py-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-3">
               <div>
                 <p className="text-xs text-gray-500 mb-1">Stripe Customer</p>
                 <p className="font-mono text-xs truncate">{user.stripeCustomerId ?? "—"}</p>
@@ -368,6 +396,68 @@ function UserRow({ user, onEdit, onDelete }: { user: AdminUser; onEdit: () => vo
                 <p className="text-xs">{formatRole(user.role)}{user.isAdmin ? " · Admin" : ""}</p>
               </div>
             </div>
+
+            {user.stripeSubscriptionId && (
+              <div className="border-t border-blue-100 pt-3 mt-1">
+                {loadingSub ? (
+                  <p className="text-xs text-gray-400">Loading subscription details…</p>
+                ) : subscription ? (
+                  <div className="flex items-center gap-6 flex-wrap">
+                    <div>
+                      <p className="text-xs text-gray-500 mb-0.5">Sub status</p>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        subscription.status === 'active' ? 'bg-green-100 text-green-700' :
+                        subscription.status === 'past_due' ? 'bg-amber-100 text-amber-700' :
+                        subscription.status === 'trialing' ? 'bg-blue-100 text-blue-700' :
+                        subscription.status === 'canceled' ? 'bg-red-100 text-red-600' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>
+                        {subscription.status}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-0.5">Period ends</p>
+                      <p className="text-xs font-medium text-[#0B1933]">
+                        {subscription.currentPeriodEnd
+                          ? new Date(subscription.currentPeriodEnd * 1000).toLocaleDateString("en-AU")
+                          : "—"}
+                      </p>
+                    </div>
+                    {subscription.cancelAtPeriodEnd && (
+                      <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-500" />
+                        <span className="text-xs font-medium text-amber-700">Cancels at period end</span>
+                      </div>
+                    )}
+                    {subscription.status !== 'canceled' && !subscription.cancelAtPeriodEnd && (
+                      <button
+                        onClick={e => { e.stopPropagation(); onCancelSub(user.id); }}
+                        disabled={cancellingId === user.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-600 border border-red-200 bg-red-50 rounded-lg hover:bg-red-100 transition disabled:opacity-50"
+                      >
+                        <Ban className="w-3.5 h-3.5" />
+                        {cancellingId === user.id ? "Cancelling…" : "Cancel subscription"}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">No subscription data available</p>
+                )}
+              </div>
+            )}
+
+            {!user.isActive && (
+              <div className="border-t border-blue-100 pt-3 mt-3">
+                <button
+                  onClick={e => { e.stopPropagation(); onReactivate(user.id); }}
+                  disabled={reactivatingId === user.id}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 border border-green-200 bg-green-50 rounded-lg hover:bg-green-100 transition disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {reactivatingId === user.id ? "Reactivating…" : "Reactivate account"}
+                </button>
+              </div>
+            )}
           </td>
         </tr>
       )}
@@ -530,18 +620,27 @@ export default function Admin() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"users" | "plans" | "stats" | "revenue" | "emails">("users");
+  const [tab, setTab] = useState<"users" | "plans" | "stats" | "revenue" | "invites" | "support" | "activity" | "emails">("users");
+  const [userFilter, setUserFilter] = useState<"all" | "inactive">("all");
   const [emailPage, setEmailPage] = useState(1);
   const [emailTypeFilter, setEmailTypeFilter] = useState("");
   const [emailStatusFilter, setEmailStatusFilter] = useState("");
+  const [activityEntityType, setActivityEntityType] = useState("");
+  const [activityDateFrom, setActivityDateFrom] = useState("");
+  const [activityDateTo, setActivityDateTo] = useState("");
+  const [activityPage, setActivityPage] = useState(0);
+  const ACTIVITY_LIMIT = 50;
 
   const [userModal, setUserModal] = useState<{ open: boolean; user: AdminUser | null }>({ open: false, user: null });
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [reactivatingId, setReactivatingId] = useState<number | null>(null);
 
   const { data: usersData, isLoading: usersLoading } = useQuery({
-    queryKey: ["admin-users"],
+    queryKey: ["admin-users", userFilter],
     queryFn: async () => {
-      const r = await fetch(API("/admin/users"), { headers: authHeaders() });
+      const url = userFilter === "inactive" ? API("/admin/users?status=inactive") : API("/admin/users");
+      const r = await fetch(url, { headers: authHeaders() });
       if (!r.ok) throw new Error("Admin access required");
       return r.json();
     },
@@ -560,6 +659,17 @@ export default function Admin() {
     queryFn: async () => {
       const r = await fetch(API("/admin/revenue"), { headers: authHeaders() });
       if (!r.ok) throw new Error("Failed to load revenue data");
+      return r.json();
+    },
+    staleTime: 60_000,
+    enabled: tab === "revenue",
+  });
+
+  const { data: failedPaymentsData, isLoading: failedPaymentsLoading } = useQuery({
+    queryKey: ["admin-failed-payments"],
+    queryFn: async () => {
+      const r = await fetch(API("/admin/failed-payments"), { headers: authHeaders() });
+      if (!r.ok) throw new Error("Failed to load");
       return r.json();
     },
     staleTime: 60_000,
@@ -607,6 +717,47 @@ export default function Admin() {
     onError: (err: Error) => {
       toast({ title: "Retry failed", description: err.message, variant: "destructive" });
     },
+  });
+
+  const { data: invitesData, isLoading: invitesLoading } = useQuery({
+    queryKey: ["admin-invites"],
+    queryFn: async () => {
+      const r = await fetch(API("/admin/invites"), { headers: authHeaders() });
+      if (!r.ok) throw new Error("Failed to load invites");
+      return r.json();
+    },
+    enabled: tab === "invites",
+  });
+
+  const { data: feedbackData, isLoading: feedbackLoading } = useQuery({
+    queryKey: ["admin-feedback"],
+    queryFn: async () => {
+      const r = await fetch(API("/admin/feedback"), { headers: authHeaders() });
+      if (!r.ok) throw new Error("Failed to load feedback");
+      return r.json();
+    },
+    enabled: tab === "support",
+  });
+
+  const [activityEntityType, setActivityEntityType] = useState("");
+  const [activityDateFrom, setActivityDateFrom] = useState("");
+  const [activityDateTo, setActivityDateTo] = useState("");
+  const [activityPage, setActivityPage] = useState(0);
+  const ACTIVITY_LIMIT = 50;
+
+
+  const { data: activityData, isLoading: activityLoading, refetch: refetchActivity } = useQuery({
+    queryKey: ["admin-activity", activityEntityType, activityDateFrom, activityDateTo, activityPage],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: String(ACTIVITY_LIMIT), offset: String(activityPage * ACTIVITY_LIMIT) });
+      if (activityEntityType) params.set("entityType", activityEntityType);
+      if (activityDateFrom) params.set("dateFrom", activityDateFrom);
+      if (activityDateTo) params.set("dateTo", activityDateTo);
+      const r = await fetch(API(`/admin/activity?${params}`), { headers: authHeaders() });
+      if (!r.ok) throw new Error("Failed to load activity logs");
+      return r.json();
+    },
+    enabled: tab === "activity",
   });
 
   const createUser = useMutation({
@@ -658,6 +809,79 @@ export default function Admin() {
     onError: (e: any) => toast({ title: "Cannot delete", description: e.message, variant: "destructive" }),
   });
 
+  const handleCancelSub = async (userId: number) => {
+    setCancellingId(userId);
+    try {
+      const r = await fetch(API(`/admin/users/${userId}/cancel-subscription`), {
+        method: "POST", headers: authHeaders(),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Failed");
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+      toast({ title: "Subscription cancelled at period end" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+    setCancellingId(null);
+  };
+
+  const handleReactivate = async (userId: number) => {
+    setReactivatingId(userId);
+    try {
+      const r = await fetch(API(`/admin/users/${userId}/reactivate`), {
+        method: "POST", headers: authHeaders(),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Failed");
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+      toast({ title: "Account reactivated" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+    setReactivatingId(null);
+  };
+
+  const handleResendInvite = async (inviteId: number) => {
+    try {
+      const r = await fetch(API(`/admin/invites/${inviteId}/resend`), {
+        method: "POST", headers: authHeaders(),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Failed");
+      toast({ title: "Invite resent" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleRevokeInvite = async (inviteId: number) => {
+    try {
+      const r = await fetch(API(`/admin/invites/${inviteId}`), {
+        method: "DELETE", headers: authHeaders(),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Failed");
+      qc.invalidateQueries({ queryKey: ["admin-invites"] });
+      toast({ title: "Invite revoked" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleMarkResolved = async (feedbackId: number) => {
+    try {
+      const r = await fetch(API(`/admin/feedback/${feedbackId}`), {
+        method: "PATCH", headers: authHeaders(), body: JSON.stringify({ status: "resolved" }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Failed");
+      qc.invalidateQueries({ queryKey: ["admin-feedback"] });
+      toast({ title: "Marked as resolved" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
   const [savingPlan, setSavingPlan] = useState<string | null>(null);
 
   const savePlan = async (planKey: string, data: any) => {
@@ -678,7 +902,10 @@ export default function Admin() {
   };
 
   const users: AdminUser[] = usersData?.users ?? [];
-  const filtered = users.filter(u =>
+  const displayedUsers = userFilter === "inactive"
+    ? users.filter(u => !u.isActive || u.stripeSubscriptionStatus === "canceled")
+    : users;
+  const filtered = displayedUsers.filter(u =>
     search === "" ||
     u.email.toLowerCase().includes(search.toLowerCase()) ||
     `${u.firstName} ${u.lastName}`.toLowerCase().includes(search.toLowerCase())
@@ -690,6 +917,13 @@ export default function Admin() {
   }));
 
   const stats = statsData ?? {};
+  const invites = invitesData?.invites ?? [];
+  const feedbackItems = feedbackData?.feedback ?? [];
+  const activityLogs = activityData?.logs ?? [];
+
+  const inactiveCount = userFilter === "inactive"
+    ? users.length
+    : users.filter(u => !u.isActive || u.stripeSubscriptionStatus === "canceled").length;
 
   if (usersData === undefined && !usersLoading) {
     return (
@@ -704,11 +938,22 @@ export default function Admin() {
     );
   }
 
+  const TAB_ITEMS = [
+    { key: "users", label: "Users" },
+    { key: "plans", label: "Plans" },
+    { key: "revenue", label: "Revenue" },
+    { key: "invites", label: "Invites" },
+    { key: "support", label: "Support" },
+    { key: "activity", label: "Activity" },
+    { key: "emails", label: "Emails" },
+    { key: "stats", label: "Stats" },
+  ] as const;
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-[#0B1933] text-white px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 flex-wrap">
           <div className="flex items-center gap-2.5">
             <svg width="28" height="28" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect width="40" height="40" rx="6" fill="#466DB5"/>
@@ -722,19 +967,19 @@ export default function Admin() {
               InspectProof Admin
             </span>
           </div>
-          <div className="flex gap-1">
-            {(["users", "plans", "revenue", "stats", "emails"] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  tab === t ? "bg-white/15 text-white" : "text-gray-300 hover:text-white"
-                }`}
-              >
-                {t === "users" ? "Users" : t === "plans" ? "Plans" : t === "revenue" ? "Revenue" : t === "stats" ? "Stats" : "Emails"}
-              </button>
-            ))}
-          </div>
+        <div className="flex items-center gap-1 flex-wrap">
+          {TAB_ITEMS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                tab === t.key ? "bg-white/15 text-white" : "text-gray-300 hover:text-white"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
         </div>
         <Button variant="ghost" size="sm" className="text-gray-300 hover:text-white" onClick={() => setLocation("/dashboard")}>
           Exit admin
@@ -751,7 +996,29 @@ export default function Admin() {
                 <h2 className="text-xl font-bold text-[#0B1933]">All users</h2>
                 <p className="text-sm text-gray-500">{users.length} total accounts</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setUserFilter("all")}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                      userFilter === "all"
+                        ? "bg-[#0B1933] text-white"
+                        : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    All ({users.length})
+                  </button>
+                  <button
+                    onClick={() => setUserFilter("inactive")}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                      userFilter === "inactive"
+                        ? "bg-red-500 text-white"
+                        : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    Cancelled/Inactive ({inactiveCount})
+                  </button>
+                </div>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <Input
@@ -794,6 +1061,10 @@ export default function Admin() {
                         user={user}
                         onEdit={() => setUserModal({ open: true, user })}
                         onDelete={() => setDeleteTarget(user)}
+                        onCancelSub={handleCancelSub}
+                        onReactivate={handleReactivate}
+                        cancellingId={cancellingId}
+                        reactivatingId={reactivatingId}
                       />
                     ))}
                     {filtered.length === 0 && (
@@ -904,7 +1175,10 @@ export default function Admin() {
                 <p className="text-sm text-gray-500 mt-0.5">Live financial data pulled from Stripe · AUD</p>
               </div>
               <button
-                onClick={() => qc.invalidateQueries({ queryKey: ["admin-revenue"] })}
+                onClick={() => {
+                  qc.invalidateQueries({ queryKey: ["admin-revenue"] });
+                  qc.invalidateQueries({ queryKey: ["admin-failed-payments"] });
+                }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
               >
                 <Activity className="w-3.5 h-3.5" />
@@ -1142,6 +1416,69 @@ export default function Admin() {
                   )}
                 </div>
 
+                {/* ── Failed / Past-Due Payments ── */}
+                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-[#0B1933]">Past-Due / Failed Payments</h3>
+                      <p className="text-xs text-gray-400 mt-0.5">Open invoices past their due date</p>
+                    </div>
+                    {failedPaymentsLoading && (
+                      <span className="text-xs text-gray-400">Loading…</span>
+                    )}
+                  </div>
+                  {failedPaymentsData?.failedPayments?.length > 0 ? (
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50">
+                          <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</th>
+                          <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Description</th>
+                          <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Amount</th>
+                          <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Due Date</th>
+                          <th className="px-4 py-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {failedPaymentsData.failedPayments.map((fp: any) => (
+                          <tr key={fp.id} className="border-b border-gray-50 hover:bg-amber-50/40">
+                            <td className="px-4 py-3">
+                              <p className="text-sm font-medium text-[#0B1933]">{fp.customerName ?? "—"}</p>
+                              <p className="text-xs text-gray-400">{fp.customerEmail ?? "—"}</p>
+                            </td>
+                            <td className="px-4 py-3 text-xs text-gray-500 max-w-48 truncate">{fp.description}</td>
+                            <td className="px-4 py-3">
+                              <span className="text-sm font-bold text-amber-600">
+                                ${fp.amount?.toFixed(2)} {fp.currency}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-xs text-red-500 font-medium">
+                              {fp.dueDate ? new Date(fp.dueDate).toLocaleDateString("en-AU") : "—"}
+                            </td>
+                            <td className="px-4 py-3">
+                              {fp.hostedInvoiceUrl && (
+                                <a
+                                  href={fp.hostedInvoiceUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#466DB5] hover:underline"
+                                >
+                                  <Mail className="w-3.5 h-3.5" />
+                                  Send payment link
+                                </a>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="px-6 py-10 text-center">
+                      <CheckCircle2 className="w-8 h-8 text-green-300 mx-auto mb-2" />
+                      <p className="text-sm text-gray-400">No past-due invoices</p>
+                    </div>
+                  )}
+                </div>
+
                 {/* ── Recent Payments ── */}
                 <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -1202,6 +1539,453 @@ export default function Admin() {
 
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Emails Tab ── */}
+        {tab === "emails" && (
+          <div>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-[#0B1933]">Email Logs</h2>
+                <p className="text-sm text-gray-500">All outbound emails sent by the system</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  <select
+                    value={emailTypeFilter}
+                    onChange={e => { setEmailTypeFilter(e.target.value); setEmailPage(1); }}
+                    className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#466DB5]/30"
+                  >
+                    <option value="">All types</option>
+                    <option value="inspection_assigned">Inspection assigned</option>
+                    <option value="inspection_reminder">Inspection reminder</option>
+                    <option value="feedback_notification">Feedback notification</option>
+                    <option value="app_invite">App invite</option>
+                    <option value="token_invite">Token invite</option>
+                    <option value="welcome_credentials">Welcome credentials</option>
+                    <option value="password_reset">Password reset</option>
+                    <option value="report_delivery">Report delivery</option>
+                    <option value="contractor_defect_report">Contractor defect report</option>
+                    <option value="welcome">Welcome</option>
+                    <option value="email_verification">Email verification</option>
+                  </select>
+                </div>
+                <select
+                  value={emailStatusFilter}
+                  onChange={e => { setEmailStatusFilter(e.target.value); setEmailPage(1); }}
+                  className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#466DB5]/30"
+                >
+                  <option value="">All statuses</option>
+                  <option value="sent">Sent</option>
+                  <option value="failed">Failed</option>
+                </select>
+                <button
+                  onClick={() => refetchEmailLogs()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0B1933] text-white text-sm font-medium rounded-lg hover:bg-[#0B1933]/90 transition"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+              {emailLogsLoading ? (
+                <div className="px-6 py-10 text-center">
+                  <RefreshCw className="w-6 h-6 text-gray-300 mx-auto mb-2 animate-spin" />
+                  <p className="text-sm text-gray-400">Loading email logs…</p>
+                </div>
+              ) : !emailLogsData?.logs?.length ? (
+                <div className="px-6 py-10 text-center">
+                  <Mail className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No email logs found</p>
+                  <p className="text-xs text-gray-300 mt-1">Emails will appear here as they are sent</p>
+                </div>
+              ) : (
+                <>
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50">
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">ID</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Recipient</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Sent at</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Message ID</th>
+                        <th className="px-4 py-3"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {emailLogsData.logs.map((log: any) => (
+                        <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                          <td className="px-4 py-3 text-xs text-gray-400">#{log.id}</td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                              {log.type?.replace(/_/g, " ")}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="text-sm font-medium text-[#0B1933] truncate max-w-48">{log.recipient ?? "—"}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            {log.status === "sent" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                                <CheckCircle2 className="w-3 h-3" /> Sent
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">
+                                <AlertCircle className="w-3 h-3" /> Failed
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-400">
+                            {log.createdAt ? new Date(log.createdAt).toLocaleString("en-AU") : "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs text-gray-400 font-mono truncate max-w-36 block" title={log.resendMessageId ?? log.errorMessage}>
+                              {log.resendMessageId ? log.resendMessageId : log.errorMessage ? <span className="text-red-400">{log.errorMessage.slice(0, 40)}</span> : "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {log.status === "failed" && (log.type === "inspection_assigned" || log.type === "inspection_reminder" || log.type === "welcome") && (
+                              <button
+                                onClick={() => retryEmail.mutate(log.id)}
+                                disabled={retryEmail.isPending}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#466DB5] border border-[#466DB5]/30 rounded-lg hover:bg-blue-50 transition disabled:opacity-50"
+                              >
+                                <RefreshCw className="w-3 h-3" /> Retry
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {emailLogsData.pages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                      <p className="text-xs text-gray-400">
+                        Page {emailLogsData.page} of {emailLogsData.pages} &mdash; {emailLogsData.total} total
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setEmailPage(p => Math.max(1, p - 1))}
+                          disabled={emailLogsData.page <= 1}
+                          className="px-3 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          onClick={() => setEmailPage(p => Math.min(emailLogsData.pages, p + 1))}
+                          disabled={emailLogsData.page >= emailLogsData.pages}
+                          className="px-3 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Invites Tab ── */}
+        {tab === "invites" && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-[#0B1933]">Platform Invitations</h2>
+                <p className="text-sm text-gray-500 mt-0.5">All pending and expired invitations across the platform</p>
+              </div>
+              <button
+                onClick={() => qc.invalidateQueries({ queryKey: ["admin-invites"] })}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Refresh
+              </button>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+              {invitesLoading ? (
+                <div className="p-8 text-center text-gray-400 text-sm">Loading invitations…</div>
+              ) : invites.length === 0 ? (
+                <div className="p-10 text-center">
+                  <Mail className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No invitations found</p>
+                </div>
+              ) : (
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Invitee</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Invited by</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Org</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Expires</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invites.map((inv: any) => (
+                      <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-medium text-[#0B1933]">{inv.email}</p>
+                          <p className="text-xs text-gray-400">{formatRole(inv.role)}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm text-gray-700">{inv.inviterName ?? "—"}</p>
+                          <p className="text-xs text-gray-400">{inv.inviterEmail ?? ""}</p>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{inv.companyName ?? "—"}</td>
+                        <td className="px-4 py-3 text-xs text-gray-400">
+                          {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString("en-AU") : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            inv.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                            inv.status === 'expired' ? 'bg-gray-100 text-gray-500' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {inv.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {!inv.usedAt && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleResendInvite(inv.id)}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-[#466DB5] hover:text-[#466DB5]/80 transition"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                Resend
+                              </button>
+                              <button
+                                onClick={() => handleRevokeInvite(inv.id)}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-red-500 hover:text-red-600 transition"
+                              >
+                                <Ban className="w-3 h-3" />
+                                Revoke
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Support Tab ── */}
+        {tab === "support" && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-[#0B1933]">Support Inbox</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Feedback and support submissions from users</p>
+              </div>
+              <button
+                onClick={() => qc.invalidateQueries({ queryKey: ["admin-feedback"] })}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Refresh
+              </button>
+            </div>
+
+            {feedbackLoading ? (
+              <div className="text-center py-16 text-gray-400 text-sm">Loading submissions…</div>
+            ) : feedbackItems.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
+                <MessageSquare className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-sm text-gray-400">No support submissions yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {feedbackItems.map((item: any) => (
+                  <div
+                    key={item.id}
+                    className={`bg-white rounded-xl border p-5 ${item.status === 'resolved' ? 'border-green-100 bg-green-50/30' : 'border-gray-200'}`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-2">
+                          <p className="text-sm font-semibold text-[#0B1933]">
+                            {item.senderName ?? "Anonymous"}
+                          </p>
+                          {item.senderEmail && (
+                            <p className="text-xs text-gray-400">{item.senderEmail}</p>
+                          )}
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ml-auto ${
+                            item.status === 'resolved'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {item.status === 'resolved' ? 'Resolved' : 'Pending'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700 leading-relaxed">{item.message}</p>
+                        <p className="text-xs text-gray-400 mt-2">
+                          {new Date(item.createdAt).toLocaleString("en-AU")}
+                        </p>
+                      </div>
+                      {item.status !== 'resolved' && (
+                        <button
+                          onClick={() => handleMarkResolved(item.id)}
+                          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 border border-green-200 bg-green-50 rounded-lg hover:bg-green-100 transition"
+                        >
+                          <CheckCheck className="w-3.5 h-3.5" />
+                          Mark resolved
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Activity Tab ── */}
+        {tab === "activity" && (
+          <div>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-[#0B1933]">Platform Activity Log</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Cross-organisation audit trail of all platform events</p>
+              </div>
+              <button
+                onClick={() => refetchActivity()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Refresh
+              </button>
+            </div>
+
+            {/* Filters */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex items-center gap-3 flex-wrap">
+              <Filter className="w-4 h-4 text-gray-400 shrink-0" />
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</label>
+                <select
+                  value={activityEntityType}
+                  onChange={e => { setActivityEntityType(e.target.value); setActivityPage(0); }}
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#466DB5]/40"
+                >
+                  <option value="">All types</option>
+                  <option value="project">Project</option>
+                  <option value="inspection">Inspection</option>
+                  <option value="issue">Issue</option>
+                  <option value="document">Document</option>
+                  <option value="checklist">Checklist</option>
+                  <option value="user">User</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">From</label>
+                <input
+                  type="date"
+                  value={activityDateFrom}
+                  onChange={e => { setActivityDateFrom(e.target.value); setActivityPage(0); }}
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#466DB5]/40"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">To</label>
+                <input
+                  type="date"
+                  value={activityDateTo}
+                  onChange={e => { setActivityDateTo(e.target.value); setActivityPage(0); }}
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#466DB5]/40"
+                />
+              </div>
+              {(activityEntityType || activityDateFrom || activityDateTo) && (
+                <button
+                  onClick={() => { setActivityEntityType(""); setActivityDateFrom(""); setActivityDateTo(""); setActivityPage(0); }}
+                  className="text-xs text-gray-400 hover:text-gray-600 transition flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" /> Clear
+                </button>
+              )}
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+              {activityLoading ? (
+                <div className="p-8 text-center text-gray-400 text-sm">Loading activity logs…</div>
+              ) : activityLogs.length === 0 ? (
+                <div className="p-10 text-center">
+                  <List className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No activity logs found</p>
+                </div>
+              ) : (
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Action</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Entity</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">User</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Org</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activityLogs.map((log: any) => (
+                      <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="text-sm text-[#0B1933]">{log.description}</p>
+                          <span className="text-xs font-semibold text-gray-400 uppercase">{log.action}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded capitalize">
+                            {log.entityType}
+                          </span>
+                          <span className="text-xs text-gray-400 ml-1">#{log.entityId}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm text-gray-700">{log.userName}</p>
+                          {log.userEmail && <p className="text-xs text-gray-400">{log.userEmail}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{log.orgName ?? "—"}</td>
+                        <td className="px-4 py-3 text-xs text-gray-400">
+                          {new Date(log.createdAt).toLocaleString("en-AU")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {/* Pagination controls */}
+              {activityData && activityData.total > ACTIVITY_LIMIT && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                  <p className="text-xs text-gray-500">
+                    Showing {activityPage * ACTIVITY_LIMIT + 1}–{Math.min((activityPage + 1) * ACTIVITY_LIMIT, activityData.total)} of {activityData.total} entries
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setActivityPage(p => Math.max(0, p - 1))}
+                      disabled={activityPage === 0}
+                      className="px-3 py-1 text-xs font-medium border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs text-gray-500">Page {activityPage + 1} of {Math.ceil(activityData.total / ACTIVITY_LIMIT)}</span>
+                    <button
+                      onClick={() => setActivityPage(p => p + 1)}
+                      disabled={(activityPage + 1) * ACTIVITY_LIMIT >= activityData.total}
+                      className="px-3 py-1 text-xs font-medium border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

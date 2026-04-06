@@ -1,10 +1,13 @@
 import { Router, type IRouter } from 'express';
-import { db, usersTable, projectsTable, inspectionsTable, planConfigsTable, emailLogsTable, reportsTable } from '@workspace/db';
-import { eq, count, desc, sql, and, ne, asc } from 'drizzle-orm';
+import { db, usersTable, projectsTable, inspectionsTable, planConfigsTable, emailLogsTable, reportsTable, invitationsTable, feedbacksTable, activityLogsTable } from '@workspace/db';
+import { eq, count, desc, sql, and, ne, asc, or, isNull, gte, lte } from 'drizzle-orm';
+import type Stripe from 'stripe';
 import { getUncachableStripeClient } from '../stripeClient';
 import { getLimits } from '../lib/planLimits';
 import bcrypt from 'bcryptjs';
 import { decodeSessionToken } from '../lib/session-token';
+import { sendTokenInviteEmail } from '../lib/email';
+import { randomUUID } from 'crypto';
 
 const router: IRouter = Router();
 
@@ -30,14 +33,20 @@ async function requireAdmin(req: any, res: any, next: any) {
 
 // ── Users ──────────────────────────────────────────────────────────────────────
 
-router.get('/admin/users', requireAdmin, async (_req, res) => {
-  const users = await db
-    .select()
-    .from(usersTable)
-    .orderBy(desc(usersTable.createdAt));
+router.get('/admin/users', requireAdmin, async (req, res) => {
+  const { status } = req.query;
+
+  const users = await db.select().from(usersTable).orderBy(desc(usersTable.createdAt));
+
+  let filtered = users;
+  if (status === 'inactive') {
+    // Include users that are either explicitly deactivated (isActive=false) OR
+    // have a Stripe subscription status of 'canceled' (set by the webhook sync).
+    filtered = users.filter(u => !u.isActive || u.stripeSubscriptionStatus === 'canceled');
+  }
 
   const usersWithUsage = await Promise.all(
-    users.map(async (user) => {
+    filtered.map(async (user) => {
       const [{ projectCount }] = await db
         .select({ projectCount: count() })
         .from(projectsTable)
@@ -59,6 +68,7 @@ router.get('/admin/users', requireAdmin, async (_req, res) => {
         isActive: user.isActive,
         stripeCustomerId: user.stripeCustomerId,
         stripeSubscriptionId: user.stripeSubscriptionId,
+        stripeSubscriptionStatus: user.stripeSubscriptionStatus,
         planOverrideProjects: user.planOverrideProjects,
         planOverrideInspections: user.planOverrideInspections,
         usage: { projects: projectCount, inspections: inspectionCount },
@@ -105,7 +115,14 @@ router.get('/admin/users/:id', requireAdmin, async (req, res) => {
   if (user.stripeSubscriptionId) {
     try {
       const stripe = await getUncachableStripeClient();
-      stripeSubscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+      const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+      stripeSubscription = {
+        id: sub.id,
+        status: sub.status,
+        currentPeriodEnd: sub.current_period_end,
+        cancelAtPeriodEnd: sub.cancel_at_period_end,
+        cancelAt: sub.cancel_at,
+      };
     } catch {}
   }
 
@@ -143,6 +160,63 @@ router.delete('/admin/users/:id', requireAdmin, async (req, res) => {
 
   await db.delete(usersTable).where(eq(usersTable.id, targetId));
   return res.json({ success: true });
+});
+
+// ── Cancel subscription ────────────────────────────────────────────────────────
+
+router.post('/admin/users/:id/cancel-subscription', requireAdmin, async (req, res) => {
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, Number(req.params.id)));
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user.stripeSubscriptionId) return res.status(400).json({ error: 'No active Stripe subscription' });
+
+    const stripe = await getUncachableStripeClient();
+    await stripe.subscriptions.update(user.stripeSubscriptionId, { cancel_at_period_end: true });
+
+    // Mark the user as inactive and downgrade plan to free_trial
+    const [updated] = await db
+      .update(usersTable)
+      .set({ 
+        plan: 'free_trial', 
+        isActive: false, 
+        stripeSubscriptionStatus: 'canceled',
+        updatedAt: new Date() 
+      })
+      .where(eq(usersTable.id, user.id))
+      .returning();
+
+    return res.json({ success: true, user: updated });
+  } catch (err: any) {
+    req.log.error({ err }, 'Cancel subscription error');
+    return res.status(500).json({ error: 'Failed to cancel subscription', message: err.message });
+  }
+});
+
+// ── Reactivate account ─────────────────────────────────────────────────────────
+
+router.post('/admin/users/:id/reactivate', requireAdmin, async (req, res) => {
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, Number(req.params.id)));
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Re-enable account and clear any cancelled subscription reference so user can re-subscribe
+    const [updated] = await db
+      .update(usersTable)
+      .set({
+        isActive: true,
+        stripeSubscriptionId: null,
+        stripeSubscriptionStatus: null,
+        plan: 'free_trial',
+        updatedAt: new Date(),
+      })
+      .where(eq(usersTable.id, user.id))
+      .returning();
+
+    return res.json({ success: true, user: updated });
+  } catch (err: any) {
+    req.log.error({ err }, 'Reactivate account error');
+    return res.status(500).json({ error: 'Failed to reactivate account', message: err.message });
+  }
 });
 
 // ── Stats ──────────────────────────────────────────────────────────────────────
@@ -227,17 +301,14 @@ router.get('/admin/revenue', requireAdmin, async (req, res) => {
         const monthlyAmount = interval === 'year' ? Math.round(amount / 12) : amount;
         mrrCents += monthlyAmount;
 
-        // Map price → product for later lookup
         const productId = typeof price.product === 'string' ? price.product : (price.product as any)?.id;
         if (productId) priceToProductId[price.id] = productId;
 
-        // Temporarily key by price nickname or product ID until we fetch products
         const tempKey = price.nickname ?? productId ?? price.id ?? 'unknown';
         revenueByPlan[tempKey] = (revenueByPlan[tempKey] ?? 0) + monthlyAmount;
       }
     }
 
-    // Fetch unique products to resolve plan keys
     const uniqueProductIds = [...new Set(Object.values(priceToProductId))];
     const productPlanMap: Record<string, string> = {};
     if (uniqueProductIds.length > 0) {
@@ -249,7 +320,6 @@ router.get('/admin/revenue', requireAdmin, async (req, res) => {
       }));
     }
 
-    // Re-key revenueByPlan using proper plan labels
     const resolvedRevenueByPlan: Record<string, number> = {};
     for (const sub of activeSubs.data) {
       for (const item of sub.items.data) {
@@ -280,12 +350,10 @@ router.get('/admin/revenue', requireAdmin, async (req, res) => {
       monthlyRevenue[key] = (monthlyRevenue[key] ?? 0) + inv.amount_paid;
     }
 
-    // ── Current month revenue ──────────────────────────────────────────────────
     const now = new Date();
     const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const currentMonthRevenue = monthlyRevenue[thisMonthKey] ?? 0;
 
-    // Fill missing months in the last 12 months
     const months: { month: string; revenue: number }[] = [];
     for (let i = 11; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -329,7 +397,6 @@ router.get('/admin/revenue', requireAdmin, async (req, res) => {
       })
     );
 
-    // ── Churn & conversion from DB ─────────────────────────────────────────────
     const [{ paidCount }] = await db
       .select({ paidCount: count() })
       .from(usersTable)
@@ -343,7 +410,6 @@ router.get('/admin/revenue', requireAdmin, async (req, res) => {
     const totalUsersResult = await db.select({ cnt: count() }).from(usersTable);
     const totalUsers = Number(totalUsersResult[0].cnt);
 
-    // ── Lifetime value estimate ────────────────────────────────────────────────
     const avgRevenuePerUser = Number(paidCount) > 0 ? mrrCents / Number(paidCount) : 0;
 
     res.json({
@@ -369,6 +435,109 @@ router.get('/admin/revenue', requireAdmin, async (req, res) => {
   } catch (err: any) {
     req.log.error({ err }, 'Revenue stats error');
     res.status(500).json({ error: 'Failed to load revenue stats', message: err.message });
+  }
+});
+
+// ── Failed Payments Detail ─────────────────────────────────────────────────────
+
+router.get('/admin/failed-payments', requireAdmin, async (req, res) => {
+  try {
+    const stripe = await getUncachableStripeClient();
+
+    const nowTs = Math.floor(Date.now() / 1000);
+
+    // Fetch both past-due open invoices AND failed payment intents
+    const [pastDueInvoices, allPaymentIntents] = await Promise.all([
+      stripe.invoices.list({ status: 'open', limit: 50 }),
+      stripe.paymentIntents.list({ limit: 50 }),
+    ]);
+
+    const pastDue = pastDueInvoices.data.filter(inv => inv.due_date && inv.due_date <= nowTs);
+    const failedPIs = allPaymentIntents.data.filter(
+      pi => pi.status === 'requires_payment_method' || pi.status === 'canceled'
+    );
+
+    // Resolve invoice entries
+    const invoiceEntries = await Promise.all(pastDue.map(async inv => {
+      let customerEmail: string | null = null;
+      let customerName: string | null = null;
+      let userId: number | null = null;
+
+      if (inv.customer) {
+        try {
+          const customer = await stripe.customers.retrieve(inv.customer as string);
+          if (!('deleted' in customer)) {
+            customerEmail = customer.email;
+            customerName = customer.name ?? null;
+          }
+        } catch {}
+      }
+
+      if (customerEmail) {
+        const rows = await db
+          .select({ id: usersTable.id })
+          .from(usersTable)
+          .where(eq(usersTable.email, customerEmail.toLowerCase()));
+        if (rows[0]) userId = rows[0].id;
+      }
+
+      return {
+        type: 'invoice' as const,
+        id: inv.id,
+        amount: inv.amount_due / 100,
+        currency: inv.currency.toUpperCase(),
+        dueDate: inv.due_date ? new Date(inv.due_date * 1000).toISOString() : null,
+        customerEmail,
+        customerName,
+        userId,
+        hostedInvoiceUrl: inv.hosted_invoice_url,
+        description: inv.lines.data[0]?.description ?? inv.description ?? '—',
+      };
+    }));
+
+    // Resolve failed payment intent entries
+    const piEntries = await Promise.all(failedPIs.map(async pi => {
+      let customerEmail: string | null = null;
+      let customerName: string | null = null;
+      let userId: number | null = null;
+
+      if (pi.customer) {
+        try {
+          const customer = await stripe.customers.retrieve(pi.customer as string);
+          if (!('deleted' in customer)) {
+            const activeCustomer = customer as Stripe.Customer;
+            customerEmail = activeCustomer.email ?? null;
+            customerName = activeCustomer.name ?? null;
+          }
+        } catch {}
+      }
+
+      if (customerEmail) {
+        const rows = await db
+          .select({ id: usersTable.id })
+          .from(usersTable)
+          .where(eq(usersTable.email, customerEmail.toLowerCase()));
+        if (rows[0]) userId = rows[0].id;
+      }
+
+      return {
+        type: 'payment_intent' as const,
+        id: pi.id,
+        amount: pi.amount / 100,
+        currency: pi.currency.toUpperCase(),
+        dueDate: null,
+        customerEmail,
+        customerName,
+        userId,
+        hostedInvoiceUrl: null,
+        description: pi.description ?? `Payment intent — ${pi.status}`,
+      };
+    }));
+
+    res.json({ failedPayments: [...invoiceEntries, ...piEntries] });
+  } catch (err: any) {
+    req.log.error({ err }, 'Failed payments error');
+    res.status(500).json({ error: 'Failed to load failed payments', message: err.message });
   }
 });
 
@@ -539,6 +708,197 @@ router.put('/admin/plans/:planKey', requireAdmin, async (req, res) => {
   await db.update(planConfigsTable).set(updates).where(eq(planConfigsTable.planKey, planKey));
   const [updated] = await db.select().from(planConfigsTable).where(eq(planConfigsTable.planKey, planKey));
   res.json({ plan: updated });
+});
+
+// ── Admin: Invites Management ──────────────────────────────────────────────────
+
+router.get('/admin/invites', requireAdmin, async (req, res) => {
+  try {
+    const invites = await db
+      .select()
+      .from(invitationsTable)
+      .orderBy(desc(invitationsTable.createdAt));
+
+    const inviters = await db
+      .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email, companyName: usersTable.companyName })
+      .from(usersTable);
+
+    const inviterMap: Record<string, { name: string; email: string; companyName: string | null }> = {};
+    for (const u of inviters) {
+      inviterMap[String(u.id)] = { name: `${u.firstName} ${u.lastName}`, email: u.email, companyName: u.companyName ?? null };
+    }
+
+    const now = new Date();
+
+    res.json({
+      invites: invites.map(inv => ({
+        id: inv.id,
+        token: inv.token,
+        email: inv.email,
+        companyName: inv.companyName ?? inviterMap[inv.invitedById]?.companyName ?? null,
+        role: inv.role,
+        invitedById: inv.invitedById,
+        inviterName: inviterMap[inv.invitedById]?.name ?? null,
+        inviterEmail: inviterMap[inv.invitedById]?.email ?? null,
+        createdAt: inv.createdAt,
+        expiresAt: inv.expiresAt,
+        usedAt: inv.usedAt,
+        status: inv.usedAt ? 'accepted' : inv.expiresAt < now ? 'expired' : 'pending',
+      })),
+    });
+  } catch (err: any) {
+    req.log.error({ err }, 'Admin list invites error');
+    res.status(500).json({ error: 'Failed to load invites' });
+  }
+});
+
+router.post('/admin/invites/:id/resend', requireAdmin, async (req, res) => {
+  try {
+    const inviteId = Number(req.params.id);
+    const rows = await db.select().from(invitationsTable).where(eq(invitationsTable.id, inviteId));
+    const invite = rows[0];
+
+    if (!invite) return res.status(404).json({ error: 'Invitation not found' });
+    if (invite.usedAt) return res.status(400).json({ error: 'Invitation already accepted' });
+
+    const newToken = randomUUID();
+    const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await db.update(invitationsTable)
+      .set({ token: newToken, expiresAt: newExpiry })
+      .where(eq(invitationsTable.id, inviteId));
+
+    const inviterRows = await db
+      .select({ firstName: usersTable.firstName, lastName: usersTable.lastName })
+      .from(usersTable)
+      .where(eq(usersTable.id, parseInt(invite.invitedById)));
+    const inviterName = inviterRows[0]
+      ? `${inviterRows[0].firstName} ${inviterRows[0].lastName}`.trim()
+      : 'Your team';
+
+    await sendTokenInviteEmail(
+      { toEmail: invite.email, inviteeName: null, inviterName, companyName: invite.companyName ?? null, token: newToken },
+      req.log
+    );
+
+    res.json({ success: true, message: `Invite resent to ${invite.email}` });
+  } catch (err: any) {
+    req.log.error({ err }, 'Admin resend invite error');
+    res.status(500).json({ error: 'Failed to resend invite' });
+  }
+});
+
+router.delete('/admin/invites/:id', requireAdmin, async (req, res) => {
+  try {
+    const inviteId = Number(req.params.id);
+    const rows = await db.select().from(invitationsTable).where(eq(invitationsTable.id, inviteId));
+    if (!rows[0]) return res.status(404).json({ error: 'Invitation not found' });
+
+    await db.delete(invitationsTable).where(eq(invitationsTable.id, inviteId));
+    res.json({ success: true });
+  } catch (err: any) {
+    req.log.error({ err }, 'Admin revoke invite error');
+    res.status(500).json({ error: 'Failed to revoke invite' });
+  }
+});
+
+// ── Admin: Support / Feedback ──────────────────────────────────────────────────
+
+router.get('/admin/feedback', requireAdmin, async (req, res) => {
+  try {
+    const items = await db
+      .select()
+      .from(feedbacksTable)
+      .orderBy(desc(feedbacksTable.createdAt));
+
+    res.json({ feedback: items });
+  } catch (err: any) {
+    req.log.error({ err }, 'Admin list feedback error');
+    res.status(500).json({ error: 'Failed to load feedback' });
+  }
+});
+
+router.patch('/admin/feedback/:id', requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!status) return res.status(400).json({ error: 'status is required' });
+
+    const [updated] = await db
+      .update(feedbacksTable)
+      .set({ status })
+      .where(eq(feedbacksTable.id, Number(req.params.id)))
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: 'Feedback not found' });
+
+    res.json({ feedback: updated });
+  } catch (err: any) {
+    req.log.error({ err }, 'Admin update feedback error');
+    res.status(500).json({ error: 'Failed to update feedback' });
+  }
+});
+
+// ── Admin: Platform-wide Activity Log ─────────────────────────────────────────
+
+router.get('/admin/activity', requireAdmin, async (req, res) => {
+  try {
+    const { entityType, dateFrom, dateTo, limit: limitQ, offset: offsetQ } = req.query;
+    const limit = Math.min(parseInt(limitQ as string) || 50, 200);
+    const offset = parseInt(offsetQ as string) || 0;
+
+    // Build WHERE conditions in SQL so filtering happens before limit/offset
+    const conditions = [];
+    if (entityType) conditions.push(eq(activityLogsTable.entityType, entityType as string));
+    if (dateFrom) conditions.push(gte(activityLogsTable.createdAt, new Date(dateFrom as string)));
+    if (dateTo) conditions.push(lte(activityLogsTable.createdAt, new Date(dateTo as string)));
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Fetch total count with same filters for accurate pagination
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(activityLogsTable)
+      .where(whereClause);
+
+    const logs = await db
+      .select()
+      .from(activityLogsTable)
+      .where(whereClause)
+      .orderBy(desc(activityLogsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    // Fetch all users to resolve name, email, and org (companyName)
+    const allUsers = await db
+      .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email, companyName: usersTable.companyName })
+      .from(usersTable);
+
+    const userMap: Record<number, { name: string; email: string; orgName: string | null }> = {};
+    for (const u of allUsers) {
+      userMap[u.id] = { name: `${u.firstName} ${u.lastName}`, email: u.email, orgName: u.companyName ?? null };
+    }
+
+    res.json({
+      logs: logs.map(l => ({
+        id: l.id,
+        entityType: l.entityType,
+        entityId: l.entityId,
+        action: l.action,
+        description: l.description,
+        userId: l.userId,
+        userName: userMap[l.userId]?.name ?? 'System',
+        userEmail: userMap[l.userId]?.email ?? null,
+        orgName: userMap[l.userId]?.orgName ?? null,
+        createdAt: l.createdAt instanceof Date ? l.createdAt.toISOString() : l.createdAt,
+      })),
+      total: Number(total),
+      limit,
+      offset,
+    });
+  } catch (err: any) {
+    req.log.error({ err }, 'Admin activity log error');
+    res.status(500).json({ error: 'Failed to load activity logs' });
+  }
 });
 
 export default router;

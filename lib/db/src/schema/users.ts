@@ -20,6 +20,7 @@ export const usersTable = pgTable("users", {
   plan: text("plan").notNull().default("free_trial"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeSubscriptionStatus: text("stripe_subscription_status"),
   planOverrideProjects: text("plan_override_projects"),
   planOverrideInspections: text("plan_override_inspections"),
   expoPushToken: text("expo_push_token"),

@@ -256,6 +256,8 @@ export async function syncPlanFromStripe(userId: number): Promise<{ plan: string
     await db.update(usersTable).set({
       plan: 'free_trial',
       stripeSubscriptionId: null,
+      stripeSubscriptionStatus: 'canceled',
+      isActive: false,
     }).where(eq(usersTable.id, userId));
     return { plan: 'free_trial', subscriptionId: null };
   }
@@ -274,6 +276,8 @@ export async function syncPlanFromStripe(userId: number): Promise<{ plan: string
   await db.update(usersTable).set({
     plan: planKey,
     stripeSubscriptionId: sub.id,
+    stripeSubscriptionStatus: sub.status,
+    isActive: true,
   }).where(eq(usersTable.id, userId));
 
   return { plan: planKey, subscriptionId: sub.id };
