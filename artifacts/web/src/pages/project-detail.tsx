@@ -718,24 +718,11 @@ function OverviewTab({ project, onRefresh, onGoToContacts }: { project: Project;
                 <div className="font-medium text-sidebar font-mono">{project.referenceNumber}</div>
               </div>
             )}
-            {/* Client — linked to owner/client contacts */}
-            {(() => {
-              const linked = projectContacts.filter(c => c.contactRole === "owner");
-              return (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-0.5">Client</div>
-                  <div className="font-medium text-sidebar">{project.clientName || "—"}</div>
-                  {linked.map(c => (
-                    <div key={c.id} className="mt-1 flex items-center gap-1.5 flex-wrap">
-                      {c.isPrimary && <span className="text-[9px] font-bold px-1 rounded bg-secondary/15 text-secondary border border-secondary/30 uppercase tracking-wide">Primary</span>}
-                      <span className="text-xs text-muted-foreground">{c.name}</span>
-                      {c.email && <span className="text-xs text-muted-foreground">· {c.email}</span>}
-                      {c.phone && <span className="text-xs text-muted-foreground">· {c.phone}</span>}
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
+            {/* Client */}
+            <div>
+              <div className="text-xs text-muted-foreground mb-0.5">Client</div>
+              <div className="font-medium text-sidebar">{project.clientName || "—"}</div>
+            </div>
             {project.ownerName && (
               <div>
                 <div className="text-xs text-muted-foreground mb-0.5">Owner</div>
@@ -743,41 +730,15 @@ function OverviewTab({ project, onRefresh, onGoToContacts }: { project: Project;
               </div>
             )}
             {/* Builder */}
-            {(() => {
-              const linked = projectContacts.filter(c => c.contactRole === "builder");
-              return (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-0.5">Builder</div>
-                  <div className="font-medium text-sidebar">{project.builderName || "—"}</div>
-                  {linked.map(c => (
-                    <div key={c.id} className="mt-1 flex items-center gap-1.5 flex-wrap">
-                      {c.isPrimary && <span className="text-[9px] font-bold px-1 rounded bg-secondary/15 text-secondary border border-secondary/30 uppercase tracking-wide">Primary</span>}
-                      <span className="text-xs text-muted-foreground">{c.name}</span>
-                      {c.email && <span className="text-xs text-muted-foreground">· {c.email}</span>}
-                      {c.phone && <span className="text-xs text-muted-foreground">· {c.phone}</span>}
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
+            <div>
+              <div className="text-xs text-muted-foreground mb-0.5">Builder</div>
+              <div className="font-medium text-sidebar">{project.builderName || "—"}</div>
+            </div>
             {/* Designer */}
-            {(() => {
-              const linked = projectContacts.filter(c => c.contactRole === "designer");
-              return (
-                <div>
-                  <div className="text-xs text-muted-foreground mb-0.5">Designer</div>
-                  <div className="font-medium text-sidebar">{project.designerName || "—"}</div>
-                  {linked.map(c => (
-                    <div key={c.id} className="mt-1 flex items-center gap-1.5 flex-wrap">
-                      {c.isPrimary && <span className="text-[9px] font-bold px-1 rounded bg-secondary/15 text-secondary border border-secondary/30 uppercase tracking-wide">Primary</span>}
-                      <span className="text-xs text-muted-foreground">{c.name}</span>
-                      {c.email && <span className="text-xs text-muted-foreground">· {c.email}</span>}
-                      {c.phone && <span className="text-xs text-muted-foreground">· {c.phone}</span>}
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
+            <div>
+              <div className="text-xs text-muted-foreground mb-0.5">Designer</div>
+              <div className="font-medium text-sidebar">{project.designerName || "—"}</div>
+            </div>
             {[
               { label: "Project Type", value: projectTypeLabel },
               { label: "DA Number", value: project.daNumber || "—" },
@@ -814,22 +775,13 @@ function OverviewTab({ project, onRefresh, onGoToContacts }: { project: Project;
                   : "—"}
               </div>
             </div>
-            {/* Primary contact summary */}
-            {projectContacts.some(c => c.isPrimary) && (
+            {/* Contacts summary — compact link only */}
+            {projectContacts.length > 0 && onGoToContacts && (
               <div className="col-span-2 pt-1 border-t border-border/50 mt-1">
-                <div className="text-xs text-muted-foreground mb-1.5">Primary Contact</div>
-                {projectContacts.filter(c => c.isPrimary).map(c => (
-                  <div key={c.id} className="flex items-center gap-2 flex-wrap">
-                    <UserIcon className="h-3.5 w-3.5 text-secondary" />
-                    <span className="text-sm font-medium text-sidebar">{c.name}</span>
-                    {c.contactRole && <span className="text-xs text-violet-700">{contactRoleLabel(c.contactRole)}</span>}
-                    {c.email && <span className="text-xs text-muted-foreground">{c.email}</span>}
-                    {c.phone && <span className="text-xs text-muted-foreground">· {c.phone}</span>}
-                    {onGoToContacts && (
-                      <button onClick={onGoToContacts} className="text-xs text-secondary hover:underline ml-1">Manage contacts →</button>
-                    )}
-                  </div>
-                ))}
+                <button onClick={onGoToContacts} className="flex items-center gap-1.5 text-xs text-secondary hover:underline font-medium">
+                  <UserIcon className="h-3.5 w-3.5" />
+                  {projectContacts.length} project contact{projectContacts.length !== 1 ? "s" : ""} — View Contractors tab →
+                </button>
               </div>
             )}
             {/* Building Classification — full width row with pill badges */}
@@ -2497,15 +2449,6 @@ function OrgContractorCombobox({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <h3 className="text-sm font-semibold text-sidebar">Organisation Library</h3>
-        {assignedContractors.length > 0 && (
-          <span className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded font-medium">
-            {assignedContractors.length} assigned
-          </span>
-        )}
-      </div>
-
       {/* Assigned chips */}
       {assignedContractors.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -2624,6 +2567,8 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
   const [inductedIds, setInductedIds] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [togglingIds, setTogglingIds] = useState<Set<number>>(new Set());
+  const [orgOpen, setOrgOpen] = useState(true);
+  const [projectOpen, setProjectOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newTrade, setNewTrade] = useState("");
@@ -2870,28 +2815,64 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
   );
 
   return (
-    <div className="space-y-6 mt-4">
-      <OrgContractorCombobox
-        orgContractors={orgContractors}
-        assignedOrgIds={assignedOrgIds}
-        togglingIds={togglingIds}
-        onToggle={toggleOrgContractor}
-        inductedIds={inductedIds}
-      />
-
-      {/* Project-specific contractors */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-sidebar">Project Contacts</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Contacts specific to this project — owners, builders, designers, etc.</p>
+    <div className="space-y-4 mt-4">
+      {/* ── Organisation Staff (collapsible) ── */}
+      <div className="rounded-xl border border-border overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setOrgOpen(o => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-sidebar">Organisation Staff</h3>
+            {assignedOrgIds.size > 0 && (
+              <span className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded font-medium">
+                {assignedOrgIds.size} assigned
+              </span>
+            )}
           </div>
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${orgOpen ? "rotate-180" : ""}`} />
+        </button>
+        {orgOpen && (
+          <div className="p-4 border-t border-border">
+            <OrgContractorCombobox
+              orgContractors={orgContractors}
+              assignedOrgIds={assignedOrgIds}
+              togglingIds={togglingIds}
+              onToggle={toggleOrgContractor}
+              inductedIds={inductedIds}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* ── Project Contacts (collapsible) ── */}
+      <div className="rounded-xl border border-border overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setProjectOpen(o => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-sidebar">Project Contacts</h3>
+            {contractors.length > 0 && (
+              <span className="text-xs bg-secondary/10 border border-secondary/20 text-secondary px-1.5 py-0.5 rounded font-medium">
+                {contractors.length}
+              </span>
+            )}
+          </div>
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${projectOpen ? "rotate-180" : ""}`} />
+        </button>
+        {projectOpen && (
+        <div className="p-4 border-t border-border space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">Contacts specific to this project — owners, builders, designers, etc.</p>
           {!adding && (
             <Button variant="outline" size="sm" onClick={() => { setAdding(true); setError(""); setDupWarning(""); }}>
               <Plus className="h-4 w-4" /> Add Contact
             </Button>
           )}
-        </div>
+          </div>
 
         {contractors.length === 0 && !adding && (
           <div className="text-center py-8 border border-dashed rounded-lg text-muted-foreground text-sm">
@@ -2959,6 +2940,8 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
         )}
 
         {error && !adding && editingId === null && <p className="text-xs text-red-500">{error}</p>}
+        </div>
+        )}
       </div>
     </div>
   );
