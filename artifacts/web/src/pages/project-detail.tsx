@@ -1473,7 +1473,7 @@ function ChecklistLinkDialog({
             <Link2 className="h-4 w-4 text-secondary" />
             Link to Checklist Items
           </DialogTitle>
-          <p className="text-sm text-muted-foreground mt-1 truncate">
+          <p className="text-sm text-muted-foreground mt-1 break-words">
             <span className="font-medium text-sidebar">{doc.name}</span> — select which checklist items this document supports
           </p>
         </DialogHeader>
