@@ -39,6 +39,7 @@ const REPORT_TYPE_OPTIONS = [
   { value: "compliance_report",         label: "Compliance Report" },
   { value: "defect_notice",             label: "Defect Notice" },
   { value: "non_compliance_notice",     label: "Non-Compliance Notice" },
+  { value: "summary",                   label: "Inspection Summary" },
   { value: "quality_control_report",    label: "Quality Control Report" },
   { value: "non_conformance_report",    label: "Non-Conformance Report" },
   { value: "safety_inspection_report",  label: "Safety Inspection Report" },

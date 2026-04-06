@@ -440,12 +440,19 @@ export default function InspectionDetail() {
   const [orgContractors, setOrgContractors] = useState<{ id: number; name: string; trade: string; email: string | null }[]>([]);
 
   const openReportDialog = useCallback((inspection: Inspection) => {
-    const suggested = getSuggestedReportType(inspection);
-    setSelectedReportType(suggested);
-    setSelectedGenDocTemplateId(null);
+    // Pre-select linked doc template (direct or checklist-linked), if any
+    const linked = getDirectDocTemplate(docTemplates, inspection.id)
+      ?? getLinkedDocTemplate(docTemplates, inspection.checklistTemplateId);
+    if (linked) {
+      setSelectedGenDocTemplateId(String(linked.id));
+      setSelectedReportType(linked.defaultReportType || getSuggestedReportType(inspection));
+    } else {
+      setSelectedGenDocTemplateId(null);
+      setSelectedReportType(getSuggestedReportType(inspection));
+    }
     setGeneratedReport(null);
     setReportDialogOpen(true);
-  }, []);
+  }, [docTemplates]);
 
   const load = useCallback(async () => {
     try {
@@ -1313,6 +1320,15 @@ export default function InspectionDetail() {
             <>
               <div className="flex-1 overflow-y-auto space-y-3 pr-1">
 
+                {/* Compute auto-linked template once for badge/recommendation use */}
+                {(() => {
+                  const autoLinked = inspection
+                    ? (getDirectDocTemplate(docTemplates, inspection.id) ?? getLinkedDocTemplate(docTemplates, inspection.checklistTemplateId))
+                    : null;
+                  const linkedReportType = autoLinked?.defaultReportType ?? null;
+
+                  return (
+                    <>
                 {/* ── Your Templates section ── */}
                 {docTemplates.length > 0 && (
                   <div>
@@ -1320,9 +1336,16 @@ export default function InspectionDetail() {
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Your Templates</span>
                       <div className="flex-1 border-t border-border" />
                     </div>
+                    {autoLinked && (
+                      <div className="flex items-center gap-2 p-2 rounded-lg bg-secondary/5 border border-secondary/20 text-xs text-secondary mb-2">
+                        <Link2 className="h-3 w-3 shrink-0" />
+                        <span><span className="font-semibold">{autoLinked.name}</span> is linked to this inspection and pre-selected below</span>
+                      </div>
+                    )}
                     <div className="space-y-1.5">
                       {docTemplates.map(dt => {
                         const isSelected = selectedGenDocTemplateId === String(dt.id);
+                        const isLinked = autoLinked && String(autoLinked.id) === String(dt.id);
                         return (
                           <label
                             key={dt.id}
@@ -1346,7 +1369,10 @@ export default function InspectionDetail() {
                               </span>
                               <span className="text-[11px] text-muted-foreground">Custom template · fills with live inspection data</span>
                             </div>
-                            {isSelected && <span className="text-xs text-sidebar font-semibold shrink-0">Selected</span>}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {isLinked && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-secondary/10 text-secondary border border-secondary/20">Linked</span>}
+                              {isSelected && <span className="text-xs text-sidebar font-semibold">Selected</span>}
+                            </div>
                           </label>
                         );
                       })}
@@ -1361,7 +1387,6 @@ export default function InspectionDetail() {
                     <div className="flex-1 border-t border-border" />
                   </div>
                   {inspection && (() => {
-                    const suggested = getSuggestedReportType(inspection);
                     const discipline = inspection.checklistTemplateDiscipline;
                     return discipline ? (
                       <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground mb-2">
@@ -1374,7 +1399,10 @@ export default function InspectionDetail() {
                     {REPORT_TYPES_DESKTOP.map((rt, idx) => {
                       const Icon = rt.icon;
                       const isSelected = !selectedGenDocTemplateId && selectedReportType === rt.key;
-                      const isRecommended = inspection ? rt.key === getSuggestedReportType(inspection) : false;
+                      // Prefer linked template's defaultReportType as recommended; fall back to discipline heuristic
+                      const isRecommended = inspection
+                        ? (linkedReportType ? rt.key === linkedReportType : rt.key === getSuggestedReportType(inspection))
+                        : false;
                       const isDisciplineType = disciplineReportTypes.includes(rt.key);
                       const prevIsDiscipline = idx > 0 ? disciplineReportTypes.includes(REPORT_TYPES_DESKTOP[idx - 1].key) : true;
                       const showDivider = !isDisciplineType && prevIsDiscipline;
@@ -1418,6 +1446,9 @@ export default function InspectionDetail() {
                     })}
                   </div>
                 </div>
+                    </>
+                  );
+                })()}
 
               </div>
               <div className="flex justify-end pt-3 border-t border-border mt-2">

@@ -2817,11 +2817,11 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
   return (
     <div className="space-y-4 mt-4">
       {/* ── Organisation Staff (collapsible) ── */}
-      <div className="rounded-xl border border-border overflow-hidden">
+      <div className="rounded-xl border border-border">
         <button
           type="button"
           onClick={() => setOrgOpen(o => !o)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+          className={`w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left ${orgOpen ? "rounded-t-xl" : "rounded-xl"}`}
         >
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-sidebar">Organisation Staff</h3>
@@ -2851,7 +2851,7 @@ function ContractorsTab({ projectId, projectName }: { projectId: number; project
         <button
           type="button"
           onClick={() => setProjectOpen(o => !o)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+          className={`w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left ${projectOpen ? "rounded-t-xl" : "rounded-xl"}`}
         >
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-sidebar">Project Contacts</h3>
