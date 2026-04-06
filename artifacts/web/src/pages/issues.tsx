@@ -205,7 +205,7 @@ export default function Issues() {
       if (res.ok) {
         const updated = await res.json();
         setSelectedIssue(updated);
-        queryClient.invalidateQueries({ queryKey: ["listIssues"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
         loadHistory(selectedIssue.id);
       }
     } catch {
@@ -227,7 +227,7 @@ export default function Issues() {
       if (res.ok) {
         const updated = await res.json();
         setSelectedIssue(updated);
-        queryClient.invalidateQueries({ queryKey: ["listIssues"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
       }
     } catch {
     } finally {
@@ -295,7 +295,7 @@ export default function Issues() {
           status: (newForm.status || "open") as CreateIssueRequestStatus,
         },
       });
-      queryClient.invalidateQueries({ queryKey: ["listIssues"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
       setShowCreate(false);
       setNewForm({ title: "", description: "", severity: "medium", category: "", priority: "normal", projectId: "", location: "", dueDate: "", assignedToId: "", status: "open" });
       setCreatePhotos([]);
@@ -351,7 +351,7 @@ export default function Issues() {
       if (!res.ok) throw new Error("Failed to close out issue");
       const updated = await res.json();
       setSelectedIssue(updated);
-      queryClient.invalidateQueries({ queryKey: ["listIssues"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
       setShowCloseout(false);
       setCloseoutNotes("");
       setCloseoutPhotos([]);
@@ -378,7 +378,7 @@ export default function Issues() {
       if (!res.ok) throw new Error("Failed to reject issue");
       const updated = await res.json();
       setSelectedIssue(updated);
-      queryClient.invalidateQueries({ queryKey: ["listIssues"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
       setShowReject(false);
       setRejectNotes("");
       loadHistory(selectedIssue.id);
@@ -515,7 +515,7 @@ export default function Issues() {
       if (!res.ok) throw new Error("Bulk action failed");
       const data = await res.json();
       setBulkActionResult(data.description ?? "Bulk action completed");
-      queryClient.invalidateQueries({ queryKey: ["listIssues"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
       clearSelection();
     } catch (err: any) {
       setBulkActionResult("Error: " + (err.message ?? "Bulk action failed"));
