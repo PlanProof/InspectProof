@@ -6,9 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type IssueStatus = (typeof IssueStatus)[keyof typeof IssueStatus];
+export type CreateIssueRequestStatus =
+  | (typeof CreateIssueRequestStatus)[keyof typeof CreateIssueRequestStatus]
+  | null;
 
-export const IssueStatus = {
+export const CreateIssueRequestStatus = {
   open: "open",
   in_progress: "in_progress",
   pending_review: "pending_review",

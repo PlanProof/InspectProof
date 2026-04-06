@@ -42,6 +42,8 @@ export const checklistResultsTable = pgTable("checklist_results", {
   photoUrls: text("photo_urls"),
   photoMarkups: text("photo_markups"),
   severity: text("severity"),
+  issueCategory: text("issue_category"),
+  issuePriority: text("issue_priority"),
   location: text("location"),
   tradeAllocated: text("trade_allocated"),
   defectStatus: text("defect_status").default("open"),

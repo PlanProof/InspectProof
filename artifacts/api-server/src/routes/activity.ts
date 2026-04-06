@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, and } from "drizzle-orm";
 import { db, activityLogsTable, usersTable } from "@workspace/db";
 import { optionalAuth } from "../middleware/auth";
 
@@ -12,18 +12,26 @@ router.get("/", optionalAuth, async (req, res) => {
       return;
     }
 
-    const { entityType, limit: limitQ, offset: offsetQ } = req.query;
+    const { entityType, entityId, limit: limitQ, offset: offsetQ } = req.query;
     const limit = Math.min(parseInt(limitQ as string) || 100, 500);
     const offset = parseInt(offsetQ as string) || 0;
 
-    let logs = await db.select().from(activityLogsTable)
+    const conditions = [];
+    if (entityType) {
+      conditions.push(eq(activityLogsTable.entityType, entityType as string));
+    }
+    if (entityId) {
+      const eid = parseInt(entityId as string);
+      if (!isNaN(eid)) {
+        conditions.push(eq(activityLogsTable.entityId, eid));
+      }
+    }
+
+    const logs = await db.select().from(activityLogsTable)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(activityLogsTable.createdAt))
       .limit(limit)
       .offset(offset);
-
-    if (entityType) {
-      logs = logs.filter(l => l.entityType === entityType);
-    }
 
     const userIds = [...new Set(logs.map(l => l.userId))];
     const users = userIds.length > 0

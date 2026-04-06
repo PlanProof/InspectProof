@@ -5,6 +5,7 @@
  * InspectProof API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { UpdateIssueRequestPriority } from "./updateIssueRequestPriority";
 import type { UpdateIssueRequestSeverity } from "./updateIssueRequestSeverity";
 import type { UpdateIssueRequestStatus } from "./updateIssueRequestStatus";
 
@@ -13,6 +14,11 @@ export interface UpdateIssueRequest {
   description?: string;
   severity?: UpdateIssueRequestSeverity;
   status?: UpdateIssueRequestStatus;
+  category?: string | null;
+  priority?: UpdateIssueRequestPriority;
+  photos?: string | null;
+  closeoutNotes?: string | null;
+  closeoutPhotos?: string | null;
   location?: string | null;
   codeReference?: string | null;
   responsibleParty?: string | null;

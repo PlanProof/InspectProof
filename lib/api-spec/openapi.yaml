@@ -523,6 +523,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/Issue"
 
+  /issues/{id}/comments:
+    get:
+      operationId: listIssueComments
+      tags: [issues]
+      summary: List comments and activity for an issue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Comments and activity feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IssueComment"
+    post:
+      operationId: createIssueComment
+      tags: [issues]
+      summary: Post a comment on an issue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIssueCommentRequest"
+      responses:
+        "201":
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssueComment"
+
   /documents:
     get:
       operationId: listDocuments
@@ -1418,6 +1462,7 @@ components:
           type: integer
         projectId:
           type: integer
+          nullable: true
         inspectionId:
           type: integer
           nullable: true
@@ -1430,7 +1475,26 @@ components:
           enum: [low, medium, high, critical]
         status:
           type: string
-          enum: [open, in_progress, resolved, closed, deferred]
+          enum: [open, in_progress, pending_review, closed, rejected]
+        category:
+          type: string
+          nullable: true
+        priority:
+          type: string
+          enum: [urgent, high, normal, low]
+          nullable: true
+        photos:
+          type: string
+          nullable: true
+        closeoutNotes:
+          type: string
+          nullable: true
+        closeoutPhotos:
+          type: string
+          nullable: true
+        markupDocumentId:
+          type: integer
+          nullable: true
         location:
           type: string
           nullable: true
@@ -1449,20 +1513,22 @@ components:
         assignedToId:
           type: integer
           nullable: true
+        assigneeName:
+          type: string
+          nullable: true
         projectName:
           type: string
+          nullable: true
         createdAt:
           type: string
         updatedAt:
           type: string
       required:
         - id
-        - projectId
         - title
         - description
         - severity
         - status
-        - projectName
         - createdAt
         - updatedAt
 
@@ -1471,6 +1537,7 @@ components:
       properties:
         projectId:
           type: integer
+          nullable: true
         inspectionId:
           type: integer
           nullable: true
@@ -1481,6 +1548,20 @@ components:
         severity:
           type: string
           enum: [low, medium, high, critical]
+        status:
+          type: string
+          enum: [open, in_progress, pending_review, closed, rejected]
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        priority:
+          type: string
+          enum: [urgent, high, normal, low]
+          nullable: true
+        photos:
+          type: string
+          nullable: true
         location:
           type: string
           nullable: true
@@ -1497,7 +1578,6 @@ components:
           type: integer
           nullable: true
       required:
-        - projectId
         - title
         - description
         - severity
@@ -1514,7 +1594,23 @@ components:
           enum: [low, medium, high, critical]
         status:
           type: string
-          enum: [open, in_progress, resolved, closed, deferred]
+          enum: [open, in_progress, pending_review, closed, rejected]
+        category:
+          type: string
+          nullable: true
+        priority:
+          type: string
+          enum: [urgent, high, normal, low]
+          nullable: true
+        photos:
+          type: string
+          nullable: true
+        closeoutNotes:
+          type: string
+          nullable: true
+        closeoutPhotos:
+          type: string
+          nullable: true
         location:
           type: string
           nullable: true
@@ -1533,6 +1629,44 @@ components:
         assignedToId:
           type: integer
           nullable: true
+
+    IssueComment:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [comment, activity]
+        body:
+          type: string
+          nullable: true
+        action:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        userId:
+          type: integer
+        userName:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - type
+        - userId
+        - userName
+        - createdAt
+
+    CreateIssueCommentRequest:
+      type: object
+      properties:
+        body:
+          type: string
+      required:
+        - body
 
     Document:
       type: object

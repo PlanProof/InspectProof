@@ -12,7 +12,7 @@ export type UpdateIssueRequestStatus =
 export const UpdateIssueRequestStatus = {
   open: "open",
   in_progress: "in_progress",
-  resolved: "resolved",
+  pending_review: "pending_review",
   closed: "closed",
-  deferred: "deferred",
+  rejected: "rejected",
 } as const;

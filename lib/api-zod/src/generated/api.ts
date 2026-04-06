@@ -263,7 +263,7 @@ export const GetProjectResponse = zod
       recentIssues: zod.array(
         zod.object({
           id: zod.number(),
-          projectId: zod.number(),
+          projectId: zod.number().nullish(),
           inspectionId: zod.number().nullish(),
           title: zod.string(),
           description: zod.string(),
@@ -271,17 +271,24 @@ export const GetProjectResponse = zod
           status: zod.enum([
             "open",
             "in_progress",
-            "resolved",
+            "pending_review",
             "closed",
-            "deferred",
+            "rejected",
           ]),
+          category: zod.string().nullish(),
+          priority: zod.enum(["urgent", "high", "normal", "low"]).nullish(),
+          photos: zod.string().nullish(),
+          closeoutNotes: zod.string().nullish(),
+          closeoutPhotos: zod.string().nullish(),
+          markupDocumentId: zod.number().nullish(),
           location: zod.string().nullish(),
           codeReference: zod.string().nullish(),
           responsibleParty: zod.string().nullish(),
           dueDate: zod.string().nullish(),
           resolvedDate: zod.string().nullish(),
           assignedToId: zod.number().nullish(),
-          projectName: zod.string(),
+          assigneeName: zod.string().nullish(),
+          projectName: zod.string().nullish(),
           createdAt: zod.string(),
           updatedAt: zod.string(),
         }),
@@ -581,7 +588,7 @@ export const GetInspectionResponse = zod
       issues: zod.array(
         zod.object({
           id: zod.number(),
-          projectId: zod.number(),
+          projectId: zod.number().nullish(),
           inspectionId: zod.number().nullish(),
           title: zod.string(),
           description: zod.string(),
@@ -589,17 +596,24 @@ export const GetInspectionResponse = zod
           status: zod.enum([
             "open",
             "in_progress",
-            "resolved",
+            "pending_review",
             "closed",
-            "deferred",
+            "rejected",
           ]),
+          category: zod.string().nullish(),
+          priority: zod.enum(["urgent", "high", "normal", "low"]).nullish(),
+          photos: zod.string().nullish(),
+          closeoutNotes: zod.string().nullish(),
+          closeoutPhotos: zod.string().nullish(),
+          markupDocumentId: zod.number().nullish(),
           location: zod.string().nullish(),
           codeReference: zod.string().nullish(),
           responsibleParty: zod.string().nullish(),
           dueDate: zod.string().nullish(),
           resolvedDate: zod.string().nullish(),
           assignedToId: zod.number().nullish(),
-          projectName: zod.string(),
+          assigneeName: zod.string().nullish(),
+          projectName: zod.string().nullish(),
           createdAt: zod.string(),
           updatedAt: zod.string(),
         }),
@@ -816,19 +830,32 @@ export const ListIssuesQueryParams = zod.object({
 
 export const ListIssuesResponseItem = zod.object({
   id: zod.number(),
-  projectId: zod.number(),
+  projectId: zod.number().nullish(),
   inspectionId: zod.number().nullish(),
   title: zod.string(),
   description: zod.string(),
   severity: zod.enum(["low", "medium", "high", "critical"]),
-  status: zod.enum(["open", "in_progress", "resolved", "closed", "deferred"]),
+  status: zod.enum([
+    "open",
+    "in_progress",
+    "pending_review",
+    "closed",
+    "rejected",
+  ]),
+  category: zod.string().nullish(),
+  priority: zod.enum(["urgent", "high", "normal", "low"]).nullish(),
+  photos: zod.string().nullish(),
+  closeoutNotes: zod.string().nullish(),
+  closeoutPhotos: zod.string().nullish(),
+  markupDocumentId: zod.number().nullish(),
   location: zod.string().nullish(),
   codeReference: zod.string().nullish(),
   responsibleParty: zod.string().nullish(),
   dueDate: zod.string().nullish(),
   resolvedDate: zod.string().nullish(),
   assignedToId: zod.number().nullish(),
-  projectName: zod.string(),
+  assigneeName: zod.string().nullish(),
+  projectName: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -838,11 +865,17 @@ export const ListIssuesResponse = zod.array(ListIssuesResponseItem);
  * @summary Create issue
  */
 export const CreateIssueBody = zod.object({
-  projectId: zod.number(),
+  projectId: zod.number().nullish(),
   inspectionId: zod.number().nullish(),
   title: zod.string(),
   description: zod.string(),
   severity: zod.enum(["low", "medium", "high", "critical"]),
+  status: zod
+    .enum(["open", "in_progress", "pending_review", "closed", "rejected"])
+    .nullish(),
+  category: zod.string().nullish(),
+  priority: zod.enum(["urgent", "high", "normal", "low"]).nullish(),
+  photos: zod.string().nullish(),
   location: zod.string().nullish(),
   codeReference: zod.string().nullish(),
   responsibleParty: zod.string().nullish(),
@@ -859,19 +892,32 @@ export const GetIssueParams = zod.object({
 
 export const GetIssueResponse = zod.object({
   id: zod.number(),
-  projectId: zod.number(),
+  projectId: zod.number().nullish(),
   inspectionId: zod.number().nullish(),
   title: zod.string(),
   description: zod.string(),
   severity: zod.enum(["low", "medium", "high", "critical"]),
-  status: zod.enum(["open", "in_progress", "resolved", "closed", "deferred"]),
+  status: zod.enum([
+    "open",
+    "in_progress",
+    "pending_review",
+    "closed",
+    "rejected",
+  ]),
+  category: zod.string().nullish(),
+  priority: zod.enum(["urgent", "high", "normal", "low"]).nullish(),
+  photos: zod.string().nullish(),
+  closeoutNotes: zod.string().nullish(),
+  closeoutPhotos: zod.string().nullish(),
+  markupDocumentId: zod.number().nullish(),
   location: zod.string().nullish(),
   codeReference: zod.string().nullish(),
   responsibleParty: zod.string().nullish(),
   dueDate: zod.string().nullish(),
   resolvedDate: zod.string().nullish(),
   assignedToId: zod.number().nullish(),
-  projectName: zod.string(),
+  assigneeName: zod.string().nullish(),
+  projectName: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -888,8 +934,13 @@ export const UpdateIssueBody = zod.object({
   description: zod.string().optional(),
   severity: zod.enum(["low", "medium", "high", "critical"]).optional(),
   status: zod
-    .enum(["open", "in_progress", "resolved", "closed", "deferred"])
+    .enum(["open", "in_progress", "pending_review", "closed", "rejected"])
     .optional(),
+  category: zod.string().nullish(),
+  priority: zod.enum(["urgent", "high", "normal", "low"]).nullish(),
+  photos: zod.string().nullish(),
+  closeoutNotes: zod.string().nullish(),
+  closeoutPhotos: zod.string().nullish(),
   location: zod.string().nullish(),
   codeReference: zod.string().nullish(),
   responsibleParty: zod.string().nullish(),
@@ -900,21 +951,66 @@ export const UpdateIssueBody = zod.object({
 
 export const UpdateIssueResponse = zod.object({
   id: zod.number(),
-  projectId: zod.number(),
+  projectId: zod.number().nullish(),
   inspectionId: zod.number().nullish(),
   title: zod.string(),
   description: zod.string(),
   severity: zod.enum(["low", "medium", "high", "critical"]),
-  status: zod.enum(["open", "in_progress", "resolved", "closed", "deferred"]),
+  status: zod.enum([
+    "open",
+    "in_progress",
+    "pending_review",
+    "closed",
+    "rejected",
+  ]),
+  category: zod.string().nullish(),
+  priority: zod.enum(["urgent", "high", "normal", "low"]).nullish(),
+  photos: zod.string().nullish(),
+  closeoutNotes: zod.string().nullish(),
+  closeoutPhotos: zod.string().nullish(),
+  markupDocumentId: zod.number().nullish(),
   location: zod.string().nullish(),
   codeReference: zod.string().nullish(),
   responsibleParty: zod.string().nullish(),
   dueDate: zod.string().nullish(),
   resolvedDate: zod.string().nullish(),
   assignedToId: zod.number().nullish(),
-  projectName: zod.string(),
+  assigneeName: zod.string().nullish(),
+  projectName: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
+});
+
+/**
+ * @summary List comments and activity for an issue
+ */
+export const ListIssueCommentsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListIssueCommentsResponseItem = zod.object({
+  id: zod.string(),
+  type: zod.enum(["comment", "activity"]),
+  body: zod.string().nullish(),
+  action: zod.string().nullish(),
+  description: zod.string().nullish(),
+  userId: zod.number(),
+  userName: zod.string(),
+  createdAt: zod.string(),
+});
+export const ListIssueCommentsResponse = zod.array(
+  ListIssueCommentsResponseItem,
+);
+
+/**
+ * @summary Post a comment on an issue
+ */
+export const CreateIssueCommentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CreateIssueCommentBody = zod.object({
+  body: zod.string(),
 });
 
 /**
@@ -1143,7 +1239,7 @@ export const GetReportResponse = zod
       issues: zod.array(
         zod.object({
           id: zod.number(),
-          projectId: zod.number(),
+          projectId: zod.number().nullish(),
           inspectionId: zod.number().nullish(),
           title: zod.string(),
           description: zod.string(),
@@ -1151,17 +1247,24 @@ export const GetReportResponse = zod
           status: zod.enum([
             "open",
             "in_progress",
-            "resolved",
+            "pending_review",
             "closed",
-            "deferred",
+            "rejected",
           ]),
+          category: zod.string().nullish(),
+          priority: zod.enum(["urgent", "high", "normal", "low"]).nullish(),
+          photos: zod.string().nullish(),
+          closeoutNotes: zod.string().nullish(),
+          closeoutPhotos: zod.string().nullish(),
+          markupDocumentId: zod.number().nullish(),
           location: zod.string().nullish(),
           codeReference: zod.string().nullish(),
           responsibleParty: zod.string().nullish(),
           dueDate: zod.string().nullish(),
           resolvedDate: zod.string().nullish(),
           assignedToId: zod.number().nullish(),
-          projectName: zod.string(),
+          assigneeName: zod.string().nullish(),
+          projectName: zod.string().nullish(),
           createdAt: zod.string(),
           updatedAt: zod.string(),
         }),

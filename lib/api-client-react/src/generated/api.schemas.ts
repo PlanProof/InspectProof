@@ -194,26 +194,44 @@ export type IssueStatus = (typeof IssueStatus)[keyof typeof IssueStatus];
 export const IssueStatus = {
   open: "open",
   in_progress: "in_progress",
-  resolved: "resolved",
+  pending_review: "pending_review",
   closed: "closed",
-  deferred: "deferred",
+  rejected: "rejected",
+} as const;
+
+export type IssuePriority =
+  | (typeof IssuePriority)[keyof typeof IssuePriority]
+  | null;
+
+export const IssuePriority = {
+  urgent: "urgent",
+  high: "high",
+  normal: "normal",
+  low: "low",
 } as const;
 
 export interface Issue {
   id: number;
-  projectId: number;
+  projectId?: number | null;
   inspectionId?: number | null;
   title: string;
   description: string;
   severity: IssueSeverity;
   status: IssueStatus;
+  category?: string | null;
+  priority?: IssuePriority;
+  photos?: string | null;
+  closeoutNotes?: string | null;
+  closeoutPhotos?: string | null;
+  markupDocumentId?: number | null;
   location?: string | null;
   codeReference?: string | null;
   responsibleParty?: string | null;
   dueDate?: string | null;
   resolvedDate?: string | null;
   assignedToId?: number | null;
-  projectName: string;
+  assigneeName?: string | null;
+  projectName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -540,12 +558,39 @@ export const CreateIssueRequestSeverity = {
   critical: "critical",
 } as const;
 
+export type CreateIssueRequestStatus =
+  | (typeof CreateIssueRequestStatus)[keyof typeof CreateIssueRequestStatus]
+  | null;
+
+export const CreateIssueRequestStatus = {
+  open: "open",
+  in_progress: "in_progress",
+  pending_review: "pending_review",
+  closed: "closed",
+  rejected: "rejected",
+} as const;
+
+export type CreateIssueRequestPriority =
+  | (typeof CreateIssueRequestPriority)[keyof typeof CreateIssueRequestPriority]
+  | null;
+
+export const CreateIssueRequestPriority = {
+  urgent: "urgent",
+  high: "high",
+  normal: "normal",
+  low: "low",
+} as const;
+
 export interface CreateIssueRequest {
-  projectId: number;
+  projectId?: number | null;
   inspectionId?: number | null;
   title: string;
   description: string;
   severity: CreateIssueRequestSeverity;
+  status?: CreateIssueRequestStatus;
+  category?: string | null;
+  priority?: CreateIssueRequestPriority;
+  photos?: string | null;
   location?: string | null;
   codeReference?: string | null;
   responsibleParty?: string | null;
@@ -569,9 +614,20 @@ export type UpdateIssueRequestStatus =
 export const UpdateIssueRequestStatus = {
   open: "open",
   in_progress: "in_progress",
-  resolved: "resolved",
+  pending_review: "pending_review",
   closed: "closed",
-  deferred: "deferred",
+  rejected: "rejected",
+} as const;
+
+export type UpdateIssueRequestPriority =
+  | (typeof UpdateIssueRequestPriority)[keyof typeof UpdateIssueRequestPriority]
+  | null;
+
+export const UpdateIssueRequestPriority = {
+  urgent: "urgent",
+  high: "high",
+  normal: "normal",
+  low: "low",
 } as const;
 
 export interface UpdateIssueRequest {
@@ -579,12 +635,40 @@ export interface UpdateIssueRequest {
   description?: string;
   severity?: UpdateIssueRequestSeverity;
   status?: UpdateIssueRequestStatus;
+  category?: string | null;
+  priority?: UpdateIssueRequestPriority;
+  photos?: string | null;
+  closeoutNotes?: string | null;
+  closeoutPhotos?: string | null;
   location?: string | null;
   codeReference?: string | null;
   responsibleParty?: string | null;
   dueDate?: string | null;
   resolvedDate?: string | null;
   assignedToId?: number | null;
+}
+
+export type IssueCommentType =
+  (typeof IssueCommentType)[keyof typeof IssueCommentType];
+
+export const IssueCommentType = {
+  comment: "comment",
+  activity: "activity",
+} as const;
+
+export interface IssueComment {
+  id: string;
+  type: IssueCommentType;
+  body?: string | null;
+  action?: string | null;
+  description?: string | null;
+  userId: number;
+  userName: string;
+  createdAt: string;
+}
+
+export interface CreateIssueCommentRequest {
+  body: string;
 }
 
 export type CreateDocumentRequestCategory =

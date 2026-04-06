@@ -46,6 +46,11 @@ type ResultKey = "pass" | "fail" | "monitor" | "na" | "pending";
 
 const SEVERITY_OPTS = ["critical", "major", "minor", "cosmetic"] as const;
 const DEFECT_STATUS_OPTS = ["open", "in_progress", "resolved", "deferred"] as const;
+const PRIORITY_OPTS = ["urgent", "high", "normal", "low"] as const;
+const ISSUE_CATEGORIES_MOBILE = [
+  "Structural", "Electrical", "Plumbing", "Fire Safety", "Waterproofing",
+  "Roofing", "Cladding", "HVAC", "Accessibility", "Finishes", "Site Safety", "Documentation", "Other",
+] as const;
 
 interface Stroke {
   points: { x: number; y: number }[];
@@ -108,6 +113,8 @@ export default function ConductInspectionScreen() {
   const [editNotes, setEditNotes] = useState("");
   const [editResult, setEditResult] = useState<ResultKey>("pending");
   const [editSeverity, setEditSeverity] = useState<string | null>(null);
+  const [editCategory, setEditCategory] = useState<string>("");
+  const [editPriority, setEditPriority] = useState<string>("normal");
   const [editLocation, setEditLocation] = useState<string>("");
   const [editTradeAllocated, setEditTradeAllocated] = useState<string>("");
   const [editRecommendedAction, setEditRecommendedAction] = useState<string>("");
@@ -338,6 +345,8 @@ export default function ConductInspectionScreen() {
     setEditResult(item.result);
     setEditNotes(item.notes || "");
     setEditSeverity(item.severity || null);
+    setEditCategory((item as any).category || "");
+    setEditPriority((item as any).priority || "normal");
     setEditLocation(item.location || "");
     setEditTradeAllocated(item.tradeAllocated || "");
     setEditRecommendedAction(item.recommendedAction || item.recommendedActionDefault || "");
@@ -348,6 +357,8 @@ export default function ConductInspectionScreen() {
     setEditNotes("");
     setEditResult("pending");
     setEditSeverity(null);
+    setEditCategory("");
+    setEditPriority("normal");
     setEditLocation("");
     setEditTradeAllocated("");
     setEditRecommendedAction("");
@@ -527,6 +538,8 @@ export default function ConductInspectionScreen() {
       notes: editNotes || null,
       ...(showDefectFields ? {
         severity: editSeverity || null,
+        category: editCategory || null,
+        priority: editPriority || null,
         location: editLocation || null,
         tradeAllocated: editTradeAllocated || null,
         recommendedAction: editRecommendedAction || null,
@@ -992,6 +1005,8 @@ export default function ConductInspectionScreen() {
             result={editResult}
             notes={editNotes}
             severity={editSeverity}
+            category={editCategory}
+            priority={editPriority}
             location={editLocation}
             tradeAllocated={editTradeAllocated}
             recommendedAction={editRecommendedAction}
@@ -1002,6 +1017,8 @@ export default function ConductInspectionScreen() {
             onResultChange={setEditResult}
             onNotesChange={setEditNotes}
             onSeverityChange={setEditSeverity}
+            onCategoryChange={setEditCategory}
+            onPriorityChange={setEditPriority}
             onLocationChange={setEditLocation}
             onTradeAllocatedChange={setEditTradeAllocated}
             onRecommendedActionChange={setEditRecommendedAction}
@@ -2259,19 +2276,23 @@ function PhotosPanel({
 }
 
 function ItemModal({
-  item, result, notes, severity, location, tradeAllocated, recommendedAction,
-  baseUrl, documents, internalStaff, contractors, onResultChange, onNotesChange, onSeverityChange, onLocationChange,
+  item, result, notes, severity, category, priority, location, tradeAllocated, recommendedAction,
+  baseUrl, documents, internalStaff, contractors, onResultChange, onNotesChange, onSeverityChange,
+  onCategoryChange, onPriorityChange, onLocationChange,
   onTradeAllocatedChange, onRecommendedActionChange, onSave, onClose,
   onUploadPhoto, onTakePhoto, onRemovePhoto, onReorderPhotos, onAnnotateDoc, saving, uploadingPhoto, insets,
   inspectionId,
 }: {
   item: ChecklistItem; result: ResultKey; notes: string; baseUrl: string;
-  severity: string | null; location: string; tradeAllocated: string; recommendedAction: string;
+  severity: string | null; category: string; priority: string;
+  location: string; tradeAllocated: string; recommendedAction: string;
   documents: ProjectDocument[];
   internalStaff: { id: number; name: string; role: string }[];
   contractors: { id: number; name: string; trade: string; email: string | null }[];
   onResultChange: (r: ResultKey) => void; onNotesChange: (n: string) => void;
-  onSeverityChange: (s: string | null) => void; onLocationChange: (l: string) => void;
+  onSeverityChange: (s: string | null) => void;
+  onCategoryChange: (c: string) => void; onPriorityChange: (p: string) => void;
+  onLocationChange: (l: string) => void;
   onTradeAllocatedChange: (t: string) => void; onRecommendedActionChange: (r: string) => void;
   onSave: () => void; onClose: () => void; onUploadPhoto: () => void;
   onTakePhoto: () => void; onRemovePhoto: (p: string) => void;
@@ -2541,6 +2562,47 @@ function ItemModal({
               </Text>
             )}
 
+
+            {/* Category */}
+            <Text style={[modalStyles.sectionLabel, { marginTop: 12 }]}>Category</Text>
+            <View style={modalStyles.chipRow}>
+              {ISSUE_CATEGORIES_MOBILE.map(c => (
+                <Pressable
+                  key={c}
+                  style={[modalStyles.severityChip, category === c && { backgroundColor: "#eff6ff", borderColor: "#3b82f6" }]}
+                  onPress={() => onCategoryChange(category === c ? "" : c)}
+                >
+                  <Text style={[modalStyles.severityChipText, category === c && { color: "#2563eb", fontWeight: "600" }]}>
+                    {c}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Priority */}
+            <Text style={[modalStyles.sectionLabel, { marginTop: 12 }]}>Priority</Text>
+            <View style={modalStyles.chipRow}>
+              {PRIORITY_OPTS.map(p => {
+                const priorityColours: Record<string, { bg: string; color: string }> = {
+                  urgent: { bg: "#faf5ff", color: "#7c3aed" },
+                  high: { bg: "#fff7ed", color: "#ea580c" },
+                  normal: { bg: "#f0fdf4", color: "#16a34a" },
+                  low: { bg: "#eff6ff", color: "#2563eb" },
+                };
+                const pc = priorityColours[p] ?? { bg: "#f1f5f9", color: "#64748b" };
+                return (
+                  <Pressable
+                    key={p}
+                    style={[modalStyles.severityChip, priority === p && { backgroundColor: pc.bg, borderColor: pc.color }]}
+                    onPress={() => onPriorityChange(p)}
+                  >
+                    <Text style={[modalStyles.severityChipText, priority === p && { color: pc.color, fontWeight: "600" }]}>
+                      {p.charAt(0).toUpperCase() + p.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
             {/* Recommended Action */}
             <Text style={[modalStyles.sectionLabel, { marginTop: 12 }]}>Recommended Action</Text>

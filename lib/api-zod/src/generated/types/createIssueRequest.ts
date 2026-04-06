@@ -5,14 +5,20 @@
  * InspectProof API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateIssueRequestPriority } from "./createIssueRequestPriority";
 import type { CreateIssueRequestSeverity } from "./createIssueRequestSeverity";
+import type { CreateIssueRequestStatus } from "./createIssueRequestStatus";
 
 export interface CreateIssueRequest {
-  projectId: number;
+  projectId?: number | null;
   inspectionId?: number | null;
   title: string;
   description: string;
   severity: CreateIssueRequestSeverity;
+  status?: CreateIssueRequestStatus;
+  category?: string | null;
+  priority?: CreateIssueRequestPriority;
+  photos?: string | null;
   location?: string | null;
   codeReference?: string | null;
   responsibleParty?: string | null;

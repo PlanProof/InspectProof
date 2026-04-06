@@ -25,6 +25,7 @@ import type {
   CreateChecklistTemplateRequest,
   CreateDocumentRequest,
   CreateInspectionRequest,
+  CreateIssueCommentRequest,
   CreateIssueRequest,
   CreateNoteRequest,
   CreateProjectRequest,
@@ -37,6 +38,7 @@ import type {
   Inspection,
   InspectionDetail,
   Issue,
+  IssueComment,
   ListChecklistTemplatesParams,
   ListDocumentsParams,
   ListInspectionsParams,
@@ -2126,6 +2128,181 @@ export const useUpdateIssue = <
   TContext
 > => {
   return useMutation(getUpdateIssueMutationOptions(options));
+};
+
+/**
+ * @summary List comments and activity for an issue
+ */
+export const getListIssueCommentsUrl = (id: number) => {
+  return `/api/issues/${id}/comments`;
+};
+
+export const listIssueComments = async (
+  id: number,
+  options?: RequestInit,
+): Promise<IssueComment[]> => {
+  return customFetch<IssueComment[]>(getListIssueCommentsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListIssueCommentsQueryKey = (id: number) => {
+  return [`/api/issues/${id}/comments`] as const;
+};
+
+export const getListIssueCommentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listIssueComments>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listIssueComments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListIssueCommentsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listIssueComments>>
+  > = ({ signal }) => listIssueComments(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listIssueComments>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListIssueCommentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listIssueComments>>
+>;
+export type ListIssueCommentsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List comments and activity for an issue
+ */
+
+export function useListIssueComments<
+  TData = Awaited<ReturnType<typeof listIssueComments>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listIssueComments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListIssueCommentsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Post a comment on an issue
+ */
+export const getCreateIssueCommentUrl = (id: number) => {
+  return `/api/issues/${id}/comments`;
+};
+
+export const createIssueComment = async (
+  id: number,
+  createIssueCommentRequest: CreateIssueCommentRequest,
+  options?: RequestInit,
+): Promise<IssueComment> => {
+  return customFetch<IssueComment>(getCreateIssueCommentUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createIssueCommentRequest),
+  });
+};
+
+export const getCreateIssueCommentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createIssueComment>>,
+    TError,
+    { id: number; data: BodyType<CreateIssueCommentRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createIssueComment>>,
+  TError,
+  { id: number; data: BodyType<CreateIssueCommentRequest> },
+  TContext
+> => {
+  const mutationKey = ["createIssueComment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createIssueComment>>,
+    { id: number; data: BodyType<CreateIssueCommentRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createIssueComment(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateIssueCommentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createIssueComment>>
+>;
+export type CreateIssueCommentMutationBody =
+  BodyType<CreateIssueCommentRequest>;
+export type CreateIssueCommentMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Post a comment on an issue
+ */
+export const useCreateIssueComment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createIssueComment>>,
+    TError,
+    { id: number; data: BodyType<CreateIssueCommentRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createIssueComment>>,
+  TError,
+  { id: number; data: BodyType<CreateIssueCommentRequest> },
+  TContext
+> => {
+  return useMutation(getCreateIssueCommentMutationOptions(options));
 };
 
 /**

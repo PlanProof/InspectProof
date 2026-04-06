@@ -335,6 +335,8 @@ CREATE TABLE IF NOT EXISTS "checklist_results" (
         "photo_urls" text,
         "photo_markups" text,
         "severity" text,
+        "issue_category" text,
+        "issue_priority" text,
         "location" text,
         "trade_allocated" text,
         "defect_status" text DEFAULT 'open',
@@ -352,11 +354,14 @@ CREATE TABLE IF NOT EXISTS "checklist_results" (
 -- ── issues (references projects, inspections) ─────────────────────────────────
 CREATE TABLE IF NOT EXISTS "issues" (
         "id" serial PRIMARY KEY NOT NULL,
-        "project_id" integer NOT NULL,
+        "project_id" integer,
         "inspection_id" integer,
         "title" text NOT NULL,
         "description" text NOT NULL,
         "severity" text DEFAULT 'medium' NOT NULL,
+        "category" text,
+        "priority" text,
+        "photos" text,
         "status" text DEFAULT 'open' NOT NULL,
         "location" text,
         "code_reference" text,
@@ -369,10 +374,22 @@ CREATE TABLE IF NOT EXISTS "issues" (
         "markup_document_id" integer,
         "created_at" timestamp DEFAULT now() NOT NULL,
         "updated_at" timestamp DEFAULT now() NOT NULL,
-        CONSTRAINT "fk_issues_project"
-            FOREIGN KEY ("project_id") REFERENCES "projects"("id") ON DELETE CASCADE,
         CONSTRAINT "fk_issues_inspection"
             FOREIGN KEY ("inspection_id") REFERENCES "inspections"("id") ON DELETE SET NULL
+);
+--> statement-breakpoint
+
+-- ── issue_comments ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS "issue_comments" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "issue_id" integer NOT NULL,
+        "user_id" integer NOT NULL,
+        "body" text NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        CONSTRAINT "fk_issue_comments_issue"
+            FOREIGN KEY ("issue_id") REFERENCES "issues"("id") ON DELETE CASCADE,
+        CONSTRAINT "fk_issue_comments_user"
+            FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE
 );
 --> statement-breakpoint
 

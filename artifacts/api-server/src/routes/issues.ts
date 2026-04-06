@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, lt, and, ne } from "drizzle-orm";
-import { db, issuesTable, projectsTable, activityLogsTable, usersTable } from "@workspace/db";
+import { eq, sql, lt, and, ne, desc } from "drizzle-orm";
+import { db, issuesTable, issueCommentsTable, projectsTable, activityLogsTable, usersTable } from "@workspace/db";
 import { optionalAuth } from "../middleware/auth";
 import { sendEmail } from "../lib/email";
 import { decodeSessionToken } from "../lib/session-token";
@@ -14,9 +14,30 @@ function getUserIdFromRequest(req: any): number | null {
   return valid ? userId : null;
 }
 
+async function canUserAccessIssue(userId: number, isAdmin: boolean, issueProjectId: number | null): Promise<boolean> {
+  if (isAdmin) return true;
+  if (!issueProjectId) return true; // standalone issue accessible to all authenticated users
+  const projects = await db.select({ id: projectsTable.id, name: projectsTable.name, createdById: projectsTable.createdById })
+    .from(projectsTable).where(eq(projectsTable.id, issueProjectId));
+  const project = projects[0];
+  if (!project) return false;
+  return project.createdById === userId || project.name === "Test Project";
+}
+
 async function formatIssue(i: any) {
-  const projects = await db.select().from(projectsTable).where(eq(projectsTable.id, i.projectId));
-  const pName = projects[0]?.name || "Unknown";
+  let pName = "No Project";
+  if (i.projectId) {
+    const projects = await db.select().from(projectsTable).where(eq(projectsTable.id, i.projectId));
+    pName = projects[0]?.name || "Unknown";
+  }
+
+  let assigneeName: string | null = null;
+  if (i.assignedToId) {
+    const users = await db.select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName })
+      .from(usersTable).where(eq(usersTable.id, i.assignedToId));
+    if (users[0]) assigneeName = `${users[0].firstName} ${users[0].lastName}`.trim();
+  }
+
   return {
     id: i.id,
     projectId: i.projectId,
@@ -24,6 +45,9 @@ async function formatIssue(i: any) {
     title: i.title,
     description: i.description,
     severity: i.severity,
+    category: i.category ?? null,
+    priority: i.priority ?? null,
+    photos: i.photos ?? null,
     status: i.status,
     location: i.location,
     codeReference: i.codeReference,
@@ -31,21 +55,79 @@ async function formatIssue(i: any) {
     dueDate: i.dueDate,
     resolvedDate: i.resolvedDate,
     assignedToId: i.assignedToId,
+    assigneeName,
     closeoutNotes: i.closeoutNotes ?? null,
     closeoutPhotos: i.closeoutPhotos ?? null,
+    markupDocumentId: i.markupDocumentId ?? null,
     projectName: pName,
     createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : i.createdAt,
     updatedAt: i.updatedAt instanceof Date ? i.updatedAt.toISOString() : i.updatedAt,
   };
 }
 
+async function sendAssignmentNotification(issue: any, assignedUserId: number, log: any, isReassignment = false) {
+  try {
+    const users = await db.select().from(usersTable).where(eq(usersTable.id, assignedUserId));
+    const user = users[0];
+    if (!user?.email) return;
+    const subject = isReassignment
+      ? `Issue Reassigned to You: ${issue.title}`
+      : `Issue Assigned to You: ${issue.title}`;
+    const html = `<p>Hi ${user.firstName},</p>
+<p>${isReassignment ? "An issue has been reassigned to you" : "A new issue has been assigned to you"}:</p>
+<table style="border-collapse:collapse;width:100%;max-width:600px">
+  <tr><td style="padding:8px;font-weight:bold;background:#f8fafc">Issue</td><td style="padding:8px">${issue.title}</td></tr>
+  <tr><td style="padding:8px;font-weight:bold;background:#f8fafc">Status</td><td style="padding:8px">${issue.status}</td></tr>
+  ${issue.severity ? `<tr><td style="padding:8px;font-weight:bold;background:#f8fafc">Severity</td><td style="padding:8px">${issue.severity}</td></tr>` : ""}
+  ${issue.priority ? `<tr><td style="padding:8px;font-weight:bold;background:#f8fafc">Priority</td><td style="padding:8px">${issue.priority}</td></tr>` : ""}
+  ${issue.dueDate ? `<tr><td style="padding:8px;font-weight:bold;background:#f8fafc">Due Date</td><td style="padding:8px">${issue.dueDate}</td></tr>` : ""}
+  ${issue.description ? `<tr><td style="padding:8px;font-weight:bold;background:#f8fafc">Description</td><td style="padding:8px">${issue.description}</td></tr>` : ""}
+</table>
+<p>Please log in to InspectProof to view the full details.</p>
+<p style="color:#888;font-size:12px">InspectProof – a product of PlanProof Technologies Pty Ltd</p>`;
+    await sendEmail({ to: user.email, subject, html });
+  } catch (err) {
+    log?.error?.({ err }, "Failed to send assignment notification");
+  }
+}
+
+async function sendStatusChangeNotification(issue: any, newStatus: string, log: any) {
+  try {
+    const recipientId = issue.assignedToId || null;
+    let recipientEmail: string | null = null;
+    let recipientName: string | null = null;
+
+    if (recipientId) {
+      const users = await db.select().from(usersTable).where(eq(usersTable.id, recipientId));
+      recipientEmail = users[0]?.email ?? null;
+      recipientName = users[0]?.firstName ?? null;
+    }
+
+    if (!recipientEmail) return;
+
+    const statusLabel = newStatus.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const subject = `Issue Status Updated: ${issue.title}`;
+    const html = `<p>Hi ${recipientName || "there"},</p>
+<p>The status of the following issue has been updated to <strong>${statusLabel}</strong>:</p>
+<table style="border-collapse:collapse;width:100%;max-width:600px">
+  <tr><td style="padding:8px;font-weight:bold;background:#f8fafc">Issue</td><td style="padding:8px">${issue.title}</td></tr>
+  <tr><td style="padding:8px;font-weight:bold;background:#f8fafc">New Status</td><td style="padding:8px">${statusLabel}</td></tr>
+  ${issue.dueDate ? `<tr><td style="padding:8px;font-weight:bold;background:#f8fafc">Due Date</td><td style="padding:8px">${issue.dueDate}</td></tr>` : ""}
+</table>
+<p>Please log in to InspectProof to view the full details.</p>
+<p style="color:#888;font-size:12px">InspectProof – a product of PlanProof Technologies Pty Ltd</p>`;
+    await sendEmail({ to: recipientEmail, subject, html });
+  } catch (err) {
+    log?.error?.({ err }, "Failed to send status change notification");
+  }
+}
+
 router.get("/", optionalAuth, async (req, res) => {
   try {
-    const { projectId, inspectionId, status, severity } = req.query;
+    const { projectId, inspectionId, status, severity, category } = req.query;
     let issues = await db.select().from(issuesTable)
       .orderBy(sql`${issuesTable.createdAt} DESC`);
 
-    // Scope issues to user's accessible projects
     if (req.authUser && !req.authUser.isAdmin) {
       const allProjects = await db.select({ id: projectsTable.id, name: projectsTable.name, createdById: projectsTable.createdById })
         .from(projectsTable);
@@ -61,6 +143,7 @@ router.get("/", optionalAuth, async (req, res) => {
     if (inspectionId) issues = issues.filter(i => i.inspectionId === parseInt(inspectionId as string));
     if (status) issues = issues.filter(i => i.status === status);
     if (severity) issues = issues.filter(i => i.severity === severity);
+    if (category) issues = issues.filter(i => i.category === category);
 
     const result = await Promise.all(issues.map(formatIssue));
     res.json(result);
@@ -82,9 +165,12 @@ router.post("/", async (req, res) => {
       projectId: data.projectId,
       inspectionId: data.inspectionId,
       title: data.title,
-      description: data.description,
+      description: data.description || "",
       severity: data.severity,
-      status: "open",
+      category: data.category || null,
+      priority: data.priority || null,
+      photos: data.photos ? (typeof data.photos === "string" ? data.photos : JSON.stringify(data.photos)) : null,
+      status: data.status || "open",
       location: data.location,
       codeReference: data.codeReference,
       responsibleParty: data.responsibleParty,
@@ -99,6 +185,10 @@ router.post("/", async (req, res) => {
       description: `Issue "${issue.title}" created (${issue.severity} severity)`,
       userId: requestingUserId ?? 1,
     });
+
+    if (issue.assignedToId) {
+      await sendAssignmentNotification(issue, issue.assignedToId, req.log, false);
+    }
 
     const formatted = await formatIssue(issue);
     res.status(201).json(formatted);
@@ -129,8 +219,35 @@ router.put("/:id", async (req, res) => {
     const data = req.body;
     const requestingUserId = getUserIdFromRequest(req);
 
-    const updateData: any = { ...data, updatedAt: new Date() };
-    if (data.status === "resolved" && !data.resolvedDate) {
+    const existingIssues = await db.select().from(issuesTable).where(eq(issuesTable.id, id));
+    const existing = existingIssues[0];
+    if (!existing) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+
+    const updateData: any = { updatedAt: new Date() };
+
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.severity !== undefined) updateData.severity = data.severity;
+    if (data.category !== undefined) updateData.category = data.category;
+    if (data.priority !== undefined) updateData.priority = data.priority;
+    if (data.photos !== undefined) {
+      updateData.photos = typeof data.photos === "string" ? data.photos : JSON.stringify(data.photos);
+    }
+    if (data.status !== undefined) updateData.status = data.status;
+    if (data.location !== undefined) updateData.location = data.location;
+    if (data.codeReference !== undefined) updateData.codeReference = data.codeReference;
+    if (data.responsibleParty !== undefined) updateData.responsibleParty = data.responsibleParty;
+    if (data.dueDate !== undefined) updateData.dueDate = data.dueDate;
+    if (data.assignedToId !== undefined) updateData.assignedToId = data.assignedToId;
+    if (data.closeoutNotes !== undefined) updateData.closeoutNotes = data.closeoutNotes;
+    if (data.closeoutPhotos !== undefined) updateData.closeoutPhotos = data.closeoutPhotos;
+
+    // Auto-set resolvedDate when closing
+    const closedStatuses = ["closed", "resolved"];
+    if (data.status && closedStatuses.includes(data.status) && !existing.resolvedDate) {
       updateData.resolvedDate = new Date().toISOString().slice(0, 10);
     }
 
@@ -144,10 +261,33 @@ router.put("/:id", async (req, res) => {
       return;
     }
 
-    const action = data.status === "resolved" ? "closed" : "updated";
-    const description = data.status === "resolved"
-      ? `Issue "${issue.title}" closed out${data.closeoutNotes ? " with notes" : ""}`
-      : `Issue "${issue.title}" updated to ${data.status || issue.status}`;
+    // Determine activity action and description
+    let action = "updated";
+    let description = `Issue "${issue.title}" updated`;
+
+    if (data.status && data.status !== existing.status) {
+      const statusLabel = data.status.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+      if (data.status === "closed" || data.status === "resolved") {
+        action = "closed";
+        description = `Issue "${issue.title}" closed out${data.closeoutNotes ? " with notes" : ""}`;
+      } else if (data.status === "rejected") {
+        action = "rejected";
+        description = `Issue "${issue.title}" rejected${data.closeoutNotes ? ": " + data.closeoutNotes.slice(0, 80) : ""}`;
+      } else {
+        action = "status_changed";
+        description = `Issue "${issue.title}" status changed to ${statusLabel}`;
+      }
+      // Send status-change notification
+      await sendStatusChangeNotification(issue, data.status, req.log);
+    } else if (data.assignedToId !== undefined && data.assignedToId !== existing.assignedToId) {
+      action = "assigned";
+      description = `Issue "${issue.title}" assigned`;
+      if (data.assignedToId) {
+        await sendAssignmentNotification(issue, data.assignedToId, req.log, !!existing.assignedToId);
+      }
+    } else {
+      description = `Issue "${issue.title}" updated`;
+    }
 
     await db.insert(activityLogsTable).values({
       entityType: "issue",
@@ -164,6 +304,154 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+// Comments endpoints
+router.get("/:id/comments", optionalAuth, async (req, res) => {
+  try {
+    if (!req.authUser) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    const issueId = parseInt(req.params.id);
+    if (isNaN(issueId)) {
+      res.status(400).json({ error: "bad_request", message: "invalid issue id" });
+      return;
+    }
+
+    // Verify the issue exists and the user has access to it
+    const [issue] = await db.select({ id: issuesTable.id, projectId: issuesTable.projectId })
+      .from(issuesTable).where(eq(issuesTable.id, issueId));
+    if (!issue) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const hasAccess = await canUserAccessIssue(req.authUser.id, req.authUser.isAdmin ?? false, issue.projectId);
+    if (!hasAccess) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    const comments = await db.select().from(issueCommentsTable)
+      .where(eq(issueCommentsTable.issueId, issueId))
+      .orderBy(desc(issueCommentsTable.createdAt));
+
+    const userIds = [...new Set(comments.map(c => c.userId))];
+    let userMap: Record<number, { name: string; email: string }> = {};
+    if (userIds.length > 0) {
+      const users = await db.select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email })
+        .from(usersTable);
+      for (const u of users) {
+        userMap[u.id] = { name: `${u.firstName} ${u.lastName}`.trim(), email: u.email };
+      }
+    }
+
+    // Also fetch activity logs for this issue (excluding "commented" to avoid duplicating comment feed items)
+    const activityLogs = await db.select().from(activityLogsTable)
+      .where(and(
+        eq(activityLogsTable.entityType, "issue"),
+        eq(activityLogsTable.entityId, issueId),
+        ne(activityLogsTable.action, "commented")
+      ))
+      .orderBy(desc(activityLogsTable.createdAt));
+
+    const allUserIds = [...new Set([...activityLogs.map(l => l.userId)])];
+    if (allUserIds.length > 0) {
+      const users = await db.select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email })
+        .from(usersTable);
+      for (const u of users) {
+        userMap[u.id] = { name: `${u.firstName} ${u.lastName}`.trim(), email: u.email };
+      }
+    }
+
+    const commentItems = comments.map(c => ({
+      id: `comment-${c.id}`,
+      type: "comment" as const,
+      body: c.body,
+      userId: c.userId,
+      userName: userMap[c.userId]?.name ?? "Unknown",
+      createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : c.createdAt,
+    }));
+
+    const activityItems = activityLogs.map(l => ({
+      id: `activity-${l.id}`,
+      type: "activity" as const,
+      action: l.action,
+      description: l.description,
+      userId: l.userId,
+      userName: userMap[l.userId]?.name ?? "System",
+      createdAt: l.createdAt instanceof Date ? l.createdAt.toISOString() : l.createdAt,
+    }));
+
+    const combined = [...commentItems, ...activityItems].sort((a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    res.json(combined);
+  } catch (err) {
+    req.log.error({ err }, "List issue comments error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.post("/:id/comments", optionalAuth, async (req, res) => {
+  try {
+    if (!req.authUser) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    const issueId = parseInt(req.params.id);
+    if (isNaN(issueId)) {
+      res.status(400).json({ error: "bad_request", message: "invalid issue id" });
+      return;
+    }
+
+    // Verify the issue exists and the user has access to it
+    const [issueCheck] = await db.select({ id: issuesTable.id, projectId: issuesTable.projectId })
+      .from(issuesTable).where(eq(issuesTable.id, issueId));
+    if (!issueCheck) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const hasCommentAccess = await canUserAccessIssue(req.authUser.id, req.authUser.isAdmin ?? false, issueCheck.projectId);
+    if (!hasCommentAccess) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    const { body } = req.body;
+    if (!body?.trim()) {
+      res.status(400).json({ error: "bad_request", message: "body is required" });
+      return;
+    }
+
+    const [comment] = await db.insert(issueCommentsTable).values({
+      issueId,
+      userId: req.authUser.id,
+      body: body.trim(),
+    }).returning();
+
+    // Log as activity too
+    await db.insert(activityLogsTable).values({
+      entityType: "issue",
+      entityId: issueId,
+      action: "commented",
+      description: body.trim().slice(0, 200),
+      userId: req.authUser.id,
+    });
+
+    res.status(201).json({
+      id: `comment-${comment.id}`,
+      type: "comment",
+      body: comment.body,
+      userId: comment.userId,
+      userName: `${req.authUser.firstName || ""} ${req.authUser.lastName || ""}`.trim() || "You",
+      createdAt: comment.createdAt instanceof Date ? comment.createdAt.toISOString() : comment.createdAt,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Create issue comment error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 router.post("/send-overdue-reminders", optionalAuth, async (req, res) => {
   try {
     if (!req.authUser?.isAdmin && !req.authUser?.isCompanyAdmin) {
@@ -174,7 +462,9 @@ router.post("/send-overdue-reminders", optionalAuth, async (req, res) => {
     const overdueIssues = await db.select().from(issuesTable)
       .where(and(
         lt(issuesTable.dueDate, today),
+        ne(issuesTable.status, "closed"),
         ne(issuesTable.status, "resolved"),
+        ne(issuesTable.status, "rejected"),
       ));
 
     let sent = 0;

@@ -6,11 +6,14 @@ import { inspectionsTable } from "./inspections";
 
 export const issuesTable = pgTable("issues", {
   id: serial("id").primaryKey(),
-  projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
-  inspectionId: integer("inspection_id").references(() => inspectionsTable.id, { onDelete: "set null" }),
+  projectId: integer("project_id"),
+  inspectionId: integer("inspection_id"),
   title: text("title").notNull(),
   description: text("description").notNull(),
   severity: text("severity").notNull().default("medium"),
+  category: text("category"),
+  priority: text("priority"),
+  photos: text("photos"),
   status: text("status").notNull().default("open"),
   location: text("location"),
   codeReference: text("code_reference"),
@@ -25,6 +28,18 @@ export const issuesTable = pgTable("issues", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const issueCommentsTable = pgTable("issue_comments", {
+  id: serial("id").primaryKey(),
+  issueId: integer("issue_id").notNull(),
+  userId: integer("user_id").notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertIssueSchema = createInsertSchema(issuesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertIssue = z.infer<typeof insertIssueSchema>;
 export type Issue = typeof issuesTable.$inferSelect;
+
+export const insertIssueCommentSchema = createInsertSchema(issueCommentsTable).omit({ id: true, createdAt: true });
+export type InsertIssueComment = z.infer<typeof insertIssueCommentSchema>;
+export type IssueComment = typeof issueCommentsTable.$inferSelect;

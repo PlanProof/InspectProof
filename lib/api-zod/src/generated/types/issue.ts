@@ -5,24 +5,32 @@
  * InspectProof API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { IssuePriority } from "./issuePriority";
 import type { IssueSeverity } from "./issueSeverity";
 import type { IssueStatus } from "./issueStatus";
 
 export interface Issue {
   id: number;
-  projectId: number;
+  projectId?: number | null;
   inspectionId?: number | null;
   title: string;
   description: string;
   severity: IssueSeverity;
   status: IssueStatus;
+  category?: string | null;
+  priority?: IssuePriority;
+  photos?: string | null;
+  closeoutNotes?: string | null;
+  closeoutPhotos?: string | null;
+  markupDocumentId?: number | null;
   location?: string | null;
   codeReference?: string | null;
   responsibleParty?: string | null;
   dueDate?: string | null;
   resolvedDate?: string | null;
   assignedToId?: number | null;
-  projectName: string;
+  assigneeName?: string | null;
+  projectName?: string | null;
   createdAt: string;
   updatedAt: string;
 }

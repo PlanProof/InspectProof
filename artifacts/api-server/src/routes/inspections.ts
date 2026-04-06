@@ -359,6 +359,8 @@ router.get("/:id", requireAuth, async (req, res) => {
       photoUrls: r.result.photoUrls ? JSON.parse(r.result.photoUrls) : [],
       photoMarkups: r.result.photoMarkups ? JSON.parse(r.result.photoMarkups) : {},
       severity: r.result.severity ?? null,
+      issueCategory: r.result.issueCategory ?? null,
+      issuePriority: r.result.issuePriority ?? null,
       location: r.result.location ?? null,
       tradeAllocated: r.result.tradeAllocated ?? null,
       defectStatus: r.result.defectStatus ?? "open",
@@ -400,7 +402,8 @@ router.get("/:id", requireAuth, async (req, res) => {
         projectName: pName,
         source: "checklist" as const,
         checklistResultId: r.id,
-        category: r.category ?? null,
+        category: r.issueCategory ?? r.category ?? null,
+        priority: r.issuePriority ?? null,
         result: r.result,
         recommendedAction: r.recommendedAction ?? null,
         createdAt: new Date().toISOString(),
@@ -598,6 +601,8 @@ router.get("/:id/checklist", requireAuth, async (req, res) => {
       photoUrls: r.result.photoUrls ? JSON.parse(r.result.photoUrls) : [],
       photoMarkups: r.result.photoMarkups ? JSON.parse(r.result.photoMarkups) : {},
       severity: r.result.severity ?? null,
+      issueCategory: r.result.issueCategory ?? null,
+      issuePriority: r.result.issuePriority ?? null,
       location: r.result.location ?? null,
       tradeAllocated: r.result.tradeAllocated ?? null,
       defectStatus: r.result.defectStatus ?? "open",
@@ -756,7 +761,7 @@ router.post("/:id/apply-checklist", requireAuth, async (req, res) => {
 router.patch("/:id/checklist/:resultId", requireAuth, async (req, res) => {
   try {
     const resultId = parseInt(req.params.resultId);
-    const { result, notes, photoUrls, photoMarkups, severity, location, tradeAllocated, defectStatus, clientVisible, recommendedAction } = req.body;
+    const { result, notes, photoUrls, photoMarkups, severity, issueCategory, issuePriority, location, tradeAllocated, defectStatus, clientVisible, recommendedAction } = req.body;
 
     const updateData: any = { updatedAt: new Date() };
     if (result !== undefined) updateData.result = result;
@@ -773,6 +778,8 @@ router.patch("/:id/checklist/:resultId", requireAuth, async (req, res) => {
     }
     if (photoMarkups !== undefined) updateData.photoMarkups = JSON.stringify(photoMarkups);
     if (severity !== undefined) updateData.severity = severity;
+    if (issueCategory !== undefined) updateData.issueCategory = issueCategory;
+    if (issuePriority !== undefined) updateData.issuePriority = issuePriority;
     if (location !== undefined) updateData.location = location;
     if (tradeAllocated !== undefined) updateData.tradeAllocated = tradeAllocated;
     if (defectStatus !== undefined) updateData.defectStatus = defectStatus;
@@ -829,6 +836,8 @@ router.patch("/:id/checklist/:resultId", requireAuth, async (req, res) => {
       photoUrls: updated.photoUrls ? JSON.parse(updated.photoUrls) : [],
       photoMarkups: updated.photoMarkups ? JSON.parse(updated.photoMarkups) : {},
       severity: updated.severity ?? null,
+      issueCategory: updated.issueCategory ?? null,
+      issuePriority: updated.issuePriority ?? null,
       location: updated.location ?? null,
       tradeAllocated: updated.tradeAllocated ?? null,
       defectStatus: updated.defectStatus ?? "open",
