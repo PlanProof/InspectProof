@@ -10,7 +10,17 @@ const router: IRouter = Router();
 router.get('/billing/plan-configs', async (_req, res) => {
   try {
     const plans = await db.select().from(planConfigsTable).orderBy(planConfigsTable.sortOrder);
-    res.json({ plans: plans.map(p => ({ ...p, features: JSON.parse(p.features || '[]') })) });
+    res.json({
+      plans: plans.map(p => {
+        const limits = getLimits(p.planKey);
+        return {
+          ...p,
+          features: JSON.parse(p.features || '[]'),
+          monthlyPriceAud: limits.monthlyPriceAud,
+          annualPriceAud: limits.annualPriceAud,
+        };
+      }),
+    });
   } catch {
     res.json({ plans: [] });
   }

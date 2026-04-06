@@ -527,6 +527,8 @@ type PlanConfig = {
   features: string[];
   isPopular: boolean;
   isBestValue: boolean;
+  monthlyPriceAud: number | null;
+  annualPriceAud: number | null;
 };
 
 function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => void }) {
@@ -562,6 +564,8 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
             features: Array.isArray(p.features) ? p.features : JSON.parse(p.features || "[]"),
             isPopular: p.isPopular,
             isBestValue: p.isBestValue,
+            monthlyPriceAud: p.monthlyPriceAud ?? null,
+            annualPriceAud: p.annualPriceAud ?? null,
           };
         }
         setPlanConfigs(configs);
@@ -744,20 +748,28 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
                 badge={null}
               />
 
-              {/* Paid plans — sourced from DB configs; Stripe prices merged in when available */}
+              {/* Paid plans — sourced from DB configs; Stripe prices take precedence, planLimits prices as fallback */}
               {Object.values(planConfigs)
                 .filter(cfg => cfg.planKey !== "free_trial" && cfg.planKey !== "enterprise")
                 .map((cfg) => {
                   const stripePlan = plans.find((p) => p.plan === cfg.planKey);
-                  const price = stripePlan?.prices.find((p) => p.interval === billingInterval) ?? null;
-                  const savings = stripePlan ? annualSavings[cfg.planKey] ?? 0 : 0;
+                  const stripePrice = stripePlan?.prices.find((p) => p.interval === billingInterval);
+                  // Fall back to planLimits prices (from server) when Stripe isn't configured
+                  const fallbackPrice = billingInterval === "month" ? cfg.monthlyPriceAud : cfg.annualPriceAud;
+                  const displayPrice = stripePrice?.unit_amount ?? fallbackPrice ?? null;
+                  // Savings badge — use Stripe data when available, otherwise calculate from planLimits prices
+                  const savings = stripePlan
+                    ? (annualSavings[cfg.planKey] ?? 0)
+                    : cfg.monthlyPriceAud != null && cfg.annualPriceAud != null
+                      ? cfg.monthlyPriceAud * 12 - cfg.annualPriceAud
+                      : 0;
                   return (
                     <PlanCard
                       key={cfg.planKey}
                       planKey={cfg.planKey}
                       name={cfg.label}
                       description={cfg.description}
-                      price={price?.unit_amount ?? null}
+                      price={displayPrice}
                       interval={billingInterval}
                       features={cfg.features ?? []}
                       selected={selected === cfg.planKey}
@@ -765,7 +777,6 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
                       icon={PLAN_ICONS[cfg.planKey] ?? null}
                       badge={billingInterval === "year" && savings > 0 ? `Save ${fmt(savings)}/yr` : null}
                       highlighted={cfg.planKey === "professional"}
-                      noPrice={!stripePlan}
                     />
                   );
                 })}
