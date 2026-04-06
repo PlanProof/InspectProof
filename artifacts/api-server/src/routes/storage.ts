@@ -146,10 +146,82 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
  *
  * Cache-Control is set to 24 h for UUID-addressed objects (immutable once written).
  */
-router.get("/storage/objects/{*path}", async (req: Request, res: Response) => {
+router.get("/storage/objects/{*path}", requireAuth, async (req: Request, res: Response) => {
   const rawPathParam = (req.params as any).path;
   const rawPath = Array.isArray(rawPathParam) ? rawPathParam.join("/") : String(rawPathParam);
+
+  // Reject directory traversal attempts
+  if (rawPath.split("/").some(segment => segment === ".." || segment === ".")) {
+    res.status(400).json({ error: "bad_request", message: "Invalid path." });
+    return;
+  }
+
   const objectPath = "/objects/" + rawPath;
+
+  const caller = req.authUser!;
+  if (!caller.isAdmin) {
+    // Determine the org admin ID for the requesting user
+    const orgAdminId = caller.isCompanyAdmin
+      ? caller.id
+      : (caller.adminUserId ? parseInt(caller.adminUserId) : caller.id);
+
+    const escapedPath = objectPath.replace(/[%_]/g, "\\$&");
+
+    // Check if this object is referenced by any record in the caller's org.
+    // We look in:
+    //   1. documents table: uploaded_by_id must belong to the same org
+    //   2. checklist_results table: via inspection → project → org admin
+    //   3. users table: avatar, signatureUrl, or logoUrl belonging to the org
+    // This check applies to all storage backends (Replit and Supabase).
+    const orgResult = await db.execute(sql`
+      SELECT 1 FROM (
+        -- Documents uploaded by any member of the caller's org
+        SELECT 1
+        FROM documents d
+        JOIN users u ON u.id = d.uploaded_by_id
+        WHERE d.file_url = ${objectPath}
+          AND (
+            u.id = ${orgAdminId}
+            OR u.admin_user_id = ${String(orgAdminId)}
+          )
+        LIMIT 1
+      ) t1
+      UNION ALL
+      SELECT 1 FROM (
+        -- Photos in checklist results for inspections in the caller's org
+        SELECT 1
+        FROM checklist_results cr
+        JOIN inspections i ON i.id = cr.inspection_id
+        JOIN projects p ON p.id = i.project_id
+        JOIN users u ON u.id = p.created_by_id
+        WHERE cr.photo_urls LIKE ${"%" + escapedPath + "%"}
+          AND (
+            p.created_by_id = ${orgAdminId}
+            OR u.admin_user_id = ${String(orgAdminId)}
+          )
+        LIMIT 1
+      ) t2
+      UNION ALL
+      SELECT 1 FROM (
+        -- User profile assets (avatar, signature, org logo) owned by the caller's org
+        SELECT 1
+        FROM users u
+        WHERE (u.avatar = ${objectPath} OR u.signature_url = ${objectPath} OR u.logo_url = ${objectPath})
+          AND (
+            u.id = ${orgAdminId}
+            OR u.admin_user_id = ${String(orgAdminId)}
+          )
+        LIMIT 1
+      ) t3
+      LIMIT 1
+    `);
+
+    const hasAccess = orgResult.rows && orgResult.rows.length > 0;
+    if (!hasAccess) {
+      res.status(403).json({ error: "forbidden", message: "Access denied." });
+      return;
+    }
+  }
 
   // Parse ?w= thumbnail width
   const wParam = req.query.w;

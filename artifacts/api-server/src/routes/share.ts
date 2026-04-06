@@ -2,13 +2,45 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, inspectionsTable, projectsTable, checklistResultsTable, checklistItemsTable, issuesTable, usersTable } from "@workspace/db";
 import crypto from "crypto";
-import { decodeSessionToken } from "../lib/session-token";
+import { requireAuth, isInspectorOnly, type AuthUser } from "../middleware/auth";
 
 const router: IRouter = Router();
 
-router.post("/inspections/:id/share", async (req, res) => {
+/**
+ * Returns true if the caller may access an inspection.
+ * Mirrors the canAccessInspection() function in inspections.ts exactly.
+ */
+async function canAccessInspection(inspection: { projectId: number | null; inspectorId?: number | null }, user: AuthUser): Promise<boolean> {
+  if (user.isAdmin) return true;
+  if (isInspectorOnly(user)) return inspection.inspectorId === user.id;
+  if (!inspection.projectId) return false;
+  const [project] = await db.select({ createdById: projectsTable.createdById }).from(projectsTable).where(eq(projectsTable.id, inspection.projectId));
+  if (!project) return false;
+  const adminId = user.isCompanyAdmin ? user.id : (user.adminUserId ? parseInt(user.adminUserId) : user.id);
+  if (project.createdById === user.id || project.createdById === adminId) return true;
+  const [creator] = await db.select({ adminUserId: usersTable.adminUserId }).from(usersTable).where(eq(usersTable.id, project.createdById));
+  return !!(creator?.adminUserId && parseInt(creator.adminUserId) === adminId);
+}
+
+router.post("/inspections/:id/share", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) { res.status(400).json({ error: "bad_request" }); return; }
+
+    const caller = req.authUser!;
+
+    const [insp] = await db.select({
+      id: inspectionsTable.id,
+      projectId: inspectionsTable.projectId,
+      inspectorId: inspectionsTable.inspectorId,
+    }).from(inspectionsTable).where(eq(inspectionsTable.id, id));
+    if (!insp) { res.status(404).json({ error: "not_found" }); return; }
+
+    if (!(await canAccessInspection(insp, caller))) {
+      res.status(403).json({ error: "forbidden", message: "Access denied." });
+      return;
+    }
+
     const token = crypto.randomBytes(24).toString("hex");
     const [updated] = await db.update(inspectionsTable)
       .set({ shareToken: token, updatedAt: new Date() } as any)
@@ -22,32 +54,60 @@ router.post("/inspections/:id/share", async (req, res) => {
   }
 });
 
-router.delete("/inspections/:id/share", async (req, res) => {
+router.delete("/inspections/:id/share", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) { res.status(400).json({ error: "bad_request" }); return; }
+
+    const caller = req.authUser!;
+
+    const [insp] = await db.select({
+      id: inspectionsTable.id,
+      projectId: inspectionsTable.projectId,
+      inspectorId: inspectionsTable.inspectorId,
+    }).from(inspectionsTable).where(eq(inspectionsTable.id, id));
+    if (!insp) { res.status(404).json({ error: "not_found" }); return; }
+
+    if (!(await canAccessInspection(insp, caller))) {
+      res.status(403).json({ error: "forbidden", message: "Access denied." });
+      return;
+    }
+
     await db.update(inspectionsTable)
       .set({ shareToken: null, updatedAt: new Date() } as any)
       .where(eq(inspectionsTable.id, id));
     res.json({ ok: true });
   } catch (err) {
+    req.log.error({ err }, "Revoke share token error");
     res.status(500).json({ error: "internal_error" });
   }
 });
 
-router.post("/inspections/:id/sign-off", async (req, res) => {
+router.post("/inspections/:id/sign-off", requireAuth, async (req, res) => {
   try {
     const inspId = parseInt(req.params.id);
-    const auth = req.headers.authorization;
-    if (!auth?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
-    const { userId, valid } = decodeSessionToken(auth.slice(7));
-    if (!valid) { res.status(401).json({ error: "unauthorized" }); return; }
+    if (isNaN(inspId)) { res.status(400).json({ error: "bad_request" }); return; }
+
+    const caller = req.authUser!;
+
+    const [insp] = await db.select({
+      id: inspectionsTable.id,
+      projectId: inspectionsTable.projectId,
+      inspectorId: inspectionsTable.inspectorId,
+    }).from(inspectionsTable).where(eq(inspectionsTable.id, inspId));
+    if (!insp) { res.status(404).json({ error: "not_found" }); return; }
+
+    if (!(await canAccessInspection(insp, caller))) {
+      res.status(403).json({ error: "forbidden", message: "Access denied." });
+      return;
+    }
 
     const [updated] = await db.update(inspectionsTable)
       .set({
         status: "completed",
         completedDate: new Date().toISOString().slice(0, 10),
         signedOffAt: new Date(),
-        signedOffById: userId,
+        signedOffById: caller.id,
         updatedAt: new Date(),
       } as any)
       .where(eq(inspectionsTable.id, inspId))

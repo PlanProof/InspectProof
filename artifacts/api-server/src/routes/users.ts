@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, or, count } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { db, usersTable } from "@workspace/db";
 import { sendWelcomeWithCredentialsEmail } from "../lib/email";
 import { requireAuth } from "../middleware/auth";
@@ -151,7 +152,7 @@ router.post("/", requireAuth, async (req, res) => {
       adminUserId: resolvedAdminUserId,
     }).returning();
 
-    res.status(201).json({ ...formatUser(user), temporaryPassword });
+    res.status(201).json(formatUser(user));
 
     if (data.sendWelcomeEmail !== false) {
       const inviterName = data.inviterName || "Your team administrator";
@@ -168,9 +169,10 @@ router.post("/", requireAuth, async (req, res) => {
 
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const randomBytes = crypto.randomBytes(10);
   let result = "";
   for (let i = 0; i < 10; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += chars[randomBytes[i] % chars.length];
   }
   return result;
 }

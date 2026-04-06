@@ -64,11 +64,11 @@ const registerLimiter = rateLimit({
 });
 
 const forgotPasswordLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 60 * 60 * 1000, // 1 hour
   limit: 5,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  message: { error: "too_many_requests", message: "Too many password reset requests. Please wait 15 minutes before trying again." },
+  message: { error: "too_many_requests", message: "Too many password reset requests. Please try again in an hour." },
 });
 
 // ── Shared user shape ─────────────────────────────────────────────────────────
@@ -305,13 +305,12 @@ router.patch("/profile", async (req, res) => {
       return;
     }
 
-    const { firstName, lastName, phone, avatar, companyName } = req.body;
+    const { firstName, lastName, phone, avatar } = req.body;
     const updates: Record<string, any> = { updatedAt: new Date() };
     if (firstName !== undefined) updates.firstName = firstName.trim();
     if (lastName !== undefined) updates.lastName = lastName.trim();
     if (phone !== undefined) updates.phone = phone?.trim() || null;
     if (avatar !== undefined) updates.avatar = avatar || null;
-    if (companyName !== undefined) updates.companyName = companyName?.trim() || null;
 
     const [updated] = await db
       .update(usersTable)
