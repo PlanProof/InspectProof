@@ -6,7 +6,7 @@ import {
   CheckCircle2, ChevronRight, Shield, Database, Download,
   ToggleLeft, Upload, Trash2, PenLine, CreditCard, Zap, BarChart3,
   ArrowRight, Eye, EyeOff, Plus, X, Edit2, Check, Mail, BookUser,
-  Link2, Calendar,
+  Link2, Calendar, Bold, Italic, AlignLeft,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -14,6 +14,13 @@ import { cn } from "@/lib/utils";
 
 function apiBase() {
   return import.meta.env.BASE_URL.replace(/\/$/, "");
+}
+
+function storageUrl(objectPath: string | null | undefined): string {
+  if (!objectPath) return "";
+  const token = localStorage.getItem("inspectproof_token") || "";
+  const base = `${apiBase()}/api/storage${objectPath}`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
 }
 
 async function apiFetch(path: string, opts?: RequestInit) {
@@ -682,7 +689,7 @@ function ProfileTab({ user, loading, isOnboarding = false, onOnboardingComplete 
                 {/* Preview box */}
                 <div className="flex-1 min-w-0 border border-border rounded-xl bg-white p-4 flex items-center justify-center min-h-[80px]">
                   <img
-                    src={`${apiBase()}/api/storage${signatureUrl}`}
+                    src={storageUrl(signatureUrl)}
                     alt="Your signature"
                     className="max-h-16 max-w-full object-contain"
                     onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
@@ -1822,6 +1829,7 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
   const [logoUploading, setLogoUploading] = useState(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const footerTextRef = useRef<HTMLTextAreaElement>(null);
   const [inspectionRemindersEnabled, setInspectionRemindersEnabled] = useState(true);
   const [inspectionReminderLeadDays, setInspectionReminderLeadDays] = useState<number[]>([1, 3]);
 
@@ -1965,7 +1973,7 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
           <div className="relative h-20 w-40 rounded-lg border-2 border-dashed border-border bg-muted/30 flex items-center justify-center overflow-hidden shrink-0">
             {logoUrl ? (
               <img
-                src={`${apiBase()}/api/storage${logoUrl}`}
+                src={storageUrl(logoUrl)}
                 alt="Company logo"
                 className="h-full w-full object-contain p-2"
               />
@@ -2128,16 +2136,77 @@ function OrganisationTab({ isOnboarding = false, onOnboardingComplete }: { isOnb
       <SectionCard title="Report Branding" description="Custom text and branding options applied to generated PDF reports">
         <FormField
           label="Custom Footer Text"
-          hint="This text appears at the bottom of every generated PDF report — use it for disclaimers, terms, or contact info."
+          hint="This text appears at the bottom of every generated PDF report — use it for disclaimers, terms, or contact info. Use the toolbar to apply bold or italic formatting."
         >
-          <textarea
-            value={form.reportFooterText}
-            onChange={e => setForm((f: typeof ORG_DEFAULTS) => ({ ...f, reportFooterText: e.target.value }))}
-            placeholder="e.g. This report is prepared for the exclusive use of the commissioning client. All findings are based on conditions observed at the time of inspection."
-            rows={3}
-            disabled={readOnly}
-            className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background transition resize-none disabled:opacity-50 disabled:cursor-not-allowed"
-          />
+          <div className="border border-input rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-secondary/30 bg-background transition">
+            {/* Formatting toolbar */}
+            <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-input bg-muted/30">
+              {[
+                { icon: <Bold className="h-3.5 w-3.5" />, label: "Bold", wrap: "**", title: "Bold (**text**)" },
+                { icon: <Italic className="h-3.5 w-3.5" />, label: "Italic", wrap: "*", title: "Italic (*text*)" },
+                { icon: <AlignLeft className="h-3.5 w-3.5" />, label: "Clear", wrap: null, title: "Remove formatting" },
+              ].map(({ icon, label, wrap, title }) => (
+                <button
+                  key={label}
+                  type="button"
+                  title={title}
+                  disabled={readOnly}
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    const el = footerTextRef.current;
+                    if (!el) return;
+                    const start = el.selectionStart ?? 0;
+                    const end = el.selectionEnd ?? 0;
+                    const selected = el.value.slice(start, end);
+                    const before = el.value.slice(0, start);
+                    const after = el.value.slice(end);
+                    let newVal: string;
+                    let newStart: number;
+                    let newEnd: number;
+                    if (wrap === null) {
+                      const stripped = el.value.replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*(.*?)\*/g, "$1");
+                      newVal = stripped;
+                      newStart = newEnd = Math.min(start, stripped.length);
+                    } else {
+                      const marker = wrap;
+                      const alreadyWrapped = selected.startsWith(marker) && selected.endsWith(marker) && selected.length > marker.length * 2;
+                      if (alreadyWrapped) {
+                        const inner = selected.slice(marker.length, selected.length - marker.length);
+                        newVal = before + inner + after;
+                        newStart = start;
+                        newEnd = start + inner.length;
+                      } else {
+                        newVal = before + marker + selected + marker + after;
+                        newStart = start + marker.length;
+                        newEnd = end + marker.length;
+                      }
+                    }
+                    setForm((f: typeof ORG_DEFAULTS) => ({ ...f, reportFooterText: newVal }));
+                    requestAnimationFrame(() => {
+                      el.focus();
+                      el.setSelectionRange(newStart, newEnd);
+                    });
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
+                >
+                  {icon}
+                  <span className="hidden sm:inline">{label}</span>
+                </button>
+              ))}
+              <div className="ml-auto text-[10px] text-muted-foreground/60 pr-1">
+                <span className="font-mono">**bold**</span> · <span className="font-mono">*italic*</span>
+              </div>
+            </div>
+            <textarea
+              ref={footerTextRef}
+              value={form.reportFooterText}
+              onChange={e => setForm((f: typeof ORG_DEFAULTS) => ({ ...f, reportFooterText: e.target.value }))}
+              placeholder="e.g. This report is prepared for the exclusive use of the commissioning client. All findings are based on conditions observed at the time of inspection."
+              rows={3}
+              disabled={readOnly}
+              className="w-full text-sm px-3 py-2 outline-none bg-background resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </div>
         </FormField>
       </SectionCard>
 

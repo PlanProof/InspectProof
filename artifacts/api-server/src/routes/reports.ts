@@ -17,6 +17,29 @@ const FM       = "PJS-Medium";
 const FSB      = "PJS-SemiBold";
 const FB       = "PJS-Bold";
 const FODDLINI = "OddliniUX";
+
+function markdownToHtml(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.*?)\*/g, "<em>$1</em>");
+}
+
+type TextSegment = { text: string; bold: boolean; italic: boolean };
+function parseInlineMarkdown(text: string): TextSegment[] {
+  const segments: TextSegment[] = [];
+  const re = /\*\*(.*?)\*\*|\*(.*?)\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) segments.push({ text: text.slice(last, m.index), bold: false, italic: false });
+    if (m[1] !== undefined) segments.push({ text: m[1], bold: true, italic: false });
+    else if (m[2] !== undefined) segments.push({ text: m[2], bold: false, italic: true });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) segments.push({ text: text.slice(last), bold: false, italic: false });
+  return segments.length ? segments : [{ text, bold: false, italic: false }];
+}
+
 import {
   db, reportsTable, projectsTable, inspectionsTable, issuesTable,
   usersTable, checklistResultsTable, checklistItemsTable, documentsTable,
@@ -518,7 +541,7 @@ function generateReportHtml(
   <!-- Footer -->
   <div style="background:#0B1933;color:#9ca3af;font-size:10px;padding:10px 32px;text-align:center;border-radius:0 0 8px 8px;">
     <div>${footerOrgLine} · ${project?.name || inspection?.projectName || ""} · ${issuedDate}</div>
-    ${orgInfo?.reportFooterText ? `<div style="margin-top:4px;font-size:9px;color:#6B7280;">${orgInfo.reportFooterText}</div>` : ""}
+    ${orgInfo?.reportFooterText ? `<div style="margin-top:4px;font-size:9px;color:#6B7280;">${markdownToHtml(orgInfo.reportFooterText)}</div>` : ""}
   </div>
 </div>`;
 }
@@ -1534,10 +1557,22 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
     .text(footerRight, pageW - MARGIN - 60, footerY, { width: 60, align: "right", lineBreak: false });
 
-  // Custom footer text on a second line
+  // Custom footer text on a second line (supports **bold** and *italic* inline markers)
   if (orgInfo?.reportFooterText) {
-    doc.fillColor("#6B7280").fontSize(6.5).font(F)
-      .text(orgInfo.reportFooterText, MARGIN, footerY + 12, { width: pageW - MARGIN * 2, lineBreak: false, ellipsis: true });
+    const segs = parseInlineMarkdown(orgInfo.reportFooterText);
+    const maxW = pageW - MARGIN * 2;
+    let curX = MARGIN;
+    segs.forEach((seg, i) => {
+      const font = seg.bold ? FB : FM;
+      doc.font(font).fontSize(6.5).fillColor("#6B7280");
+      const isLast = i === segs.length - 1;
+      if (i === 0) {
+        doc.text(seg.text, curX, footerY + 12, { width: maxW, lineBreak: false, continued: !isLast, ellipsis: isLast });
+      } else {
+        doc.text(seg.text, { lineBreak: false, continued: !isLast, ellipsis: isLast });
+      }
+      curX += doc.widthOfString(seg.text);
+    });
   }
 
   doc.restore();
