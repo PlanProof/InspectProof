@@ -646,6 +646,7 @@ export default function GenerateReportScreen() {
   const [includeCoverPage, setIncludeCoverPage] = useState(true);
   const [includeSummary, setIncludeSummary] = useState(true);
   const [includeSignOff, setIncludeSignOff] = useState(true);
+  const [showOptions, setShowOptions] = useState(false);
 
   const fetchWithAuth = useCallback(async (url: string, opts?: RequestInit) => {
     const res = await fetch(`${baseUrl}${url}`, {
@@ -1014,46 +1015,60 @@ export default function GenerateReportScreen() {
       {/* ── Step 1: Sticky generate bar ── */}
       {step === "select" && (
         <View style={[styles.generateSelectBar, { paddingBottom: tabBarHeight + 12 }]}>
-          {/* Report options toggles */}
-          <View style={styles.reportOptionsContainer}>
-            <Text style={styles.reportOptionsTitle}>Report Options</Text>
-            <View style={styles.reportOptionRow}>
-              <View style={styles.reportOptionLeft}>
-                <Feather name="book-open" size={14} color={Colors.textSecondary} />
-                <Text style={styles.reportOptionLabel}>Cover Page</Text>
+          {/* Report options — collapsible */}
+          <Pressable style={styles.reportOptionsToggleRow} onPress={() => setShowOptions(v => !v)}>
+            <View style={styles.reportOptionLeft}>
+              <Feather name="sliders" size={14} color={Colors.textSecondary} />
+              <Text style={styles.reportOptionsToggleLabel}>Report Options</Text>
+              <View style={styles.reportOptionsChipsRow}>
+                {includeCoverPage && <View style={styles.optionChip}><Text style={styles.optionChipText}>Cover</Text></View>}
+                {includeSummary   && <View style={styles.optionChip}><Text style={styles.optionChipText}>Summary</Text></View>}
+                {includeSignOff   && <View style={styles.optionChip}><Text style={styles.optionChipText}>Sign-off</Text></View>}
               </View>
-              <Switch
-                value={includeCoverPage}
-                onValueChange={setIncludeCoverPage}
-                trackColor={{ false: Colors.border, true: Colors.primary + "55" }}
-                thumbColor={includeCoverPage ? Colors.primary : Colors.textTertiary}
-              />
             </View>
-            <View style={styles.reportOptionRow}>
-              <View style={styles.reportOptionLeft}>
-                <Feather name="align-left" size={14} color={Colors.textSecondary} />
-                <Text style={styles.reportOptionLabel}>Executive Summary</Text>
+            <Feather name={showOptions ? "chevron-up" : "chevron-down"} size={16} color={Colors.textSecondary} />
+          </Pressable>
+
+          {showOptions && (
+            <View style={styles.reportOptionsContainer}>
+              <View style={styles.reportOptionRow}>
+                <View style={styles.reportOptionLeft}>
+                  <Feather name="book-open" size={14} color={Colors.textSecondary} />
+                  <Text style={styles.reportOptionLabel}>Cover Page</Text>
+                </View>
+                <Switch
+                  value={includeCoverPage}
+                  onValueChange={setIncludeCoverPage}
+                  trackColor={{ false: Colors.border, true: Colors.primary + "55" }}
+                  thumbColor={includeCoverPage ? Colors.primary : Colors.textTertiary}
+                />
               </View>
-              <Switch
-                value={includeSummary}
-                onValueChange={setIncludeSummary}
-                trackColor={{ false: Colors.border, true: Colors.primary + "55" }}
-                thumbColor={includeSummary ? Colors.primary : Colors.textTertiary}
-              />
-            </View>
-            <View style={styles.reportOptionRow}>
-              <View style={styles.reportOptionLeft}>
-                <Feather name="edit-3" size={14} color={Colors.textSecondary} />
-                <Text style={styles.reportOptionLabel}>Sign-off Page</Text>
+              <View style={styles.reportOptionRow}>
+                <View style={styles.reportOptionLeft}>
+                  <Feather name="align-left" size={14} color={Colors.textSecondary} />
+                  <Text style={styles.reportOptionLabel}>Executive Summary</Text>
+                </View>
+                <Switch
+                  value={includeSummary}
+                  onValueChange={setIncludeSummary}
+                  trackColor={{ false: Colors.border, true: Colors.primary + "55" }}
+                  thumbColor={includeSummary ? Colors.primary : Colors.textTertiary}
+                />
               </View>
-              <Switch
-                value={includeSignOff}
-                onValueChange={setIncludeSignOff}
-                trackColor={{ false: Colors.border, true: Colors.primary + "55" }}
-                thumbColor={includeSignOff ? Colors.primary : Colors.textTertiary}
-              />
+              <View style={styles.reportOptionRow}>
+                <View style={styles.reportOptionLeft}>
+                  <Feather name="edit-3" size={14} color={Colors.textSecondary} />
+                  <Text style={styles.reportOptionLabel}>Sign-off Page</Text>
+                </View>
+                <Switch
+                  value={includeSignOff}
+                  onValueChange={setIncludeSignOff}
+                  trackColor={{ false: Colors.border, true: Colors.primary + "55" }}
+                  thumbColor={includeSignOff ? Colors.primary : Colors.textTertiary}
+                />
+              </View>
             </View>
-          </View>
+          )}
 
           <Pressable
             style={[styles.generateSelectBtn, !selectedReportType && styles.generateSelectBtnDisabled]}
@@ -1218,23 +1233,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
   },
+  reportOptionsToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    marginBottom: 6,
+  },
+  reportOptionsToggleLabel: {
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.text,
+    marginRight: 6,
+  },
+  reportOptionsChipsRow: {
+    flexDirection: "row",
+    gap: 4,
+    flexWrap: "wrap",
+    flex: 1,
+  },
+  optionChip: {
+    backgroundColor: Colors.primary + "15",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  optionChipText: {
+    fontSize: 10,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.primary,
+  },
   reportOptionsContainer: {
-    marginBottom: 12,
+    marginBottom: 10,
     backgroundColor: Colors.background,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 8,
     gap: 2,
-  },
-  reportOptionsTitle: {
-    fontSize: 11,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: Colors.textTertiary,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 8,
   },
   reportOptionRow: {
     flexDirection: "row",

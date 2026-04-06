@@ -65,6 +65,7 @@ function NativeTabLayout() {
       <HiddenTrigger name="inspection/[id]" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/create" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/conduct/[id]" style={{ display: "none" }} />
+      <HiddenTrigger name="inspection/conduct/induction/[id]" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/generate-report" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/document-viewer" style={{ display: "none" }} />
       <HiddenTrigger name="inspection/photo-markup" style={{ display: "none" }} />
@@ -181,8 +182,9 @@ function ClassicTabLayout() {
       <Tabs.Screen name="project/[id]"                  options={{ href: null }} />
       <Tabs.Screen name="inspection/[id]"               options={{ href: null }} />
       <Tabs.Screen name="inspection/create"             options={{ href: null }} />
-      <Tabs.Screen name="inspection/conduct/[id]"       options={{ href: null }} />
-      <Tabs.Screen name="inspection/generate-report"    options={{ href: null }} />
+      <Tabs.Screen name="inspection/conduct/[id]"             options={{ href: null }} />
+      <Tabs.Screen name="inspection/conduct/induction/[id]"  options={{ href: null }} />
+      <Tabs.Screen name="inspection/generate-report"         options={{ href: null }} />
       <Tabs.Screen name="inspection/photo-markup"       options={{ href: null, tabBarStyle: { display: "none" } }} />
       <Tabs.Screen name="inspection/document-viewer"    options={{ href: null }} />
       <Tabs.Screen name="feedback"                      options={{ href: null }} />
