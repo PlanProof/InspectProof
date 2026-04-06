@@ -54,7 +54,7 @@ export default function DocumentsScreen() {
     });
   }, [baseUrl]);
 
-  const { data: docs = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
+  const { data: docs = [], isLoading, isError, refetch, isRefetching } = useQuery<any[]>({
     queryKey: ["documents", token],
     queryFn: async () => {
       const res = await fetch(`${baseUrl}/api/documents`, {
@@ -131,7 +131,7 @@ export default function DocumentsScreen() {
               <Pressable
                 key={c}
                 onPress={() => setCategory(c)}
-                style={[styles.chip, active && styles.chipActive]}
+                style={({ pressed }) => [styles.chip, active && styles.chipActive, pressed && { opacity: 0.75 }]}
               >
                 <Text style={[styles.chipText, active && styles.chipTextActive]}>
                   {c === "all" ? "All" : c.charAt(0).toUpperCase() + c.slice(1)}
@@ -147,8 +147,24 @@ export default function DocumentsScreen() {
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
       >
+        {isError && docs.length > 0 && (
+          <Pressable style={styles.errorBanner} onPress={() => refetch()}>
+            <Feather name="wifi-off" size={14} color="#92400e" />
+            <Text style={styles.errorBannerText}>Failed to refresh — tap to retry</Text>
+          </Pressable>
+        )}
         {isLoading ? (
           Array.from({ length: 5 }).map((_, i) => <View key={i} style={styles.skeleton} />)
+        ) : isError && docs.length === 0 ? (
+          <View style={styles.empty}>
+            <Feather name="wifi-off" size={36} color={Colors.textTertiary} />
+            <Text style={styles.emptyTitle}>Could not load documents</Text>
+            <Text style={styles.emptyDesc}>Check your connection and try again.</Text>
+            <Pressable style={styles.retryBtn} onPress={() => refetch()}>
+              <Feather name="refresh-cw" size={14} color={Colors.primary} />
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : filtered.length === 0 ? (
           <View style={styles.empty}>
             <Feather name="book" size={40} color={Colors.borderLight} />
@@ -266,4 +282,16 @@ const styles = StyleSheet.create({
     borderRadius: 8, alignSelf: "flex-start",
   },
   versionText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  retryBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    marginTop: 8, paddingHorizontal: 20, paddingVertical: 10,
+    backgroundColor: Colors.accent, borderRadius: 10,
+  },
+  retryText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  errorBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#fef3c7", borderRadius: 8, marginBottom: 8,
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  errorBannerText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#92400e" },
 });

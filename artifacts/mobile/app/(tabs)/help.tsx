@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   View, Text, ScrollView, StyleSheet, Pressable,
-  TextInput, ActivityIndicator,
+  TextInput, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -107,7 +107,7 @@ export default function HelpScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.header, { paddingTop: insets.top + WEB_TOP + 16 }]}>
         <View style={styles.headerTop}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
@@ -118,7 +118,9 @@ export default function HelpScreen() {
       </View>
 
       <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 8 }]}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* Hero */}
@@ -225,7 +227,7 @@ export default function HelpScreen() {
 
 
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

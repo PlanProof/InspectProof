@@ -92,7 +92,7 @@ export default function LoginScreen() {
 
   if (forgotMode) {
     return (
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
           contentContainerStyle={[
             styles.container,
@@ -184,7 +184,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -237,7 +237,7 @@ export default function LoginScreen() {
           <View style={styles.field}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <Text style={styles.label}>Password</Text>
-              <Pressable onPress={() => { setForgotEmail(email); setForgotMode(true); }}>
+              <Pressable onPress={() => { setForgotEmail(email); setForgotMode(true); }} hitSlop={12}>
                 <Text style={styles.forgotLink}>Forgot password?</Text>
               </Pressable>
             </View>
@@ -252,7 +252,7 @@ export default function LoginScreen() {
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
               />
-              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton} hitSlop={8}>
                 <Feather name={showPassword ? "eye-off" : "eye"} size={16} color={Colors.textTertiary} />
               </Pressable>
             </View>

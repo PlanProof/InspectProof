@@ -59,7 +59,7 @@ export default function InspectionDetailScreen() {
     return res.json();
   };
 
-  const { data: inspection, isLoading, refetch, isRefetching } = useQuery({
+  const { data: inspection, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ["inspection", id, token],
     queryFn: () => fetchWithAuth(`/api/inspections/${id}`),
     enabled: !!token && !!id,
@@ -234,6 +234,27 @@ export default function InspectionDetailScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.secondary} />
+      </View>
+    );
+  }
+
+  if (isError && !inspection) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Feather name="wifi-off" size={36} color={Colors.textTertiary} />
+        <Text style={{ fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, marginTop: 12 }}>
+          Could not load inspection
+        </Text>
+        <Text style={{ fontSize: 13, color: Colors.textSecondary, marginTop: 4, textAlign: "center", paddingHorizontal: 32 }}>
+          Check your connection and try again.
+        </Text>
+        <Pressable
+          onPress={() => refetch()}
+          style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 16, backgroundColor: Colors.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 }}
+        >
+          <Feather name="refresh-cw" size={14} color={Colors.primary} />
+          <Text style={{ fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary }}>Retry</Text>
+        </Pressable>
       </View>
     );
   }

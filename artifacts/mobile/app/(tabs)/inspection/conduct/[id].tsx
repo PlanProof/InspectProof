@@ -13,6 +13,7 @@ import {
   Platform,
   useWindowDimensions,
   Animated,
+  Linking,
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/Swipeable";
 import * as FileSystem from "expo-file-system/legacy";
@@ -140,13 +141,13 @@ export default function ConductInspectionScreen() {
     return res.json();
   }, [baseUrl, token]);
 
-  const { data: inspection, isLoading: loadingInspection } = useQuery({
+  const { data: inspection, isLoading: loadingInspection, isError: errorInspection, refetch: refetchInspection } = useQuery({
     queryKey: ["inspection", id, token],
     queryFn: () => fetchWithAuth(`/api/inspections/${id}`),
     enabled: !!token && !!id,
   });
 
-  const { data: checklistItems = [], isLoading: loadingChecklist, refetch: refetchChecklist } = useQuery<ChecklistItem[]>({
+  const { data: checklistItems = [], isLoading: loadingChecklist, isError: errorChecklist, refetch: refetchChecklist } = useQuery<ChecklistItem[]>({
     queryKey: ["inspection-checklist", id, token],
     queryFn: () => fetchWithAuth(`/api/inspections/${id}/checklist`),
     enabled: !!token && !!id,
@@ -221,14 +222,28 @@ export default function ConductInspectionScreen() {
     if (sourceType === "camera") {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission needed", "Please allow camera access.");
+        Alert.alert(
+          "Camera Access Required",
+          "Allow camera access to take photos for this inspection.",
+          [
+            { text: "Not Now", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ]
+        );
         return;
       }
       picked = await ImagePicker.launchCameraAsync({ quality: 0.8 });
     } else {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission needed", "Please allow photo library access.");
+        Alert.alert(
+          "Photo Library Access Required",
+          "Allow photo library access to attach images to this inspection.",
+          [
+            { text: "Not Now", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ]
+        );
         return;
       }
       picked = await ImagePicker.launchImageLibraryAsync({
@@ -558,7 +573,14 @@ export default function ConductInspectionScreen() {
     if (!activeItem) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Permission needed", "Please allow photo access to upload images.");
+      Alert.alert(
+        "Photo Library Access Required",
+        "Allow photo library access to upload images to this checklist item.",
+        [
+          { text: "Not Now", style: "cancel" },
+          { text: "Open Settings", onPress: () => Linking.openSettings() },
+        ]
+      );
       return;
     }
 
@@ -581,7 +603,14 @@ export default function ConductInspectionScreen() {
   const takePhotoForItem = async (item: ChecklistItem) => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Permission needed", "Please allow camera access to take photos.");
+      Alert.alert(
+        "Camera Access Required",
+        "Allow camera access to take photos for this checklist item.",
+        [
+          { text: "Not Now", style: "cancel" },
+          { text: "Open Settings", onPress: () => Linking.openSettings() },
+        ]
+      );
       return;
     }
     const picked = await ImagePicker.launchCameraAsync({ quality: 0.8 });
@@ -677,6 +706,27 @@ export default function ConductInspectionScreen() {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.secondary} />
         <Text style={styles.loadingText}>Loading inspection...</Text>
+      </View>
+    );
+  }
+
+  if ((errorInspection && !inspection) || (errorChecklist && checklistItems.length === 0)) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Feather name="wifi-off" size={36} color={Colors.textTertiary} />
+        <Text style={[styles.loadingText, { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", marginTop: 12 }]}>
+          Could not load inspection
+        </Text>
+        <Text style={{ fontSize: 13, color: Colors.textSecondary, marginTop: 4, textAlign: "center", paddingHorizontal: 32 }}>
+          Check your connection and try again.
+        </Text>
+        <Pressable
+          onPress={() => { refetchInspection(); refetchChecklist(); }}
+          style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 16, backgroundColor: Colors.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 }}
+        >
+          <Feather name="refresh-cw" size={14} color={Colors.primary} />
+          <Text style={{ fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary }}>Retry</Text>
+        </Pressable>
       </View>
     );
   }

@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import {
   View, Text, StyleSheet, Pressable, TextInput,
   ScrollView, Platform, ActivityIndicator, Alert, Image,
+  KeyboardAvoidingView,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -176,7 +177,7 @@ export default function ProfileScreen() {
   const initials = `${(user?.firstName ?? "?")[0]}${(user?.lastName ?? "?")[0]}`.toUpperCase();
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.header, { paddingTop: insets.top + WEB_TOP + 16 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="chevron-left" size={22} color={Colors.text} />
@@ -194,6 +195,7 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 8 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -291,7 +293,7 @@ export default function ProfileScreen() {
           </View>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

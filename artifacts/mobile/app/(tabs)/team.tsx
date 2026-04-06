@@ -58,7 +58,7 @@ export default function TeamScreen() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
 
-  const { data: users = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
+  const { data: users = [], isLoading, isError, refetch, isRefetching } = useQuery<any[]>({
     queryKey: ["users", token],
     queryFn: async () => {
       const res = await fetch(`${baseUrl}/api/users`, {
@@ -126,7 +126,7 @@ export default function TeamScreen() {
               <Pressable
                 key={r}
                 onPress={() => setRoleFilter(r)}
-                style={[styles.chip, active && { backgroundColor: color, borderColor: color }]}
+                style={({ pressed }) => [styles.chip, active && { backgroundColor: color, borderColor: color }, pressed && { opacity: 0.75 }]}
               >
                 <Text style={[styles.chipText, active && { color: "#fff" }]}>
                   {r === "all" ? "All Roles" : ROLE_LABELS[r] || r.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
@@ -142,8 +142,24 @@ export default function TeamScreen() {
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
       >
+        {isError && users.length > 0 && (
+          <Pressable style={styles.errorBanner} onPress={() => refetch()}>
+            <Feather name="wifi-off" size={14} color="#92400e" />
+            <Text style={styles.errorBannerText}>Failed to refresh — tap to retry</Text>
+          </Pressable>
+        )}
         {isLoading ? (
           Array.from({ length: 5 }).map((_, i) => <View key={i} style={styles.skeleton} />)
+        ) : isError && users.length === 0 ? (
+          <View style={styles.empty}>
+            <Feather name="wifi-off" size={36} color={Colors.textTertiary} />
+            <Text style={styles.emptyTitle}>Could not load team</Text>
+            <Text style={styles.emptyDesc}>Check your connection and try again.</Text>
+            <Pressable style={styles.retryBtn} onPress={() => refetch()}>
+              <Feather name="refresh-cw" size={14} color={Colors.primary} />
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : filtered.length === 0 ? (
           <View style={styles.empty}>
             <Feather name="users" size={40} color={Colors.borderLight} />
@@ -240,4 +256,16 @@ const styles = StyleSheet.create({
   phoneRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   phone: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary },
   roleDot: { width: 8, height: 8, borderRadius: 4 },
+  retryBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    marginTop: 8, paddingHorizontal: 20, paddingVertical: 10,
+    backgroundColor: Colors.accent, borderRadius: 10,
+  },
+  retryText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  errorBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#fef3c7", borderRadius: 8, marginBottom: 8,
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  errorBannerText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#92400e" },
 });

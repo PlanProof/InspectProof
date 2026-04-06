@@ -11,6 +11,7 @@ import {
   Platform,
   Modal,
   TouchableOpacity,
+  KeyboardAvoidingView,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -234,6 +235,10 @@ export default function CreateInspectionScreen() {
   };
 
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
     <View style={[styles.container, { paddingTop: insets.top + WEB_TOP }]}>
       {/* Header */}
       <View style={styles.header}>
@@ -668,6 +673,7 @@ export default function CreateInspectionScreen() {
         )}
       </View>
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

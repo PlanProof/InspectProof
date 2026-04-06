@@ -23,7 +23,7 @@ export default function AnalyticsScreen() {
   const { token } = useAuth();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
-  const { data: analytics, isLoading, refetch, isRefetching } = useQuery<any>({
+  const { data: analytics, isLoading, isError, refetch, isRefetching } = useQuery<any>({
     queryKey: ["analytics-dashboard", token],
     queryFn: async () => {
       const res = await fetch(`${baseUrl}/api/analytics/dashboard`, {
@@ -55,6 +55,27 @@ export default function AnalyticsScreen() {
     );
   }
 
+  if (isError && !analytics) {
+    return (
+      <View style={styles.loading}>
+        <Feather name="wifi-off" size={36} color={Colors.textTertiary} />
+        <Text style={{ fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, marginTop: 12 }}>
+          Could not load analytics
+        </Text>
+        <Text style={{ fontSize: 13, color: Colors.textSecondary, marginTop: 4, textAlign: "center", paddingHorizontal: 32 }}>
+          Check your connection and try again.
+        </Text>
+        <Pressable
+          onPress={() => refetch()}
+          style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 16, backgroundColor: Colors.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 }}
+        >
+          <Feather name="refresh-cw" size={14} color={Colors.primary} />
+          <Text style={{ fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary }}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   const issuesBySeverity = analytics?.issuesBySeverity || [];
   const inspectionsByType = analytics?.inspectionsByType || [];
   const projectsByStage = analytics?.projectsByStage || [];
@@ -75,6 +96,15 @@ export default function AnalyticsScreen() {
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
       >
+      {isError && analytics && (
+        <Pressable
+          onPress={() => refetch()}
+          style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fef3c7", borderRadius: 8, marginBottom: 12, paddingHorizontal: 12, paddingVertical: 8 }}
+        >
+          <Feather name="wifi-off" size={14} color="#92400e" />
+          <Text style={{ flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#92400e" }}>Failed to refresh — tap to retry</Text>
+        </Pressable>
+      )}
       {/* Header */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Overview</Text>

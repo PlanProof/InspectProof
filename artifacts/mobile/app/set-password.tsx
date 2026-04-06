@@ -78,7 +78,7 @@ export default function SetPasswordScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
         contentContainerStyle={[
@@ -120,7 +120,7 @@ export default function SetPasswordScreen() {
                 autoCapitalize="none"
                 autoFocus
               />
-              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton} hitSlop={8}>
                 <Feather name={showPassword ? "eye-off" : "eye"} size={16} color={Colors.textTertiary} />
               </Pressable>
             </View>
@@ -142,7 +142,7 @@ export default function SetPasswordScreen() {
                 secureTextEntry={!showConfirm}
                 autoCapitalize="none"
               />
-              <Pressable onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeButton}>
+              <Pressable onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeButton} hitSlop={8}>
                 <Feather name={showConfirm ? "eye-off" : "eye"} size={16} color={Colors.textTertiary} />
               </Pressable>
             </View>

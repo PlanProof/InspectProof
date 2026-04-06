@@ -199,7 +199,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {/* Invite token flow modal */}
       <Modal visible={showInviteFlow} transparent animationType="fade" onRequestClose={() => setShowInviteFlow(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 }}>
@@ -368,7 +368,7 @@ export default function RegisterScreen() {
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                 />
-                <Pressable onPress={() => setShowPassword(!showPassword)}>
+                <Pressable onPress={() => setShowPassword(!showPassword)} hitSlop={8}>
                   <Feather name={showPassword ? "eye-off" : "eye"} size={16} color={Colors.textTertiary} />
                 </Pressable>
               </View>

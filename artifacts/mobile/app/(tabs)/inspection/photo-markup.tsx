@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   View, Text, StyleSheet, Pressable, Alert, ActivityIndicator,
-  useWindowDimensions, Image, ScrollView,
+  useWindowDimensions, Image, ScrollView, Linking,
 } from "react-native";
 import { GestureDetector, Gesture, GestureHandlerRootView } from "react-native-gesture-handler";
 import { useLocalSearchParams, router } from "expo-router";
@@ -208,6 +208,31 @@ export default function PhotoMarkupScreen() {
     return () => { cancelled = true; };
   }, [currentPhotoUri]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const retryUpload = useCallback(async () => {
+    if (!currentPhotoUri || uploadState !== "error") return;
+    setUploadState("uploading");
+    setSavedObjectPath(null);
+    let uploadedPath: string | null = null;
+    try {
+      const objectPath = await uploadPhoto(currentPhotoUri);
+      uploadedPath = objectPath;
+      await appendPhotoToChecklist(objectPath);
+      setSavedObjectPath(objectPath);
+      setUploadState("saved");
+    } catch (err) {
+      console.error("[photo-markup] retry upload error:", err);
+      setUploadState("error");
+      if (uploadedPath) {
+        try {
+          await fetch(`${baseUrl}/api/storage${uploadedPath}`, {
+            method: "DELETE",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+        } catch { /* best-effort cleanup */ }
+      }
+    }
+  }, [currentPhotoUri, uploadState, uploadPhoto, appendPhotoToChecklist, baseUrl, token]);
+
   // ── Delete ────────────────────────────────────────────────────────────────
 
   const deletePhoto = () => {
@@ -249,7 +274,14 @@ export default function PhotoMarkupScreen() {
   const takeAnother = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Permission needed", "Please allow camera access to take photos.");
+      Alert.alert(
+        "Camera Access Required",
+        "Allow camera access to take photos for this inspection item.",
+        [
+          { text: "Not Now", style: "cancel" },
+          { text: "Open Settings", onPress: () => Linking.openSettings() },
+        ]
+      );
       return;
     }
     const picked = await ImagePicker.launchCameraAsync({ quality: 0.8 });
@@ -441,7 +473,10 @@ export default function PhotoMarkupScreen() {
             </View>
           )}
           {uploadState === "error" && (
-            <Text style={styles.errorText}>Save failed</Text>
+            <Pressable onPress={retryUpload} style={styles.errorPill} hitSlop={8}>
+              <Feather name="alert-circle" size={13} color="#fff" />
+              <Text style={styles.errorPillText}>Save failed · Retry</Text>
+            </Pressable>
           )}
         </View>
         <Pressable
@@ -539,6 +574,12 @@ const styles = StyleSheet.create({
   },
   savedText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   errorText: { color: Colors.danger, fontSize: 13, fontWeight: "600" },
+  errorPill: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: Colors.danger, borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  errorPillText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   saveBtn: {
     backgroundColor: Colors.secondary, paddingHorizontal: 16, paddingVertical: 7,
     borderRadius: 8, minWidth: 56, alignItems: "center",

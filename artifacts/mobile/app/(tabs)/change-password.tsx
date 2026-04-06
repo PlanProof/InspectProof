@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   View, Text, StyleSheet, Pressable, TextInput,
   ScrollView, Platform, ActivityIndicator, Alert,
+  KeyboardAvoidingView,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -101,7 +102,7 @@ export default function ChangePasswordScreen() {
   })();
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.header, { paddingTop: insets.top + WEB_TOP + 16 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="chevron-left" size={22} color={Colors.text} />
@@ -110,6 +111,7 @@ export default function ChangePasswordScreen() {
       </View>
 
       <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 8 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -170,7 +172,7 @@ export default function ChangePasswordScreen() {
             : <Text style={styles.submitBtnText}>Update Password</Text>}
         </Pressable>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

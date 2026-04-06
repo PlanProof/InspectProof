@@ -54,7 +54,7 @@ export default function InspectionsScreen() {
   const [search, setSearch] = useState("");
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
-  const { data: inspections = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
+  const { data: inspections = [], isLoading, isError, refetch, isRefetching } = useQuery<any[]>({
     queryKey: ["inspections", token],
     queryFn: async () => {
       const res = await fetch(`${baseUrl}/api/inspections`, {
@@ -112,7 +112,10 @@ export default function InspectionsScreen() {
             <View style={styles.countBadge}>
               <Text style={styles.countText}>{filtered.length}</Text>
             </View>
-            <Pressable style={styles.newBtn} onPress={() => router.push("/inspection/create" as any)}>
+            <Pressable
+              style={({ pressed }) => [styles.newBtn, pressed && { opacity: 0.75 }]}
+              onPress={() => router.push("/inspection/create" as any)}
+            >
               <Feather name="plus" size={18} color={Colors.primary} />
               <Text style={styles.newBtnText}>New</Text>
             </Pressable>
@@ -144,7 +147,7 @@ export default function InspectionsScreen() {
             <Pressable
               key={f}
               onPress={() => setActiveFilter(f)}
-              style={[styles.chip, activeFilter === f && styles.chipActive]}
+              style={({ pressed }) => [styles.chip, activeFilter === f && styles.chipActive, pressed && { opacity: 0.75 }]}
             >
               <Text style={[styles.chipText, activeFilter === f && styles.chipTextActive]}>{f}</Text>
             </Pressable>
@@ -158,8 +161,24 @@ export default function InspectionsScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {isError && inspections.length > 0 && (
+          <Pressable style={styles.errorBanner} onPress={() => refetch()}>
+            <Feather name="wifi-off" size={14} color="#92400e" />
+            <Text style={styles.errorBannerText}>Failed to refresh — tap to retry</Text>
+          </Pressable>
+        )}
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => <View key={i} style={styles.skeleton} />)
+        ) : isError && inspections.length === 0 ? (
+          <View style={styles.errorWrap}>
+            <Feather name="wifi-off" size={32} color={Colors.textTertiary} />
+            <Text style={styles.errorTitle}>Could not load inspections</Text>
+            <Text style={styles.errorText}>Check your connection and try again.</Text>
+            <Pressable style={styles.retryBtn} onPress={() => refetch()}>
+              <Feather name="refresh-cw" size={14} color={Colors.primary} />
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={search.trim() ? "search" : "check-circle"}
@@ -291,4 +310,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   cardList: { gap: 10 },
+  errorWrap: { alignItems: "center", justifyContent: "center", paddingVertical: 56, gap: 10 },
+  errorTitle: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  errorText: { fontSize: 13, color: Colors.textSecondary, textAlign: "center" },
+  retryBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    marginTop: 4, paddingHorizontal: 20, paddingVertical: 10,
+    backgroundColor: Colors.accent, borderRadius: 10,
+  },
+  retryText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  errorBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#fef3c7", borderRadius: 8, marginBottom: 8,
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  errorBannerText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#92400e" },
 });

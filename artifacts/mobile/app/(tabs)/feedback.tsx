@@ -7,6 +7,8 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -69,7 +71,7 @@ export default function FeedbackScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Pressable
@@ -84,7 +86,7 @@ export default function FeedbackScreen() {
       </View>
 
       <ScrollView
-        style={styles.scroll}
+        style={[styles.scroll, { flex: 1 }]}
         contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 24 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -199,7 +201,7 @@ export default function FeedbackScreen() {
           </Pressable>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

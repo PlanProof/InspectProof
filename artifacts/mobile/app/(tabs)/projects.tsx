@@ -44,7 +44,7 @@ export default function ProjectsScreen() {
 
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
-  const { data: projects = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
+  const { data: projects = [], isLoading, isError, refetch, isRefetching } = useQuery<any[]>({
     queryKey: ["projects", token],
     queryFn: async () => {
       const res = await fetch(`${baseUrl}/api/projects`, {
@@ -117,7 +117,7 @@ export default function ProjectsScreen() {
               <Pressable
                 key={f.key}
                 onPress={() => setStatusFilter(f.key)}
-                style={[styles.chip, active && styles.chipActive]}
+                style={({ pressed }) => [styles.chip, active && styles.chipActive, pressed && { opacity: 0.75 }]}
               >
                 {active && f.key !== "all" && (
                   <View style={[styles.chipDot, styles.chipDotActive]} />
@@ -142,7 +142,7 @@ export default function ProjectsScreen() {
               <Pressable
                 key={f.key}
                 onPress={() => setStageFilter(f.key)}
-                style={[styles.chip, styles.chipStage, active && styles.chipStageActive]}
+                style={({ pressed }) => [styles.chip, styles.chipStage, active && styles.chipStageActive, pressed && { opacity: 0.75 }]}
               >
                 <Text style={[styles.chipText, styles.chipTextStage, active && styles.chipTextStageActive]}>
                   {f.label}
@@ -154,7 +154,7 @@ export default function ProjectsScreen() {
 
         {/* Active filter summary + clear */}
         {activeFilters > 0 && (
-          <Pressable style={styles.clearRow} onPress={() => { setStatusFilter("all"); setStageFilter("all"); }}>
+          <Pressable style={({ pressed }) => [styles.clearRow, pressed && { opacity: 0.75 }]} onPress={() => { setStatusFilter("all"); setStageFilter("all"); }}>
             <Feather name="filter" size={12} color={Colors.secondary} />
             <Text style={styles.clearText}>
               {activeFilters} filter{activeFilters > 1 ? "s" : ""} active · tap to clear
@@ -169,8 +169,24 @@ export default function ProjectsScreen() {
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.secondary} />}
         showsVerticalScrollIndicator={false}
       >
+        {isError && projects.length > 0 && (
+          <Pressable style={styles.errorBanner} onPress={() => refetch()}>
+            <Feather name="wifi-off" size={14} color="#92400e" />
+            <Text style={styles.errorBannerText}>Failed to refresh — tap to retry</Text>
+          </Pressable>
+        )}
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => <View key={i} style={styles.skeleton} />)
+        ) : isError && projects.length === 0 ? (
+          <View style={styles.errorWrap}>
+            <Feather name="wifi-off" size={32} color={Colors.textTertiary} />
+            <Text style={styles.errorTitle}>Could not load projects</Text>
+            <Text style={styles.errorText}>Check your connection and try again.</Text>
+            <Pressable style={styles.retryBtn} onPress={() => refetch()}>
+              <Feather name="refresh-cw" size={14} color={Colors.primary} />
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : filtered.length === 0 ? (
           <EmptyState
             icon="folder"
@@ -319,4 +335,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.border,
     marginBottom: 10,
   },
+  errorWrap: { alignItems: "center", justifyContent: "center", paddingVertical: 56, gap: 10 },
+  errorTitle: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  errorText: { fontSize: 13, color: Colors.textSecondary, textAlign: "center" },
+  retryBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    marginTop: 4, paddingHorizontal: 20, paddingVertical: 10,
+    backgroundColor: Colors.accent, borderRadius: 10,
+  },
+  retryText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary },
+  errorBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#fef3c7", borderRadius: 8, marginBottom: 8,
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  errorBannerText: { flex: 1, fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: "#92400e" },
 });

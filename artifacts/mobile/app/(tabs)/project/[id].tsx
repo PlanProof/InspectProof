@@ -92,7 +92,7 @@ export default function ProjectDetailScreen() {
     return res.json();
   };
 
-  const { data: project, isLoading, refetch, isRefetching } = useQuery({
+  const { data: project, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ["project", id, token],
     queryFn: () => fetchWithAuth(`/api/projects/${id}`),
     enabled: !!token && !!id,
@@ -294,6 +294,27 @@ export default function ProjectDetailScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.secondary} />
+      </View>
+    );
+  }
+
+  if (isError && !project) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Feather name="wifi-off" size={36} color={Colors.textTertiary} />
+        <Text style={{ fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, marginTop: 12 }}>
+          Could not load project
+        </Text>
+        <Text style={{ fontSize: 13, color: Colors.textSecondary, marginTop: 4, textAlign: "center", paddingHorizontal: 32 }}>
+          Check your connection and try again.
+        </Text>
+        <Pressable
+          onPress={() => refetch()}
+          style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 16, backgroundColor: Colors.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 }}
+        >
+          <Feather name="refresh-cw" size={14} color={Colors.primary} />
+          <Text style={{ fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.primary }}>Retry</Text>
+        </Pressable>
       </View>
     );
   }

@@ -11,6 +11,8 @@ import {
   Modal,
   Image,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -1079,51 +1081,56 @@ export default function GenerateReportScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowEmailModal(false)}
       >
-        <View style={[styles.emailModal, { paddingTop: insets.top + 24 }]}>
-          <View style={styles.emailModalHeader}>
-            <Pressable onPress={() => setShowEmailModal(false)} hitSlop={12}>
-              <Feather name="x" size={22} color={Colors.text} />
-            </Pressable>
-            <Text style={styles.emailModalTitle}>Send to Client</Text>
-            <View style={{ width: 22 }} />
-          </View>
-          <View style={styles.emailModalBody}>
-            <View style={styles.emailInfo}>
-              <Feather name="file-text" size={18} color={Colors.secondary} />
-              <Text style={styles.emailInfoText} numberOfLines={2}>{report?.title}</Text>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={[styles.emailModal, { paddingTop: insets.top + 24 }]}>
+            <View style={styles.emailModalHeader}>
+              <Pressable onPress={() => setShowEmailModal(false)} hitSlop={12}>
+                <Feather name="x" size={22} color={Colors.text} />
+              </Pressable>
+              <Text style={styles.emailModalTitle}>Send to Client</Text>
+              <View style={{ width: 22 }} />
             </View>
-            <Text style={styles.emailLabel}>Client Email Address</Text>
-            <TextInput
-              style={styles.emailInput}
-              value={clientEmail}
-              onChangeText={setClientEmail}
-              placeholder={`e.g. ${inspection?.clientName
-                ? inspection.clientName.toLowerCase().replace(/\s+/g, ".") + "@example.com"
-                : "client@example.com"}`}
-              placeholderTextColor={Colors.textTertiary}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-            />
-            <Text style={styles.emailHint}>
-              The report will be sent as a formatted document with all checklist results and photos.
-            </Text>
+            <View style={styles.emailModalBody}>
+              <View style={styles.emailInfo}>
+                <Feather name="file-text" size={18} color={Colors.secondary} />
+                <Text style={styles.emailInfoText} numberOfLines={2}>{report?.title}</Text>
+              </View>
+              <Text style={styles.emailLabel}>Client Email Address</Text>
+              <TextInput
+                style={styles.emailInput}
+                value={clientEmail}
+                onChangeText={setClientEmail}
+                placeholder={`e.g. ${inspection?.clientName
+                  ? inspection.clientName.toLowerCase().replace(/\s+/g, ".") + "@example.com"
+                  : "client@example.com"}`}
+                placeholderTextColor={Colors.textTertiary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus
+              />
+              <Text style={styles.emailHint}>
+                The report will be sent as a formatted document with all checklist results and photos.
+              </Text>
+            </View>
+            <View style={[styles.emailModalFooter, { paddingBottom: insets.bottom + 16 }]}>
+              <Pressable style={styles.emailCancelBtn} onPress={() => setShowEmailModal(false)}>
+                <Text style={styles.emailCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.emailSendBtn, !clientEmail.trim() && styles.emailSendBtnDisabled]}
+                onPress={sendToClient}
+                disabled={!clientEmail.trim()}
+              >
+                <Feather name="send" size={16} color={Colors.primary} />
+                <Text style={styles.emailSendText}>Send Report</Text>
+              </Pressable>
+            </View>
           </View>
-          <View style={[styles.emailModalFooter, { paddingBottom: insets.bottom + 16 }]}>
-            <Pressable style={styles.emailCancelBtn} onPress={() => setShowEmailModal(false)}>
-              <Text style={styles.emailCancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.emailSendBtn, !clientEmail.trim() && styles.emailSendBtnDisabled]}
-              onPress={sendToClient}
-              disabled={!clientEmail.trim()}
-            >
-              <Feather name="send" size={16} color={Colors.primary} />
-              <Text style={styles.emailSendText}>Send Report</Text>
-            </Pressable>
-          </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </View>

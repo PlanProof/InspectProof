@@ -119,9 +119,9 @@ function ClassicTabLayout() {
               tint="dark"
               style={[StyleSheet.absoluteFill, { backgroundColor: Colors.tabBar + "E0" }]}
             />
-          ) : isWeb ? (
+          ) : (
             <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.tabBar }]} />
-          ) : null,
+          ),
         tabBarLabelStyle: {
           fontFamily: "PlusJakartaSans_600SemiBold",
           fontSize: 11,
