@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, sql, lt, and, ne, desc, inArray } from "drizzle-orm";
 import { db, issuesTable, issueCommentsTable, projectsTable, activityLogsTable, usersTable } from "@workspace/db";
 import { optionalAuth, requireAuth } from "../middleware/auth";
+import { getOrgMemberIds } from "../lib/quota";
 import { sendEmail } from "../lib/email";
 import { decodeSessionToken } from "../lib/session-token";
 
@@ -128,14 +129,18 @@ router.get("/", optionalAuth, async (req, res) => {
     let issues = await db.select().from(issuesTable)
       .orderBy(sql`${issuesTable.createdAt} DESC`);
 
-    if (req.authUser && !req.authUser.isAdmin) {
-      const allProjects = await db.select({ id: projectsTable.id, name: projectsTable.name, createdById: projectsTable.createdById })
+    if (req.authUser) {
+      // All users (including platform admins) are scoped to their own organisation.
+      const adminId = req.authUser.isAdmin || req.authUser.isCompanyAdmin
+        ? req.authUser.id
+        : (req.authUser.adminUserId ? parseInt(req.authUser.adminUserId) : req.authUser.id);
+      const orgMemberIds = await getOrgMemberIds(adminId);
+      const orgSet = new Set([...orgMemberIds, req.authUser.id]);
+      const allProjects = await db.select({ id: projectsTable.id, createdById: projectsTable.createdById })
         .from(projectsTable);
-      const accessibleIds = allProjects
-        .filter(p => p.name === "Test Project" || p.createdById === req.authUser!.id)
-        .map(p => p.id);
-      issues = issues.filter(i => accessibleIds.includes(i.projectId));
-    } else if (!req.authUser) {
+      const accessibleIds = allProjects.filter(p => orgSet.has(p.createdById)).map(p => p.id);
+      issues = issues.filter(i => i.projectId == null || accessibleIds.includes(i.projectId));
+    } else {
       issues = [];
     }
 

@@ -105,27 +105,24 @@ router.get("/calendar", optionalAuth, async (req, res) => {
     // ── Build WHERE conditions ────────────────────────────────────────────────
     const conditions: SQL[] = [];
 
-    // RBAC: determine row-level access
-    // - Platform admins: all rows
-    // - Company admins: rows from their org's projects
+    // RBAC: all users (including platform admins) are scoped to their own org.
+    // - Org admins / platform admins: rows from their org's projects
     // - Everyone else: only their own assigned inspections
-    if (!req.authUser.isAdmin) {
-      if (req.authUser.isCompanyAdmin) {
-        const orgMemberIds = await getOrgMemberIds(req.authUser.id);
-        const orgSet = new Set([...orgMemberIds, req.authUser.id]);
-        const orgProjects = await db
-          .select({ id: projectsTable.id })
-          .from(projectsTable)
-          .where(inArray(projectsTable.createdById, [...orgSet]));
-        const projectIds = orgProjects.map(p => p.id);
-        if (projectIds.length === 0) {
-          res.json([]);
-          return;
-        }
-        conditions.push(inArray(inspectionsTable.projectId, projectIds));
-      } else {
-        conditions.push(eq(inspectionsTable.inspectorId, req.authUser.id));
+    if (req.authUser.isAdmin || req.authUser.isCompanyAdmin) {
+      const orgMemberIds = await getOrgMemberIds(req.authUser.id);
+      const orgSet = new Set([...orgMemberIds, req.authUser.id]);
+      const orgProjects = await db
+        .select({ id: projectsTable.id })
+        .from(projectsTable)
+        .where(inArray(projectsTable.createdById, [...orgSet]));
+      const projectIds = orgProjects.map(p => p.id);
+      if (projectIds.length === 0) {
+        res.json([]);
+        return;
       }
+      conditions.push(inArray(inspectionsTable.projectId, projectIds));
+    } else {
+      conditions.push(eq(inspectionsTable.inspectorId, req.authUser.id));
     }
 
     // Date range filter at SQL level
@@ -241,23 +238,21 @@ router.get("/", optionalAuth, async (req, res) => {
     let accessibleProjectIds: number[] | string = "none";
 
     if (req.authUser && isInspectorOnly(req.authUser)) {
-      // Inspector-role: handled per-row below via inspectorId filter; allow all projects
+      // Inspector-role: further restricted to their own assignments below
       accessibleProjectIds = "all";
     } else if (req.authUser) {
-      if (req.authUser.isAdmin) {
-        accessibleProjectIds = "all";
-      } else {
-        const adminId = req.authUser.isCompanyAdmin
-          ? req.authUser.id
-          : (req.authUser.adminUserId ? parseInt(req.authUser.adminUserId) : req.authUser.id);
-        const orgMemberIds = await getOrgMemberIds(adminId);
-        const orgSet = new Set([...orgMemberIds, req.authUser.id]);
-        const allProjects = await db.select({ id: projectsTable.id, createdById: projectsTable.createdById })
-          .from(projectsTable);
-        accessibleProjectIds = allProjects
-          .filter(p => orgSet.has(p.createdById))
-          .map(p => p.id);
-      }
+      // All users (including platform admins) are scoped to their own organisation.
+      // Platform admins do NOT see cross-tenant data in the list view.
+      const adminId = req.authUser.isCompanyAdmin || req.authUser.isAdmin
+        ? req.authUser.id
+        : (req.authUser.adminUserId ? parseInt(req.authUser.adminUserId) : req.authUser.id);
+      const orgMemberIds = await getOrgMemberIds(adminId);
+      const orgSet = new Set([...orgMemberIds, req.authUser.id]);
+      const allProjects = await db.select({ id: projectsTable.id, createdById: projectsTable.createdById })
+        .from(projectsTable);
+      accessibleProjectIds = allProjects
+        .filter(p => orgSet.has(p.createdById))
+        .map(p => p.id);
     } else {
       // Unauthenticated – only show test project inspections
       const testProjects = await db.select({ id: projectsTable.id }).from(projectsTable)

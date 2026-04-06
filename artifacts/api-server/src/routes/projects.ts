@@ -122,18 +122,14 @@ router.get("/", optionalAuth, async (req, res) => {
     const { status, search } = req.query;
     let projects = await db.select().from(projectsTable).orderBy(sql`${projectsTable.updatedAt} DESC`);
 
-    // Scope projects to the requesting user's organisation (all members share visibility)
+    // Scope projects to the requesting user's organisation (all members share visibility).
+    // Platform admins are scoped to their own org just like company admins — they do NOT
+    // see cross-tenant data in list views. Per-record access for support is handled separately.
     if (req.authUser) {
-      if (!req.authUser.isAdmin) {
-        // Resolve the billing/org admin for this user
-        const adminId = effectiveAdminId(req.authUser);
-        // All org member IDs: the admin + every team member under them
-        const orgMemberIds = await getOrgMemberIds(adminId);
-        // Ensure the requesting user is always included even if adminUserId is unset
-        const orgSet = new Set([...orgMemberIds, req.authUser.id]);
-        projects = projects.filter(p => orgSet.has(p.createdById));
-      }
-      // Platform admins (isAdmin=true) see all projects — no filter applied
+      const adminId = effectiveAdminId(req.authUser);
+      const orgMemberIds = await getOrgMemberIds(adminId);
+      const orgSet = new Set([...orgMemberIds, req.authUser.id]);
+      projects = projects.filter(p => orgSet.has(p.createdById));
     } else {
       // Unauthenticated — return nothing
       projects = [];
