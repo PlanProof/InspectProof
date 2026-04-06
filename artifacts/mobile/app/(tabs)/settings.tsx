@@ -85,6 +85,8 @@ export default function SettingsScreen() {
   const [cacheCleared, setCacheCleared] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [marketingSaving, setMarketingSaving] = useState(false);
 
   const [orgDetails, setOrgDetails] = useState<{
     name?: string; abn?: string; acn?: string; phone?: string;
@@ -103,7 +105,33 @@ export default function SettingsScreen() {
         if (data && (data.name || data.abn || data.phone)) setOrgDetails(data);
       })
       .catch(() => {});
+    fetch(getApiUrl("/api/auth/marketing-prefs"), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setMarketingOptIn(data.marketingEmailOptIn ?? false); })
+      .catch(() => {});
   }, [token]);
+
+  const toggleMarketingOptIn = async (value: boolean) => {
+    const previous = marketingOptIn;
+    setMarketingOptIn(value);
+    setMarketingSaving(true);
+    try {
+      const res = await fetch(getApiUrl("/api/auth/marketing-prefs"), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ marketingEmailOptIn: value }),
+      });
+      if (!res.ok) {
+        setMarketingOptIn(previous);
+      }
+    } catch {
+      setMarketingOptIn(previous);
+    } finally {
+      setMarketingSaving(false);
+    }
+  };
 
   async function handleDeleteAccount() {
     setDeleting(true);
@@ -266,6 +294,22 @@ export default function SettingsScreen() {
               onPress={() => router.push("/notifications" as any)}
             />
           </View>
+        </View>
+
+        {/* Communication Preferences */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Communication Preferences</Text>
+          <View style={styles.group}>
+            <SettingRow
+              icon="mail"
+              label="Product Updates & News"
+              sublabel="Receive inspection tips and product news from InspectProof"
+              toggle={{ value: marketingOptIn, onChange: toggleMarketingOptIn }}
+            />
+          </View>
+          <Text style={[styles.sectionHint, { marginTop: 4, fontSize: 11, fontFamily: "PlusJakartaSans_400Regular" }]}>
+            {marketingSaving ? "Saving..." : "Marketing emails only. Transactional emails are always sent."}
+          </Text>
         </View>
 
         {/* General — Open addresses in */}

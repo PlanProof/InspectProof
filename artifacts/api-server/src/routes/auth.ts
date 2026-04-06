@@ -169,7 +169,7 @@ router.post("/login", loginLimiter, async (req, res) => {
 
 router.post("/register", registerLimiter, async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role, organization, plan, profession, marketingOptIn } = req.body;
+    const { email, password, firstName, lastName, role, organization, plan, profession, marketingEmailOptIn, marketingOptIn } = req.body;
 
     if (!email || !password || !firstName || !lastName) {
       res.status(400).json({ error: "bad_request", message: "First name, last name, email and password are required." });
@@ -204,6 +204,7 @@ router.post("/register", registerLimiter, async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
+    const optedIn = marketingEmailOptIn === true || marketingOptIn === true;
     const [newUser] = await db.insert(usersTable).values({
       email: email.toLowerCase().trim(),
       passwordHash,
@@ -216,7 +217,10 @@ router.post("/register", registerLimiter, async (req, res) => {
       isCompanyAdmin: true,
       userType: "user",
       permissions: JSON.stringify({ editTemplates: true, addInspectors: true, createProjects: true }),
-      notificationPrefs: JSON.stringify({ marketingOptIn: marketingOptIn === true }),
+      marketingEmailOptIn: optedIn,
+      marketingEmailOptInAt: optedIn ? new Date() : null,
+      marketingEmailSource: optedIn ? "inspectproof_signup" : null,
+      marketingEmailScope: optedIn ? "inspectproof_and_related_updates" : null,
     }).returning();
 
     const token = createSessionToken(newUser.id);
@@ -575,6 +579,59 @@ router.patch("/notification-prefs", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Update notification prefs error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── Marketing preferences ──────────────────────────────────────────────────────
+
+router.get("/marketing-prefs", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
+    const { userId, valid } = decodeSessionToken(authHeader.slice(7));
+    if (!valid) { res.status(401).json({ error: "unauthorized" }); return; }
+
+    const [user] = await db.select({
+      marketingEmailOptIn: usersTable.marketingEmailOptIn,
+      marketingEmailOptInAt: usersTable.marketingEmailOptInAt,
+      marketingEmailSource: usersTable.marketingEmailSource,
+      marketingEmailScope: usersTable.marketingEmailScope,
+    }).from(usersTable).where(eq(usersTable.id, userId));
+
+    if (!user) { res.status(404).json({ error: "not_found" }); return; }
+    res.json(user);
+  } catch (err) {
+    req.log.error({ err }, "Get marketing prefs error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+router.patch("/marketing-prefs", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) { res.status(401).json({ error: "unauthorized" }); return; }
+    const { userId, valid } = decodeSessionToken(authHeader.slice(7));
+    if (!valid) { res.status(401).json({ error: "unauthorized" }); return; }
+
+    const { marketingEmailOptIn } = req.body;
+    if (typeof marketingEmailOptIn !== "boolean") {
+      res.status(400).json({ error: "bad_request", message: "marketingEmailOptIn must be a boolean" });
+      return;
+    }
+
+    await db.update(usersTable)
+      .set({
+        marketingEmailOptIn,
+        marketingEmailOptInAt: marketingEmailOptIn ? new Date() : null,
+        marketingEmailSource: marketingEmailOptIn ? "inspectproof_settings" : null,
+        marketingEmailScope: marketingEmailOptIn ? "inspectproof_and_related_updates" : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(usersTable.id, userId));
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Update marketing prefs error");
     res.status(500).json({ error: "internal_error" });
   }
 });

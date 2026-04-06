@@ -106,6 +106,7 @@ export default function RegisterScreen() {
   const [profession, setProfession] = useState("");
   const [professionOpen, setProfessionOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState("free_trial");
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -182,7 +183,7 @@ export default function RegisterScreen() {
       const res = await fetch(`${baseUrl}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, email, password, organization, profession, plan: selectedPlan }),
+        body: JSON.stringify({ firstName, lastName, email, password, organization, profession, plan: selectedPlan, marketingEmailOptIn: marketingOptIn }),
       });
       if (!res.ok) {
         const body = await res.json();
@@ -427,6 +428,24 @@ export default function RegisterScreen() {
                 </Pressable>
               </Modal>
             </View>
+
+            {/* Marketing opt-in */}
+            <Pressable
+              onPress={() => setMarketingOptIn(v => !v)}
+              style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}
+            >
+              <View style={{
+                width: 18, height: 18, borderRadius: 4, borderWidth: 1.5,
+                borderColor: marketingOptIn ? Colors.secondary : Colors.border,
+                backgroundColor: marketingOptIn ? Colors.secondary : Colors.background,
+                alignItems: "center", justifyContent: "center", marginTop: 1, flexShrink: 0,
+              }}>
+                {marketingOptIn && <Feather name="check" size={11} color="#fff" />}
+              </View>
+              <Text style={{ fontSize: 12, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textSecondary, flex: 1, lineHeight: 18 }}>
+                I'd like to receive product updates, inspection tips, and compliance news from InspectProof and PlanProof Technologies. You can update this in your account settings at any time.
+              </Text>
+            </Pressable>
 
             <Pressable
               onPress={handleNext}

@@ -774,10 +774,10 @@ function SecurityTab() {
           </div>
         )}
       </div>
+
     </>
   );
 }
-
 // ── Notifications Tab ─────────────────────────────────────────────────────────
 
 const NOTIF_DEFAULTS = {
@@ -899,7 +899,71 @@ function NotificationsTab() {
           </Button>
         </div>
       </div>
-    </>
+
+      <CommunicationPrefsSection />
+      </>
+    );
+  }
+
+function CommunicationPrefsSection() {
+  const [optIn, setOptIn] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch("/api/auth/marketing-prefs")
+      .then(data => setOptIn(data.marketingEmailOptIn ?? false))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await apiFetch("/api/auth/marketing-prefs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marketingEmailOptIn: optIn }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setError("Failed to save preference. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return null;
+
+  return (
+    <SectionCard
+      title="Communication Preferences"
+      description="Control whether you receive marketing and product communications from InspectProof"
+    >
+      <SettingRow
+        label="Product updates &amp; newsletters"
+        description="Receive product updates, inspection tips, and compliance news from InspectProof and PlanProof Technologies. You can opt out at any time."
+      >
+        <Toggle checked={optIn} onChange={() => { setOptIn(v => !v); setSaved(false); }} />
+      </SettingRow>
+      {error && <p className="text-sm text-red-500">{error}</p>}
+      <div className="flex items-center justify-between pt-2 border-t border-border/50">
+        <p className="text-xs text-muted-foreground">
+          This preference applies to marketing emails only. Transactional and security emails are always sent.
+        </p>
+        <div className="flex items-center gap-3 shrink-0 ml-4">
+          <SaveBanner show={saved} />
+          <Button onClick={save} disabled={saving} className="flex items-center gap-2">
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
+    </SectionCard>
   );
 }
 

@@ -51,6 +51,10 @@ export const usersTable = pgTable("users", {
   piExpiry: text("pi_expiry"),
   reportFooterText: text("report_footer_text"),
   notificationPrefs: text("notification_prefs"),
+  marketingEmailOptIn: boolean("marketing_email_opt_in").notNull().default(false),
+  marketingEmailOptInAt: timestamp("marketing_email_opt_in_at"),
+  marketingEmailSource: text("marketing_email_source"),
+  marketingEmailScope: text("marketing_email_scope"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

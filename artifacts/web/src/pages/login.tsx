@@ -492,7 +492,7 @@ function AccountStep({
               className="mt-0.5 h-4 w-4 rounded border-muted-foreground/30 accent-primary cursor-pointer shrink-0"
             />
             <span className="text-xs text-muted-foreground leading-relaxed group-hover:text-foreground transition-colors">
-              I'd like to receive product updates, inspection tips, and compliance news from InspectProof. You can unsubscribe at any time.
+              I'd like to receive product updates, inspection tips, and compliance news from InspectProof and PlanProof Technologies. You can update this preference at any time in your account settings.
             </span>
           </label>
 
@@ -610,7 +610,7 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
           password: account.password,
           organization: account.organization,
           plan: selected,
-          marketingOptIn: account.marketingOptIn,
+          marketingEmailOptIn: account.marketingOptIn,
         }),
       });
       const regData = await regRes.json();

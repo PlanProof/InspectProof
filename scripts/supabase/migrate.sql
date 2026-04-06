@@ -632,3 +632,31 @@ DO $$ BEGIN
         ALTER TABLE notifications VALIDATE CONSTRAINT fk_notifications_user;
     END IF;
 END $$;
+
+-- ── users: marketing communications opt-in columns ────────────────────────────
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'marketing_email_opt_in'
+    ) THEN
+        ALTER TABLE users ADD COLUMN marketing_email_opt_in boolean NOT NULL DEFAULT false;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'marketing_email_opt_in_at'
+    ) THEN
+        ALTER TABLE users ADD COLUMN marketing_email_opt_in_at timestamp;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'marketing_email_source'
+    ) THEN
+        ALTER TABLE users ADD COLUMN marketing_email_source text;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'marketing_email_scope'
+    ) THEN
+        ALTER TABLE users ADD COLUMN marketing_email_scope text;
+    END IF;
+END $$;

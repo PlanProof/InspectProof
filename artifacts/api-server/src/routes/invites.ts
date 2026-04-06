@@ -292,11 +292,12 @@ router.get("/validate/:token", async (req, res) => {
 
 router.post("/accept", async (req, res) => {
   try {
-    const { token, firstName, lastName, password } = req.body as {
+    const { token, firstName, lastName, password, marketingEmailOptIn } = req.body as {
       token?: string;
       firstName?: string;
       lastName?: string;
       password?: string;
+      marketingEmailOptIn?: boolean;
     };
 
     if (!token || !firstName || !lastName || !password) {
@@ -381,6 +382,7 @@ router.post("/accept", async (req, res) => {
       return;
     }
 
+    const optedIn = marketingEmailOptIn === true;
     const [newUser] = await db.insert(usersTable).values({
       email: invite.email,
       passwordHash,
@@ -395,6 +397,10 @@ router.post("/accept", async (req, res) => {
       mobileOnly,
       adminUserId: invite.invitedById,
       requiresPasswordChange: true,
+      marketingEmailOptIn: optedIn,
+      marketingEmailOptInAt: optedIn ? new Date() : null,
+      marketingEmailSource: optedIn ? "inspectproof_signup" : null,
+      marketingEmailScope: optedIn ? "inspectproof_and_related_updates" : null,
     }).returning();
 
     // Mark token as used

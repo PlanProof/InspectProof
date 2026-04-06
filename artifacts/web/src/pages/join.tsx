@@ -26,7 +26,7 @@ export default function JoinPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [invite, setInvite] = useState<{ email: string; companyName: string | null; role: string } | null>(null);
 
-  const [form, setForm] = useState({ firstName: "", lastName: "", password: "", confirmPassword: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", password: "", confirmPassword: "", marketingEmailOptIn: false });
   const [showPw, setShowPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [formError, setFormError] = useState("");
@@ -74,7 +74,7 @@ export default function JoinPage() {
       const res = await fetch(API("/invites/accept"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, firstName: form.firstName.trim(), lastName: form.lastName.trim(), password: form.password }),
+        body: JSON.stringify({ token, firstName: form.firstName.trim(), lastName: form.lastName.trim(), password: form.password, marketingEmailOptIn: form.marketingEmailOptIn }),
       });
       const body = await res.json().catch((): AcceptResponse => ({})) as AcceptResponse;
       if (!res.ok) {
@@ -366,6 +366,20 @@ export default function JoinPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Marketing opt-in */}
+                  <label className="flex items-start gap-2.5 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={form.marketingEmailOptIn}
+                      onChange={e => setForm(f => ({ ...f, marketingEmailOptIn: e.target.checked }))}
+                      className="mt-0.5 h-4 w-4 rounded border-muted-foreground/30 accent-primary cursor-pointer shrink-0"
+                      disabled={submitting}
+                    />
+                    <span className="text-xs text-muted-foreground leading-relaxed group-hover:text-foreground transition-colors">
+                      I'd like to receive product updates, inspection tips, and compliance news from InspectProof and PlanProof Technologies. You can update this preference at any time in your account settings.
+                    </span>
+                  </label>
 
                   <Button
                     type="submit"
