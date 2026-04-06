@@ -1841,15 +1841,25 @@ function buildPdf(
       && (prevIsDivider || nextIsDivider);
 
     if (looksLikeHeader) {
-      checkPageBreak(40);
-      doc.moveDown(0.6);
+      checkPageBreak(36);
+      doc.moveDown(0.7);
       const headerY = doc.y;
-      doc.rect(MARGIN, headerY, contentW, 22).fill("#E8ECF2");
-      // Left accent bar
-      doc.rect(MARGIN, headerY, 3, 22).fill(COLOR_BLUE);
-      doc.fillColor(COLOR_NAVY).fontSize(9).font(FB)
-        .text(line.trim(), MARGIN + 10, headerY + 7, { width: contentW - 16 });
-      doc.y = headerY + 30;
+      const headerText = line.trim();
+      // Measure text width to position the divider lines
+      doc.fontSize(8).font(FB);
+      const textW = doc.widthOfString(headerText) + 16;
+      const lineY = headerY + 8;
+      const halfGap = Math.min((contentW - textW) / 2, contentW * 0.35);
+      // Left divider line
+      doc.moveTo(MARGIN, lineY).lineTo(MARGIN + halfGap - 6, lineY)
+        .strokeColor("#D1D5DB").lineWidth(0.5).stroke();
+      // Right divider line
+      doc.moveTo(MARGIN + halfGap + textW + 6, lineY).lineTo(MARGIN + contentW, lineY)
+        .strokeColor("#D1D5DB").lineWidth(0.5).stroke();
+      // Centered category label
+      doc.fillColor("#6B7280").fontSize(8).font(FB)
+        .text(headerText, MARGIN + halfGap, headerY + 3, { width: textW, align: "center", lineBreak: false });
+      doc.y = headerY + 22;
       continue;
     }
 
@@ -1872,7 +1882,7 @@ function buildPdf(
     // Checklist item: "1. [✓ PASS] description" or "1. [✗ FAIL] ..."
     const checkMatch = line.match(/^(\d+)\.\s+\[(.+?)\]\s+(.*)$/);
     if (checkMatch) {
-      checkPageBreak(18);
+      const itemNum = checkMatch[1];
       const resultStr = checkMatch[2].trim();
       const desc = checkMatch[3].trim();
       const isPass = resultStr.includes("PASS");
@@ -1881,21 +1891,44 @@ function buildPdf(
       const badgeColor = isPass ? "#16A34A" : isFail ? "#DC2626" : isMonitor ? "#D97706" : "#9CA3AF";
       const badgeBg = isPass ? "#F0FDF4" : isFail ? "#FEF2F2" : isMonitor ? "#FFFBEB" : "#F9FAFB";
       const badgeBorder = isPass ? "#BBF7D0" : isFail ? "#FECACA" : isMonitor ? "#FDE68A" : "#E5E7EB";
-      const badgeText = isPass ? "PASS" : isFail ? "FAIL" : isMonitor ? "MON" : "N/A";
-      const badgeW = isMonitor ? 36 : 36;
+      const badgeText = isPass ? "Pass" : isFail ? "Fail" : isMonitor ? "Monitor" : "N/A";
+      const badgeW = isMonitor ? 44 : 34;
+
+      // Layout constants
+      const numCircleD = 16;
+      const numX = MARGIN;
+      const descX = MARGIN + numCircleD + 6;
+      const badgeX = MARGIN + contentW - badgeW;
+      const descW = contentW - numCircleD - 6 - badgeW - 8;
+
+      // Estimate description height for page break
+      doc.fontSize(9).font(F);
+      const descH = doc.heightOfString(desc, { width: descW });
+      checkPageBreak(Math.max(22, descH + 8));
+
+      const rowY = doc.y;
 
       // Subtle row bg for fail items
       if (isFail) {
-        doc.rect(MARGIN - 4, doc.y - 2, contentW + 8, 18).fill("#FFF5F5");
+        doc.rect(MARGIN - 4, rowY - 2, contentW + 8, Math.max(20, descH + 8)).fill("#FFF5F5");
       }
 
-      const rowY = doc.y;
-      doc.roundedRect(MARGIN, rowY + 1, badgeW, 13, 2).fillAndStroke(badgeBg, badgeBorder);
-      doc.fillColor(badgeColor).fontSize(7).font(FB)
-        .text(badgeText, MARGIN, rowY + 4, { width: badgeW, align: "center", lineBreak: false });
+      // Number circle
+      doc.circle(numX + numCircleD / 2, rowY + 8, numCircleD / 2).fill("#F3F4F6");
+      doc.fillColor("#6B7280").fontSize(7).font(FB)
+        .text(itemNum, numX, rowY + 4.5, { width: numCircleD, align: "center", lineBreak: false });
+
+      // Description
       doc.fillColor("#1F2937").fontSize(9).font(F)
-        .text(desc, MARGIN + 43, rowY, { width: contentW - 43 });
-      doc.moveDown(0.45);
+        .text(desc, descX, rowY, { width: descW });
+
+      // Status badge on the right (vertically centred with first line)
+      doc.roundedRect(badgeX, rowY + 1, badgeW, 13, 3).fillAndStroke(badgeBg, badgeBorder);
+      doc.fillColor(badgeColor).fontSize(7).font(FB)
+        .text(badgeText, badgeX, rowY + 4, { width: badgeW, align: "center", lineBreak: false });
+
+      doc.y = rowY + Math.max(20, descH + 8);
+      doc.moveDown(0.3);
 
       // Render photos for this item (if any)
       if (photosByDesc && photoBuffers) {
@@ -1957,20 +1990,41 @@ function buildPdf(
 
     // Sub-detail lines (indented with spaces, e.g. "   Code Ref: ...")
     if (/^\s{2,}/.test(raw)) {
-      checkPageBreak(15);
       const subText = line.trim();
       const subKv = subText.match(/^([A-Za-z][A-Za-z 0-9\/\-&]+?):\s+(.+)$/);
       if (subKv) {
-        const indentX = MARGIN + 10;
-        const availW = contentW - 10;
-        doc.fillColor("#6B7280").fontSize(8.5).font(FB)
-          .text(subKv[1] + ": ", indentX, doc.y, { continued: true, width: availW });
-        doc.fillColor("#374151").fontSize(8.5).font(F)
-          .text(subKv[2], { width: availW });
-        doc.moveDown(0.35);
+        const label = subKv[1].trim();
+        const val = subKv[2].trim();
+        const indentX = MARGIN + 22;
+        const availW = contentW - 22;
+
+        if (label === "Code Ref") {
+          // Render as teal pill badge (matching mobile style)
+          checkPageBreak(14);
+          const pillY = doc.y;
+          doc.fontSize(7.5).font(FB);
+          const pillTextW = doc.widthOfString(val);
+          const pillW = Math.min(pillTextW + 10, availW);
+          doc.roundedRect(indentX, pillY, pillW, 12, 3)
+            .fill("#ECFDF5");
+          doc.fillColor("#059669").fontSize(7.5).font(FB)
+            .text(val, indentX + 5, pillY + 2, { width: pillW - 10, lineBreak: false });
+          doc.y = pillY + 14;
+          doc.moveDown(0.25);
+        } else {
+          checkPageBreak(15);
+          const kvX = indentX;
+          const kvAvailW = availW;
+          doc.fillColor("#6B7280").fontSize(8.5).font(FB)
+            .text(label + ": ", kvX, doc.y, { continued: true, width: kvAvailW });
+          doc.fillColor("#374151").fontSize(8.5).font(F)
+            .text(val, { width: kvAvailW });
+          doc.moveDown(0.35);
+        }
       } else {
+        checkPageBreak(15);
         doc.fillColor("#374151").fontSize(9).font(F)
-          .text(subText, MARGIN + 10, doc.y, { width: contentW - 10 });
+          .text(subText, MARGIN + 22, doc.y, { width: contentW - 22 });
         doc.moveDown(0.3);
       }
       continue;

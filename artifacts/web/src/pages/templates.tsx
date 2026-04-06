@@ -608,18 +608,17 @@ function ReadItem({ item, idx }: { item: any; idx: number }) {
             {item.reason}
           </p>
         )}
-        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+        <div className="flex flex-wrap gap-2 mt-1.5">
           {item.codeReference && (
-            <span className="text-[10px] font-mono bg-sidebar/10 text-sidebar px-1.5 py-0.5 rounded border border-sidebar/20">
+            <span className="text-xs font-mono bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded">
               {item.codeReference}
             </span>
           )}
           {!item.isRequired && (
-            <span className="text-[10px] text-muted-foreground border border-muted/60 rounded px-1.5 py-0.5">Optional</span>
+            <span className="text-xs text-muted-foreground border border-muted/60 rounded px-1.5 py-0.5">Optional</span>
           )}
         </div>
       </div>
-      {item.isRequired && <CheckSquare className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0 mt-0.5" />}
     </div>
   );
 }
