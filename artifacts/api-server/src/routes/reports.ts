@@ -311,31 +311,25 @@ function generateReportHtml(
   ];
 
   const detailRows: [string, string][] = [
-    ["Project Name",     project?.name || inspection?.projectName || "—"],
-    ["Site Address",     siteAddress],
-    ["DA / BA Number",   project?.daNumber || "—"],
-    ["Certification No", project?.certificationNumber || "—"],
+    ["Project Name",       project?.name || inspection?.projectName || "—"],
+    ["Site Address",       siteAddress],
+    ["DA / BA Number",     project?.daNumber || "—"],
+    ["Certification No",   project?.certificationNumber || "—"],
     ["NCC Building Class", project?.buildingClassification || project?.nccClass || "—"],
-    ["Inspection Type",  inspType],
-    ["Inspection Date",  inspectionDate],
-    ["Date Issued",      issuedDate],
-    ["Inspector",        inspectorName],
-    ...(inspector?.licenceNumber ? [["Licence No.", inspector.licenceNumber] as [string, string]] : []),
-    ["Report Ref.",      reportRef],
-    ["Status",           `<span style="background:${statusBadgeBg};color:${statusBadgeColor};font-weight:700;padding:2px 8px;border-radius:4px;font-size:11px;">${statusLabel}</span>`],
-  ];
-
-  // Parties section rows
-  const partyRows: [string, string][] = [
-    ["Inspector / Certifier", inspectorName],
+    ...(project?.clientName  ? [["Client",              project.clientName]  as [string, string]] : []),
+    ...(project?.ownerName   ? [["Owner",               project.ownerName]   as [string, string]] : []),
+    ...(project?.builderName ? [["Builder",             project.builderName] as [string, string]] : []),
+    ...(project?.designerName ? [["Designer / Architect", project.designerName] as [string, string]] : []),
+    ...(certifier ? [["Assigned Certifier", `${certifier.firstName} ${certifier.lastName}`] as [string, string]] : []),
+    ["Inspection Type",    inspType],
+    ["Inspection Date",    inspectionDate],
+    ["Date Issued",        issuedDate],
+    ["Inspector",          inspectorName],
     ...(inspector?.profession || inspector?.role ? [["Inspector Role", inspector?.profession || ROLE_LABELS[inspector?.role ?? ""] || inspector?.role || "—"] as [string, string]] : []),
     ...(inspector?.licenceNumber ? [["Licence No.", inspector.licenceNumber] as [string, string]] : []),
     ...(orgInfo?.accreditationNumber ? [["Accreditation No.", orgInfo.accreditationNumber] as [string, string]] : []),
-    ...(project?.clientName ? [["Client", project.clientName] as [string, string]] : []),
-    ...(project?.ownerName ? [["Owner", project.ownerName] as [string, string]] : []),
-    ...(project?.builderName ? [["Builder", project.builderName] as [string, string]] : []),
-    ...(project?.designerName ? [["Designer / Architect", project.designerName] as [string, string]] : []),
-    ...(certifier ? [["Council / Certifier", `${certifier.firstName} ${certifier.lastName}`] as [string, string]] : project?.assignedCertifierId ? [["Certifier Ref.", `Ref #${project.assignedCertifierId}`] as [string, string]] : []),
+    ["Report Ref.",        reportRef],
+    ["Status",             `<span style="background:${statusBadgeBg};color:${statusBadgeColor};font-weight:700;padding:2px 8px;border-radius:4px;font-size:11px;">${statusLabel}</span>`],
   ];
 
   const checklistHtml = buildHtmlChecklistTable(checklistResults);
@@ -488,19 +482,6 @@ function generateReportHtml(
         </tr>`).join("")}
       </table>
     </div>
-
-    ${partyRows.length > 0 ? `
-    <!-- Parties -->
-    <div style="margin-bottom:20px;">
-      ${sectionHeading("Parties")}
-      <table style="width:100%;border-collapse:collapse;">
-        ${partyRows.map(([label, value], idx) => `
-        <tr style="background:${idx % 2 === 0 ? "#f9fafb" : "#fff"};">
-          <td style="padding:7px 10px;font-weight:600;color:#0B1933;width:36%;font-size:12px;border-bottom:1px solid #f1f5f9;">${label}</td>
-          <td style="padding:7px 10px;font-size:12px;border-bottom:1px solid #f1f5f9;">${value}</td>
-        </tr>`).join("")}
-      </table>
-    </div>` : ""}
 
     <!-- Result box -->
     <div style="background:${resultBoxBg};border:1px solid ${resultBoxBdr};border-radius:6px;padding:12px 16px;margin-bottom:16px;">
