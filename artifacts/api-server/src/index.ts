@@ -269,6 +269,9 @@ async function runSchemaMigrations() {
     // email_verified_at column for users (Task #34 verification flow)
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at timestamp`);
 
+    // inspections: scheduled_end_date for calendar duration support (Task #39)
+    await pool.query(`ALTER TABLE inspections ADD COLUMN IF NOT EXISTS scheduled_end_date date`);
+
     logger.info("Schema migrations applied");
   } catch (err) {
     logger.error({ err }, "Schema migration failed — continuing");

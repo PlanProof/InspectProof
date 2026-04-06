@@ -927,6 +927,193 @@ const tlStyles = StyleSheet.create({
   },
 });
 
+interface AgendaInspection {
+  id: number;
+  projectName: string;
+  inspectionType: string;
+  status: string;
+  scheduledDate: string;
+  scheduledTime: string | null;
+}
+
+function TodayTomorrowAgenda() {
+  const { token } = useAuth();
+  const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
+  const today = toLocalDateStr(new Date());
+  const end7 = new Date();
+  end7.setDate(end7.getDate() + 7);
+  const end7Str = toLocalDateStr(end7);
+
+  const { data: calInspections = [] } = useQuery<AgendaInspection[]>({
+    queryKey: ["calendar-agenda", today, end7Str, token],
+    queryFn: async () => {
+      const res = await fetch(`${baseUrl}/api/inspections/calendar?start=${today}&end=${end7Str}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json() as Promise<AgendaInspection[]>;
+    },
+    enabled: !!token,
+  });
+
+  const tomorrowDate = new Date();
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrow = toLocalDateStr(tomorrowDate);
+
+  // Next 7 days (days 2–7)
+  const upcomingDays = new Set<string>();
+  for (let i = 2; i <= 7; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    upcomingDays.add(toLocalDateStr(d));
+  }
+
+  const active = (insp: AgendaInspection) => insp.status !== "completed" && insp.status !== "cancelled";
+  const todayInsps = calInspections.filter(i => i.scheduledDate === today && active(i));
+  const tomorrowInsps = calInspections.filter(i => i.scheduledDate === tomorrow && active(i));
+  const upcomingInsps = calInspections.filter(i => upcomingDays.has(i.scheduledDate) && active(i));
+
+  if (todayInsps.length === 0 && tomorrowInsps.length === 0 && upcomingInsps.length === 0) return null;
+
+  function AgendaItem({ insp }: { insp: AgendaInspection }) {
+    const typeLabel = INSPECTION_TYPE_LABELS[insp.inspectionType] ?? toTitleCase(insp.inspectionType ?? "");
+    const statusCfg = STATUS_CONFIG[insp.status] ?? { label: insp.status, color: Colors.textSecondary, bg: Colors.borderLight };
+    return (
+      <Pressable
+        onPress={() => router.push(`/(tabs)/inspection/${insp.id}` as any)}
+        style={({ pressed }) => [agendaStyles.item, pressed && { opacity: 0.75 }]}
+      >
+        <View style={agendaStyles.itemLeft}>
+          <View style={[agendaStyles.statusDot, { backgroundColor: statusCfg.color }]} />
+          <View style={agendaStyles.itemText}>
+            <Text style={agendaStyles.itemProject} numberOfLines={1}>{insp.projectName}</Text>
+            <Text style={agendaStyles.itemType} numberOfLines={1}>{typeLabel}</Text>
+            {insp.scheduledTime ? (
+              <Text style={agendaStyles.itemTime}>{insp.scheduledTime}</Text>
+            ) : null}
+          </View>
+        </View>
+        <Feather name="chevron-right" size={14} color={Colors.textTertiary} />
+      </Pressable>
+    );
+  }
+
+  function DaySection({ label, items }: { label: string; items: AgendaInspection[] }) {
+    if (items.length === 0) return null;
+    return (
+      <View style={agendaStyles.daySection}>
+        <Text style={agendaStyles.dayLabel}>{label}</Text>
+        {items.map(insp => <AgendaItem key={insp.id} insp={insp} />)}
+      </View>
+    );
+  }
+
+  return (
+    <View style={agendaStyles.wrap}>
+      <View style={agendaStyles.header}>
+        <Feather name="list" size={14} color={Colors.secondary} />
+        <Text style={agendaStyles.title}>Upcoming Agenda</Text>
+      </View>
+      <DaySection label="Today" items={todayInsps} />
+      <DaySection label="Tomorrow" items={tomorrowInsps} />
+      {upcomingInsps.length > 0 && (
+        <View style={agendaStyles.daySection}>
+          <Text style={agendaStyles.dayLabel}>Next 7 Days</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={agendaStyles.swipeRow}
+          >
+            {upcomingInsps.map(insp => {
+              const statusColor = STATUS_CONFIG[insp.status]?.color ?? Colors.textSecondary;
+              const typeLabel = INSPECTION_TYPE_LABELS[insp.inspectionType] ?? toTitleCase(insp.inspectionType ?? "");
+              return (
+                <Pressable
+                  key={insp.id}
+                  onPress={() => router.push(`/(tabs)/inspection/${insp.id}` as any)}
+                  style={({ pressed }) => [agendaStyles.swipeCard, pressed && { opacity: 0.75 }]}
+                >
+                  <View style={[agendaStyles.swipeCardAccent, { backgroundColor: statusColor }]} />
+                  <Text style={agendaStyles.swipeCardDate} numberOfLines={1}>{insp.scheduledDate}</Text>
+                  <Text style={agendaStyles.swipeCardProject} numberOfLines={2}>{insp.projectName}</Text>
+                  <Text style={agendaStyles.swipeCardType} numberOfLines={1}>{typeLabel}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const agendaStyles = StyleSheet.create({
+  wrap: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  header: { flexDirection: "row", alignItems: "center", gap: 7 },
+  title: { fontSize: 15, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  daySection: { gap: 6 },
+  dayLabel: {
+    fontSize: 11,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: Colors.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  item: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  itemLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  itemText: { flex: 1, gap: 2 },
+  itemProject: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
+  itemType: { fontSize: 11, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textSecondary },
+  itemTime: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  moreBtn: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Colors.secondary + "15",
+  },
+  moreBtnText: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.secondary },
+  swipeRow: { flexDirection: "row", gap: 10, paddingVertical: 2, paddingRight: 4 },
+  swipeCard: {
+    width: 130,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: 12,
+    gap: 6,
+    overflow: "hidden",
+  },
+  swipeCardAccent: { position: "absolute", top: 0, left: 0, right: 0, height: 3, borderTopLeftRadius: 12, borderTopRightRadius: 12 },
+  swipeCardDate: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.textTertiary, marginTop: 6 },
+  swipeCardProject: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text, lineHeight: 16 },
+  swipeCardType: { fontSize: 10, fontFamily: "PlusJakartaSans_400Regular", color: Colors.textSecondary },
+});
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useTabBarHeight();
@@ -1081,6 +1268,9 @@ export default function HomeScreen() {
         onScheduleChange={handleScheduleChange}
         reportMap={reportMap}
       />
+
+      {/* Today & Tomorrow Agenda */}
+      <TodayTomorrowAgenda />
 
       {/* Full Calendar Modal */}
       <Modal

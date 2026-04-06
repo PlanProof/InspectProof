@@ -35,7 +35,7 @@ pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vi
 
 ## Routes (Web App)
 
-`/`, `/login`, `/dashboard`, `/projects`, `/projects/:id`, `/inspections`, `/inspections/:id`, `/issues`, `/activity`, `/share/:token`, `/analytics`, `/templates`, `/doc-templates`, `/inspectors`, `/settings`, `/settings/contractor-library`, `/billing`, `/admin`, `/terms`, `/privacy`
+`/`, `/login`, `/dashboard`, `/projects`, `/projects/:id`, `/inspections`, `/inspections/:id`, `/calendar`, `/issues`, `/activity`, `/share/:token`, `/analytics`, `/templates`, `/doc-templates`, `/inspectors`, `/settings`, `/settings/contractor-library`, `/billing`, `/admin`, `/terms`, `/privacy`
 
 **Reports:** Accessed via the "Reports" tab inside each project's detail page (`/projects/:id`) — no standalone `/reports` route.
 
@@ -68,6 +68,7 @@ pnpm workspace monorepo. Three deployable artifacts: `artifacts/web` (React + Vi
 - **Contractor Library page** (`/settings/contractor-library`): Dedicated page with full contractor management (add, edit, remove, performance history). Two-column layout: main contractor list with search/filter + sidebar with Trade Categories management. Settings > Organisation tab replaced embedded library with navigation card.
 - **Trade Categories**: New `trade_categories` DB table (scoped per company). CRUD API at `/api/org-contractors/trade-categories`. Categories shown on contractor cards as violet badges. Contractors can be grouped by category on the library page.
 - **Org Contractor Combobox**: Project Contractors tab replaces flat checklist with `OrgContractorCombobox` — assigned contractors shown as removable emerald chips, unassigned searchable via text input dropdown (filters by name/trade/company).
+- **Inspection Calendar** (`/calendar`): Web calendar view powered by `react-big-calendar` with month/week/agenda views, colour-coded by status (scheduled/in_progress/completed/overdue), click-to-preview card with project/inspector info, drag-to-reschedule (PATCH `/api/inspections/:id/reschedule`), inspector/project/discipline filters. RBAC: inspector-role users see only their own inspections. New API endpoint `GET /api/inspections/calendar?start=&end=&inspectorId=&projectId=&discipline=`. Sidebar item added. Mobile home screen updated with "Upcoming Agenda" section showing Today, Tomorrow and Next 7 Days agenda list with one-tap navigation.
 
 ## Security Architecture
 

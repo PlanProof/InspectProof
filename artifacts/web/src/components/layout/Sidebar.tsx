@@ -14,6 +14,7 @@ import {
   Zap,
   AlertTriangle,
   Activity,
+  CalendarDays,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -21,6 +22,7 @@ const navigation = [
   { name: "Home",        href: "/dashboard",   icon: Home },
   { name: "Projects",    href: "/projects",    icon: FolderOpen },
   { name: "Inspections", href: "/inspections", icon: CheckSquare },
+  { name: "Calendar",    href: "/calendar",    icon: CalendarDays },
   { name: "Issues",      href: "/issues",      icon: AlertTriangle },
   { name: "Templates",   href: "/templates",   icon: FileText },
   { name: "Analytics",   href: "/analytics",   icon: BarChart3 },

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, ilike } from "drizzle-orm";
+import { eq, sql, ilike, and, gte, lte, inArray, isNotNull, type SQL } from "drizzle-orm";
 import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable, reportsTable } from "@workspace/db";
 import { checkInspectionQuota, getOrgMemberIds } from "../lib/quota";
 import { optionalAuth, requireAuth, isInspectorOnly, type AuthUser } from "../middleware/auth";
@@ -87,6 +87,149 @@ async function formatInspection(i: any) {
     createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : i.createdAt,
   };
 }
+
+// ── Calendar endpoint ─────────────────────────────────────────────────────────
+// Returns inspections within a date range enriched with project + inspector info.
+// Uses SQL-level filtering and LEFT JOINs to avoid N+1 queries.
+router.get("/calendar", optionalAuth, async (req, res) => {
+  try {
+    const { start, end, inspectorId: inspectorIdQ, projectId: projectIdQ, discipline } = req.query;
+
+    // Unauthenticated — return empty immediately
+    if (!req.authUser) {
+      res.json([]);
+      return;
+    }
+
+    // ── Build WHERE conditions ────────────────────────────────────────────────
+    const conditions: SQL[] = [];
+
+    // RBAC: determine row-level access
+    // - Platform admins: all rows
+    // - Company admins: rows from their org's projects
+    // - Everyone else: only their own assigned inspections
+    if (!req.authUser.isAdmin) {
+      if (req.authUser.isCompanyAdmin) {
+        const orgMemberIds = await getOrgMemberIds(req.authUser.id);
+        const orgSet = new Set([...orgMemberIds, req.authUser.id]);
+        const orgProjects = await db
+          .select({ id: projectsTable.id })
+          .from(projectsTable)
+          .where(inArray(projectsTable.createdById, [...orgSet]));
+        const projectIds = orgProjects.map(p => p.id);
+        if (projectIds.length === 0) {
+          res.json([]);
+          return;
+        }
+        conditions.push(inArray(inspectionsTable.projectId, projectIds));
+      } else {
+        conditions.push(eq(inspectionsTable.inspectorId, req.authUser.id));
+      }
+    }
+
+    // Date range filter at SQL level
+    if (start) conditions.push(gte(inspectionsTable.scheduledDate, start as string));
+    if (end) conditions.push(lte(inspectionsTable.scheduledDate, end as string));
+
+    // Additional explicit filters
+    if (inspectorIdQ) conditions.push(eq(inspectionsTable.inspectorId, parseInt(inspectorIdQ as string)));
+    if (projectIdQ) conditions.push(eq(inspectionsTable.projectId, parseInt(projectIdQ as string)));
+
+    // ── Single query with LEFT JOINs ─────────────────────────────────────────
+    const rows = await db
+      .select({
+        id: inspectionsTable.id,
+        projectId: inspectionsTable.projectId,
+        projectName: projectsTable.name,
+        projectAddress: projectsTable.siteAddress,
+        projectSuburb: projectsTable.suburb,
+        inspectionType: inspectionsTable.inspectionType,
+        status: inspectionsTable.status,
+        scheduledDate: inspectionsTable.scheduledDate,
+        scheduledEndDate: inspectionsTable.scheduledEndDate,
+        scheduledTime: inspectionsTable.scheduledTime,
+        completedDate: inspectionsTable.completedDate,
+        inspectorId: inspectionsTable.inspectorId,
+        inspectorFirstName: usersTable.firstName,
+        inspectorLastName: usersTable.lastName,
+        duration: inspectionsTable.duration,
+        discipline: checklistTemplatesTable.discipline,
+        checklistTemplateId: inspectionsTable.checklistTemplateId,
+      })
+      .from(inspectionsTable)
+      .leftJoin(projectsTable, eq(inspectionsTable.projectId, projectsTable.id))
+      .leftJoin(usersTable, eq(inspectionsTable.inspectorId, usersTable.id))
+      .leftJoin(checklistTemplatesTable, eq(inspectionsTable.checklistTemplateId, checklistTemplatesTable.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(inspectionsTable.scheduledDate);
+
+    // Discipline filter (after join)
+    let result = rows.map(r => ({
+      id: r.id,
+      projectId: r.projectId,
+      projectName: r.projectName ?? "Unknown",
+      projectAddress: r.projectAddress ?? null,
+      projectSuburb: r.projectSuburb ?? null,
+      inspectionType: r.inspectionType,
+      status: r.status,
+      scheduledDate: r.scheduledDate,
+      scheduledEndDate: r.scheduledEndDate ?? null,
+      scheduledTime: r.scheduledTime,
+      completedDate: r.completedDate,
+      inspectorId: r.inspectorId,
+      inspectorName: r.inspectorFirstName ? `${r.inspectorFirstName} ${r.inspectorLastName ?? ""}`.trim() : null,
+      duration: r.duration,
+      discipline: r.discipline ?? null,
+      checklistTemplateId: r.checklistTemplateId,
+    }));
+
+    if (discipline) {
+      result = result.filter(i => i.discipline === (discipline as string));
+    }
+
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Calendar endpoint error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── Calendar disciplines endpoint ─────────────────────────────────────────────
+// Returns the distinct disciplines available in the authenticated user's accessible inspections.
+router.get("/calendar/disciplines", optionalAuth, async (req, res) => {
+  try {
+    if (!req.authUser) { res.json([]); return; }
+
+    // Build the same RBAC conditions as /calendar to prevent cross-tenant data exposure
+    const conditions: SQL[] = [isNotNull(checklistTemplatesTable.discipline)];
+
+    if (!req.authUser.isAdmin) {
+      if (req.authUser.isCompanyAdmin) {
+        const orgMemberIds = await getOrgMemberIds(req.authUser.id);
+        const orgSet = new Set([...orgMemberIds, req.authUser.id]);
+        const orgProjects = await db
+          .select({ id: projectsTable.id })
+          .from(projectsTable)
+          .where(inArray(projectsTable.createdById, [...orgSet]));
+        const projectIds = orgProjects.map(p => p.id);
+        if (projectIds.length === 0) { res.json([]); return; }
+        conditions.push(inArray(inspectionsTable.projectId, projectIds));
+      } else {
+        conditions.push(eq(inspectionsTable.inspectorId, req.authUser.id));
+      }
+    }
+
+    const rows = await db
+      .selectDistinct({ discipline: checklistTemplatesTable.discipline })
+      .from(inspectionsTable)
+      .leftJoin(checklistTemplatesTable, eq(inspectionsTable.checklistTemplateId, checklistTemplatesTable.id))
+      .where(and(...conditions));
+    res.json(rows.map(r => r.discipline).filter(Boolean).sort());
+  } catch (err) {
+    req.log.error({ err }, "Calendar disciplines error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
 
 router.get("/", optionalAuth, async (req, res) => {
   try {
@@ -551,6 +694,54 @@ router.put("/:id", requireAuth, async (req, res) => {
     }
   } catch (err) {
     req.log.error({ err }, "Update inspection error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// PATCH /:id/reschedule — drag-to-reschedule from the calendar; only updates scheduledDate
+router.patch("/:id/reschedule", requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { scheduledDate } = req.body;
+    if (!scheduledDate) {
+      res.status(400).json({ error: "scheduledDate is required" });
+      return;
+    }
+    const [before] = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, id));
+    if (!before) { res.status(404).json({ error: "not_found" }); return; }
+
+    const actor = req.authUser!;
+    // Reschedule RBAC matches calendar visibility:
+    // - Platform admin → all
+    // - Company admin → any inspection within their org
+    // - Everyone else → only inspections they are assigned to as inspector
+    const canReschedule = await (async () => {
+      if (actor.isAdmin) return true;
+      if (actor.isCompanyAdmin) return canAccessInspection(before, actor);
+      // Non-admin non-company-admin: must be the assigned inspector
+      return before.inspectorId === actor.id;
+    })();
+
+    if (!canReschedule) {
+      res.status(403).json({ error: "forbidden" }); return;
+    }
+    const [updated] = await db.update(inspectionsTable)
+      .set({ scheduledDate, updatedAt: new Date() })
+      .where(eq(inspectionsTable.id, id))
+      .returning();
+
+    await db.insert(activityLogsTable).values({
+      entityType: "inspection",
+      entityId: id,
+      action: "rescheduled",
+      description: `Inspection rescheduled from ${before.scheduledDate} to ${scheduledDate} via calendar`,
+      userId: req.authUser!.id,
+    });
+
+    const formatted = await formatInspection(updated);
+    res.json(formatted);
+  } catch (err) {
+    req.log.error({ err }, "Reschedule inspection error");
     res.status(500).json({ error: "internal_error" });
   }
 });

@@ -10,6 +10,7 @@ export const inspectionsTable = pgTable("inspections", {
   inspectionType: text("inspection_type").notNull(),
   status: text("status").notNull().default("scheduled"),
   scheduledDate: date("scheduled_date").notNull(),
+  scheduledEndDate: date("scheduled_end_date"),
   scheduledTime: text("scheduled_time"),
   completedDate: date("completed_date"),
   inspectorId: integer("inspector_id").references(() => usersTable.id, { onDelete: "set null" }),
