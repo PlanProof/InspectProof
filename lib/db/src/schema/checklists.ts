@@ -1,6 +1,7 @@
 import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { inspectionsTable } from "./inspections";
 
 export const checklistTemplatesTable = pgTable("checklist_templates", {
   id: serial("id").primaryKey(),
@@ -18,7 +19,7 @@ export const checklistTemplatesTable = pgTable("checklist_templates", {
 
 export const checklistItemsTable = pgTable("checklist_items", {
   id: serial("id").primaryKey(),
-  templateId: integer("template_id"),
+  templateId: integer("template_id").references(() => checklistTemplatesTable.id, { onDelete: "set null" }),
   orderIndex: integer("order_index").notNull(),
   category: text("category").notNull(),
   description: text("description").notNull(),
@@ -34,8 +35,8 @@ export const checklistItemsTable = pgTable("checklist_items", {
 
 export const checklistResultsTable = pgTable("checklist_results", {
   id: serial("id").primaryKey(),
-  inspectionId: integer("inspection_id").notNull(),
-  checklistItemId: integer("checklist_item_id").notNull(),
+  inspectionId: integer("inspection_id").notNull().references(() => inspectionsTable.id, { onDelete: "cascade" }),
+  checklistItemId: integer("checklist_item_id").notNull().references(() => checklistItemsTable.id, { onDelete: "cascade" }),
   result: text("result").notNull().default("pending"),
   notes: text("notes"),
   photoUrls: text("photo_urls"),

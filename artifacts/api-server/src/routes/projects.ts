@@ -361,11 +361,14 @@ router.patch("/:id", requireAuth, async (req, res) => {
   }
 });
 
+// Archive (PATCH status → 'archived'): soft, reversible — child records kept intact.
+// Delete (DELETE /:id): permanent. Primary mechanism is DB-level FK CASCADE (migrate.sql).
+// If the direct delete fails with a FK violation (pre-migration DB without CASCADE
+// constraints), falls back to manual child cleanup then retries.
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
 
-    // Confirm project exists and caller has access
     const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
     if (!project) {
       res.status(404).json({ error: "not_found" });
@@ -375,33 +378,36 @@ router.delete("/:id", requireAuth, async (req, res) => {
       res.status(403).json({ error: "forbidden" }); return;
     }
 
-    // Get all inspection IDs for this project
-    const inspections = await db.select({ id: inspectionsTable.id })
-      .from(inspectionsTable).where(eq(inspectionsTable.projectId, id));
-    const inspectionIds = inspections.map(i => i.id);
+    try {
+      // On a migrated DB with FK CASCADE constraints this cascades automatically.
+      await db.delete(projectsTable).where(eq(projectsTable.id, id));
+    } catch (deleteErr: unknown) {
+      // FK violation (23503) means the DB lacks CASCADE constraints; clean up manually.
+      const pgCode = (deleteErr as { code?: string })?.code;
+      if (pgCode !== "23503") throw deleteErr;
 
-    if (inspectionIds.length > 0) {
-      // Delete checklist results, notes, reports, and activity logs for inspections
-      await db.delete(checklistResultsTable).where(inArray(checklistResultsTable.inspectionId, inspectionIds));
-      await db.delete(notesTable).where(inArray(notesTable.inspectionId, inspectionIds));
-      await db.delete(reportsTable).where(inArray(reportsTable.inspectionId, inspectionIds));
-      await db.delete(issuesTable).where(inArray(issuesTable.inspectionId, inspectionIds));
+      req.log.warn({ id }, "Project delete FK violation – manual child cleanup (pre-migration DB)");
+
+      const inspections = await db.select({ id: inspectionsTable.id })
+        .from(inspectionsTable).where(eq(inspectionsTable.projectId, id));
+      const inspectionIds = inspections.map(i => i.id);
+
+      if (inspectionIds.length > 0) {
+        await db.delete(checklistResultsTable).where(inArray(checklistResultsTable.inspectionId, inspectionIds));
+        await db.delete(notesTable).where(inArray(notesTable.inspectionId, inspectionIds));
+        await db.delete(reportsTable).where(inArray(reportsTable.inspectionId, inspectionIds));
+        await db.delete(issuesTable).where(inArray(issuesTable.inspectionId, inspectionIds));
+      }
+
+      await db.delete(inspectionsTable).where(eq(inspectionsTable.projectId, id));
+      await db.delete(documentChecklistLinksTable).where(eq(documentChecklistLinksTable.projectId, id));
+      await db.delete(documentsTable).where(eq(documentsTable.projectId, id));
+      await db.delete(issuesTable).where(eq(issuesTable.projectId, id));
+      await db.delete(projectInspectionTypesTable).where(eq(projectInspectionTypesTable.projectId, id));
+      await db.delete(activityLogsTable).where(sql`${activityLogsTable.entityType} = 'project' AND ${activityLogsTable.entityId} = ${id}`);
+
+      await db.delete(projectsTable).where(eq(projectsTable.id, id));
     }
-
-    // Delete all inspections for this project
-    await db.delete(inspectionsTable).where(eq(inspectionsTable.projectId, id));
-
-    // Delete document–checklist links, documents, project-level issues
-    await db.delete(documentChecklistLinksTable).where(eq(documentChecklistLinksTable.projectId, id));
-    await db.delete(documentsTable).where(eq(documentsTable.projectId, id));
-    await db.delete(issuesTable).where(eq(issuesTable.projectId, id));
-
-    // Delete project inspection type assignments and activity logs
-    await db.delete(projectInspectionTypesTable).where(eq(projectInspectionTypesTable.projectId, id));
-    await db.delete(activityLogsTable).where(sql`${activityLogsTable.entityType} = 'project' AND ${activityLogsTable.entityId} = ${id}`);
-
-    // Finally delete the project
-    await db.delete(projectsTable).where(eq(projectsTable.id, id));
 
     res.json({ success: true });
   } catch (err) {

@@ -148,6 +148,20 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
 /**
  * Storage proxy – serves objects with optional on-the-fly thumbnail resize.
  *
+ * Authentication: requireAuth is enforced so that only authenticated users can
+ * retrieve stored files. This prevents unauthenticated access to inspection
+ * photos, markup documents, and other sensitive assets.
+ *
+ * Storage path conventions:
+ *   - Replit Object Storage: /objects/uploads/<uuid>
+ *       Files uploaded through POST /api/storage/uploads/file are stored in
+ *       the PRIVATE_OBJECT_DIR bucket at uploads/<uuid>. The UUID path makes
+ *       objects effectively content-addressed and immutable once written.
+ *   - Supabase Storage: /objects/supabase/<bucket>/<path>
+ *       When SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set, uploads go
+ *       to Supabase. This handler detects the /objects/supabase/ prefix and
+ *       redirects to a short-lived Supabase signed download URL.
+ *
  * Query params:
  *   ?w=<pixels>  — resize image so the longest edge is at most <w> pixels.
  *                  Only applied for image/* content types.

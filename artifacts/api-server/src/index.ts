@@ -18,6 +18,36 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+// Fail fast if required env vars are absent, rather than surfacing errors mid-request.
+(function validateRequiredEnvVars() {
+  const missing: string[] = [];
+
+  if (!process.env.DATABASE_URL) {
+    missing.push("DATABASE_URL");
+  }
+
+  const hasReplitStorage = !!process.env.PRIVATE_OBJECT_DIR;
+  const hasSupabaseStorage =
+    !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!hasReplitStorage && !hasSupabaseStorage) {
+    missing.push(
+      "PRIVATE_OBJECT_DIR (Replit Object Storage) " +
+      "OR both SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (Supabase Storage)"
+    );
+  }
+
+  if (missing.length > 0) {
+    logger.error(
+      { missingVars: missing },
+      "STARTUP ABORTED — required environment variables are not set:\n" +
+      missing.map((v) => `  • ${v}`).join("\n") + "\n" +
+      "Set these variables and restart the server."
+    );
+    process.exit(1);
+  }
+})();
+
 async function runSchemaMigrations() {
   try {
     // users table additions

@@ -1,11 +1,13 @@
 import { pgTable, serial, text, integer, timestamp, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { projectsTable } from "./projects";
+import { inspectionsTable } from "./inspections";
 
 export const issuesTable = pgTable("issues", {
   id: serial("id").primaryKey(),
-  projectId: integer("project_id").notNull(),
-  inspectionId: integer("inspection_id"),
+  projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
+  inspectionId: integer("inspection_id").references(() => inspectionsTable.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   description: text("description").notNull(),
   severity: text("severity").notNull().default("medium"),

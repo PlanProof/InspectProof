@@ -1,16 +1,18 @@
 import { pgTable, serial, text, integer, timestamp, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { usersTable } from "./users";
+import { projectsTable } from "./projects";
 
 export const inspectionsTable = pgTable("inspections", {
   id: serial("id").primaryKey(),
-  projectId: integer("project_id"),
+  projectId: integer("project_id").references(() => projectsTable.id, { onDelete: "cascade" }),
   inspectionType: text("inspection_type").notNull(),
   status: text("status").notNull().default("scheduled"),
   scheduledDate: date("scheduled_date").notNull(),
   scheduledTime: text("scheduled_time"),
   completedDate: date("completed_date"),
-  inspectorId: integer("inspector_id"),
+  inspectorId: integer("inspector_id").references(() => usersTable.id, { onDelete: "set null" }),
   duration: integer("duration"),
   notes: text("notes"),
   weatherConditions: text("weather_conditions"),

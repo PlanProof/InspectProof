@@ -1,10 +1,13 @@
 import { pgTable, serial, text, integer, timestamp, boolean, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { projectsTable } from "./projects";
+import { checklistItemsTable } from "./checklists";
+import { inductionsTable } from "./inductions";
 
 export const documentsTable = pgTable("documents", {
   id: serial("id").primaryKey(),
-  projectId: integer("project_id").notNull(),
+  projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   category: text("category").notNull().default("other"),
   fileName: text("file_name").notNull(),
@@ -16,7 +19,7 @@ export const documentsTable = pgTable("documents", {
   folder: text("folder").notNull().default("General"),
   fileUrl: text("file_url"),
   inspectionId: integer("inspection_id"),
-  inductionId: integer("induction_id"),
+  inductionId: integer("induction_id").references(() => inductionsTable.id, { onDelete: "set null" }),
   includedInInspection: boolean("included_in_inspection").notNull().default(true),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -28,15 +31,15 @@ export type Document = typeof documentsTable.$inferSelect;
 
 export const documentChecklistLinksTable = pgTable("document_checklist_links", {
   id: serial("id").primaryKey(),
-  documentId: integer("document_id").notNull(),
-  checklistItemId: integer("checklist_item_id").notNull(),
-  projectId: integer("project_id").notNull(),
+  documentId: integer("document_id").notNull().references(() => documentsTable.id, { onDelete: "cascade" }),
+  checklistItemId: integer("checklist_item_id").notNull().references(() => checklistItemsTable.id, { onDelete: "cascade" }),
+  projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, t => [unique("doc_item_unique").on(t.documentId, t.checklistItemId)]);
 
 export const projectInspectionTypesTable = pgTable("project_inspection_types", {
   id: serial("id").primaryKey(),
-  projectId: integer("project_id").notNull(),
+  projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
   inspectionType: text("inspection_type").notNull(),
   isSelected: boolean("is_selected").notNull().default(false),
   templateId: integer("template_id"),

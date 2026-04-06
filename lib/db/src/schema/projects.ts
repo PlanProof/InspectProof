@@ -2,6 +2,7 @@ import { pgTable, serial, text, integer, timestamp, date, uniqueIndex } from "dr
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { sql } from "drizzle-orm";
+import { usersTable } from "./users";
 
 export const projectsTable = pgTable("projects", {
   id: serial("id").primaryKey(),
@@ -23,9 +24,9 @@ export const projectsTable = pgTable("projects", {
   status: text("status").notNull().default("active"),
   stage: text("stage").notNull().default("pre_construction"),
   notes: text("notes"),
-  assignedCertifierId: integer("assigned_certifier_id"),
-  assignedInspectorId: integer("assigned_inspector_id"),
-  createdById: integer("created_by_id"),
+  assignedCertifierId: integer("assigned_certifier_id").references(() => usersTable.id, { onDelete: "set null" }),
+  assignedInspectorId: integer("assigned_inspector_id").references(() => usersTable.id, { onDelete: "set null" }),
+  createdById: integer("created_by_id").references(() => usersTable.id, { onDelete: "set null" }),
   startDate: date("start_date"),
   expectedCompletionDate: date("expected_completion_date"),
   completedDate: date("completed_date"),
