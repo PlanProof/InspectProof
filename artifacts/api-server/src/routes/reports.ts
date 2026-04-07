@@ -1543,40 +1543,15 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
     footerLeft = parts.join("  ·  ");
   }
 
-  const hasDisclaimer = !!orgInfo?.reportFooterText;
   const footerRight = `Page ${pageNum} of ${totalPages}`;
-  // Top line: company info + page number — sit 8pt from the top of the footer band
-  const footerY = pageH - footerH + 8;
+  // Centre the single line vertically in the footer band
+  const footerY = pageH - footerH + 15;
   const halfW = (pageW - MARGIN * 2) / 2 - 10;
 
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
     .text(footerLeft, MARGIN, footerY, { width: halfW * 1.6, lineBreak: false, ellipsis: true });
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
     .text(footerRight, pageW - MARGIN - 60, footerY, { width: 60, align: "right", lineBreak: false });
-
-  // Custom disclaimer — wraps across multiple lines within the footer band.
-  // Strip inline markdown (too small to matter at 6.5pt) and render with lineBreak
-  // so the full text is visible. Height is capped to the available footer space so
-  // text can never overflow below the page.
-  if (hasDisclaimer) {
-    const plainDisclaimer = orgInfo!.reportFooterText!
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/\*(.*?)\*/g, "$1")
-      .replace(/\r?\n/g, "  ");
-    const maxW  = pageW - MARGIN * 2;
-    const disclaimerY = footerY + 12;
-    // Available height from the disclaimer start to 4pt above the page edge
-    const availH = pageH - 4 - disclaimerY;
-    if (availH > 4) {
-      doc.font(F).fontSize(6.5).fillColor("#9CA3AF")
-        .text(plainDisclaimer, MARGIN, disclaimerY, {
-          width: maxW,
-          height: availH,
-          lineBreak: true,
-          ellipsis: true,
-        });
-    }
-  }
 
   doc.restore();
 }
@@ -1623,9 +1598,7 @@ function buildPdf(
   const contentW = pageW - MARGIN * 2;
   const typeLabel = (report.reportTypeLabel || report.reportType || "Report").toUpperCase();
 
-  // Dynamic footer height: taller when a multi-line disclaimer is present.
-  // 72pt gives ~6 lines of 6.5pt text — enough for any reasonable disclaimer.
-  const effectiveFooterH = orgInfo?.reportFooterText ? 72 : FOOTER_H;
+  const effectiveFooterH = FOOTER_H;
 
   const formatDatePdf = (d: string | null | undefined) =>
     d ? new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }) : "—";
@@ -2244,7 +2217,29 @@ function buildPdf(
     doc.fillColor("#6B7280").fontSize(8).font(FSB)
       .text("Date: ____________________", inspBlockX, builderY + 54, { width: signoffBlockW, lineBreak: false });
 
-    doc.moveDown(2);
+    // ── Custom disclaimer / limitation of liability ────────────────────────
+    if (orgInfo?.reportFooterText) {
+      // Position below builder block with breathing room
+      doc.y = builderY + 80;
+      // Horizontal rule
+      doc.moveTo(MARGIN, doc.y)
+        .lineTo(pageW - MARGIN, doc.y)
+        .strokeColor("#E5E7EB").lineWidth(0.75).stroke();
+      doc.y += 10;
+      // "DISCLAIMER" label
+      doc.fillColor("#6B7280").fontSize(7.5).font(FSB)
+        .text("DISCLAIMER", MARGIN, doc.y, { width: contentW, lineBreak: false });
+      doc.y += 12;
+      // Full disclaimer text — strip markdown formatting, wrap naturally
+      const disclaimerText = orgInfo.reportFooterText
+        .replace(/\*\*(.*?)\*\*/g, "$1")
+        .replace(/\*(.*?)\*/g, "$1");
+      doc.fillColor("#6B7280").fontSize(8).font(F)
+        .text(disclaimerText, MARGIN, doc.y, { width: contentW, lineBreak: true });
+      doc.moveDown(1);
+    } else {
+      doc.moveDown(2);
+    }
   }
 
   // ── Photo Documentation Appendix ──────────────────────────────────────────
