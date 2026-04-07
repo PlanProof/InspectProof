@@ -1526,11 +1526,11 @@ interface OrgInfo {
   inspectorLicenceNumber?: string;
 }
 
-function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number, orgInfo?: OrgInfo) {
+function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number, orgInfo?: OrgInfo, footerH = FOOTER_H) {
   const pageW = doc.page.width;
   const pageH = doc.page.height;
   doc.save();
-  doc.rect(0, pageH - FOOTER_H, pageW, FOOTER_H).fill(COLOR_NAVY);
+  doc.rect(0, pageH - footerH, pageW, footerH).fill(COLOR_NAVY);
 
   let footerLeft = "InspectProof · Confidential";
   if (orgInfo?.companyName) {
@@ -1543,8 +1543,10 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
     footerLeft = parts.join("  ·  ");
   }
 
+  const hasDisclaimer = !!orgInfo?.reportFooterText;
   const footerRight = `Page ${pageNum} of ${totalPages}`;
-  const footerY = pageH - FOOTER_H + (orgInfo?.reportFooterText ? 7 : 15);
+  // Top line: company info + page number — sit 8pt from the top of the footer band
+  const footerY = pageH - footerH + 8;
   const halfW = (pageW - MARGIN * 2) / 2 - 10;
 
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
@@ -1552,19 +1554,27 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
     .text(footerRight, pageW - MARGIN - 60, footerY, { width: 60, align: "right", lineBreak: false });
 
-  // Custom footer text on a second line — rendered as plain single line to prevent
-  // any PDFKit page-overflow when the disclaimer is long or contains inline markup.
-  if (orgInfo?.reportFooterText) {
-    const plainDisclaimer = orgInfo.reportFooterText
+  // Custom disclaimer — wraps across multiple lines within the footer band.
+  // Strip inline markdown (too small to matter at 6.5pt) and render with lineBreak
+  // so the full text is visible. Height is capped to the available footer space so
+  // text can never overflow below the page.
+  if (hasDisclaimer) {
+    const plainDisclaimer = orgInfo!.reportFooterText!
       .replace(/\*\*(.*?)\*\*/g, "$1")
       .replace(/\*(.*?)\*/g, "$1")
-      .replace(/\s*\n\s*/g, "  ");
-    const maxW = pageW - MARGIN * 2;
+      .replace(/\r?\n/g, "  ");
+    const maxW  = pageW - MARGIN * 2;
     const disclaimerY = footerY + 12;
-    // Guard: only draw if we are still within the footer band (never below page)
-    if (disclaimerY < pageH - 4) {
-      doc.font(F).fontSize(6.5).fillColor("#6B7280")
-        .text(plainDisclaimer, MARGIN, disclaimerY, { width: maxW, lineBreak: false, ellipsis: true });
+    // Available height from the disclaimer start to 4pt above the page edge
+    const availH = pageH - 4 - disclaimerY;
+    if (availH > 4) {
+      doc.font(F).fontSize(6.5).fillColor("#9CA3AF")
+        .text(plainDisclaimer, MARGIN, disclaimerY, {
+          width: maxW,
+          height: availH,
+          lineBreak: true,
+          ellipsis: true,
+        });
     }
   }
 
@@ -1612,6 +1622,10 @@ function buildPdf(
   const pageW = doc.page.width;
   const contentW = pageW - MARGIN * 2;
   const typeLabel = (report.reportTypeLabel || report.reportType || "Report").toUpperCase();
+
+  // Dynamic footer height: taller when a multi-line disclaimer is present.
+  // 72pt gives ~6 lines of 6.5pt text — enough for any reasonable disclaimer.
+  const effectiveFooterH = orgInfo?.reportFooterText ? 72 : FOOTER_H;
 
   const formatDatePdf = (d: string | null | undefined) =>
     d ? new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }) : "—";
@@ -1748,7 +1762,7 @@ function buildPdf(
 
   // ── Parse and render content — setup ─────────────────────────────────────
   const lines = (report.content || "").split("\n");
-  const bottomLimit = doc.page.height - FOOTER_H - 30;
+  const bottomLimit = doc.page.height - effectiveFooterH - 30;
 
   const checkPageBreak = (needed = 20) => {
     if (doc.y + needed > bottomLimit) {
@@ -2247,7 +2261,7 @@ function buildPdf(
 
       // Section heading
       const checkPageBreakAppendix = (needed = 20) => {
-        if (doc.y + needed > doc.page.height - FOOTER_H - 30) {
+        if (doc.y + needed > doc.page.height - effectiveFooterH - 30) {
           doc.addPage();
           addPageHeader(doc, "Photo Documentation", logoBuffer, orgInfo?.companyName);
         }
@@ -2351,7 +2365,7 @@ function buildPdf(
   const totalPages = range.count;
   for (let p = 0; p < totalPages; p++) {
     doc.switchToPage(range.start + p);
-    addPageFooter(doc, p + 1, totalPages, orgInfo);
+    addPageFooter(doc, p + 1, totalPages, orgInfo, effectiveFooterH);
   }
 
   return doc;
