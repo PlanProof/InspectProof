@@ -28,8 +28,7 @@ The project is structured as a pnpm workspace monorepo, comprising three deploya
     - Contractors are managed per-project and globally via a dedicated "Contractor Library" page under organization settings.
     - Public share portal (`/share/:token`) for client access to inspection details.
     - Two-step onboarding process for new users (profile setup and organization details).
-    - Address Autocomplete using Mapbox Geocoding API (server-side proxy at `/api/geocode`).
-    - Report Templates page redesigned: section-based builder (Cover Page, Executive Summary, Inspection Details, Checklist Results, Issues, Terms & Conditions, Sign-Off) replaces WYSIWYG editor. Templates are now JSON configs stored in `doc_templates.content`. Generate Report uses `/api/reports/generate` (reports.ts). Supports custom Terms & Conditions and letterhead image upload.
+    - Address Autocomplete using Nominatim OpenStreetMap API in the web app.
     - Inspection Calendar view powered by `react-big-calendar` with various views, color-coding, and filtering.
 
 **Technical Implementations:**
