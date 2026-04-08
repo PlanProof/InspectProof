@@ -47,9 +47,12 @@ function NativeTabLayout() {
   if (!nativeTabs) return null;
 
   const { NativeTabs, Icon, Label } = nativeTabs;
-  // NativeTabs.Trigger types don't expose `style` but the underlying component accepts it
-  const HiddenTrigger = NativeTabs.Trigger as React.ComponentType<{ name: string; style?: object }>;
 
+  // Only the four visible tab triggers are registered here.
+  // All nested/sub-screens (inspection detail, project detail, settings, etc.)
+  // are navigated to via router.push() and do not need a trigger — adding them
+  // as triggers (even with display:none) causes them to appear as extra buttons
+  // in the native tab bar on iOS.
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
@@ -57,42 +60,20 @@ function NativeTabLayout() {
         <Label>Home</Label>
       </NativeTabs.Trigger>
 
-      {/* Inspections tab + all its nested screens */}
       <NativeTabs.Trigger name="inspections">
         <Icon sf={{ default: "clipboard", selected: "clipboard.fill" }} />
         <Label>Inspections</Label>
       </NativeTabs.Trigger>
-      <HiddenTrigger name="inspection/[id]" style={{ display: "none" }} />
-      <HiddenTrigger name="inspection/create" style={{ display: "none" }} />
-      <HiddenTrigger name="inspection/conduct/[id]" style={{ display: "none" }} />
-      <HiddenTrigger name="inspection/conduct/induction/[id]" style={{ display: "none" }} />
-      <HiddenTrigger name="inspection/generate-report" style={{ display: "none" }} />
-      <HiddenTrigger name="inspection/document-viewer" style={{ display: "none" }} />
-      <HiddenTrigger name="inspection/photo-markup" style={{ display: "none" }} />
 
-      {/* Projects tab + its nested screens */}
       <NativeTabs.Trigger name="projects">
         <Icon sf={{ default: "folder", selected: "folder.fill" }} />
         <Label>Projects</Label>
       </NativeTabs.Trigger>
-      <HiddenTrigger name="project/[id]" style={{ display: "none" }} />
 
-      {/* More tab + all its nested screens */}
       <NativeTabs.Trigger name="more">
         <Icon sf={{ default: "ellipsis.circle", selected: "ellipsis.circle.fill" }} />
         <Label>More</Label>
       </NativeTabs.Trigger>
-      <HiddenTrigger name="feedback" style={{ display: "none" }} />
-      <HiddenTrigger name="profile" style={{ display: "none" }} />
-      <HiddenTrigger name="settings" style={{ display: "none" }} />
-      <HiddenTrigger name="team" style={{ display: "none" }} />
-      <HiddenTrigger name="help" style={{ display: "none" }} />
-      <HiddenTrigger name="change-password" style={{ display: "none" }} />
-      <HiddenTrigger name="analytics" style={{ display: "none" }} />
-      <HiddenTrigger name="notifications" style={{ display: "none" }} />
-      <HiddenTrigger name="documents" style={{ display: "none" }} />
-      <HiddenTrigger name="templates/index" style={{ display: "none" }} />
-      <HiddenTrigger name="templates/[id]" style={{ display: "none" }} />
     </NativeTabs>
   );
 }
