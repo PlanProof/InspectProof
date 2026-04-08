@@ -25,21 +25,27 @@ interface AddressAutocompleteProps {
   compact?: boolean;
 }
 
+function hasAddressContent(f?: AddressFields | null): f is AddressFields {
+  return !!(f && (f.siteAddress || f.suburb || f.state || f.postcode));
+}
+
 export function AddressAutocomplete({ value, onChange, compact = false }: AddressAutocompleteProps) {
   const [manual, setManual] = useState(false);
   const [query, setQuery] = useState(value?.siteAddress ?? "");
   const [suggestions, setSuggestions] = useState<MapboxSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<AddressFields | null>(value ?? null);
+  const [selected, setSelected] = useState<AddressFields | null>(hasAddressContent(value) ? value : null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (value) {
+    if (hasAddressContent(value)) {
       setSelected(value);
       if (value.siteAddress && !query) setQuery(value.siteAddress);
+    } else {
+      setSelected(null);
     }
   }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
 
