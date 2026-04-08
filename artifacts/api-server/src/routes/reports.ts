@@ -201,7 +201,7 @@ function generateReportHtml(
   inspector: any,
   storageBaseUrl?: string,
   orgInfo?: OrgInfo,
-  reportOptions?: { includeCoverPage?: boolean; includeSummary?: boolean; includeSignOff?: boolean; termsAndConditions?: string },
+  reportOptions?: { includeCoverPage?: boolean; includeSummary?: boolean; includeSignOff?: boolean },
   certifier?: any,
 ): string {
   const typeLabel = REPORT_TYPE_LABELS[reportType] || reportType;
@@ -248,7 +248,6 @@ function generateReportHtml(
     includeCoverPage: reportOptions?.includeCoverPage !== false,
     includeSummary: reportOptions?.includeSummary !== false,
     includeSignOff: reportOptions?.includeSignOff !== false,
-    termsAndConditions: reportOptions?.termsAndConditions || null,
   };
 
   const statusLabel = inspection?.status
@@ -414,13 +413,6 @@ function generateReportHtml(
     </div>` : ""}
   </div>` : "";
 
-  const termsHtml = opts.termsAndConditions ? `
-  <!-- Terms & Conditions -->
-  <div style="border-top:2px solid #e5e7eb;padding-top:20px;margin-top:8px;page-break-before:always;">
-    ${sectionHeading("Terms & Conditions")}
-    <div style="font-size:12px;color:#374151;line-height:1.8;white-space:pre-wrap;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:16px;">${opts.termsAndConditions}</div>
-  </div>` : "";
-
   const signOffHtml = opts.includeSignOff ? `
   <!-- Sign-Off Section -->
   <div style="border-top:2px solid #e5e7eb;padding-top:20px;margin-top:8px;">
@@ -534,7 +526,6 @@ function generateReportHtml(
       ${checklistHtml}
     </div>
 
-    ${termsHtml}
     ${signOffHtml}
   </div>
   <!-- Footer -->
@@ -1006,12 +997,11 @@ router.get("/", optionalAuth, async (req, res) => {
 // Generate report content from inspection data and save as draft
 router.post("/generate", requireAuth, async (req, res) => {
   try {
-    const { inspectionId, reportType, userId, includeCoverPage, includeSummary, includeSignOff, termsAndConditions } = req.body;
+    const { inspectionId, reportType, userId, includeCoverPage, includeSummary, includeSignOff } = req.body;
     const reportOptions = {
       includeCoverPage: includeCoverPage !== false,
       includeSummary: includeSummary !== false,
       includeSignOff: includeSignOff !== false,
-      termsAndConditions: termsAndConditions || undefined,
     };
 
     const inspections = await db.select().from(inspectionsTable)
