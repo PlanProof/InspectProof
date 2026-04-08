@@ -233,8 +233,19 @@ export default function ProjectDetail() {
               )}
             </div>
             <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
-              <Building className="h-3.5 w-3.5" />
-              {project.siteAddress}, {project.suburb} {project.state} {project.postcode}
+              <Building className="h-3.5 w-3.5 shrink-0" />
+              {project.siteAddress ? (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${project.siteAddress}, ${project.suburb} ${project.state} ${project.postcode}`.trim())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-secondary hover:underline transition-colors"
+                >
+                  {project.siteAddress}, {project.suburb} {project.state} {project.postcode}
+                </a>
+              ) : (
+                <span>{project.siteAddress}, {project.suburb} {project.state} {project.postcode}</span>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-3">
