@@ -11,110 +11,12 @@ export interface AddressFields {
   postcode: string;
 }
 
-interface NominatimResult {
-  place_id: number;
-  display_name: string;
-  address: {
-    house_number?: string;
-    house?: string;
-    road?: string;
-    pedestrian?: string;
-    path?: string;
-    footway?: string;
-    cycleway?: string;
-    residential?: string;
-    living_street?: string;
-    service?: string;
-    suburb?: string;
-    neighbourhood?: string;
-    quarter?: string;
-    locality?: string;
-    city_district?: string;
-    town?: string;
-    city?: string;
-    village?: string;
-    hamlet?: string;
-    county?: string;
-    state?: string;
-    postcode?: string;
-  };
-}
-
-const STATE_ABBREVS: Record<string, string> = {
-  "new south wales": "NSW",
-  "victoria": "VIC",
-  "queensland": "QLD",
-  "south australia": "SA",
-  "western australia": "WA",
-  "tasmania": "TAS",
-  "northern territory": "NT",
-  "australian capital territory": "ACT",
-};
-
-function abbreviateState(state?: string): string {
-  if (!state) return "";
-  const lower = state.toLowerCase();
-  return STATE_ABBREVS[lower] ?? state.toUpperCase().slice(0, 3);
-}
-
-function resolveRoad(a: NominatimResult["address"]): string | undefined {
-  return (
-    a.road ??
-    a.pedestrian ??
-    a.path ??
-    a.footway ??
-    a.cycleway ??
-    a.residential ??
-    a.living_street ??
-    a.service
-  );
-}
-
-function resolveSuburb(a: NominatimResult["address"]): string {
-  return (
-    a.suburb ??
-    a.neighbourhood ??
-    a.quarter ??
-    a.locality ??
-    a.city_district ??
-    a.town ??
-    a.city ??
-    a.village ??
-    a.hamlet ??
-    a.county ??
-    ""
-  );
-}
-
-function parseNominatimAddress(result: NominatimResult): AddressFields {
-  const a = result.address;
-  const road = resolveRoad(a);
-  const houseNum = a.house_number ?? a.house;
-
-  let siteAddress: string;
-
-  if (houseNum && road) {
-    siteAddress = `${houseNum} ${road}`;
-  } else if (road && /^\d/.test(road)) {
-    siteAddress = road;
-  } else {
-    const segments = result.display_name.split(",").map(s => s.trim());
-    const first = segments[0];
-    if (/^\d+[A-Za-z]?$/.test(first) && segments[1]) {
-      siteAddress = `${first} ${segments[1]}`;
-    } else if (/^\d/.test(first)) {
-      siteAddress = first;
-    } else if (road) {
-      siteAddress = road;
-    } else {
-      siteAddress = first;
-    }
-  }
-
-  const suburb = resolveSuburb(a);
-  const state = abbreviateState(a.state);
-  const postcode = a.postcode ?? "";
-  return { siteAddress, suburb, state, postcode };
+interface MapboxSuggestion {
+  siteAddress: string;
+  suburb: string;
+  state: string;
+  postcode: string;
+  displayName: string;
 }
 
 interface AddressAutocompleteProps {
@@ -126,7 +28,7 @@ interface AddressAutocompleteProps {
 export function AddressAutocomplete({ value, onChange, compact = false }: AddressAutocompleteProps) {
   const [manual, setManual] = useState(false);
   const [query, setQuery] = useState(value?.siteAddress ?? "");
-  const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
+  const [suggestions, setSuggestions] = useState<MapboxSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<AddressFields | null>(value ?? null);
@@ -161,22 +63,13 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
     abortRef.current = new AbortController();
     setLoading(true);
     try {
-      const url = new URL("https://nominatim.openstreetmap.org/search");
-      url.searchParams.set("q", q);
-      url.searchParams.set("format", "json");
-      url.searchParams.set("addressdetails", "1");
-      url.searchParams.set("countrycodes", "au");
-      url.searchParams.set("limit", "8");
-      if (/^\d/.test(q.trim())) {
-        url.searchParams.set("layer", "address");
-      }
-      const res = await fetch(url.toString(), {
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`, {
         signal: abortRef.current.signal,
-        headers: { "Accept-Language": "en" },
       });
-      const data: NominatimResult[] = await res.json();
-      setSuggestions(data);
-      setOpen(data.length > 0);
+      if (!res.ok) throw new Error("geocode_error");
+      const data: { suggestions: MapboxSuggestion[] } = await res.json();
+      setSuggestions(data.suggestions ?? []);
+      setOpen((data.suggestions ?? []).length > 0);
     } catch (err) {
       if (err instanceof Error && err.name !== "AbortError") setSuggestions([]);
     } finally {
@@ -189,11 +82,16 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
     setQuery(q);
     setSelected(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => search(q), 350);
+    debounceRef.current = setTimeout(() => search(q), 300);
   };
 
-  const handleSelect = (result: NominatimResult) => {
-    const fields = parseNominatimAddress(result);
+  const handleSelect = (s: MapboxSuggestion) => {
+    const fields: AddressFields = {
+      siteAddress: s.siteAddress,
+      suburb: s.suburb,
+      state: s.state,
+      postcode: s.postcode,
+    };
     setSelected(fields);
     setQuery(fields.siteAddress);
     setSuggestions([]);
@@ -201,7 +99,6 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
     onChange(fields);
   };
 
-  // Once an address is selected, allow direct editing of the street address in the same input
   const handleSelectedAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setQuery(val);
@@ -305,18 +202,16 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
           )}
         </div>
 
-        {/* Suggestion dropdown — only while searching (no selection yet) */}
         {!selected && open && suggestions.length > 0 && (
           <ul className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-xl overflow-hidden max-h-64 overflow-y-auto">
-            {suggestions.map(r => {
-              const parsed = parseNominatimAddress(r);
-              const mainLine = [parsed.siteAddress, parsed.suburb].filter(Boolean).join(", ");
-              const secondLine = [parsed.state, parsed.postcode].filter(Boolean).join(" ");
+            {suggestions.map((s, i) => {
+              const mainLine = [s.siteAddress, s.suburb].filter(Boolean).join(", ");
+              const secondLine = [s.state, s.postcode].filter(Boolean).join(" ");
               return (
-                <li key={r.place_id}>
+                <li key={i}>
                   <button
                     type="button"
-                    onMouseDown={e => { e.preventDefault(); handleSelect(r); }}
+                    onMouseDown={e => { e.preventDefault(); handleSelect(s); }}
                     className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors border-b border-border/40 last:border-0"
                   >
                     <div className="text-sm font-medium text-sidebar truncate">{mainLine}</div>
@@ -329,7 +224,6 @@ export function AddressAutocomplete({ value, onChange, compact = false }: Addres
         )}
       </div>
 
-      {/* After selection: show suburb / state / postcode as read-only context */}
       {selected && (
         <>
           {!selected.siteAddress && (
