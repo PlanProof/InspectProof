@@ -689,7 +689,7 @@ function HowItWorks() {
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
           {steps.map((step) => (
             <div key={step.number} className="relative">
               <div className="relative z-10">
@@ -707,6 +707,26 @@ function HowItWorks() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Wide image banner */}
+        <div className="relative w-full h-64 sm:h-80 rounded-2xl overflow-hidden">
+          <img
+            src="/how-it-works-site.jpg"
+            alt="Building inspector checking reinforcement on a construction site"
+            className="w-full h-full object-cover object-center"
+            style={{ filter: "brightness(0.72) contrast(1.08)" }}
+          />
+          {/* Overlay text */}
+          <div className="absolute inset-0 flex items-end p-8">
+            <p
+              className="text-white text-xl sm:text-2xl font-normal max-w-lg leading-snug"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              Every inspection.{" "}
+              <span className="text-[#C5D92D]">Every record. Every time.</span>
+            </p>
+          </div>
         </div>
       </div>
     </section>

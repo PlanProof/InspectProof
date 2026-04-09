@@ -65,3 +65,39 @@ id = "pHpGmGbTxqBYgQjTD1uR0"
 uri = "file://attached_assets/generated_videos/inspector_tablet_checklist_construction_site.mp4"
 type = "video"
 title = "InspectProof — Hero Video Clip"
+
+[[outputs]]
+id = "Wg7YHeV3VH6VPXVxLZuQC"
+uri = "file://attached_assets/stock_images/construction_site_inspection_workers_1.jpg"
+type = "image"
+title = "construction site workers inspecting building modern high rise"
+
+[[outputs]]
+id = "mGarSrmD0rMLtgxCTxs-O"
+uri = "file://attached_assets/stock_images/construction_site_inspection_workers_2.jpg"
+type = "image"
+title = "construction site workers inspecting building modern high rise"
+
+[[outputs]]
+id = "sMXM_8OXyD6uDSwrg4U50"
+uri = "file://attached_assets/stock_images/construction_site_inspection_workers_3.jpg"
+type = "image"
+title = "construction site workers inspecting building modern high rise"
+
+[[outputs]]
+id = "yHIG5CqkT_cv6PHOMwllL"
+uri = "file://attached_assets/stock_images/quality_control_construction_1.jpg"
+type = "image"
+title = "workers checking quality control at construction site sunny day"
+
+[[outputs]]
+id = "bQaQ_rN3-ZJO9qp1R_EuJ"
+uri = "file://attached_assets/stock_images/quality_control_construction_2.jpg"
+type = "image"
+title = "workers checking quality control at construction site sunny day"
+
+[[outputs]]
+id = "_5N0hEi77Oj3j76_S-xcn"
+uri = "file://attached_assets/stock_images/quality_control_construction_3.jpg"
+type = "image"
+title = "workers checking quality control at construction site sunny day"
