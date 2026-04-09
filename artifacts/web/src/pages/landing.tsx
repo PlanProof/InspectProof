@@ -302,14 +302,14 @@ const PROFESSIONALS = [
     description:
       "Document structural inspections at every stage — from footing inspections to final frame. InspectProof ensures your sign-off is backed by complete, timestamped evidence that stands up to scrutiny.",
     checklistPreview: {
-      templateName: "Frame Inspection — Structural Engineer",
+      templateName: "Steel Frame Inspection — AS 4100",
       items: [
-        "Stud spacing, size and grade match structural drawings throughout",
-        "All lintels, beams and posts are correct size, species and grade",
-        "Tie-downs, hold-downs and brackets installed per engineer's connection schedule",
-        "Diagonal bracing or structural sheathing installed and fixed per drawings",
-        "Roof trusses or rafters bear correctly on wall plates and are braced per drawings",
-        "Frame inspection certificate issued after satisfactory inspection",
+        "Steel members match approved drawings — sections, lengths and grades verified",
+        "Bolted connections use correct bolt grade, size and quantity — no missing bolts",
+        "Welds inspected for size, length and quality — no visible cracks or undercut",
+        "Columns plumb and beams level within permitted tolerances — AS 4100 Cl 15",
+        "Column base plates anchored with correct holding-down bolt pattern and size",
+        "NATA-certified inspection report for welds and connections provided",
       ],
     },
   },
