@@ -7,7 +7,7 @@ Key capabilities include:
 - **Project Management**: Comprehensive tools for managing projects, inspections, and issues with detailed metadata and status filtering.
 - **Inspection Tools**: Mobile-first features such as SVG photo markup, digital checklists, and integrated NCC 2022 code references.
 - **Reporting & Analytics**: Generation of inspection certificates, PDF reports, and real-time dashboard statistics.
-- **Template Library**: A wide range of checklist templates for various disciplines (e.g., Building Surveyor, Structural Engineer, Plumbing Officer) and roles (71 global templates seeded on startup).
+- **Template Library**: A wide range of checklist templates for various disciplines (e.g., Building Surveyor, Structural Engineer, Plumbing Officer) and roles (77+ global platform templates seeded on startup). Template scoping enforced: platform templates (`isGlobal=true`) are read-only and visible to all users; user-created templates (`isGlobal=false`, `createdById=adminId`) are private to that org. Same model applies to doc templates (`userId=null` for platform, `userId=adminId` for org-private).
 - **Team & Permissions**: Company-linked user management with granular permissions (isCompanyAdmin, editTemplates, etc.) and plan-based limits.
 - **Discipline Filtering**: Automated filtering of inspection types based on the logged-in user's assigned discipline using Drizzle queries.
 

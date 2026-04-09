@@ -2,6 +2,7 @@ import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { inspectionsTable } from "./inspections";
+import { usersTable } from "./users";
 
 export const checklistTemplatesTable = pgTable("checklist_templates", {
   id: serial("id").primaryKey(),
@@ -12,6 +13,7 @@ export const checklistTemplatesTable = pgTable("checklist_templates", {
   discipline: text("discipline").notNull().default("Building Surveyor"),
   sortOrder: integer("sort_order").notNull().default(0),
   isGlobal: boolean("is_global").notNull().default(false),
+  createdById: integer("created_by_id").references(() => usersTable.id, { onDelete: "set null" }),
   recurrenceType: text("recurrence_type"),
   recurrenceInterval: integer("recurrence_interval"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

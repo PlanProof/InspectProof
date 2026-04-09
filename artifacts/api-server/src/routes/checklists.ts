@@ -1,9 +1,14 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, or } from "drizzle-orm";
 import { db, checklistTemplatesTable, checklistItemsTable, usersTable } from "@workspace/db";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, type AuthUser } from "../middleware/auth";
 
 const router: IRouter = Router();
+
+function effectiveAdminId(user: AuthUser): number {
+  if (user.isAdmin || user.isCompanyAdmin) return user.id;
+  return user.adminUserId ? parseInt(user.adminUserId) : user.id;
+}
 
 async function requireTemplateEdit(req: any, res: any): Promise<boolean> {
   const caller = req.authUser;
@@ -22,6 +27,13 @@ async function requireTemplateEdit(req: any, res: any): Promise<boolean> {
   return false;
 }
 
+function canModifyTemplate(template: { isGlobal: boolean; createdById: number | null }, user: AuthUser): boolean {
+  if (user.isAdmin) return true;
+  if (template.isGlobal) return false;
+  const adminId = effectiveAdminId(user);
+  return template.createdById === adminId;
+}
+
 function formatTemplate(t: any, itemCount = 0) {
   return {
     id: t.id,
@@ -32,6 +44,8 @@ function formatTemplate(t: any, itemCount = 0) {
     discipline: t.discipline ?? "Building Surveyor",
     sortOrder: t.sortOrder ?? 0,
     itemCount,
+    isGlobal: t.isGlobal ?? false,
+    createdById: t.createdById ?? null,
     recurrenceType: t.recurrenceType ?? null,
     recurrenceInterval: t.recurrenceInterval ?? null,
     createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : t.createdAt,
@@ -61,11 +75,22 @@ function formatItem(i: any) {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const { discipline } = req.query;
+    const adminId = effectiveAdminId(req.authUser!);
+
+    const ownershipFilter = or(
+      eq(checklistTemplatesTable.isGlobal, true),
+      eq(checklistTemplatesTable.createdById, adminId)
+    );
+
     const templates = discipline
       ? await db.select().from(checklistTemplatesTable)
-          .where(eq(checklistTemplatesTable.discipline, discipline as string))
+          .where(and(
+            eq(checklistTemplatesTable.discipline, discipline as string),
+            ownershipFilter
+          ))
           .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.sortOrder} ASC`)
       : await db.select().from(checklistTemplatesTable)
+          .where(ownershipFilter)
           .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.sortOrder} ASC`);
 
     const result = await Promise.all(templates.map(async (t) => {
@@ -86,11 +111,14 @@ router.post("/", requireAuth, async (req: any, res) => {
   if (!allowed) return;
   try {
     const { name, inspectionType, description, folder, discipline, sortOrder, items } = req.body;
+    const adminId = effectiveAdminId(req.authUser!);
     const [template] = await db.insert(checklistTemplatesTable).values({
       name, inspectionType, description,
       folder: folder ?? "Class 1a",
       discipline: discipline ?? "Building Surveyor",
       sortOrder: sortOrder ?? 0,
+      isGlobal: false,
+      createdById: adminId,
     }).returning();
 
     if (items?.length > 0) {
@@ -139,6 +167,16 @@ router.patch("/items/:itemId", requireAuth, async (req: any, res) => {
   if (!allowed) return;
   try {
     const itemId = parseInt(req.params.itemId);
+    const [item] = await db.select().from(checklistItemsTable).where(eq(checklistItemsTable.id, itemId));
+    if (!item) { res.status(404).json({ error: "not_found" }); return; }
+    if (item.templateId) {
+      const [tmpl] = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, item.templateId));
+      if (tmpl && !canModifyTemplate(tmpl, req.authUser!)) {
+        res.status(403).json({ error: "forbidden", message: "Platform template items cannot be modified. Copy the template first." });
+        return;
+      }
+    }
+
     const { description, reason, codeReference, riskLevel, isRequired, category, orderIndex } = req.body;
     const updates: any = {};
     if (description !== undefined) updates.description = description;
@@ -149,13 +187,13 @@ router.patch("/items/:itemId", requireAuth, async (req: any, res) => {
     if (category !== undefined) updates.category = category;
     if (orderIndex !== undefined) updates.orderIndex = orderIndex;
 
-    const [item] = await db.update(checklistItemsTable)
+    const [updated] = await db.update(checklistItemsTable)
       .set(updates)
       .where(eq(checklistItemsTable.id, itemId))
       .returning();
 
-    if (!item) { res.status(404).json({ error: "not_found" }); return; }
-    res.json(formatItem(item));
+    if (!updated) { res.status(404).json({ error: "not_found" }); return; }
+    res.json(formatItem(updated));
   } catch (err) {
     req.log.error({ err }, "Update item error");
     res.status(500).json({ error: "internal_error" });
@@ -167,6 +205,15 @@ router.delete("/items/:itemId", requireAuth, async (req: any, res) => {
   if (!allowed) return;
   try {
     const itemId = parseInt(req.params.itemId);
+    const [item] = await db.select().from(checklistItemsTable).where(eq(checklistItemsTable.id, itemId));
+    if (!item) { res.status(404).json({ error: "not_found" }); return; }
+    if (item.templateId) {
+      const [tmpl] = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, item.templateId));
+      if (tmpl && !canModifyTemplate(tmpl, req.authUser!)) {
+        res.status(403).json({ error: "forbidden", message: "Platform template items cannot be deleted. Copy the template first." });
+        return;
+      }
+    }
     await db.delete(checklistItemsTable).where(eq(checklistItemsTable.id, itemId));
     res.json({ success: true });
   } catch (err) {
@@ -203,6 +250,13 @@ router.patch("/:id", requireAuth, async (req: any, res) => {
   if (!allowed) return;
   try {
     const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, id));
+    if (!existing) { res.status(404).json({ error: "not_found" }); return; }
+    if (!canModifyTemplate(existing, req.authUser!)) {
+      res.status(403).json({ error: "forbidden", message: "Platform templates cannot be modified. Copy the template to customise it." });
+      return;
+    }
+
     const { name, sortOrder, folder, discipline, description, inspectionType, recurrenceType, recurrenceInterval } = req.body;
     const updates: any = {};
     if (name !== undefined) updates.name = name;
@@ -257,7 +311,7 @@ router.post("/:id/items", requireAuth, async (req: any, res) => {
   }
 });
 
-// Copy template with all items
+// Copy template with all items — copy is always a private user template
 router.post("/:id/copy", requireAuth, async (req: any, res) => {
   const allowed = await requireTemplateEdit(req, res);
   if (!allowed) return;
@@ -271,6 +325,7 @@ router.post("/:id/copy", requireAuth, async (req: any, res) => {
       .where(eq(checklistItemsTable.templateId, id))
       .orderBy(checklistItemsTable.orderIndex);
 
+    const adminId = effectiveAdminId(req.authUser!);
     const [copy] = await db.insert(checklistTemplatesTable).values({
       name: `${source.name} (Copy)`,
       inspectionType: source.inspectionType,
@@ -278,6 +333,8 @@ router.post("/:id/copy", requireAuth, async (req: any, res) => {
       folder: source.folder,
       discipline: source.discipline,
       sortOrder: (source.sortOrder ?? 0) + 1,
+      isGlobal: false,
+      createdById: adminId,
     }).returning();
 
     if (items.length > 0) {
@@ -359,7 +416,7 @@ router.post("/folder-reorder", requireAuth, async (req: any, res) => {
   }
 });
 
-// Delete all templates (and their items) in a folder
+// Delete all templates (and their items) in a folder — only deletes user's own non-global templates
 router.delete("/folder", requireAuth, async (req: any, res) => {
   const allowed = await requireTemplateEdit(req, res);
   if (!allowed) return;
@@ -370,23 +427,28 @@ router.delete("/folder", requireAuth, async (req: any, res) => {
       return;
     }
 
-    const templates = await db.select({ id: checklistTemplatesTable.id })
+    const adminId = effectiveAdminId(req.authUser!);
+    const templates = await db.select({ id: checklistTemplatesTable.id, isGlobal: checklistTemplatesTable.isGlobal })
       .from(checklistTemplatesTable)
       .where(and(
         eq(checklistTemplatesTable.discipline, discipline),
-        eq(checklistTemplatesTable.folder, folder)
+        eq(checklistTemplatesTable.folder, folder),
+        req.authUser!.isAdmin
+          ? undefined
+          : and(eq(checklistTemplatesTable.isGlobal, false), eq(checklistTemplatesTable.createdById, adminId))
       ));
 
-    await Promise.all(templates.map(t =>
+    const deletable = templates.filter(t => req.authUser!.isAdmin || !t.isGlobal);
+    await Promise.all(deletable.map(t =>
       db.delete(checklistItemsTable).where(eq(checklistItemsTable.templateId, t.id))
     ));
-    await db.delete(checklistTemplatesTable)
-      .where(and(
-        eq(checklistTemplatesTable.discipline, discipline),
-        eq(checklistTemplatesTable.folder, folder)
+    if (deletable.length > 0) {
+      await Promise.all(deletable.map(t =>
+        db.delete(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, t.id))
       ));
+    }
 
-    res.json({ success: true, deleted: templates.length });
+    res.json({ success: true, deleted: deletable.length });
   } catch (err) {
     req.log.error({ err }, "Delete folder error");
     res.status(500).json({ error: "internal_error" });
@@ -398,6 +460,12 @@ router.delete("/:id", requireAuth, async (req: any, res) => {
   if (!allowed) return;
   try {
     const id = parseInt(req.params.id);
+    const [existing] = await db.select().from(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, id));
+    if (!existing) { res.status(404).json({ error: "not_found" }); return; }
+    if (!canModifyTemplate(existing, req.authUser!)) {
+      res.status(403).json({ error: "forbidden", message: "Platform templates cannot be deleted." });
+      return;
+    }
     await db.delete(checklistItemsTable).where(eq(checklistItemsTable.templateId, id));
     await db.delete(checklistTemplatesTable).where(eq(checklistTemplatesTable.id, id));
     res.json({ success: true });

@@ -405,8 +405,20 @@ function TemplateDetail({
             </div>
           ) : (
             <>
-              <h2 className="text-xl font-bold text-sidebar">{data.name}</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-xl font-bold text-sidebar">{data.name}</h2>
+                {(data as any).isGlobal && (
+                  <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 uppercase tracking-wide">
+                    Platform
+                  </span>
+                )}
+              </div>
               {data.description && <p className="text-sm text-muted-foreground mt-1">{data.description}</p>}
+              {(data as any).isGlobal && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  This is a read-only platform template. Use <strong>Duplicate</strong> to create your own editable copy.
+                </p>
+              )}
               {(data as any).recurrenceType && (data as any).recurrenceType !== "none" && (
                 <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 mt-1.5">
                   Repeats {(data as any).recurrenceType}{(data as any).recurrenceInterval && (data as any).recurrenceType === "custom" ? ` every ${(data as any).recurrenceInterval} days` : ""}
@@ -427,9 +439,11 @@ function TemplateDetail({
             </>
           ) : (
             <>
-              <Button size="sm" variant="outline" onClick={enterEdit} className="gap-1.5">
-                <Pencil className="h-3.5 w-3.5" /> Edit
-              </Button>
+              {!(data as any)?.isGlobal && (
+                <Button size="sm" variant="outline" onClick={enterEdit} className="gap-1.5">
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </Button>
+              )}
               <Button size="sm" variant="outline" onClick={handleCopy} disabled={copying} className="gap-1.5">
                 {copying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
                 Duplicate
@@ -1296,13 +1310,15 @@ export default function Templates() {
                           >
                             <Copy className="h-3 w-3" />
                           </button>
-                          <button
-                            onClick={() => setConfirmDeleteTemplate({ id: t.id, name: t.name })}
-                            className="opacity-0 group-hover/row:opacity-100 transition-opacity p-1 mr-0.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
-                            title="Delete checklist"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
+                          {!(t as any).isGlobal && (
+                            <button
+                              onClick={() => setConfirmDeleteTemplate({ id: t.id, name: t.name })}
+                              className="opacity-0 group-hover/row:opacity-100 transition-opacity p-1 mr-0.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
+                              title="Delete checklist"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
                         </div>
                       );
                     })}

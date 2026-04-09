@@ -1,8 +1,14 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
-import { db, docTemplatesTable } from "@workspace/db";
+import { eq, desc, or, isNull } from "drizzle-orm";
+import { db, docTemplatesTable, usersTable } from "@workspace/db";
+import { requireAuth, type AuthUser } from "../middleware/auth";
 
 const router: IRouter = Router();
+
+function effectiveAdminId(user: AuthUser): number {
+  if (user.isAdmin || user.isCompanyAdmin) return user.id;
+  return user.adminUserId ? parseInt(user.adminUserId) : user.id;
+}
 
 function fmt(t: any) {
   return {
@@ -14,39 +20,58 @@ function fmt(t: any) {
       try { return JSON.parse(t.linkedChecklistIds ?? "[]"); } catch { return []; }
     })(),
     backgroundImage: t.backgroundImage ?? null,
+    isGlobal: t.userId == null,
     createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : t.createdAt,
     updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : t.updatedAt,
   };
 }
 
-router.get("/", async (req, res) => {
+function canEdit(template: { userId: number | null }, user: AuthUser): boolean {
+  if (user.isAdmin) return true;
+  if (template.userId == null) return false;
+  return template.userId === effectiveAdminId(user);
+}
+
+router.get("/", requireAuth, async (req, res) => {
   try {
-    const rows = await db.select().from(docTemplatesTable).orderBy(desc(docTemplatesTable.updatedAt));
+    const adminId = effectiveAdminId(req.authUser!);
+    const rows = await db.select().from(docTemplatesTable)
+      .where(or(
+        isNull(docTemplatesTable.userId),
+        eq(docTemplatesTable.userId, adminId)
+      ))
+      .orderBy(desc(docTemplatesTable.updatedAt));
     res.json(rows.map(fmt));
   } catch (err: any) {
+    req.log?.error({ err }, "List doc templates error");
     res.status(500).json({ error: "internal_error" });
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", requireAuth, async (req, res) => {
   try {
+    const adminId = effectiveAdminId(req.authUser!);
     const [row] = await db.select().from(docTemplatesTable).where(eq(docTemplatesTable.id, parseInt(req.params.id)));
     if (!row) { res.status(404).json({ error: "not_found" }); return; }
+    if (row.userId != null && row.userId !== adminId && !req.authUser!.isAdmin) {
+      res.status(403).json({ error: "forbidden" }); return;
+    }
     res.json(fmt(row));
   } catch {
     res.status(500).json({ error: "internal_error" });
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", requireAuth, async (req, res) => {
   try {
-    const { name, content, linkedChecklistIds, backgroundImage, userId } = req.body;
+    const adminId = effectiveAdminId(req.authUser!);
+    const { name, content, linkedChecklistIds, backgroundImage } = req.body;
     const [row] = await db.insert(docTemplatesTable).values({
       name: name ?? "Untitled Template",
       content: content ?? "",
       linkedChecklistIds: JSON.stringify(linkedChecklistIds ?? []),
       backgroundImage: backgroundImage ?? null,
-      userId: userId ?? null,
+      userId: adminId,
     }).returning();
     res.json(fmt(row));
   } catch {
@@ -54,8 +79,12 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", requireAuth, async (req, res) => {
   try {
+    const [existing] = await db.select().from(docTemplatesTable).where(eq(docTemplatesTable.id, parseInt(req.params.id)));
+    if (!existing) { res.status(404).json({ error: "not_found" }); return; }
+    if (!canEdit(existing, req.authUser!)) { res.status(403).json({ error: "forbidden", message: "Platform templates cannot be modified." }); return; }
+
     const { name, content, linkedChecklistIds, backgroundImage } = req.body;
     const update: any = { updatedAt: new Date() };
     if (name !== undefined) update.name = name;
@@ -70,8 +99,11 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireAuth, async (req, res) => {
   try {
+    const [existing] = await db.select().from(docTemplatesTable).where(eq(docTemplatesTable.id, parseInt(req.params.id)));
+    if (!existing) { res.status(404).json({ error: "not_found" }); return; }
+    if (!canEdit(existing, req.authUser!)) { res.status(403).json({ error: "forbidden", message: "Platform templates cannot be deleted." }); return; }
     await db.delete(docTemplatesTable).where(eq(docTemplatesTable.id, parseInt(req.params.id)));
     res.json({ success: true });
   } catch {
