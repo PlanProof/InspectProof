@@ -434,7 +434,7 @@ function Professionals() {
             className="text-3xl sm:text-4xl font-normal text-white mb-4"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
-            Built for every professional<br />working within Australia's built environment
+            Built for professionals<br />working within Australia's built environment
           </h2>
         </div>
 
