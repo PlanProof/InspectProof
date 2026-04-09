@@ -10,7 +10,9 @@
   },
   "private": true,
   "devDependencies": {
+    "playwright": "^1.59.1",
     "prettier": "^3.8.1",
+    "sharp": "^0.34.5",
     "tsx": "catalog:",
     "typescript": "~5.9.2"
   },

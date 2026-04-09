@@ -733,18 +733,78 @@ function HowItWorks() {
         </div>
 
         {/* Wide image banner */}
-        <div className="relative w-full h-64 sm:h-80 rounded-2xl overflow-hidden">
+        <div className="relative w-full rounded-2xl overflow-hidden" style={{ height: "420px" }}>
           <img
             src="/how-it-works-real.png"
             alt="Inspector using a tablet to conduct an inspection inside a building"
-            className="w-full h-full object-cover object-center"
-            style={{ filter: "brightness(0.85) contrast(1.05)" }}
+            className="w-full h-full object-cover"
+            style={{ objectPosition: "62% center", filter: "brightness(0.88) contrast(1.04)" }}
           />
           {/* Gradient overlay for text legibility */}
           <div
             className="absolute inset-0"
-            style={{ background: "linear-gradient(to top, rgba(11,25,51,0.82) 0%, rgba(11,25,51,0.3) 50%, transparent 100%)" }}
+            style={{ background: "linear-gradient(to top, rgba(11,25,51,0.85) 0%, rgba(11,25,51,0.2) 45%, transparent 100%)" }}
           />
+
+          {/* InspectProof UI overlay — positioned over the tablet screen in the photo */}
+          <div
+            className="absolute hidden sm:block overflow-hidden rounded-[4px] shadow-2xl"
+            style={{
+              left: "50%",
+              top: "10%",
+              width: "19%",
+              height: "72%",
+              transform: "perspective(600px) rotateY(-4deg) rotateX(1deg)",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.08)",
+            }}
+          >
+            {/* App header */}
+            <div className="bg-[#0B1933] px-2 py-1.5 flex items-center gap-1.5 shrink-0">
+              <div className="w-2 h-2 rounded-full bg-[#C5D92D] shrink-0" />
+              <span className="text-white font-bold leading-none" style={{ fontSize: "7px" }}>InspectProof</span>
+            </div>
+            {/* Page title bar */}
+            <div className="bg-[#0f2242] px-2 py-1 flex items-center justify-between shrink-0">
+              <span className="text-[#C5D92D] font-semibold" style={{ fontSize: "6px" }}>Frame Inspection — Class 1</span>
+              <span className="bg-[#C5D92D] text-[#0B1933] font-bold px-1 rounded-sm" style={{ fontSize: "5px" }}>IN PROGRESS</span>
+            </div>
+            {/* Checklist body */}
+            <div className="bg-white flex-1 px-1.5 py-1 overflow-hidden" style={{ fontSize: "5.5px" }}>
+              {[
+                { label: "Photograph overall frame — all elevations", done: true },
+                { label: "Verify layout vs endorsed drawings", done: true },
+                { label: "Bottom plate hold-down bolts — NCC HP3.4.4", done: true },
+                { label: "Wall bracing type & nail pattern confirmed", done: true },
+                { label: "Truss-to-plate strap per engineer schedule", done: false },
+                { label: "Check notching by plumbing/electrical trades", done: false },
+                { label: "Moisture barrier installed & lapped correctly", done: false },
+              ].map((item, i) => (
+                <div key={i} className="flex items-start gap-1 py-0.5 border-b border-gray-100 last:border-0">
+                  <div
+                    className="shrink-0 mt-0.5 flex items-center justify-center rounded-sm"
+                    style={{
+                      width: "7px", height: "7px",
+                      background: item.done ? "#C5D92D" : "white",
+                      border: item.done ? "none" : "1px solid #d1d5db",
+                    }}
+                  >
+                    {item.done && (
+                      <svg viewBox="0 0 10 10" style={{ width: "5px", height: "5px" }}>
+                        <path d="M1.5 5L4 7.5L8.5 2.5" stroke="#0B1933" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className="text-gray-700 leading-tight">{item.label}</span>
+                </div>
+              ))}
+            </div>
+            {/* Footer */}
+            <div className="bg-gray-50 border-t border-gray-200 px-1.5 py-1 flex items-center justify-between shrink-0">
+              <span className="text-gray-400" style={{ fontSize: "5px" }}>4 of 7 complete</span>
+              <span className="text-[#466DB5] font-semibold" style={{ fontSize: "5px" }}>Save &amp; Continue →</span>
+            </div>
+          </div>
+
           {/* Overlay text */}
           <div className="absolute inset-0 flex items-end p-8">
             <p
