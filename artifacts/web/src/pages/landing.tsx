@@ -138,9 +138,9 @@ function Hero() {
             {/* Stats — inline under CTAs */}
             <div className="mt-16 pt-8 border-t border-white/10 grid grid-cols-3 gap-0">
               {[
-                { value: "100%", label: "NCC class\ncoverage" },
-                { value: "< 2 min", label: "Average\nreport time" },
-                { value: "Zero", label: "Paper checklists\nneeded" },
+                { value: "Zero", label: "Missed hold points\nwith smart scheduling" },
+                { value: "< 2 min", label: "From inspection to\nsigned certificate" },
+                { value: "100%", label: "Audit-ready documentation,\nevery time" },
               ].map((stat, i) => (
                 <div
                   key={stat.label}
