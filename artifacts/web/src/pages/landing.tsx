@@ -735,7 +735,7 @@ function HowItWorks() {
         {/* Wide image banner */}
         <div className="relative w-full h-64 sm:h-80 rounded-2xl overflow-hidden">
           <img
-            src="/how-it-works-app.png"
+            src="/how-it-works-real.png"
             alt="Inspector using a tablet to conduct an inspection inside a building"
             className="w-full h-full object-cover object-center"
             style={{ filter: "brightness(0.85) contrast(1.05)" }}
