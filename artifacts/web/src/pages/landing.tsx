@@ -412,21 +412,26 @@ function DefectSection() {
           <img
             src="/defect-contractor-site.png"
             alt="Inspector documenting a structural defect on site using a smartphone"
-            className="w-full h-full object-cover object-center"
-            style={{ filter: "brightness(0.85) contrast(1.05)" }}
+            className="w-full h-full object-cover"
+            style={{ objectPosition: "70% center", filter: "brightness(0.92) contrast(1.06)" }}
           />
+          {/* Horizontal fade — dark left, transparent right */}
           <div
             className="absolute inset-0"
-            style={{ background: "linear-gradient(to top, rgba(11,25,51,0.82) 0%, rgba(11,25,51,0.3) 50%, transparent 100%)" }}
+            style={{ background: "linear-gradient(to right, rgba(11,25,51,0.95) 0%, rgba(11,25,51,0.75) 35%, rgba(11,25,51,0.2) 60%, transparent 80%)" }}
           />
-          <div className="absolute inset-0 flex items-end p-8">
-            <p
-              className="text-white text-xl sm:text-2xl font-semibold max-w-lg leading-snug drop-shadow-sm"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              Find it. Log it.{" "}
-              <span className="text-[#C5D92D]">Close it out.</span>
-            </p>
+          {/* Text centred vertically on the left */}
+          <div className="absolute inset-0 flex items-center px-10">
+            <div className="max-w-xs">
+              <div className="mb-3 h-0.5 w-10 bg-[#C5D92D]" />
+              <p
+                className="text-white text-xl sm:text-2xl font-semibold leading-snug"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                Find it. Log it.{" "}
+                <span className="text-[#C5D92D]">Close it out.</span>
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -732,23 +737,26 @@ function HowItWorks() {
           ))}
         </div>
 
-        {/* Wide image banner */}
-        <div className="relative w-full h-64 sm:h-80 rounded-2xl overflow-hidden">
+        {/* Wide image banner — diagonal split style */}
+        <div className="relative w-full h-64 sm:h-80 rounded-2xl overflow-hidden flex">
+          {/* Photo fills the full frame */}
           <img
             src="/how-it-works-real.png"
             alt="Inspector using a tablet to conduct an inspection inside a building"
-            className="w-full h-full object-cover object-center"
-            style={{ filter: "brightness(0.85) contrast(1.05)" }}
+            className="absolute inset-0 w-full h-full object-cover object-center"
+            style={{ filter: "brightness(0.9) contrast(1.05)" }}
           />
-          {/* Gradient overlay for text legibility */}
+          {/* Dark panel on the left with diagonal right edge */}
           <div
-            className="absolute inset-0"
-            style={{ background: "linear-gradient(to top, rgba(11,25,51,0.82) 0%, rgba(11,25,51,0.3) 50%, transparent 100%)" }}
-          />
-          {/* Overlay text */}
-          <div className="absolute inset-0 flex items-end p-8">
+            className="relative z-10 flex items-center px-8 py-8"
+            style={{
+              width: "48%",
+              background: "linear-gradient(135deg, rgba(11,25,51,0.98) 0%, rgba(11,25,51,0.92) 100%)",
+              clipPath: "polygon(0 0, 100% 0, 82% 100%, 0 100%)",
+            }}
+          >
             <p
-              className="text-white text-xl sm:text-2xl font-semibold max-w-lg leading-snug drop-shadow-sm"
+              className="text-white text-xl sm:text-2xl font-semibold leading-snug pr-8"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               Every inspection.{" "}
