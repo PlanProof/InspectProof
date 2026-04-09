@@ -406,6 +406,25 @@ function DefectSection() {
           </div>
 
         </div>
+
+        {/* Wide image banner */}
+        <div className="relative w-full h-64 sm:h-80 rounded-2xl overflow-hidden mt-16">
+          <img
+            src="/defect-contractor-site.png"
+            alt="Inspector documenting a structural defect on site using a smartphone"
+            className="w-full h-full object-cover object-center"
+            style={{ filter: "brightness(0.68) contrast(1.08)" }}
+          />
+          <div className="absolute inset-0 flex items-end p-8">
+            <p
+              className="text-white text-xl sm:text-2xl font-normal max-w-lg leading-snug"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              Find it. Log it.{" "}
+              <span className="text-[#C5D92D]">Close it out.</span>
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -712,8 +731,8 @@ function HowItWorks() {
         {/* Wide image banner */}
         <div className="relative w-full h-64 sm:h-80 rounded-2xl overflow-hidden">
           <img
-            src="/how-it-works-site.jpg"
-            alt="Building inspector checking reinforcement on a construction site"
+            src="/how-it-works-workflow.png"
+            alt="Professionals reviewing inspection reports and compliance data"
             className="w-full h-full object-cover object-center"
             style={{ filter: "brightness(0.72) contrast(1.08)" }}
           />

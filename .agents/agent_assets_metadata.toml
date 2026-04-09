@@ -6,6 +6,18 @@ uri = "file://artifacts/web/public/hero-construction-tablet.png"
 type = "image"
 title = "inspector tablet construction site hero"
 
+[[generated]]
+id = "SL7sHzlTp3hbcFVIUFYxw"
+uri = "file://artifacts/web/public/how-it-works-workflow.png"
+type = "image"
+title = "professionals reviewing inspection report laptop office"
+
+[[generated]]
+id = "2dfdOWMjQ5Qgh-14ym58Q"
+uri = "file://artifacts/web/public/defect-contractor-site.png"
+type = "image"
+title = "inspector documenting defect smartphone construction site"
+
 [[outputs]]
 id = "NigCnwbjIa0sY-tqzilrl"
 uri = "file://attached_assets/stock_images/engineer_tablet_site_1.jpg"
