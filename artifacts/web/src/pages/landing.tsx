@@ -284,96 +284,136 @@ const PROFESSIONALS = [
     role: "Building Surveyors",
     description:
       "Manage the full statutory inspection lifecycle from a single platform. InspectProof gives building surveyors a professional system for issuing compliant inspection certificates, managing hold points and delivering client-ready reports — from minor works to complex Class 2–9 developments.",
-    bullets: [
-      "NCC and BCA-aligned inspection checklists",
-      "Statutory hold point and mandatory inspection management",
-      "Occupation and compliance certificate documentation",
-      "Client-facing PDF report and certificate delivery",
-    ],
+    checklistPreview: {
+      templateName: "Frame Inspection — Class 1 Dwelling",
+      items: [
+        "Photograph overall frame from each elevation before inspection commences",
+        "Verify frame layout and overall dimensions match endorsed construction drawings",
+        "Confirm bottom plate hold-down bolts installed at correct spacing and kN capacity — NCC HP3.4.4",
+        "Wall bracing type, location and nail pattern match the endorsed bracing layout plan",
+        "Verify each truss connected to top plate with engineer-specified strap — NCC HP3.4.4",
+        "Check structural members for unauthorised notching or drilling by plumbing and electrical trades",
+      ],
+    },
   },
   {
     icon: Building2,
     role: "Structural Engineers",
     description:
       "Document structural inspections at every stage — from footing inspections to final frame. InspectProof ensures your sign-off is backed by complete, timestamped evidence that stands up to scrutiny.",
-    bullets: [
-      "Stage-by-stage structural inspection records",
-      "Photo evidence attached to each inspection item",
-      "Non-conformance and hold point management",
-      "Engineer certification report export",
-    ],
+    checklistPreview: {
+      templateName: "Frame Inspection — Structural Engineer",
+      items: [
+        "Stud spacing, size and grade match structural drawings throughout",
+        "All lintels, beams and posts are correct size, species and grade",
+        "Tie-downs, hold-downs and brackets installed per engineer's connection schedule",
+        "Diagonal bracing or structural sheathing installed and fixed per drawings",
+        "Roof trusses or rafters bear correctly on wall plates and are braced per drawings",
+        "Frame inspection certificate issued after satisfactory inspection",
+      ],
+    },
   },
   {
     icon: Droplets,
     role: "Plumbing Inspectors",
     description:
       "Carry out plumbing inspections with purpose-built checklists covering AS/NZS standards. Issue plumbing compliance certificates from the field, without the paperwork.",
-    bullets: [
-      "Plumbing compliance certificate templates",
-      "AS/NZS and state regulation aligned checklists",
-      "Pressure test and fixture inspection records",
-      "Geocoded inspection reports for regulatory lodgement",
-    ],
+    checklistPreview: {
+      templateName: "Rough-In Plumbing Inspection",
+      items: [
+        "Correct pipe material, class and jointing method used for each application — AS/NZS 3500.1",
+        "Waste lines fall minimum 1:40 (2.5%) for horizontal pipes — AS/NZS 3500.2",
+        "Vent pipes installed to correct height and diameter — not blocked by insulation",
+        "All floor and wall penetrations sealed against vermin and fire-rated where required",
+        "Air or water pressure test conducted on concealed supply lines — no pressure drop",
+        "Rough-in inspection certificate completed and signed",
+      ],
+    },
   },
   {
     icon: HardHat,
     role: "Builders",
     description:
       "Take control of quality on-site without the paperwork. InspectProof gives builders a structured way to record quality checks at every stage, flag non-conformances and maintain a complete audit trail before handover.",
-    bullets: [
-      "Stage-based quality control checklists",
-      "Non-conformance flagging and resolution tracking",
-      "Photo evidence linked to each inspection item",
-      "Pre-handover inspection records for clients",
-    ],
+    checklistPreview: {
+      templateName: "Defect Inspection",
+      items: [
+        "Walls — painting complete, no drips, runs, missed patches or substrate visible",
+        "Ceilings — no cracking, staining, cornice gaps or paint defects",
+        "All doors operate freely, latch correctly and are hung square without binding",
+        "Kitchen and laundry cabinetry level, secure, soft-close hinges operational",
+        "Tiles — grout lines consistent, no hollow-sounding tiles, no cracking or lippage",
+        "Waterproofing visible below tiles in shower recess — no silicone gaps or movement",
+      ],
+    },
   },
   {
     icon: ClipboardCheck,
     role: "Site Supervisors",
     description:
       "Keep every trade and inspection on track from one place. Schedule inspections, log daily observations, manage hold points and ensure nothing slips through the cracks during construction.",
-    bullets: [
-      "Daily run sheet scheduling and management",
-      "Hold point and inspection gate management",
-      "Daily site diary and observation logging",
-      "Real-time progress visibility across all trades",
-    ],
+    checklistPreview: {
+      templateName: "Daily Site Inspection — Site Supervisor",
+      items: [
+        "Site entry is controlled — hoarding, gates and signage in place and undamaged",
+        "All workers on site wearing required PPE — hard hats, high-vis, safety boots",
+        "All open edges, excavations and floor voids are barricaded or covered — WHS Reg s225",
+        "Mobile plant operating safely — spotters used where pedestrian/plant interaction exists",
+        "Site conditions assessed for high wind, lightning or extreme heat risk",
+        "Work progressing in line with programme — delays or issues noted",
+      ],
+    },
   },
   {
     icon: ShieldAlert,
     role: "WHS Officers",
     description:
       "Document safety inspections and hazard assessments in the field with the same rigour as any compliance inspection. Raise issues instantly, track corrective actions and produce audit-ready WHS records.",
-    bullets: [
-      "Safety inspection checklists aligned to WHS Act",
-      "Hazard and incident reporting with photo evidence",
-      "Corrective action tracking and close-out",
-      "Audit-ready safety records and reports",
-    ],
+    checklistPreview: {
+      templateName: "Site Safety Audit — WHS Officer",
+      items: [
+        "WHS Management Plan current, signed by PCBU and accessible on site — WHS Reg s293",
+        "Emergency response plan posted prominently — assembly point clearly marked",
+        "Edge protection, scaffolding or personal fall arrest in use at all work at heights >2m",
+        "All excavations >1.5m shored, battered or benched — no unprotected workers below",
+        "SWMS in place for all high-risk construction work — reviewed and signed by workers",
+        "Adequate first aid kit available and restocked — first aid officer identified",
+      ],
+    },
   },
   {
     icon: Home,
     role: "Pre-Purchase Inspectors",
     description:
       "Deliver professional building inspection reports faster than ever. Use purpose-built checklists, capture photo evidence on-site and generate branded client reports before you leave the property.",
-    bullets: [
-      "Residential and commercial inspection templates",
-      "Branded PDF report generation from the field",
-      "Photo markup and annotation tools",
-      "Client delivery direct from the app",
-    ],
+    checklistPreview: {
+      templateName: "Pre-Purchase Building Inspection — AS 4349.1",
+      items: [
+        "Roof covering — tiles, metal or membrane in good condition; no slipped or missing materials",
+        "Roof space inspected — no active leaks, pest damage, missing insulation or structural concerns",
+        "External walls — no significant cracking, moisture penetration, spalling or damage",
+        "Internal walls and ceilings — no significant cracking, damp staining or structural movement",
+        "Bathrooms and laundry — no evidence of leaks, water damage or failed waterproofing",
+        "Overall condition assessment and major defects summary completed per AS 4349.1",
+      ],
+    },
   },
   {
     icon: Flame,
     role: "Fire Safety Engineers",
     description:
       "Conduct fire safety inspections, document passive and active fire system compliance and issue fire safety certificates — all from a platform built for the rigour of Australian fire safety standards.",
-    bullets: [
-      "Fire safety system inspection checklists",
-      "Passive and active fire protection verification",
-      "Annual fire safety statement support",
-      "Non-conformance and rectification tracking",
-    ],
+    checklistPreview: {
+      templateName: "Fire Safety Systems Inspection",
+      items: [
+        "Smoke detection system covers all required areas — no zone gaps — AS 1670.1",
+        "Fire alarm panel operational — no faults, monitored by approved monitoring company",
+        "Sprinkler control valve open and tagged — flow test confirms adequate pressure and flow",
+        "Fire and smoke dampers in HVAC actuated correctly in test mode — AS 1682.2",
+        "Fire-rated walls, doors and penetration seals intact — no holes in rated construction",
+        "Fire systems commissioning report and Essential Safety Measures schedule prepared",
+      ],
+    },
   },
 ];
 
@@ -436,15 +476,30 @@ function Professionals() {
               Get Started <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-          <div className="flex flex-col items-center justify-center">
-            <ul className="space-y-4">
-              {p.bullets.map((b) => (
-                <li key={b} className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-[#C5D92D]" />
-                  <span className="text-white/70 text-sm leading-relaxed">{b}</span>
-                </li>
-              ))}
-            </ul>
+          <div className="w-full">
+            <div className="rounded-xl border border-white/10 bg-[#0B1933]/60 overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-white/5">
+                <CheckCircle2 className="h-4 w-4 text-[#C5D92D] shrink-0" />
+                <span className="text-xs font-semibold text-white/80 tracking-wide truncate">
+                  {p.checklistPreview.templateName}
+                </span>
+              </div>
+              <ul className="divide-y divide-white/5">
+                {p.checklistPreview.items.map((item) => (
+                  <li key={item} className="flex items-start gap-3 px-4 py-3">
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#C5D92D]/15 border border-[#C5D92D]/40">
+                      <CheckCircle2 className="h-3 w-3 text-[#C5D92D]" />
+                    </div>
+                    <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
+                      <span className="text-white/65 text-xs leading-relaxed">{item}</span>
+                      <span className="shrink-0 rounded-full bg-[#C5D92D]/15 px-2 py-0.5 text-[10px] font-semibold text-[#C5D92D] border border-[#C5D92D]/30">
+                        Pass
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       </div>
