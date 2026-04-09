@@ -50,7 +50,7 @@ const AVATAR_COLORS = [
 
 const ROLE_MAP: Record<string, string> = {
   admin:              "Owner",
-  certifier:          "Inspector",
+  certifier:          "Building Certifier",
   inspector:          "Inspector",
   building_inspector: "Inspector",
   engineer:           "Inspector",
@@ -91,20 +91,22 @@ function apiUserToMember(u: any): TeamMember {
   };
 }
 
-const ROLES = ["Inspector", "Manager", "Staff"];
-const ADD_MEMBER_ROLES = ["Inspector", "Manager", "Staff"];
+const ROLES = ["Building Certifier", "Inspector", "Manager", "Staff"];
+const ADD_MEMBER_ROLES = ["Building Certifier", "Inspector", "Manager", "Staff"];
 
 const ROLE_REVERSE: Record<string, string> = {
-  Inspector: "inspector",
-  Manager:   "supervisor",
-  Staff:     "staff",
+  "Building Certifier": "certifier",
+  Inspector:            "inspector",
+  Manager:              "supervisor",
+  Staff:                "staff",
 };
 
 const ROLE_BADGE: Record<string, string> = {
-  Owner:     "bg-amber-50 text-amber-700 border-amber-200",
-  Manager:   "bg-violet-50 text-violet-700 border-violet-200",
-  Inspector: "bg-blue-50 text-blue-700 border-blue-200",
-  Staff:     "bg-muted text-muted-foreground border-muted/60",
+  Owner:               "bg-amber-50 text-amber-700 border-amber-200",
+  "Building Certifier":"bg-emerald-50 text-emerald-700 border-emerald-200",
+  Manager:             "bg-violet-50 text-violet-700 border-violet-200",
+  Inspector:           "bg-blue-50 text-blue-700 border-blue-200",
+  Staff:               "bg-muted text-muted-foreground border-muted/60",
 };
 
 function apiBase() {
