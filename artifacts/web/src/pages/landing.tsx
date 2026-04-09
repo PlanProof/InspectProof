@@ -413,11 +413,15 @@ function DefectSection() {
             src="/defect-contractor-site.png"
             alt="Inspector documenting a structural defect on site using a smartphone"
             className="w-full h-full object-cover object-center"
-            style={{ filter: "brightness(0.68) contrast(1.08)" }}
+            style={{ filter: "brightness(0.85) contrast(1.05)" }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{ background: "linear-gradient(to top, rgba(11,25,51,0.82) 0%, rgba(11,25,51,0.3) 50%, transparent 100%)" }}
           />
           <div className="absolute inset-0 flex items-end p-8">
             <p
-              className="text-white text-xl sm:text-2xl font-normal max-w-lg leading-snug"
+              className="text-white text-xl sm:text-2xl font-semibold max-w-lg leading-snug drop-shadow-sm"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               Find it. Log it.{" "}
@@ -732,14 +736,19 @@ function HowItWorks() {
         <div className="relative w-full h-64 sm:h-80 rounded-2xl overflow-hidden">
           <img
             src="/how-it-works-workflow.png"
-            alt="Professionals reviewing inspection reports and compliance data"
+            alt="Inspector using a tablet to conduct an inspection inside a building"
             className="w-full h-full object-cover object-center"
-            style={{ filter: "brightness(0.72) contrast(1.08)" }}
+            style={{ filter: "brightness(0.85) contrast(1.05)" }}
+          />
+          {/* Gradient overlay for text legibility */}
+          <div
+            className="absolute inset-0"
+            style={{ background: "linear-gradient(to top, rgba(11,25,51,0.82) 0%, rgba(11,25,51,0.3) 50%, transparent 100%)" }}
           />
           {/* Overlay text */}
           <div className="absolute inset-0 flex items-end p-8">
             <p
-              className="text-white text-xl sm:text-2xl font-normal max-w-lg leading-snug"
+              className="text-white text-xl sm:text-2xl font-semibold max-w-lg leading-snug drop-shadow-sm"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
               Every inspection.{" "}
