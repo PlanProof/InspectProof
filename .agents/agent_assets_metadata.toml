@@ -59,3 +59,9 @@ id = "rNlkBqZvcUcOdnYkyjbAW"
 uri = "file://attached_assets/stock_images/inspector_digital_3.jpg"
 type = "image"
 title = "building inspector with digital device"
+
+[[outputs]]
+id = "pHpGmGbTxqBYgQjTD1uR0"
+uri = "file://attached_assets/generated_videos/inspector_tablet_checklist_construction_site.mp4"
+type = "video"
+title = "InspectProof — Hero Video Clip"
