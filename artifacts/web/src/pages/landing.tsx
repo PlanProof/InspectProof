@@ -766,8 +766,9 @@ function HowItWorks() {
               className="text-white text-xl sm:text-2xl font-semibold leading-snug pr-8"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
-              Every inspection.{" "}
-              <span className="text-[#C5D92D]">Every record. Every time.</span>
+              Every inspection.<br />
+              Every record.<br />
+              <span className="text-[#C5D92D]">Every time.</span>
             </p>
           </div>
         </div>
