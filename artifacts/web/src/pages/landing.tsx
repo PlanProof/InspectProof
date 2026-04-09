@@ -169,8 +169,8 @@ function Hero() {
             {/* Bottom gradient */}
             <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#0B1933] to-transparent z-10" />
             <img
-              src="/hero-construction.jpg"
-              alt="Construction professional on site"
+              src="/hero-construction-tablet.png"
+              alt="Construction professional reviewing inspection on a tablet"
               className="absolute inset-0 w-full h-full object-cover object-center"
               style={{ filter: "brightness(0.75) contrast(1.05)" }}
             />

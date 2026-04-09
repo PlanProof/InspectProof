@@ -1,0 +1,61 @@
+uploads = []
+
+[[generated]]
+id = "Kug8cypdtVvNDoGP2w-j3"
+uri = "file://artifacts/web/public/hero-construction-tablet.png"
+type = "image"
+title = "inspector tablet construction site hero"
+
+[[outputs]]
+id = "NigCnwbjIa0sY-tqzilrl"
+uri = "file://attached_assets/stock_images/engineer_tablet_site_1.jpg"
+type = "image"
+title = "engineer using tablet on construction site"
+
+[[outputs]]
+id = "NY0nHOYsz9CedR1KL0ahS"
+uri = "file://attached_assets/stock_images/engineer_tablet_site_2.jpg"
+type = "image"
+title = "engineer using tablet on construction site"
+
+[[outputs]]
+id = "DNlfssxXOsbk6fxGIFLhS"
+uri = "file://attached_assets/stock_images/engineer_tablet_site_3.jpg"
+type = "image"
+title = "engineer using tablet on construction site"
+
+[[outputs]]
+id = "C232ROoNKKG1mqtvVv6Iw"
+uri = "file://attached_assets/stock_images/tablet_construction_1.jpg"
+type = "image"
+title = "man using tablet at construction site"
+
+[[outputs]]
+id = "B_Op7-V7UiOHmXpGjt7iZ"
+uri = "file://attached_assets/stock_images/tablet_construction_2.jpg"
+type = "image"
+title = "man using tablet at construction site"
+
+[[outputs]]
+id = "Ja7-g1mQeVkUVrrMUtksV"
+uri = "file://attached_assets/stock_images/tablet_construction_3.jpg"
+type = "image"
+title = "man using tablet at construction site"
+
+[[outputs]]
+id = "8JhRgNbrGrTYkPJa_lumH"
+uri = "file://attached_assets/stock_images/inspector_digital_1.jpg"
+type = "image"
+title = "building inspector with digital device"
+
+[[outputs]]
+id = "TKlPHOMBnHpUY9kq2HV7P"
+uri = "file://attached_assets/stock_images/inspector_digital_2.jpg"
+type = "image"
+title = "building inspector with digital device"
+
+[[outputs]]
+id = "rNlkBqZvcUcOdnYkyjbAW"
+uri = "file://attached_assets/stock_images/inspector_digital_3.jpg"
+type = "image"
+title = "building inspector with digital device"
