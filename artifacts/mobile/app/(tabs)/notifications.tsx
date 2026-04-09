@@ -8,6 +8,7 @@ import {
   Switch,
 } from "react-native";
 import { router } from "expo-router";
+import { safeBack } from "@/constants/routes";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -64,7 +65,7 @@ export default function NotificationsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack("/(tabs)/more")}
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
         >
           <Feather name="chevron-left" size={22} color={Colors.primary} />

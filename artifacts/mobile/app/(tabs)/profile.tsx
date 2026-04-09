@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
 } from "react-native";
 import { router } from "expo-router";
+import { safeBack } from "@/constants/routes";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -165,7 +166,7 @@ export default function ProfileScreen() {
       if (!r.ok) { setError(data.message ?? "Failed to save."); return; }
       await refreshUser();
       Alert.alert("Saved", "Your profile has been updated.", [
-        { text: "OK", onPress: () => router.back() },
+        { text: "OK", onPress: () => safeBack("/(tabs)/settings") },
       ]);
     } catch {
       setError("Network error. Please try again.");
@@ -179,7 +180,7 @@ export default function ProfileScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.header, { paddingTop: insets.top + WEB_TOP + 16 }]}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable onPress={() => safeBack("/(tabs)/settings")} style={styles.backBtn}>
           <Feather name="chevron-left" size={22} color={Colors.text} />
         </Pressable>
         <Text style={styles.title}>Edit Profile</Text>

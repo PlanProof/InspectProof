@@ -340,6 +340,14 @@ router.patch("/:id", requireAuth, async (req, res) => {
       }
     }
 
+    // Explicitly block any attempt to mutate org-linkage or privilege fields via user-supplied body.
+    // adminUserId must never be changed by a non-platform-admin (even self-update) to prevent
+    // org-hijacking via the public PATCH endpoint.
+    if (req.body.adminUserId !== undefined && !caller.isAdmin) {
+      res.status(403).json({ error: "forbidden", message: "You do not have permission to change organisation linkage." });
+      return;
+    }
+
     const { phone, firstName, lastName, role, signatureUrl, profession, licenceNumber,
             companyName, isActive, userType, permissions } = req.body;
 

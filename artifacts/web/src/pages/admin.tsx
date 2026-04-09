@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   Users, BarChart3, Shield, AlertCircle, CheckCircle2,
-  ChevronDown, ChevronUp, Edit2, Search, Trash2, UserPlus,
+  ChevronDown, ChevronUp, ChevronLeft, Edit2, Search, Trash2, UserPlus,
   Package, X, Plus, GripVertical, Save,
   DollarSign, TrendingUp, TrendingDown, CreditCard,
   Calendar, ExternalLink, AlertOctagon, Activity,
@@ -980,6 +980,19 @@ export default function Admin() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
+
+        {/* ── Breadcrumb ── */}
+        <nav className="flex items-center gap-1.5 text-sm text-gray-400 mb-6">
+          <button
+            onClick={() => setLocation("/dashboard")}
+            className="flex items-center gap-1 hover:text-gray-600 transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Dashboard
+          </button>
+          <span>/</span>
+          <span className="text-gray-600 font-medium">Admin</span>
+        </nav>
 
         {/* ── Users Tab ── */}
         {tab === "users" && (

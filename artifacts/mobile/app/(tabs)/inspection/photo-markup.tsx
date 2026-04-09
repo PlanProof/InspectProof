@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { GestureDetector, Gesture, GestureHandlerRootView } from "react-native-gesture-handler";
 import { useLocalSearchParams, router } from "expo-router";
+import { safeBack } from "@/constants/routes";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { Feather } from "@expo/vector-icons";
@@ -142,7 +143,7 @@ export default function PhotoMarkupScreen() {
         },
       });
     } else {
-      router.back();
+      safeBack("/(tabs)/inspections");
     }
   }, [inspectionId, reopenItemId]);
 

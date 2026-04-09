@@ -574,10 +574,28 @@ router.patch("/notification-prefs", async (req, res) => {
     const { userId, valid } = decodeSessionToken(authHeader.slice(7));
     if (!valid) { res.status(401).json({ error: "unauthorized" }); return; }
 
+    // Whitelist only known boolean notification preference keys to prevent arbitrary field injection.
+    const ALLOWED_PREF_KEYS = new Set(["emailSummary", "emailDefects", "emailAssignments", "pushCritical", "pushCompletions", "pushReminders", "reportReady", "weeklyDigest"]);
+
+    // Read and MERGE into existing prefs — do NOT replace the whole JSON blob.
+    // Other keys (e.g. inspectionRemindersEnabled, inspectionReminderLeadDays) are written
+    // by the organisation settings endpoint and must survive notification-prefs updates.
+    const [existingRow] = await db.select({ notificationPrefs: usersTable.notificationPrefs })
+      .from(usersTable).where(eq(usersTable.id, userId));
+    const existing: Record<string, unknown> = existingRow?.notificationPrefs
+      ? (() => { try { return JSON.parse(existingRow.notificationPrefs); } catch { return {}; } })()
+      : {};
+
+    for (const [key, val] of Object.entries(req.body)) {
+      if (ALLOWED_PREF_KEYS.has(key) && typeof val === "boolean") {
+        existing[key] = val;
+      }
+    }
+
     await db.update(usersTable)
-      .set({ notificationPrefs: JSON.stringify(req.body), updatedAt: new Date() })
+      .set({ notificationPrefs: JSON.stringify(existing), updatedAt: new Date() })
       .where(eq(usersTable.id, userId));
-    res.json({ success: true });
+    res.json({ success: true, prefs: existing });
   } catch (err) {
     req.log.error({ err }, "Update notification prefs error");
     res.status(500).json({ error: "internal_error" });

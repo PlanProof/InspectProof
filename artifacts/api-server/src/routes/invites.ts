@@ -325,12 +325,41 @@ router.post("/accept", async (req, res) => {
       return;
     }
 
-    // Check email not already taken
+    // Check email not already taken.
+    // IMPORTANT: we do NOT mark the token as used here — the conflict is not a
+    // successful acceptance, so the token stays valid for the intended recipient.
     const existing = await db.select().from(usersTable).where(eq(usersTable.email, invite.email));
     if (existing.length > 0) {
-      // Mark token used to clean up
-      await db.update(invitationsTable).set({ usedAt: new Date() }).where(eq(invitationsTable.token, token));
-      res.status(409).json({ error: "conflict", message: "An account with this email already exists. Please sign in." });
+      const existingUser = existing[0];
+      // Cross-org conflict: email belongs to a different organisation → different message.
+      const sameOrg = existingUser.adminUserId === invite.invitedById
+        || existingUser.id === parseInt(invite.invitedById);
+      if (sameOrg) {
+        // Already a member of this org — direct them to sign in.
+        res.status(409).json({
+          error: "already_member",
+          message: "You are already a member of this organisation. Please sign in to your existing account.",
+        });
+      } else {
+        // Account exists in a different organisation — prevent cross-org join.
+        res.status(409).json({
+          error: "conflict",
+          message: "An account with this email already exists in a different organisation. Please contact support if you need to switch organisations.",
+        });
+      }
+      return;
+    }
+
+    // ── Verify the inviting organisation still exists and is active ──────────────
+    // Guard against org-linkage to deleted or deactivated admin accounts.
+    // If the org owner no longer exists or is inactive, the invite is no longer valid.
+    const adminRows = await db.select().from(usersTable).where(eq(usersTable.id, parseInt(invite.invitedById)));
+    const adminUser = adminRows[0];
+    if (!adminUser || !adminUser.isActive) {
+      res.status(410).json({
+        error: "org_unavailable",
+        message: "The organisation that sent this invitation is no longer available. Please contact support.",
+      });
       return;
     }
 
@@ -340,28 +369,25 @@ router.post("/accept", async (req, res) => {
     //   "inspector" = mobile app only → mobileOnly: true
     //   "user"      = web only        → mobileOnly: false
     //   "both"      = full access     → mobileOnly: false
-    const adminRows = await db.select().from(usersTable).where(eq(usersTable.id, parseInt(invite.invitedById)));
-    const adminUser = adminRows[0];
-    const adminPlan = adminUser?.plan ?? "free_trial";
+    const adminPlan = adminUser.plan ?? "free_trial";
     const planForcesAppOnly = isMobileOnly(adminPlan);
     const inviteUserType = invite.userType ?? "both";
     const mobileOnly = planForcesAppOnly || inviteUserType === "inspector";
 
-    // Re-check seat limit at accept time using adminUserId linkage (not companyName)
-    if (adminUser) {
-      const limits = getLimits(adminPlan);
-      if (limits.maxTeamMembers !== null) {
-        const [{ value: currentMemberCount }] = await db
-          .select({ value: count() })
-          .from(usersTable)
-          .where(eq(usersTable.adminUserId, String(adminUser.id)));
-        if (currentMemberCount >= limits.maxTeamMembers) {
-          res.status(402).json({
-            error: "team_limit_reached",
-            message: `The organisation's ${limits.label} plan is at its team member limit (${limits.maxTeamMembers}). Please ask your admin to upgrade before accepting this invitation.`,
-          });
-          return;
-        }
+    // Re-check seat limit at accept time using adminUserId linkage (not companyName).
+    // adminUser is guaranteed non-null here (validated above).
+    const limits = getLimits(adminPlan);
+    if (limits.maxTeamMembers !== null) {
+      const [{ value: currentMemberCount }] = await db
+        .select({ value: count() })
+        .from(usersTable)
+        .where(eq(usersTable.adminUserId, String(adminUser.id)));
+      if (currentMemberCount >= limits.maxTeamMembers) {
+        res.status(402).json({
+          error: "team_limit_reached",
+          message: `The organisation's ${limits.label} plan is at its team member limit (${limits.maxTeamMembers}). Please ask your admin to upgrade before accepting this invitation.`,
+        });
+        return;
       }
     }
 

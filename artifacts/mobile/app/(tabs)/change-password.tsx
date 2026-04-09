@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
 } from "react-native";
 import { router } from "expo-router";
+import { safeBack } from "@/constants/routes";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -81,7 +82,7 @@ export default function ChangePasswordScreen() {
         return;
       }
       Alert.alert("Password changed", "Your password has been updated successfully.", [
-        { text: "OK", onPress: () => router.back() },
+        { text: "OK", onPress: () => safeBack("/(tabs)/settings") },
       ]);
     } catch {
       setError("Network error. Please try again.");
@@ -104,7 +105,7 @@ export default function ChangePasswordScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={[styles.header, { paddingTop: insets.top + WEB_TOP + 16 }]}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable onPress={() => safeBack("/(tabs)/settings")} style={styles.backBtn}>
           <Feather name="chevron-left" size={22} color={Colors.text} />
         </Pressable>
         <Text style={styles.title}>Change Password</Text>

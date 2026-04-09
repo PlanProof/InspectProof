@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { safeBack } from "@/constants/routes";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
@@ -85,7 +86,7 @@ export default function AnalyticsScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable onPress={() => safeBack("/(tabs)/more")} style={styles.backBtn}>
           <Feather name="chevron-left" size={22} color={Colors.text} />
         </Pressable>
         <Text style={styles.title}>Analytics & Insights</Text>

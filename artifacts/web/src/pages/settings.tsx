@@ -184,6 +184,17 @@ export default function Settings() {
 
   const canManageBilling = authUser?.isCompanyAdmin || authUser?.isAdmin;
 
+  // If a non-billing user lands directly on ?tab=billing, redirect to profile tab.
+  // Also normalise the URL query so it stays consistent with what the UI shows.
+  useEffect(() => {
+    if (activeTab === "billing" && canManageBilling === false) {
+      setActiveTab("profile");
+      const params = new URLSearchParams(window.location.search);
+      params.set("tab", "profile");
+      window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    }
+  }, [activeTab, canManageBilling]);
+
   useEffect(() => {
     apiFetch("/api/auth/me").then(setUser).catch(() => {}).finally(() => setLoadingUser(false));
   }, [token]);
@@ -236,7 +247,12 @@ export default function Settings() {
           {TABS.filter(t => t.id !== "billing" || canManageBilling).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setActiveTab(id)}
+              onClick={() => {
+                setActiveTab(id);
+                const params = new URLSearchParams(window.location.search);
+                params.set("tab", id);
+                window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+              }}
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left",
                 activeTab === id

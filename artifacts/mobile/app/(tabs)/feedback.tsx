@@ -11,6 +11,7 @@ import {
   Platform,
 } from "react-native";
 import { router } from "expo-router";
+import { safeBack } from "@/constants/routes";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
@@ -75,7 +76,7 @@ export default function FeedbackScreen() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => safeBack("/(tabs)/more")}
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
           hitSlop={12}
         >
@@ -194,7 +195,7 @@ export default function FeedbackScreen() {
             </Pressable>
           )}
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => safeBack("/(tabs)/more")}
             style={({ pressed }) => [styles.btnGhost, pressed && { opacity: 0.6 }]}
           >
             <Text style={styles.btnGhostText}>Back to More</Text>
