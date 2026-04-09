@@ -18,6 +18,12 @@ uri = "file://artifacts/web/public/defect-contractor-site.png"
 type = "image"
 title = "inspector documenting defect smartphone construction site"
 
+[[generated]]
+id = "Ui8IfclLsBEui5AIFwPsX"
+uri = "file://artifacts/web/public/how-it-works-tablet.png"
+type = "image"
+title = "inspector tablet inspectproof app checklist building interior"
+
 [[outputs]]
 id = "NigCnwbjIa0sY-tqzilrl"
 uri = "file://attached_assets/stock_images/engineer_tablet_site_1.jpg"
