@@ -92,7 +92,7 @@ export default function Compliance() {
   const { data: dash } = useGetDashboardAnalytics();
   const { data: trends } = useGetAnalyticsTrends();
 
-  const complianceRate = trends?.complianceRate ?? dash?.complianceRate ?? null;
+  const complianceRate = trends?.complianceRate ?? (dash as any)?.complianceRate ?? null;
   const openIssues = dash?.openIssues ?? 0;
   const totalInspections = dash?.totalInspections ?? 0;
 

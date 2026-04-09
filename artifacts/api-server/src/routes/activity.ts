@@ -51,8 +51,8 @@ router.get("/", optionalAuth, async (req, res) => {
       action: l.action,
       description: l.description,
       userId: l.userId,
-      userName: userMap[l.userId]?.name ?? "System",
-      userEmail: userMap[l.userId]?.email ?? null,
+      userName: l.userId != null ? (userMap[l.userId]?.name ?? "System") : "System",
+      userEmail: l.userId != null ? (userMap[l.userId]?.email ?? null) : null,
       createdAt: l.createdAt instanceof Date ? l.createdAt.toISOString() : l.createdAt,
     }));
 

@@ -439,7 +439,7 @@ export default function Issues() {
   const openCount = issues?.filter(i => i.status === "open").length ?? 0;
   const inProgressCount = issues?.filter(i => i.status === "in_progress").length ?? 0;
   const pendingReviewCount = issues?.filter(i => i.status === "pending_review").length ?? 0;
-  const closedCount = issues?.filter(i => i.status === "closed" || i.status === "resolved").length ?? 0;
+  const closedCount = issues?.filter(i => i.status === "closed" || (i.status as string) === "resolved").length ?? 0;
   const overdueCount = issues?.filter(i => {
     if (!i.dueDate || ["closed", "resolved", "rejected"].includes(i.status)) return false;
     return new Date(i.dueDate) < new Date();

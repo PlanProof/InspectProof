@@ -1,9 +1,10 @@
 import crypto from "crypto";
 
-const APP_SECRET = process.env.APP_SECRET || process.env.SESSION_SECRET;
-if (!APP_SECRET) {
+const _SECRET = process.env.APP_SECRET || process.env.SESSION_SECRET;
+if (!_SECRET) {
   throw new Error("APP_SECRET (or SESSION_SECRET) environment variable is required but not set.");
 }
+const APP_SECRET: string = _SECRET;
 
 const SESSION_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
 

@@ -287,6 +287,7 @@ function SignInForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
                 className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary pr-10"
               />
               <button
@@ -448,6 +449,7 @@ function AccountStep({
                 onChange={handle("password")}
                 required
                 minLength={8}
+                autoComplete="new-password"
                 className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary pr-10"
               />
               <button

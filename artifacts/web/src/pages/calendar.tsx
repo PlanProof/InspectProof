@@ -87,16 +87,17 @@ const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, "default" | "success" | "warning" | "secondary" | "destructive"> = {
-    scheduled: "secondary",
-    in_progress: "warning",
-    completed: "success",
-    follow_up_required: "destructive",
-    cancelled: "default",
-    overdue: "destructive",
+  const map: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; cls?: string }> = {
+    scheduled:           { variant: "secondary" },
+    in_progress:         { variant: "outline", cls: "border-amber-400 bg-amber-50 text-amber-700" },
+    completed:           { variant: "outline", cls: "border-green-400 bg-green-50 text-green-700" },
+    follow_up_required:  { variant: "destructive" },
+    cancelled:           { variant: "default" },
+    overdue:             { variant: "destructive" },
   };
+  const { variant, cls } = map[status] ?? { variant: "default" };
   return (
-    <Badge variant={map[status] ?? "default"} className="capitalize text-xs">
+    <Badge variant={variant} className={cn("capitalize text-xs", cls)}>
       {status.replace(/_/g, " ")}
     </Badge>
   );
@@ -268,7 +269,7 @@ export default function CalendarPage() {
   const handleView = useCallback((newView: View) => setView(newView), []);
   const handleSelectEvent = useCallback((event: CalendarEvent) => setSelectedEvent(event), []);
 
-  const handleEventDrop: DnDCalendarProps["onEventDrop"] = useCallback(({ event, start }) => {
+  const handleEventDrop: DnDCalendarProps["onEventDrop"] = useCallback(({ event, start }: { event: CalendarEvent; start: Date | string; end: Date | string; isAllDay: boolean; delta: object; resourceId?: string | number }) => {
     // Use local date string to avoid UTC-conversion off-by-one errors
     const newDate = start instanceof Date ? toLocalDateStr(start) : String(start);
     setRescheduleError(null);

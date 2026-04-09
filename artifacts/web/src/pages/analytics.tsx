@@ -46,21 +46,24 @@ export default function Analytics() {
     total: r.total ?? r.count ?? 0,
   }));
 
+  const trendsAny = trends as any;
+  const dashAny = dash as any;
+
   const passFailBreakdown: { name: string; value: number }[] =
-    trends?.passFailBreakdown ?? [];
+    trendsAny?.passFailBreakdown ?? [];
 
   const complianceTrend: { month: string; rate: number }[] =
-    trends?.complianceTrend ?? [];
+    trendsAny?.complianceTrend ?? [];
 
   const issuesBySeverity = (
-    trends?.issuesBySeverity ?? dash?.issuesBySeverity ?? []
+    trendsAny?.issuesBySeverity ?? dashAny?.issuesBySeverity ?? []
   ).map((r: any) => ({
     name: r.name ?? r.severity ?? "Unknown",
     count: r.count ?? 0,
   }));
 
   const complianceRate =
-    trends?.complianceRate ?? dash?.complianceRate ?? null;
+    trends?.complianceRate ?? dashAny?.complianceRate ?? null;
 
   const noInspections = inspectionsByMonth.length === 0;
   const noPassFail = passFailBreakdown.length === 0;
@@ -220,7 +223,7 @@ export default function Analytics() {
                       contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
                     />
                     <Bar dataKey="count" radius={[0, 4, 4, 0]} maxBarSize={30}>
-                      {issuesBySeverity.map((entry, index) => (
+                      {issuesBySeverity.map((entry: { name: string; count: number }, index: number) => (
                         <Cell
                           key={`cell-${index}`}
                           fill={SEVERITY_COLORS[entry.name] ?? "#466DB5"}

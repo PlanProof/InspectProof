@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
@@ -19,7 +20,7 @@ function abbreviateState(name?: string): string {
   return STATE_ABBREVS[lower] ?? name;
 }
 
-router.get("/geocode", async (req, res) => {
+router.get("/geocode", requireAuth, async (req, res) => {
   const q = String(req.query.q ?? "").trim();
   if (q.length < 3) {
     return res.json({ suggestions: [] });

@@ -636,6 +636,9 @@ router.post('/admin/emails/:id/retry', requireAdmin, async (req, res) => {
                 isReassignment: Boolean(metadata.isReassignment),
               }, req.log);
             } else {
+              const reminderType = (metadata.reminderType === "overdue" || metadata.reminderType === "overdue_admin")
+                ? metadata.reminderType as "overdue" | "overdue_admin"
+                : "upcoming";
               sendOk = await sendInspectionReminderEmail({
                 inspectorName: `${inspector.firstName} ${inspector.lastName}`.trim(),
                 inspectorEmail: inspector.email,
@@ -645,6 +648,7 @@ router.post('/admin/emails/:id/retry', requireAdmin, async (req, res) => {
                 scheduledDate: inspection.scheduledDate,
                 scheduledTime: inspection.scheduledTime ?? null,
                 inspectionId: inspection.id,
+                reminderType,
                 daysUntil: typeof metadata.daysUntil === 'number' ? metadata.daysUntil : 1,
               }, req.log);
             }
@@ -886,9 +890,9 @@ router.get('/admin/activity', requireAdmin, async (req, res) => {
         action: l.action,
         description: l.description,
         userId: l.userId,
-        userName: userMap[l.userId]?.name ?? 'System',
-        userEmail: userMap[l.userId]?.email ?? null,
-        orgName: userMap[l.userId]?.orgName ?? null,
+        userName: l.userId != null ? (userMap[l.userId]?.name ?? 'System') : 'System',
+        userEmail: l.userId != null ? (userMap[l.userId]?.email ?? null) : null,
+        orgName: l.userId != null ? (userMap[l.userId]?.orgName ?? null) : null,
         createdAt: l.createdAt instanceof Date ? l.createdAt.toISOString() : l.createdAt,
       })),
       total: Number(total),

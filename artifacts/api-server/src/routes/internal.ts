@@ -70,6 +70,7 @@ router.post("/internal/send-inspection-reminders", requireInternalSecret, async 
         scheduledDate: inspection.scheduledDate,
         scheduledTime: inspection.scheduledTime ?? null,
         inspectionId: inspection.id,
+        reminderType: "upcoming",
         daysUntil: daysAhead,
       }, req.log);
       results.push({ inspectionId: inspection.id, email: inspector.email, status: sent ? "sent" : "failed" });

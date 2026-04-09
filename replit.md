@@ -28,11 +28,11 @@ The project is structured as a pnpm workspace monorepo, comprising three deploya
     - Contractors are managed per-project and globally via a dedicated "Contractor Library" page under organization settings.
     - Public share portal (`/share/:token`) for client access to inspection details.
     - Two-step onboarding process for new users (profile setup and organization details).
-    - Address Autocomplete using Nominatim OpenStreetMap API in the web app.
+    - Address Autocomplete using Mapbox v6 geocoding API (proxied via `/api/geocode` requiring auth) in the web app. Site address in project detail header is a clickable Google Maps link.
     - Inspection Calendar view powered by `react-big-calendar` with various views, color-coding, and filtering.
 
 **Technical Implementations:**
-- **Authentication:** Token-based (JWT) with `req.authUser` for middleware.
+- **Authentication:** Token-based (HMAC-SHA256 signed) with `req.authUser` for middleware. `AuthUser` includes `firstName` and `lastName` populated from the users table.
 - **Authorization:** Granular permissions (`isCompanyAdmin`, `editTemplates`, `addInspectors`, `createProjects`) and plan limits are enforced (e.g., `free_trial`=1, `starter`=3, `professional`=10, `enterprise`=null).
 - **API Server Startup:** Follows a specific order: schema migrations, admin seed, listen on port, then background tasks (templates, Stripe, storage).
 - **Photo Markup:** Mobile SVG free-hand annotations stored as JSON.
@@ -45,6 +45,7 @@ The project is structured as a pnpm workspace monorepo, comprising three deploya
 - **Email System:** Utilizes Resend for transactional emails, logging all sent emails to an `email_logs` table. Supports retry functionality for certain email types via an admin UI. An internal cron endpoint (`/api/internal/send-inspection-reminders`) sends inspection reminders.
 - **Calendar Integration:** Supports per-user OAuth calendar sync with Google and Outlook, integrating inspection events into external calendars.
 - **Database Schema:** Defined using Drizzle, with additional SQL migrations for specific requirements (e.g., `email_verified_at`).
+- **TypeScript Build:** `lib/api-client-react` and `lib/db` are composite packages — run `npx tsc --build` in each when schema changes occur. Stale `dist/` folders cause false TS errors downstream. The web app has zero TS errors after rebuilding both.
 
 ## External Dependencies
 
@@ -53,5 +54,5 @@ The project is structured as a pnpm workspace monorepo, comprising three deploya
 - **Email Service:** Resend (`RESEND_API_KEY`) for all transactional emails.
 - **Payment Gateway:** Stripe (Replit Stripe connector for development, `STRIPE_SECRET_KEY` for production).
 - **Mobile Development:** Expo (`newArchEnabled: false`, Project ID: `b93ea21e-4b89-4be9-9ca7-c37bd022f2aa`).
-- **Address Autocomplete:** Nominatim OpenStreetMap API.
+- **Address Autocomplete:** Mapbox v6 forward geocoding API (`MAPBOX_PUBLIC_KEY` secret), proxied via `GET /api/geocode` (auth required).
 - **Calendar Integration:** Google Calendar API and Microsoft Outlook Calendar API via OAuth.

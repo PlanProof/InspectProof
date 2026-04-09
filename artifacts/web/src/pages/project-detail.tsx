@@ -2121,7 +2121,7 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
 
 function InspectionTypesTab({ projectId }: { projectId: number }) {
   const { data: me } = useGetMe();
-  const discipline = me?.profession ?? null;
+  const discipline = (me as any)?.profession ?? null;
 
   const [types, setTypes] = useState<InspectionTypeRow[]>([]);
   const [loading, setLoading] = useState(true);

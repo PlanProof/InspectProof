@@ -18,8 +18,9 @@ function effectiveAdminId(user: AuthUser): number {
  * Returns true if the requesting user may access a resource created by createdById.
  * Platform admins bypass all checks. Company/team members are scoped to their org.
  */
-async function canAccessProject(createdById: number, user: AuthUser): Promise<boolean> {
+async function canAccessProject(createdById: number | null, user: AuthUser): Promise<boolean> {
   if (user.isAdmin) return true;
+  if (createdById == null) return false;
   const adminId = effectiveAdminId(user);
   if (createdById === user.id || createdById === adminId) return true;
   // Check cross-member: was the resource created by a colleague (same org)?
@@ -477,6 +478,9 @@ router.get("/:id/activity", requireAuth, async (req, res) => {
 router.get("/:id/documents", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+    if (!project) return res.status(404).json({ error: "not_found" });
+    if (!await canAccessProject(project.createdById, req.authUser!)) return res.status(403).json({ error: "forbidden" });
     const docs = await db.select().from(documentsTable)
       .where(eq(documentsTable.projectId, id))
       .orderBy(sql`${documentsTable.folder} ASC, ${documentsTable.name} ASC`);

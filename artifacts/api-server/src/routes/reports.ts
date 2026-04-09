@@ -47,8 +47,9 @@ import {
 import { optionalAuth, requireAuth, type AuthUser } from "../middleware/auth";
 
 /** Returns true if the authenticated user belongs to the same org as the project creator. */
-async function canAccessProjectByCreator(projectCreatedById: number, user: AuthUser): Promise<boolean> {
+async function canAccessProjectByCreator(projectCreatedById: number | null, user: AuthUser): Promise<boolean> {
   if (user.isAdmin) return true;
+  if (projectCreatedById == null) return false;
   const adminId = (user.isAdmin || user.isCompanyAdmin) ? user.id : (user.adminUserId ? parseInt(user.adminUserId) : user.id);
   if (projectCreatedById === user.id || projectCreatedById === adminId) return true;
   const [creator] = await db.select({ adminUserId: usersTable.adminUserId }).from(usersTable).where(eq(usersTable.id, projectCreatedById));

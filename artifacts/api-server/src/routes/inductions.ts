@@ -12,8 +12,9 @@ function effectiveAdminId(user: AuthUser): number {
   return user.adminUserId ? parseInt(user.adminUserId) : user.id;
 }
 
-async function canAccessProject(createdById: number, user: AuthUser): Promise<boolean> {
+async function canAccessProject(createdById: number | null, user: AuthUser): Promise<boolean> {
   if (user.isAdmin) return true;
+  if (createdById == null) return false;
   const adminId = effectiveAdminId(user);
   if (createdById === user.id || createdById === adminId) return true;
   const [creator] = await db

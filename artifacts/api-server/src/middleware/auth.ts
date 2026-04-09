@@ -6,6 +6,8 @@ import { decodeSessionToken } from "../lib/session-token";
 export interface AuthUser {
   id: number;
   email: string;
+  firstName: string;
+  lastName: string;
   role: string;
   isAdmin: boolean;
   isCompanyAdmin: boolean;
@@ -45,6 +47,8 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
           req.authUser = {
             id: users[0].id,
             email: users[0].email,
+            firstName: users[0].firstName,
+            lastName: users[0].lastName,
             role: users[0].role,
             isAdmin: users[0].isAdmin ?? false,
             isCompanyAdmin: users[0].isCompanyAdmin ?? false,
