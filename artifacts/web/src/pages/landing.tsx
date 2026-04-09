@@ -407,18 +407,25 @@ function DefectSection() {
 
         </div>
 
-        {/* Wide image banner */}
-        <div className="relative w-full h-64 sm:h-80 rounded-2xl overflow-hidden mt-16">
+        {/* Wide image banner — fades into section background */}
+        <div
+          className="relative w-full mt-16 overflow-hidden"
+          style={{
+            height: "340px",
+            maskImage: "linear-gradient(to bottom, black 0%, black 55%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 55%, transparent 100%)",
+          }}
+        >
           <img
             src="/defect-contractor-site.png"
             alt="Inspector documenting a structural defect on site using a smartphone"
             className="w-full h-full object-cover"
             style={{ objectPosition: "70% center", filter: "brightness(0.92) contrast(1.06)" }}
           />
-          {/* Horizontal fade — dark left, transparent right */}
+          {/* Horizontal colour overlay so text is readable */}
           <div
             className="absolute inset-0"
-            style={{ background: "linear-gradient(to right, rgba(11,25,51,0.95) 0%, rgba(11,25,51,0.75) 35%, rgba(11,25,51,0.2) 60%, transparent 80%)" }}
+            style={{ background: "linear-gradient(to right, rgba(11,25,51,0.92) 0%, rgba(11,25,51,0.65) 35%, rgba(11,25,51,0.1) 58%, transparent 75%)" }}
           />
           {/* Text centred vertically on the left */}
           <div className="absolute inset-0 flex items-center px-10">
@@ -738,7 +745,7 @@ function HowItWorks() {
         </div>
 
         {/* Wide image banner — diagonal split style */}
-        <div className="relative w-full h-64 sm:h-80 rounded-2xl overflow-hidden flex">
+        <div className="relative w-full h-64 sm:h-80 overflow-hidden flex">
           {/* Photo fills the full frame */}
           <img
             src="/how-it-works-real.png"
