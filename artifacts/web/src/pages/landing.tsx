@@ -22,6 +22,11 @@ import {
   Bell,
   Menu,
   X,
+  Zap,
+  Send,
+  AlertTriangle,
+  CheckCheck,
+  Clock,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -272,6 +277,134 @@ function Features() {
               <p className="text-sm text-gray-500 leading-relaxed">{f.description}</p>
             </div>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DefectSection() {
+  const points = [
+    {
+      icon: Zap,
+      title: "Instant defect reports",
+      description:
+        "The moment a defect is raised during an inspection, a branded defect notice is generated and emailed directly to the nominated contractor — no manual follow-up required.",
+    },
+    {
+      icon: Send,
+      title: "Notify contractors or internal staff",
+      description:
+        "Assign defects to registered contractors, subcontractors or internal team members. Each recipient gets a clear, actionable notice with photos, NCC references and a required completion date.",
+    },
+    {
+      icon: CheckCheck,
+      title: "Track resolution in real time",
+      description:
+        "Monitor defect status — open, in progress, or resolved — from the dashboard. Receive updates when a contractor marks works complete and confirm closure with a follow-up inspection.",
+    },
+    {
+      icon: Clock,
+      title: "Full audit trail",
+      description:
+        "Every defect notice, acknowledgement and resolution is logged against the inspection record. If a dispute arises, the complete evidence chain is on hand.",
+    },
+  ];
+
+  return (
+    <section className="bg-gray-50 py-24">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+
+          {/* Left — copy */}
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#0B1933]/20 bg-[#0B1933]/5 px-4 py-1.5 mb-6">
+              <AlertTriangle className="h-3.5 w-3.5 text-[#0B1933]" />
+              <span className="text-xs font-medium text-[#0B1933] tracking-wide uppercase">
+                Defect & Contractor Management
+              </span>
+            </div>
+            <h2
+              className="text-3xl sm:text-4xl font-normal text-[#0B1933] mb-5 leading-snug"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              Raise a defect.<br />
+              <span className="text-[#466DB5]">The right people are notified instantly.</span>
+            </h2>
+            <p className="text-gray-500 mb-10 leading-relaxed">
+              When a defect is identified on site, InspectProof closes the loop automatically — generating a formal defect notice and dispatching it to the assigned contractor or staff member so nothing falls through the cracks.
+            </p>
+            <div className="space-y-7">
+              {points.map((p) => (
+                <div key={p.title} className="flex gap-4">
+                  <div className="flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-lg bg-[#0B1933]">
+                    <p.icon className="h-4 w-4 text-[#C5D92D]" />
+                  </div>
+                  <div>
+                    <p
+                      className="font-semibold text-[#0B1933] mb-1"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      {p.title}
+                    </p>
+                    <p className="text-sm text-gray-500 leading-relaxed">{p.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right — mockup card */}
+          <div className="relative flex flex-col gap-4">
+            {/* Defect card */}
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-lg p-6">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-50 border border-red-100 shrink-0">
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                </div>
+                <div>
+                  <p className="font-semibold text-[#0B1933] text-sm">Defect Raised — Frame Inspection</p>
+                  <p className="text-xs text-gray-400 mt-0.5">12 Ashgrove Crescent, Brisbane QLD — 9 Apr 2026</p>
+                </div>
+                <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 shrink-0">Open</span>
+              </div>
+              <div className="rounded-lg bg-gray-50 border border-gray-100 p-4 mb-4 text-sm text-gray-600 leading-relaxed">
+                <strong className="text-[#0B1933]">Item:</strong> Diagonal bracing on north elevation non-compliant — bracing length insufficient per engineer's schedule.<br />
+                <span className="text-xs text-gray-400 mt-1 block">NCC ref: AS 1684.2 Cl 8.4 · Risk: Critical · Photo attached</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span>Assigned to:</span>
+                <span className="font-medium text-[#0B1933]">Timber Framing Co. — Mark Sullivan</span>
+              </div>
+            </div>
+
+            {/* Notification sent card */}
+            <div className="rounded-2xl border border-[#466DB5]/30 bg-[#466DB5]/5 shadow p-5 flex items-start gap-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#466DB5] shrink-0">
+                <Send className="h-4 w-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-[#0B1933] text-sm">Defect notice sent</p>
+                <p className="text-xs text-gray-500 mt-0.5">mark.sullivan@timberfaming.com.au · Required by: 16 Apr 2026</p>
+              </div>
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-[#466DB5] shrink-0">
+                <Zap className="h-3 w-3" />
+                Instant
+              </div>
+            </div>
+
+            {/* Resolution card */}
+            <div className="rounded-2xl border border-green-200 bg-green-50 shadow p-5 flex items-start gap-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-green-600 shrink-0">
+                <CheckCheck className="h-4 w-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-[#0B1933] text-sm">Defect resolved &amp; closed</p>
+                <p className="text-xs text-gray-500 mt-0.5">Contractor marked complete · Confirmed by inspector · Logged to audit trail</p>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
@@ -711,6 +844,7 @@ export default function Landing() {
       <Header />
       <Hero />
       <Features />
+      <DefectSection />
       <Professionals />
       <HowItWorks />
       <CTA />
