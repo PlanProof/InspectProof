@@ -175,6 +175,7 @@ interface DocTemplate {
   backgroundImage?: string;
   linkedChecklistIds: number[];
   defaultReportType?: string;
+  discipline?: string | null;
 }
 
 function loadDocTemplates(): DocTemplate[] {
@@ -1354,7 +1355,7 @@ export default function InspectionDetail() {
                   return (
                     <>
                 {/* ── Your Templates section ── */}
-                {docTemplates.length > 0 && (
+                {docTemplates.filter(dt => !dt.discipline || dt.discipline === inspection.checklistTemplateDiscipline).length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Your Templates</span>
@@ -1367,7 +1368,7 @@ export default function InspectionDetail() {
                       </div>
                     )}
                     <div className="space-y-1.5">
-                      {docTemplates.map(dt => {
+                      {docTemplates.filter(dt => !dt.discipline || dt.discipline === inspection.checklistTemplateDiscipline).map(dt => {
                         const isSelected = selectedGenDocTemplateId === String(dt.id);
                         const isLinked = autoLinked && String(autoLinked.id) === String(dt.id);
                         return (
@@ -2412,7 +2413,7 @@ function OverviewTab({
                   className="flex-1 text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
                 >
                   <option value="">— No doc template linked —</option>
-                  {docTemplates.map(dt => (
+                  {docTemplates.filter(dt => !dt.discipline || dt.discipline === inspection.checklistTemplateDiscipline).map(dt => (
                     <option key={dt.id} value={dt.id}>{dt.name}</option>
                   ))}
                 </select>
