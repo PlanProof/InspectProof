@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -758,41 +758,26 @@ export default function Admin() {
   const [nlSending, setNlSending] = useState(false);
   const [nlRightPanel, setNlRightPanel] = useState<"preview" | "history">("history");
 
-  const nlPreviewSrcdoc = useMemo(() => {
-    const BASE_FONT = `'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif`;
-    return `<!DOCTYPE html><html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>${nlSubject || "Newsletter Preview"}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-</head>
-<body style="margin:0;padding:0;background:#f4f6fa;font-family:${BASE_FONT};">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa;padding:32px 0;">
-    <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-        <tr><td style="background:#0B1933;padding:20px 28px;">
-          <table width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td style="vertical-align:middle;"><span style="font-size:18px;font-weight:500;color:#ffffff;letter-spacing:0.02em;">InspectProof</span></td>
-            <td align="right" style="vertical-align:middle;"><span style="font-size:10px;color:#C5D92D;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;">Product Update</span></td>
-          </tr></table>
-        </td></tr>
-        <tr><td style="padding:32px 28px 28px;font-family:${BASE_FONT};">
-          <p style="margin:0 0 12px;font-size:14px;color:#6b7280;">Hi Alex,</p>
-          ${nlBody || '<p style="color:#9ca3af;font-style:italic;">Your email body will appear here\u2026</p>'}
-        </td></tr>
-        <tr><td style="background:#f8fafc;border-top:1px solid #e5e7eb;padding:16px 28px;">
-          <p style="margin:0;font-size:11px;color:#9ca3af;text-align:center;line-height:1.7;">
-            InspectProof \u2014 a product of PlanProof Technologies Pty Ltd<br/>
-            You're receiving this because you opted in to product updates from InspectProof.<br/>
-            <a href="#" style="color:#9ca3af;text-decoration:underline;">Unsubscribe</a>
-          </p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`;
-  }, [nlSubject, nlBody]);
+  const [nlPreviewHtml, setNlPreviewHtml] = useState<string>("");
+  const [nlPreviewLoading, setNlPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    if (nlRightPanel !== "preview") return;
+    const timer = setTimeout(async () => {
+      setNlPreviewLoading(true);
+      try {
+        const r = await fetch(API("/admin/newsletters/preview"), {
+          method: "POST",
+          headers: { ...authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({ bodyHtml: nlBody, firstName: "Alex" }),
+        });
+        if (r.ok) setNlPreviewHtml(await r.text());
+      } catch { /* ignore */ } finally {
+        setNlPreviewLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [nlBody, nlRightPanel]);
 
   const { data: nlStats, refetch: refetchNlStats } = useQuery({
     queryKey: ["admin-newsletter-stats"],
@@ -2350,14 +2335,18 @@ export default function Admin() {
                         {nlPreview && <span className="ml-2 text-gray-400">· {nlPreview}</span>}
                       </div>
                     )}
-                    <iframe
-                      key={nlPreviewSrcdoc}
-                      srcDoc={nlPreviewSrcdoc}
-                      sandbox="allow-same-origin"
-                      className="w-full flex-1 border-0"
-                      style={{ minHeight: 520 }}
-                      title="Email preview"
-                    />
+                    {nlPreviewLoading ? (
+                      <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Loading preview…</div>
+                    ) : (
+                      <iframe
+                        key={nlPreviewHtml}
+                        srcDoc={nlPreviewHtml}
+                        sandbox="allow-same-origin"
+                        className="w-full flex-1 border-0"
+                        style={{ minHeight: 520 }}
+                        title="Email preview"
+                      />
+                    )}
                     <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-xs text-gray-400 text-center">
                       Preview only — "Hi Alex," is a placeholder; each recipient sees their own name
                     </div>

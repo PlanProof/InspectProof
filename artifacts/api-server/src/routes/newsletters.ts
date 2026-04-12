@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, usersTable, newsletterCampaignsTable } from "@workspace/db";
 import { eq, and, count } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
-import { sendNewsletterBatch } from "../lib/email";
+import { sendNewsletterBatch, newsletterHtml } from "../lib/email";
 import crypto from "crypto";
 
 const router: IRouter = Router();
@@ -146,6 +146,16 @@ router.post("/admin/newsletters/send", requireAuth, requireSuperAdmin, async (re
     req.log.error({ err }, "Newsletter send error");
     res.status(500).json({ error: "internal_error" });
   }
+});
+
+router.post("/admin/newsletters/preview", requireAuth, requireSuperAdmin, (req, res) => {
+  const { bodyHtml, firstName } = req.body as { bodyHtml?: string; firstName?: string };
+  const html = newsletterHtml({
+    firstName: firstName?.trim() || "Alex",
+    bodyHtml: bodyHtml?.trim() || "<p style=\"color:#9ca3af;font-style:italic;\">Your email body will appear here…</p>",
+    unsubscribeUrl: "#unsubscribe-preview",
+  });
+  res.type("text/html").send(html);
 });
 
 router.get("/newsletter/unsubscribe", async (req, res) => {

@@ -1001,7 +1001,7 @@ export async function sendEmailVerificationEmail(
 
 /* ── Newsletter Broadcast ──────────────────────────────────── */
 
-function newsletterHtml(opts: {
+export function newsletterHtml(opts: {
   firstName: string;
   bodyHtml: string;
   unsubscribeUrl: string;
