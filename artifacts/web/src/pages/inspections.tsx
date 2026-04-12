@@ -651,7 +651,7 @@ export default function Inspections() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <InspectionStatusBadge status={insp.status} />
+                      <InspectionStatusBadge status={insp.status} signedOffAt={(insp as any).signedOffAt} />
                     </TableCell>
                     <TableCell className="text-muted-foreground">{insp.inspectorName || "Unassigned"}</TableCell>
                     <TableCell className="text-right">
@@ -804,7 +804,8 @@ export default function Inspections() {
   );
 }
 
-function InspectionStatusBadge({ status }: { status: string }) {
+function InspectionStatusBadge({ status, signedOffAt }: { status: string; signedOffAt?: string | Date | null }) {
+  const effectiveStatus = status === "completed" && !signedOffAt ? "in_progress" : status;
   const map: Record<string, "default" | "success" | "warning" | "secondary" | "destructive"> = {
     scheduled: "secondary",
     in_progress: "warning",
@@ -812,9 +813,10 @@ function InspectionStatusBadge({ status }: { status: string }) {
     follow_up_required: "destructive",
     cancelled: "default"
   };
+  const label = effectiveStatus === "in_progress" ? "In Progress" : effectiveStatus.replace(/_/g, ' ');
   return (
-    <Badge variant={map[status] || "default"} className="capitalize shadow-sm">
-      {status.replace(/_/g, ' ')}
+    <Badge variant={map[effectiveStatus] || "default"} className="capitalize shadow-sm">
+      {label}
     </Badge>
   );
 }

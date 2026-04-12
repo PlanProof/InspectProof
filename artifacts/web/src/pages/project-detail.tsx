@@ -121,14 +121,16 @@ function formatBytes(bytes?: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function inspectionStatusIcon(status: string) {
-  if (status === "completed" || status === "passed") return <CheckCircle className="h-4 w-4 text-green-500" />;
-  if (status === "failed") return <XCircle className="h-4 w-4 text-red-500" />;
-  if (status === "in_progress") return <Clock className="h-4 w-4 text-amber-500" />;
+function inspectionStatusIcon(status: string, signedOffAt?: string | Date | null) {
+  const effective = status === "completed" && !signedOffAt ? "in_progress" : status;
+  if (effective === "completed" || effective === "passed") return <CheckCircle className="h-4 w-4 text-green-500" />;
+  if (effective === "failed") return <XCircle className="h-4 w-4 text-red-500" />;
+  if (effective === "in_progress") return <Clock className="h-4 w-4 text-amber-500" />;
   return <Calendar className="h-4 w-4 text-blue-500" />;
 }
 
-function inspectionStatusBadge(status: string) {
+function inspectionStatusBadge(status: string, signedOffAt?: string | Date | null) {
+  const effective = status === "completed" && !signedOffAt ? "in_progress" : status;
   const map: Record<string, string> = {
     scheduled: "bg-blue-50 text-blue-700 border-blue-200",
     in_progress: "bg-amber-50 text-amber-700 border-amber-200",
@@ -137,9 +139,10 @@ function inspectionStatusBadge(status: string) {
     failed: "bg-red-50 text-red-700 border-red-200",
     cancelled: "bg-gray-50 text-gray-500 border-gray-200",
   };
+  const label = effective === "in_progress" ? "In Progress" : effective.replace(/_/g, " ");
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded border capitalize ${map[status] || "bg-gray-50 text-gray-500 border-gray-200"}`}>
-      {status.replace("_", " ")}
+    <span className={`text-xs font-medium px-2 py-0.5 rounded border capitalize ${map[effective] || "bg-gray-50 text-gray-500 border-gray-200"}`}>
+      {label}
     </span>
   );
 }
@@ -2105,7 +2108,7 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {inspectionStatusIcon(insp.status)}
+                        {inspectionStatusIcon(insp.status, (insp as any).signedOffAt)}
                         <div>
                           <div className="font-medium text-sm text-sidebar capitalize group-hover:text-secondary transition-colors">
                             {insp.checklistTemplateName ? cleanTypeName(insp.checklistTemplateName) : insp.inspectionType.replace(/_/g, " ")}
@@ -2114,7 +2117,7 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{inspectionStatusBadge(insp.status)}</TableCell>
+                    <TableCell>{inspectionStatusBadge(insp.status, (insp as any).signedOffAt)}</TableCell>
                     <TableCell className="text-sm">{formatDate(insp.scheduledDate)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {insp.completedDate ? formatDate(insp.completedDate) : "—"}

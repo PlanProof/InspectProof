@@ -193,6 +193,7 @@ router.get("/calendar", optionalAuth, async (req, res) => {
         duration: inspectionsTable.duration,
         discipline: checklistTemplatesTable.discipline,
         checklistTemplateId: inspectionsTable.checklistTemplateId,
+        signedOffAt: inspectionsTable.signedOffAt,
       })
       .from(inspectionsTable)
       .leftJoin(projectsTable, eq(inspectionsTable.projectId, projectsTable.id))
@@ -219,6 +220,7 @@ router.get("/calendar", optionalAuth, async (req, res) => {
       duration: r.duration,
       discipline: r.discipline ?? null,
       checklistTemplateId: r.checklistTemplateId,
+      signedOffAt: r.signedOffAt ?? null,
     }));
 
     if (discipline) {
