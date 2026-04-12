@@ -76,6 +76,8 @@ interface AdminUser {
   stripeSubscriptionStatus: string | null;
   planOverrideProjects: string | null;
   planOverrideInspections: string | null;
+  marketingEmailOptIn: boolean;
+  marketingEmailOptInAt: string | null;
   usage: { projects: number; inspections: number };
   limits: { maxProjects: number | null; maxInspectionsMonthly: number | null; maxInspectionsTotal: number | null; label: string };
   createdAt: string;
@@ -160,16 +162,17 @@ function UserModal({ user, onClose, onSave, saving }: {
 }) {
   const isNew = !user;
   const [form, setForm] = useState({
-    firstName:             user?.firstName ?? "",
-    lastName:              user?.lastName ?? "",
-    email:                 user?.email ?? "",
-    role:                  user?.role ?? "inspector",
-    plan:                  user?.plan ?? "free_trial",
-    password:              "",
-    isAdmin:               user?.isAdmin ?? false,
-    isActive:              user?.isActive ?? true,
-    planOverrideProjects:  user?.planOverrideProjects ?? "",
+    firstName:               user?.firstName ?? "",
+    lastName:                user?.lastName ?? "",
+    email:                   user?.email ?? "",
+    role:                    user?.role ?? "inspector",
+    plan:                    user?.plan ?? "free_trial",
+    password:                "",
+    isAdmin:                 user?.isAdmin ?? false,
+    isActive:                user?.isActive ?? true,
+    planOverrideProjects:    user?.planOverrideProjects ?? "",
     planOverrideInspections: user?.planOverrideInspections ?? "",
+    marketingEmailOptIn:     user?.marketingEmailOptIn ?? false,
   });
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -188,6 +191,7 @@ function UserModal({ user, onClose, onSave, saving }: {
       planOverrideInspections: form.planOverrideInspections || null,
     };
     if (form.password) payload.password = form.password;
+    payload.marketingEmailOptIn = form.marketingEmailOptIn;
     onSave(payload);
   };
 
@@ -259,7 +263,7 @@ function UserModal({ user, onClose, onSave, saving }: {
             </div>
           </div>
 
-          <div className="flex gap-6 pt-1">
+          <div className="flex gap-6 pt-1 flex-wrap">
             <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
               <input type="checkbox" checked={form.isAdmin} onChange={set("isAdmin")} className="rounded accent-[#466DB5]" />
               Admin access
@@ -267,6 +271,25 @@ function UserModal({ user, onClose, onSave, saving }: {
             <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
               <input type="checkbox" checked={form.isActive} onChange={set("isActive")} className="rounded accent-[#466DB5]" />
               Active account
+            </label>
+          </div>
+
+          <div className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+            <label className="flex items-center justify-between gap-3 cursor-pointer select-none">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Marketing emails</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {!isNew && user?.marketingEmailOptIn && user?.marketingEmailOptInAt
+                    ? `Opted in ${new Date(user.marketingEmailOptInAt).toLocaleDateString("en-AU", { dateStyle: "medium" })}`
+                    : "Product updates & newsletters"}
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={form.marketingEmailOptIn}
+                onChange={set("marketingEmailOptIn")}
+                className="rounded accent-[#466DB5] w-4 h-4 shrink-0"
+              />
             </label>
           </div>
         </div>
@@ -394,6 +417,16 @@ function UserRow({ user, onEdit, onDelete, onCancelSub, onReactivate, cancelling
               <div>
                 <p className="text-xs text-gray-500 mb-1">Roles & flags</p>
                 <p className="text-xs">{formatRole(user.role)}{user.isAdmin ? " · Admin" : ""}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Marketing emails</p>
+                {user.marketingEmailOptIn ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                    ✓ Opted in{user.marketingEmailOptInAt ? ` · ${new Date(user.marketingEmailOptInAt).toLocaleDateString("en-AU")}` : ""}
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-400">Not subscribed</span>
+                )}
               </div>
             </div>
 

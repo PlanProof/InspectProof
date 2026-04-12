@@ -71,6 +71,8 @@ router.get('/admin/users', requireAdmin, async (req, res) => {
         stripeSubscriptionStatus: user.stripeSubscriptionStatus,
         planOverrideProjects: user.planOverrideProjects,
         planOverrideInspections: user.planOverrideInspections,
+        marketingEmailOptIn: user.marketingEmailOptIn,
+        marketingEmailOptInAt: user.marketingEmailOptInAt,
         usage: { projects: projectCount, inspections: inspectionCount },
         limits: getLimits(user.plan ?? 'free_trial'),
         createdAt: user.createdAt,
@@ -130,7 +132,7 @@ router.get('/admin/users/:id', requireAdmin, async (req, res) => {
 });
 
 router.patch('/admin/users/:id', requireAdmin, async (req, res) => {
-  const { email, firstName, lastName, role, plan, isAdmin, isActive, planOverrideProjects, planOverrideInspections, password } = req.body;
+  const { email, firstName, lastName, role, plan, isAdmin, isActive, planOverrideProjects, planOverrideInspections, password, marketingEmailOptIn } = req.body;
   const updates: Record<string, any> = { updatedAt: new Date() };
 
   if (email !== undefined) updates.email = email.toLowerCase().trim();
@@ -143,6 +145,12 @@ router.patch('/admin/users/:id', requireAdmin, async (req, res) => {
   if (planOverrideProjects !== undefined) updates.planOverrideProjects = planOverrideProjects;
   if (planOverrideInspections !== undefined) updates.planOverrideInspections = planOverrideInspections;
   if (password) updates.passwordHash = await bcrypt.hash(password, 10);
+  if (marketingEmailOptIn !== undefined) {
+    updates.marketingEmailOptIn = marketingEmailOptIn;
+    updates.marketingEmailOptInAt = marketingEmailOptIn ? new Date() : null;
+    updates.marketingEmailSource = marketingEmailOptIn ? 'admin_override' : null;
+    updates.marketingEmailScope = marketingEmailOptIn ? 'inspectproof_and_related_updates' : null;
+  }
 
   const [updated] = await db
     .update(usersTable)
