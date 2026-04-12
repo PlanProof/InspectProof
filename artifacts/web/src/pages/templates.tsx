@@ -22,6 +22,9 @@ const DISCIPLINE_ORDER = [
   "WHS Officer",
   "Pre-Purchase Inspector",
   "Fire Safety Engineer",
+  "Property Manager",
+  "Pool Inspector",
+  "Insurance Assessor",
   "Custom",
 ];
 const DISCIPLINE_META: Record<string, { active: string; accent: string }> = {
@@ -33,6 +36,9 @@ const DISCIPLINE_META: Record<string, { active: string; accent: string }> = {
   "WHS Officer":           { active: "bg-red-700 text-white",    accent: "text-red-700 border-red-700" },
   "Pre-Purchase Inspector":{ active: "bg-purple-700 text-white", accent: "text-purple-700 border-purple-700" },
   "Fire Safety Engineer":  { active: "bg-rose-700 text-white",   accent: "text-rose-700 border-rose-700" },
+  "Property Manager":      { active: "bg-cyan-700 text-white",   accent: "text-cyan-700 border-cyan-700" },
+  "Pool Inspector":        { active: "bg-sky-700 text-white",    accent: "text-sky-700 border-sky-700" },
+  "Insurance Assessor":    { active: "bg-indigo-700 text-white", accent: "text-indigo-700 border-indigo-700" },
   "Custom":                { active: "bg-slate-700 text-white",  accent: "text-slate-700 border-slate-400" },
 };
 
@@ -49,6 +55,19 @@ const TYPE_META: Record<string, { label: string; color: string; dot: string }> =
   pool_barrier:     { label: "Pool Barrier",    color: "bg-teal-100 text-teal-800 border-teal-200",         dot: "bg-teal-500" },
   lock_up:          { label: "Lock-Up",         color: "bg-indigo-100 text-indigo-800 border-indigo-200",   dot: "bg-indigo-500" },
   fit_out:          { label: "Fit-Out",         color: "bg-pink-100 text-pink-800 border-pink-200",         dot: "bg-pink-500" },
+  // Property Manager
+  pm_routine:       { label: "Routine Property",  color: "bg-cyan-100 text-cyan-800 border-cyan-200",       dot: "bg-cyan-500" },
+  pm_entry:         { label: "Entry Condition",   color: "bg-cyan-100 text-cyan-800 border-cyan-200",       dot: "bg-cyan-600" },
+  pm_exit:          { label: "Exit Condition",    color: "bg-cyan-100 text-cyan-800 border-cyan-200",       dot: "bg-cyan-700" },
+  pm_maintenance:   { label: "Maintenance",       color: "bg-cyan-100 text-cyan-800 border-cyan-200",       dot: "bg-cyan-400" },
+  // Pool Inspector
+  pool_water_quality: { label: "Water Quality",   color: "bg-sky-100 text-sky-800 border-sky-200",          dot: "bg-sky-500" },
+  pool_spa:           { label: "Spa & Pool",      color: "bg-sky-100 text-sky-800 border-sky-200",          dot: "bg-sky-600" },
+  // Insurance Assessor
+  ins_storm:        { label: "Storm Damage",      color: "bg-indigo-100 text-indigo-800 border-indigo-200", dot: "bg-indigo-500" },
+  ins_fire:         { label: "Fire Damage",       color: "bg-indigo-100 text-indigo-800 border-indigo-200", dot: "bg-indigo-600" },
+  ins_water:        { label: "Water Damage",      color: "bg-indigo-100 text-indigo-800 border-indigo-200", dot: "bg-indigo-400" },
+  ins_general:      { label: "General Assessment",color: "bg-indigo-100 text-indigo-800 border-indigo-200", dot: "bg-indigo-700" },
 };
 
 const BS_INSPECTION_TYPE_ORDER = [
