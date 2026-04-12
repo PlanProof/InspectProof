@@ -34,6 +34,9 @@ const DISCIPLINES = [
   "WHS Officer",
   "Pre-Purchase Inspector",
   "Fire Safety Engineer",
+  "Property Manager",
+  "Pool Inspector",
+  "Insurance Assessor",
 ];
 
 const REPORT_TYPE_OPTIONS = [

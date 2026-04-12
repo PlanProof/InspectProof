@@ -816,5 +816,184 @@ export async function seedDisciplineChecklists() {
     ],
   );
 
+  // PROPERTY MANAGER
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log("\n--- Property Manager ---");
+
+  await seedTemplate(
+    "Routine Property Inspection", "Property Manager", "pm_routine", "Routine Property Inspection",
+    "Periodic inspection of a managed rental property to assess condition, maintenance needs and tenancy compliance.",
+    10,
+    [
+      { category: "Entry & External", description: "Entry doors, gates and letterbox in good condition — no damage or security concerns", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Entry & External", description: "Garden, lawns and outdoor areas maintained to lease standard — no fire hazards or excess debris", riskLevel: "low", defectTrigger: true, requirePhoto: true },
+      { category: "General Interior", description: "Walls, ceilings and floors free of damage — no unauthorised modifications or markings", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "General Interior", description: "All windows and doors operational — no broken locks, latches or glass", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Kitchen", description: "Kitchen appliances, benchtops and cabinetry in good condition — no damage beyond fair wear and tear", riskLevel: "low", defectTrigger: true, requirePhoto: true },
+      { category: "Bathroom", description: "Bathroom fixtures, tiling and waterproofing intact — no mould, leaks or water damage", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Utilities", description: "Smoke alarms present and tested — all in working order", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "State tenancy legislation" },
+      { category: "Utilities", description: "Hot water system, heating and cooling operational — no visible faults", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Safety", description: "No obvious safety hazards — trip risks, exposed wiring or structural concerns noted and reported", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Lease Compliance", description: "Property occupied in accordance with lease — no unauthorised occupants or sub-letting evident", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+    ],
+  );
+
+  await seedTemplate(
+    "Entry Condition Report", "Property Manager", "pm_entry", "Entry Condition Report",
+    "Detailed condition assessment completed at the commencement of a tenancy for bond and condition tracking purposes.",
+    20,
+    [
+      { category: "External", description: "External walls, roof, gutters and eaves in good condition — no damage noted at entry", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "External", description: "Driveways, paths and fencing intact — no significant damage", riskLevel: "low", defectTrigger: true, requirePhoto: true },
+      { category: "Interior Surfaces", description: "Walls painted and clean — no holes, stains or scuffs beyond fair wear and tear", riskLevel: "low", defectTrigger: true, requirePhoto: true },
+      { category: "Interior Surfaces", description: "Floor coverings in good condition — no tears, stains or significant wear", riskLevel: "low", defectTrigger: true, requirePhoto: true },
+      { category: "Fixtures & Fittings", description: "All light fittings, power points and switches functional and undamaged", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Appliances", description: "All included appliances tested and operational — condition documented", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Safety", description: "Smoke alarms tested and operational — documented in report", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "State tenancy legislation" },
+      { category: "Keys & Access", description: "All keys, remotes and access devices issued and counted — receipt signed by tenant", riskLevel: "high", defectTrigger: false, requirePhoto: false },
+    ],
+  );
+
+  await seedTemplate(
+    "Exit Condition Report", "Property Manager", "pm_exit", "Exit Condition Report",
+    "Final condition inspection at the end of a tenancy to compare against the entry condition report and assess bond claim eligibility.",
+    30,
+    [
+      { category: "External", description: "External walls, gutters and eaves condition compared to entry report — damage beyond fair wear and tear noted", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Interior Surfaces", description: "Walls and ceilings assessed — any damage, marks or holes beyond fair wear and tear documented", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Floor Coverings", description: "Floor coverings assessed — stains, tears or damage beyond fair wear and tear documented", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Cleanliness", description: "Property cleaned to a professional standard — kitchen, bathrooms and all rooms assessed", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Appliances", description: "All included appliances cleaned and operational — condition compared to entry report", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Garden & External", description: "Garden and lawns returned to entry condition — no excess rubbish or items left behind", riskLevel: "low", defectTrigger: true, requirePhoto: true },
+      { category: "Keys & Access", description: "All keys, remotes and access devices returned and counted — any missing items documented", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+    ],
+  );
+
+  await seedTemplate(
+    "Maintenance Inspection", "Property Manager", "pm_maintenance", "Maintenance Inspection",
+    "Targeted inspection to assess and document maintenance items, safety issues and repair needs at a managed property.",
+    40,
+    [
+      { category: "Structural", description: "Roof, gutters and downpipes inspected — no blockages, damage or leaks", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Plumbing", description: "Taps, toilets and drains operational — no leaks, slow drainage or water damage", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Electrical", description: "Switchboard, power points and lights inspected — no obvious faults or safety concerns", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "Safety Devices", description: "Smoke alarms tested and operational — RCD tested if applicable", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "State tenancy legislation" },
+      { category: "HVAC", description: "Air conditioning filters cleaned, heating system checked — operational and no faults", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Security", description: "All door and window locks operational — no security vulnerabilities identified", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+    ],
+  );
+
+  // POOL INSPECTOR
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log("\n--- Pool Inspector ---");
+
+  await seedTemplate(
+    "Pool Barrier Safety Inspection", "Pool Inspector", "pool_barrier", "Pool Barrier Safety Inspection",
+    "Compliance inspection of pool and spa barriers against state swimming pool safety legislation and Australian Standards.",
+    10,
+    [
+      { category: "Fence Height & Construction", description: "Pool barrier height not less than 1200mm on outside face — measured at all points around perimeter", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1926.1 / State Swimming Pools Act" },
+      { category: "Fence Height & Construction", description: "Barrier has no climbable elements within 900mm outside — no furniture, equipment or landscaping providing foothold", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1926.1" },
+      { category: "Fence Height & Construction", description: "No gaps in barrier greater than 100mm — measured at all sections including corners and footings", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1926.1" },
+      { category: "Gates & Latches", description: "Gate self-closes and self-latches from any open position — no manual fastening required", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1926.2" },
+      { category: "Gates & Latches", description: "Gate latch located on pool side at least 1500mm from ground OR child-resistant — cannot be reached through or over gate", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1926.2" },
+      { category: "Gates & Latches", description: "Gates open outward away from pool — no inward-swinging gates that could trap a child", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "AS 1926.2" },
+      { category: "CPR Signage", description: "CPR resuscitation sign displayed in a prominent position at the pool — clear and legible", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "State Swimming Pools Act" },
+      { category: "Non-Climbable Zone", description: "Non-climbable zone of 900mm maintained outside of barrier — no obstructions within the zone on inspection", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1926.1" },
+    ],
+  );
+
+  await seedTemplate(
+    "Pool Water Quality & Equipment Inspection", "Pool Inspector", "pool_water_quality", "Pool Water Quality & Equipment Inspection",
+    "Assessment of pool water chemistry, clarity, filtration and equipment condition to ensure a safe swimming environment.",
+    20,
+    [
+      { category: "Water Chemistry", description: "pH level within acceptable range 7.2–7.6 — tested and recorded on site", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Water Chemistry", description: "Free chlorine / sanitiser level adequate — within state-legislated range for public or residential pools", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "Water Chemistry", description: "Total alkalinity within 80–120 ppm — stabiliser and calcium hardness levels acceptable", riskLevel: "medium", defectTrigger: true, requirePhoto: false },
+      { category: "Water Clarity", description: "Pool water visually clear — main drain visible from pool surface, no turbidity or algae growth", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Filtration", description: "Filter operating correctly — adequate flow, no cracked media or bypassed filtration", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Equipment", description: "Pump, filter and chlorinator in good mechanical condition — no leaks, unusual noise or visible faults", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Drains & Suction", description: "Main drain covers and suction fittings compliant — no missing, broken or non-compliant covers", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "AS 1926.3" },
+    ],
+  );
+
+  await seedTemplate(
+    "Spa & Portable Pool Inspection", "Pool Inspector", "pool_spa", "Spa & Portable Pool Inspection",
+    "Safety and barrier compliance inspection for spa pools and portable above-ground pools.",
+    30,
+    [
+      { category: "Barrier or Lockable Cover", description: "Spa or portable pool has compliant barrier OR lockable safety cover — cover supports weight of child (tested)", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "State Swimming Pools Act" },
+      { category: "Barrier or Lockable Cover", description: "Lockable cover secured when spa/portable pool not in use — no unsupervised child access possible", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "State Swimming Pools Act" },
+      { category: "Electrical Safety", description: "Spa electrical equipment installed by licensed electrician — no visible cord hazards or exposed wiring near water", riskLevel: "critical", defectTrigger: true, requirePhoto: false, codeReference: "AS/NZS 3000" },
+      { category: "Water Quality", description: "Water clarity and sanitiser levels acceptable — no visible algae or discolouration", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "CPR Signage", description: "CPR sign displayed in a prominent, weatherproof location near the spa or portable pool", riskLevel: "critical", defectTrigger: true, requirePhoto: true, codeReference: "State Swimming Pools Act" },
+    ],
+  );
+
+  // INSURANCE ASSESSOR
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log("\n--- Insurance Assessor ---");
+
+  await seedTemplate(
+    "Storm Damage Assessment", "Insurance Assessor", "ins_storm", "Storm Damage Assessment",
+    "Structured assessment of building damage caused by storm, hail, wind or flood events for insurance claim purposes.",
+    10,
+    [
+      { category: "Roof", description: "Roof covering inspected — missing, cracked or displaced tiles/sheeting documented with photo evidence", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Roof", description: "Gutters and downpipes assessed — storm damage, blockage or displacement documented", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "External Walls", description: "External cladding and render inspected — hail damage, cracks or impact damage documented", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Windows & Glazing", description: "All windows and skylights inspected — cracked, broken or water-damaged glazing documented", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Internal Water Damage", description: "Ceilings and internal walls inspected for water ingress — staining, sagging or mould documented", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Structural", description: "Structural elements assessed — no storm-related movement, cracking or foundation damage", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Outbuildings & Fencing", description: "Sheds, garages, carports and fencing inspected — storm damage documented", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Safety Hazards", description: "Site safety assessed — no live electrical hazards, unstable structures or access risks before inspection proceeds", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+    ],
+  );
+
+  await seedTemplate(
+    "Fire Damage Assessment", "Insurance Assessor", "ins_fire", "Fire Damage Assessment",
+    "Comprehensive assessment of building and contents damage resulting from fire and smoke for insurance claim purposes.",
+    20,
+    [
+      { category: "Structural Damage", description: "Structural frame assessed — fire-damaged, charred or compromised elements documented with extent of damage", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Smoke & Soot", description: "Smoke and soot contamination extent mapped — all affected rooms, HVAC and surfaces documented", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Roof & Ceiling", description: "Roof structure and ceilings assessed — collapse risk, fire damage extent and water damage from suppression documented", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Electrical Systems", description: "Electrical systems de-energised before inspection — fire damage to switchboard, wiring and fittings documented", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Windows & Doors", description: "Windows, doors and frames inspected — heat damage, broken glazing and warped frames documented", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Contents", description: "Damaged contents identified and documented — fire, smoke and water-affected items listed separately", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Cause & Origin", description: "Area of fire origin identified if determinable — documented for insurer file without prejudice to investigation", riskLevel: "high", defectTrigger: false, requirePhoto: true },
+    ],
+  );
+
+  await seedTemplate(
+    "Water & Flood Damage Assessment", "Insurance Assessor", "ins_water", "Water & Flood Damage Assessment",
+    "Assessment of building and contents damage caused by water ingress, burst pipes, flooding or sewage backup for insurance purposes.",
+    30,
+    [
+      { category: "Source Identification", description: "Source of water damage identified and documented — burst pipe, overland flood, storm water or sewage", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Affected Area Mapping", description: "All affected rooms and areas mapped — moisture readings taken and recorded in each room", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Flooring", description: "Floor coverings and subfloor assessed — swelling, delamination, saturation or structural damage documented", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Wall Linings", description: "Walls and skirting assessed — moisture penetration height documented, plasterboard and insulation saturation noted", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Ceilings", description: "Ceilings inspected — water staining, sagging, collapse risk and moisture content documented", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Mould Risk", description: "Mould presence or elevated mould risk assessed — areas requiring remediation before reinstatement documented", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Contents", description: "Water-damaged contents documented — irreparable vs restorable items listed for claim", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+    ],
+  );
+
+  await seedTemplate(
+    "General Property Assessment", "Insurance Assessor", "ins_general", "General Property Assessment",
+    "General property condition and damage assessment for insurance claim scoping, covering structure, services and contents.",
+    40,
+    [
+      { category: "Building Envelope", description: "Roof, walls and foundation inspected for damage — all defects documented with photos", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Internal Finishes", description: "Ceilings, walls and floors assessed — damage extent and causation documented", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Electrical Services", description: "Electrical systems safety assessed — no live hazards, damage extent documented for reinstatement scope", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "Plumbing Services", description: "Plumbing fixtures and pipework inspected — leaks, water damage and damage extent documented", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Contents", description: "Damaged contents itemised — replacement value evidence collected where available", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Scope of Works", description: "Preliminary reinstatement scope determined — builder quotation requirements and damage extent summarised", riskLevel: "high", defectTrigger: false, requirePhoto: false },
+    ],
+  );
+
   console.log("\n=== All discipline checklists seeded successfully ===");
 }

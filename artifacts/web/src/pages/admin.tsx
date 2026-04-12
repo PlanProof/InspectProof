@@ -48,6 +48,9 @@ const ROLE_LABELS: Record<string, string> = {
   whs:               "WHS Officer",
   pre_purchase:      "Pre-Purchase Inspector",
   fire_engineer:     "Fire Safety Engineer",
+  property_manager:  "Property Manager",
+  pool_inspector:    "Pool Inspector",
+  insurance_assessor: "Insurance Assessor",
   staff:             "Staff",
   other:             "Other",
 };

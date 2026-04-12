@@ -23,6 +23,9 @@ const DISCIPLINES = [
   "WHS Officer",
   "Pre-Purchase Inspector",
   "Fire Safety Engineer",
+  "Property Manager",
+  "Pool Inspector",
+  "Insurance Assessor",
 ];
 
 const DISCIPLINE_COLORS: Record<string, string> = {
@@ -34,6 +37,9 @@ const DISCIPLINE_COLORS: Record<string, string> = {
   "WHS Officer":            "#b91c1c",
   "Pre-Purchase Inspector": "#7e22ce",
   "Fire Safety Engineer":   "#be123c",
+  "Property Manager":       "#0891b2",
+  "Pool Inspector":         "#0369a1",
+  "Insurance Assessor":     "#4338ca",
 };
 
 const RISK_COLORS: Record<string, string> = {

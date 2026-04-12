@@ -12,7 +12,7 @@ import {
   UserCheck, ChevronDown, FolderOpen, Upload, File,
   FileImage, FileSpreadsheet, CheckSquare, PencilLine,
   RefreshCw, Eye, ShieldCheck, Flame, Home, ClipboardCheck, Trash2, Camera, Link2,
-  PenLine, Share2, Copy, ExternalLink, MapPin,
+  PenLine, Share2, Copy, ExternalLink, MapPin, Key, Droplets, FileSearch,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -332,19 +332,25 @@ type Tab = typeof TABS[number];
 // ── Report type catalogue ─────────────────────────────────────────────────────
 
 const ALL_REPORT_TYPE_LABELS: Record<string, string> = {
-  inspection_certificate:   "Inspection Certificate",
-  compliance_report:        "Compliance Report",
-  defect_notice:            "Defect Notice",
-  non_compliance_notice:    "Non-Compliance Notice",
-  summary:                  "Inspection Summary",
-  quality_control_report:   "Quality Control Report",
-  non_conformance_report:   "Non-Conformance Report",
-  safety_inspection_report: "Safety Inspection Report",
-  hazard_assessment_report: "Hazard Assessment Report",
-  corrective_action_report: "Corrective Action Report",
-  pre_purchase_report:      "Pre-Purchase Building Report",
-  annual_fire_safety:       "Annual Fire Safety Statement",
-  fire_inspection_report:   "Fire Safety Inspection Report",
+  inspection_certificate:       "Inspection Certificate",
+  compliance_report:            "Compliance Report",
+  defect_notice:                "Defect Notice",
+  non_compliance_notice:        "Non-Compliance Notice",
+  summary:                      "Inspection Summary",
+  quality_control_report:       "Quality Control Report",
+  non_conformance_report:       "Non-Conformance Report",
+  safety_inspection_report:     "Safety Inspection Report",
+  hazard_assessment_report:     "Hazard Assessment Report",
+  corrective_action_report:     "Corrective Action Report",
+  pre_purchase_report:          "Pre-Purchase Building Report",
+  annual_fire_safety:           "Annual Fire Safety Statement",
+  fire_inspection_report:       "Fire Safety Inspection Report",
+  condition_report:             "Property Condition Report",
+  maintenance_report:           "Maintenance Report",
+  pool_safety_certificate:      "Pool Safety Certificate",
+  pool_water_quality_report:    "Pool Water Quality Report",
+  insurance_assessment_report:  "Insurance Assessment Report",
+  damage_assessment_report:     "Property Damage Assessment Report",
 };
 
 const ALL_REPORT_TYPES_META: Array<{ key: string; label: string; icon: React.ElementType; desc: string }> = [
@@ -359,8 +365,14 @@ const ALL_REPORT_TYPES_META: Array<{ key: string; label: string; icon: React.Ele
   { key: "hazard_assessment_report", label: "Hazard Assessment Report",      icon: ShieldCheck,    desc: "Site hazard identification and risk control requirements" },
   { key: "corrective_action_report", label: "Corrective Action Report",      icon: RefreshCw,      desc: "Status of open corrective actions from prior inspections" },
   { key: "pre_purchase_report",      label: "Pre-Purchase Building Report",  icon: Home,           desc: "Property condition assessment for prospective buyers (AS 4349.1)" },
-  { key: "annual_fire_safety",       label: "Annual Fire Safety Statement",  icon: Flame,          desc: "Annual certification of essential fire safety measures" },
-  { key: "fire_inspection_report",   label: "Fire Safety Inspection Report", icon: Flame,          desc: "Fire safety compliance inspection findings and actions" },
+  { key: "annual_fire_safety",           label: "Annual Fire Safety Statement",      icon: Flame,        desc: "Annual certification of essential fire safety measures" },
+  { key: "fire_inspection_report",       label: "Fire Safety Inspection Report",     icon: Flame,        desc: "Fire safety compliance inspection findings and actions" },
+  { key: "condition_report",             label: "Property Condition Report",         icon: Key,          desc: "Routine inspection condition report for rental or managed properties" },
+  { key: "maintenance_report",           label: "Maintenance Report",                icon: Key,          desc: "Maintenance items identified during inspection with recommended actions" },
+  { key: "pool_safety_certificate",      label: "Pool Safety Certificate",           icon: Droplets,     desc: "Certificate of compliance with pool barrier and safety requirements" },
+  { key: "pool_water_quality_report",    label: "Pool Water Quality Report",         icon: Droplets,     desc: "Water chemistry, clarity and equipment inspection outcomes" },
+  { key: "insurance_assessment_report",  label: "Insurance Assessment Report",       icon: FileSearch,   desc: "Formal assessment of property damage for insurance claim purposes" },
+  { key: "damage_assessment_report",     label: "Property Damage Assessment Report", icon: FileSearch,   desc: "Itemised damage scope report covering structure and contents" },
 ];
 
 const DISCIPLINE_REPORT_TYPES: Record<string, string[]> = {
@@ -371,6 +383,9 @@ const DISCIPLINE_REPORT_TYPES: Record<string, string[]> = {
   "WHS Officer":            ["safety_inspection_report", "hazard_assessment_report", "corrective_action_report", "non_compliance_notice"],
   "Pre-Purchase Inspector": ["pre_purchase_report", "defect_notice", "summary", "compliance_report"],
   "Fire Safety Engineer":   ["annual_fire_safety", "fire_inspection_report", "compliance_report", "defect_notice"],
+  "Property Manager":       ["condition_report", "maintenance_report", "defect_notice", "summary"],
+  "Pool Inspector":         ["pool_safety_certificate", "pool_water_quality_report", "compliance_report", "defect_notice"],
+  "Insurance Assessor":     ["insurance_assessment_report", "damage_assessment_report", "defect_notice", "summary"],
 };
 
 const DEFAULT_DISCIPLINE_TYPES = ["inspection_certificate", "compliance_report", "defect_notice", "summary"];

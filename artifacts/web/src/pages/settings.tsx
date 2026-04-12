@@ -482,6 +482,9 @@ const PROFESSION_OPTIONS = [
   "WHS Officer",
   "Pre-Purchase Inspector",
   "Fire Safety Engineer",
+  "Property Manager",
+  "Pool Inspector",
+  "Insurance Assessor",
   "Other",
 ];
 
