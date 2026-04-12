@@ -419,6 +419,22 @@ async function runSchemaMigrations() {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_email_source text`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing_email_scope text`);
 
+    await pool.query(`CREATE TABLE IF NOT EXISTS newsletter_campaigns (
+      id serial PRIMARY KEY,
+      subject text NOT NULL,
+      body_html text NOT NULL,
+      preview_text text,
+      sent_by_id integer,
+      sent_by_email text,
+      recipient_count integer NOT NULL DEFAULT 0,
+      success_count integer NOT NULL DEFAULT 0,
+      failure_count integer NOT NULL DEFAULT 0,
+      status text NOT NULL DEFAULT 'draft',
+      sent_at timestamp,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now()
+    )`);
+
     logger.info("Schema migrations applied");
   } catch (err) {
     logger.error({ err }, "Schema migration failed — continuing");

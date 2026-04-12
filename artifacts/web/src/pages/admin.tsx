@@ -620,7 +620,7 @@ export default function Admin() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"users" | "plans" | "stats" | "revenue" | "invites" | "support" | "activity" | "emails">("users");
+  const [tab, setTab] = useState<"users" | "plans" | "stats" | "revenue" | "invites" | "support" | "activity" | "emails" | "newsletters">("users");
   const [userFilter, setUserFilter] = useState<"all" | "inactive">("all");
   const [emailPage, setEmailPage] = useState(1);
   const [emailTypeFilter, setEmailTypeFilter] = useState("");
@@ -718,6 +718,55 @@ export default function Admin() {
       toast({ title: "Retry failed", description: err.message, variant: "destructive" });
     },
   });
+
+  const [nlSubject, setNlSubject] = useState("");
+  const [nlBody, setNlBody] = useState("");
+  const [nlPreview, setNlPreview] = useState("");
+  const [nlSending, setNlSending] = useState(false);
+
+  const { data: nlStats, refetch: refetchNlStats } = useQuery({
+    queryKey: ["admin-newsletter-stats"],
+    queryFn: async () => {
+      const r = await fetch(API("/admin/newsletters/stats"), { headers: authHeaders() });
+      if (!r.ok) throw new Error("Failed to load newsletter stats");
+      return r.json() as Promise<{ subscriberCount: number; recentCampaigns: any[] }>;
+    },
+    enabled: tab === "newsletters",
+  });
+
+  const { data: nlCampaigns, refetch: refetchCampaigns } = useQuery({
+    queryKey: ["admin-newsletter-campaigns"],
+    queryFn: async () => {
+      const r = await fetch(API("/admin/newsletters/campaigns"), { headers: authHeaders() });
+      if (!r.ok) throw new Error("Failed to load campaigns");
+      return r.json() as Promise<{ campaigns: any[] }>;
+    },
+    enabled: tab === "newsletters",
+  });
+
+  async function sendNewsletter() {
+    if (!nlSubject.trim() || !nlBody.trim()) {
+      toast({ title: "Missing fields", description: "Subject and body are required.", variant: "destructive" });
+      return;
+    }
+    setNlSending(true);
+    try {
+      const r = await fetch(API("/admin/newsletters/send"), {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: nlSubject, bodyHtml: nlBody, previewText: nlPreview }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.message ?? "Send failed");
+      toast({ title: "Newsletter sent!", description: `Delivered to ${data.successCount} of ${data.recipientCount} subscribers.` });
+      setNlSubject(""); setNlBody(""); setNlPreview("");
+      refetchNlStats(); refetchCampaigns();
+    } catch (err: any) {
+      toast({ title: "Send failed", description: err.message, variant: "destructive" });
+    } finally {
+      setNlSending(false);
+    }
+  }
 
   const { data: invitesData, isLoading: invitesLoading } = useQuery({
     queryKey: ["admin-invites"],
@@ -939,6 +988,7 @@ export default function Admin() {
     { key: "support", label: "Support" },
     { key: "activity", label: "Activity" },
     { key: "emails", label: "Emails" },
+    { key: "newsletters", label: "Newsletters" },
     { key: "stats", label: "Stats" },
   ] as const;
 
@@ -2140,6 +2190,105 @@ export default function Admin() {
                   )}
                 </>
               )}
+            </div>
+          </div>
+        )}
+        {/* ── Newsletters Tab ── */}
+        {tab === "newsletters" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-[#0B1933]">Newsletters</h2>
+                <p className="text-sm text-gray-500">Compose and send product updates to opted-in subscribers</p>
+              </div>
+              <div className="flex items-center gap-2 bg-[#0B1933] text-white rounded-xl px-5 py-3">
+                <span className="text-2xl font-bold">{nlStats?.subscriberCount ?? "—"}</span>
+                <span className="text-sm text-white/70 ml-1">subscribers</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Compose */}
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <h3 className="text-base font-semibold text-[#0B1933] mb-4">Compose Campaign</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Subject Line</label>
+                    <input
+                      type="text"
+                      value={nlSubject}
+                      onChange={e => setNlSubject(e.target.value)}
+                      placeholder="e.g. InspectProof v2.4 — What's New"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#466DB5]/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Preview Text <span className="text-gray-400 normal-case font-normal">(shown in email clients below the subject)</span></label>
+                    <input
+                      type="text"
+                      value={nlPreview}
+                      onChange={e => setNlPreview(e.target.value)}
+                      placeholder="Short summary visible in inbox…"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#466DB5]/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Body <span className="text-gray-400 normal-case font-normal">(HTML supported)</span></label>
+                    <textarea
+                      value={nlBody}
+                      onChange={e => setNlBody(e.target.value)}
+                      rows={12}
+                      placeholder={"<p>We're excited to announce...</p>\n\n<p>What's new in this release:</p>\n<ul>\n  <li>Feature A</li>\n  <li>Feature B</li>\n</ul>"}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#466DB5]/30 resize-none"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Tip: use standard HTML tags. Each email will open with "Hi [First Name]," automatically.</p>
+                  </div>
+                  <button
+                    onClick={sendNewsletter}
+                    disabled={nlSending || !nlSubject.trim() || !nlBody.trim()}
+                    className="w-full inline-flex items-center justify-center gap-2 bg-[#C5D92D] text-[#0B1933] font-semibold text-sm px-4 py-2.5 rounded-lg hover:bg-[#d4e83a] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {nlSending ? "Sending…" : `Send to ${nlStats?.subscriberCount ?? "…"} subscribers`}
+                  </button>
+                </div>
+              </div>
+
+              {/* Campaign history */}
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold text-[#0B1933]">Send History</h3>
+                  <button onClick={() => refetchCampaigns()} className="text-xs text-gray-400 hover:text-gray-600 transition">Refresh</button>
+                </div>
+                {!nlCampaigns?.campaigns?.length ? (
+                  <div className="text-center py-12 text-gray-400 text-sm">No campaigns sent yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {[...nlCampaigns.campaigns].reverse().map((c: any) => (
+                      <div key={c.id} className="border border-gray-100 rounded-lg p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-[#0B1933] truncate">{c.subject}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {c.sentAt ? new Date(c.sentAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" }) : "Not sent"}
+                              {c.sentByEmail ? ` · by ${c.sentByEmail}` : ""}
+                            </p>
+                          </div>
+                          <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full ${c.status === "sent" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                            {c.status}
+                          </span>
+                        </div>
+                        {c.status === "sent" && (
+                          <div className="flex gap-4 mt-2 pt-2 border-t border-gray-50">
+                            <span className="text-xs text-gray-500"><span className="font-semibold text-[#0B1933]">{c.recipientCount}</span> recipients</span>
+                            <span className="text-xs text-gray-500"><span className="font-semibold text-green-600">{c.successCount}</span> delivered</span>
+                            {c.failureCount > 0 && <span className="text-xs text-gray-500"><span className="font-semibold text-red-500">{c.failureCount}</span> failed</span>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

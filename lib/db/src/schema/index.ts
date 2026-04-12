@@ -17,3 +17,4 @@ export * from "./inductions";
 export * from "./emailLogs";
 export * from "./shareAcknowledgements";
 export * from "./calendarIntegrations";
+export * from "./newsletters";

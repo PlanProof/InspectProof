@@ -998,3 +998,91 @@ export async function sendEmailVerificationEmail(
     log?.error({ err, to: opts.toEmail }, "Failed to send email verification email");
   }
 }
+
+/* ── Newsletter Broadcast ──────────────────────────────────── */
+
+function newsletterHtml(opts: {
+  firstName: string;
+  bodyHtml: string;
+  unsubscribeUrl: string;
+}): string {
+  const { firstName, bodyHtml, unsubscribeUrl } = opts;
+  const footer = `InspectProof — a product of PlanProof Technologies Pty Ltd<br/>
+You're receiving this because you opted in to product updates from InspectProof.<br/>
+<a href="${unsubscribeUrl}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe</a>`;
+
+  const content = `
+    ${greeting(firstName)}
+    ${bodyHtml}`;
+
+  return emailWrapper({ title: "InspectProof Update", tag: "Product Update", content, footer });
+}
+
+export interface NewsletterRecipient {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  unsubscribeUrl: string;
+}
+
+export async function sendNewsletterBatch(
+  opts: {
+    subject: string;
+    bodyHtml: string;
+    previewText?: string;
+    recipients: NewsletterRecipient[];
+  },
+  log?: EmailLogger,
+): Promise<{ successCount: number; failureCount: number }> {
+  if (!isConfigured()) {
+    log?.warn({}, "Resend not configured — skipping newsletter send");
+    return { successCount: 0, failureCount: opts.recipients.length };
+  }
+
+  let successCount = 0;
+  let failureCount = 0;
+
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < opts.recipients.length; i += BATCH_SIZE) {
+    const batch = opts.recipients.slice(i, i + BATCH_SIZE);
+    const messages = batch.map(r => ({
+      from: SMTP_FROM,
+      to: r.email,
+      subject: opts.subject,
+      html: newsletterHtml({
+        firstName: r.firstName || "there",
+        bodyHtml: opts.bodyHtml,
+        unsubscribeUrl: r.unsubscribeUrl,
+      }),
+    }));
+
+    try {
+      const { data, error } = await getResend().batch.send(messages);
+      if (error) throw new Error(error.message);
+      const sent = Array.isArray(data) ? data.length : batch.length;
+      successCount += sent;
+      log?.info({ batchIndex: Math.floor(i / BATCH_SIZE) + 1, sent }, "Newsletter batch sent");
+    } catch (err) {
+      log?.error({ err, batchStart: i }, "Newsletter batch failed — falling back to individual sends");
+      for (const r of batch) {
+        try {
+          const { data, error: e } = await getResend().emails.send({
+            from: SMTP_FROM,
+            to: r.email,
+            subject: opts.subject,
+            html: newsletterHtml({ firstName: r.firstName || "there", bodyHtml: opts.bodyHtml, unsubscribeUrl: r.unsubscribeUrl }),
+          });
+          if (e) throw new Error(e.message);
+          await logEmail({ type: "newsletter", recipient: r.email, subject: opts.subject, status: "sent", resendMessageId: data?.id });
+          successCount++;
+        } catch (indErr) {
+          await logEmail({ type: "newsletter", recipient: r.email, subject: opts.subject, status: "failed", errorMessage: indErr instanceof Error ? indErr.message : String(indErr) });
+          failureCount++;
+        }
+      }
+    }
+  }
+
+  return { successCount, failureCount };
+}
