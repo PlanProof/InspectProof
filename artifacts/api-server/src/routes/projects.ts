@@ -15,11 +15,17 @@ function effectiveAdminId(user: AuthUser): number {
 }
 
 /**
- * Returns true if the requesting user may access a resource created by createdById.
- * Platform admins bypass all checks. Company/team members are scoped to their org.
+ * Returns true if the requesting user may access a resource owned by a project.
+ * Platform admins bypass all checks. Org membership (orgAdminId) takes priority;
+ * falls back to the legacy createdById check for older records.
  */
-async function canAccessProject(createdById: number | null, user: AuthUser): Promise<boolean> {
+async function canAccessProject(createdById: number | null, user: AuthUser, orgAdminId?: number | null): Promise<boolean> {
   if (user.isAdmin) return true;
+  // Primary check: does the user belong to this project's org?
+  if (orgAdminId != null) {
+    const accessible = await getAccessibleOrgAdminIds(user);
+    if (accessible.has(orgAdminId)) return true;
+  }
   if (createdById == null) return false;
   const adminId = effectiveAdminId(user);
   if (createdById === user.id || createdById === adminId) return true;
@@ -304,7 +310,7 @@ router.get("/:id", requireAuth, async (req, res) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    if (!await canAccessProject(project.createdById, req.authUser!)) {
+    if (!await canAccessProject(project.createdById, req.authUser!, project.orgAdminId)) {
       res.status(403).json({ error: "forbidden" });
       return;
     }
@@ -379,7 +385,7 @@ router.put("/:id", requireAuth, async (req, res) => {
     const data = req.body;
     const [existing] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
     if (!existing) { res.status(404).json({ error: "not_found" }); return; }
-    if (!await canAccessProject(existing.createdById, req.authUser!)) {
+    if (!await canAccessProject(existing.createdById, req.authUser!, existing.orgAdminId)) {
       res.status(403).json({ error: "forbidden" }); return;
     }
     const [project] = await db.update(projectsTable)
@@ -412,7 +418,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
     const id = parseInt(req.params.id);
     const [existing] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
     if (!existing) { res.status(404).json({ error: "not_found" }); return; }
-    if (!await canAccessProject(existing.createdById, req.authUser!)) {
+    if (!await canAccessProject(existing.createdById, req.authUser!, existing.orgAdminId)) {
       res.status(403).json({ error: "forbidden" }); return;
     }
     const allowed = ["status", "name", "siteAddress", "suburb", "state", "postcode", "clientName", "ownerName",
@@ -455,7 +461,7 @@ router.delete("/:id", requireAuth, async (req, res) => {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    if (!await canAccessProject(project.createdById, req.authUser!)) {
+    if (!await canAccessProject(project.createdById, req.authUser!, project.orgAdminId)) {
       res.status(403).json({ error: "forbidden" }); return;
     }
 
@@ -502,7 +508,7 @@ router.get("/:id/activity", requireAuth, async (req, res) => {
     const id = parseInt(req.params.id);
     const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
     if (!project) { res.status(404).json({ error: "not_found" }); return; }
-    if (!await canAccessProject(project.createdById, req.authUser!)) {
+    if (!await canAccessProject(project.createdById, req.authUser!, project.orgAdminId)) {
       res.status(403).json({ error: "forbidden" }); return;
     }
 
@@ -564,7 +570,7 @@ router.get("/:id/documents", requireAuth, async (req, res) => {
     const id = parseInt(req.params.id);
     const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
     if (!project) return res.status(404).json({ error: "not_found" });
-    if (!await canAccessProject(project.createdById, req.authUser!)) return res.status(403).json({ error: "forbidden" });
+    if (!await canAccessProject(project.createdById, req.authUser!, project.orgAdminId)) return res.status(403).json({ error: "forbidden" });
     const docs = await db.select().from(documentsTable)
       .where(eq(documentsTable.projectId, id))
       .orderBy(sql`${documentsTable.folder} ASC, ${documentsTable.name} ASC`);
@@ -1349,7 +1355,7 @@ router.get("/:id/org-contractor-assignments", requireAuth, async (req, res) => {
   try {
     const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
     if (!project) return res.status(404).json({ error: "not_found" });
-    if (!await canAccessProject(project.createdById, req.authUser!)) {
+    if (!await canAccessProject(project.createdById, req.authUser!, project.orgAdminId)) {
       return res.status(403).json({ error: "forbidden" });
     }
     const rows = await db
@@ -1408,7 +1414,7 @@ router.post("/:id/org-contractor-assignments", requireAuth, async (req, res) => 
   try {
     const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
     if (!project) return res.status(404).json({ error: "not_found" });
-    if (!await canAccessProject(project.createdById, req.authUser!)) {
+    if (!await canAccessProject(project.createdById, req.authUser!, project.orgAdminId)) {
       return res.status(403).json({ error: "forbidden" });
     }
 
@@ -1445,7 +1451,7 @@ router.delete("/:id/org-contractor-assignments/:orgContractorId", requireAuth, a
   try {
     const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
     if (!project) return res.status(404).json({ error: "not_found" });
-    if (!await canAccessProject(project.createdById, req.authUser!)) {
+    if (!await canAccessProject(project.createdById, req.authUser!, project.orgAdminId)) {
       return res.status(403).json({ error: "forbidden" });
     }
 

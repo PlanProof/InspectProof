@@ -54,8 +54,14 @@ async function canAccessInspection(inspection: { projectId: number | null; inspe
   if (user.isAdmin) return true;
   if (isInspectorOnly(user)) return inspection.inspectorId === user.id;
   if (!inspection.projectId) return false;
-  const [project] = await db.select({ createdById: projectsTable.createdById }).from(projectsTable).where(eq(projectsTable.id, inspection.projectId));
+  const [project] = await db.select({ createdById: projectsTable.createdById, orgAdminId: projectsTable.orgAdminId }).from(projectsTable).where(eq(projectsTable.id, inspection.projectId));
   if (!project) return false;
+  // Primary check: org-based access (respects multi-org membership and revocations)
+  if (project.orgAdminId != null) {
+    const accessible = await getAccessibleOrgAdminIds(user);
+    if (accessible.has(project.orgAdminId)) return true;
+  }
+  // Legacy fallback: createdById check
   const adminId = user.isCompanyAdmin ? user.id : (user.adminUserId ? parseInt(user.adminUserId) : user.id);
   if (project.createdById === user.id || project.createdById === adminId) return true;
   const [creator] = await db.select({ adminUserId: usersTable.adminUserId }).from(usersTable).where(eq(usersTable.id, project.createdById));
