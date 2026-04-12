@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, lt, and, ne, desc, inArray } from "drizzle-orm";
-import { db, issuesTable, issueCommentsTable, projectsTable, activityLogsTable, usersTable, inspectionsTable, checklistTemplatesTable } from "@workspace/db";
+import { db, issuesTable, issueCommentsTable, projectsTable, activityLogsTable, usersTable, inspectionsTable, checklistTemplatesTable, userOrganisationsTable } from "@workspace/db";
 import { optionalAuth, requireAuth } from "../middleware/auth";
 import { getOrgMemberIds } from "../lib/quota";
 import { sendEmail } from "../lib/email";
@@ -160,16 +160,40 @@ router.get("/", optionalAuth, async (req, res) => {
       .orderBy(sql`${issuesTable.createdAt} DESC`);
 
     if (req.authUser) {
-      // All users (including platform admins) are scoped to their own organisation.
-      const adminId = req.authUser.isAdmin || req.authUser.isCompanyAdmin
-        ? req.authUser.id
-        : (req.authUser.adminUserId ? parseInt(req.authUser.adminUserId) : req.authUser.id);
-      const orgMemberIds = await getOrgMemberIds(adminId);
-      const orgSet = new Set([...orgMemberIds, req.authUser.id]);
-      const allProjects = await db.select({ id: projectsTable.id, createdById: projectsTable.createdById })
-        .from(projectsTable);
-      const accessibleIds = allProjects.filter(p => orgSet.has(p.createdById)).map(p => p.id);
-      issues = issues.filter(i => i.projectId == null || accessibleIds.includes(i.projectId));
+      if (!req.authUser.isAdmin) {
+        // Non-platform-admins: scope to projects belonging to their accessible orgs
+        // (matched by orgAdminId, consistent with the projects list route).
+        const primaryAdminId = req.authUser.isCompanyAdmin
+          ? req.authUser.id
+          : (req.authUser.adminUserId ? parseInt(req.authUser.adminUserId) : req.authUser.id);
+
+        // Collect all org admin IDs this user is an active member of
+        const memberships = await db
+          .select({ orgAdminId: userOrganisationsTable.orgAdminId, status: userOrganisationsTable.status })
+          .from(userOrganisationsTable)
+          .where(eq(userOrganisationsTable.userId, req.authUser.id));
+        const blockedOrgAdminIds = new Set(
+          memberships.filter(m => m.status !== "active").map(m => m.orgAdminId),
+        );
+        const accessibleOrgAdminIds = new Set<number>(
+          memberships.filter(m => m.status === "active").map(m => m.orgAdminId),
+        );
+        if (!blockedOrgAdminIds.has(primaryAdminId)) {
+          accessibleOrgAdminIds.add(primaryAdminId);
+        }
+
+        const allProjects = await db
+          .select({ id: projectsTable.id, orgAdminId: projectsTable.orgAdminId })
+          .from(projectsTable);
+        const accessibleProjectIds = new Set(
+          allProjects
+            .filter(p => p.orgAdminId != null && accessibleOrgAdminIds.has(p.orgAdminId))
+            .map(p => p.id),
+        );
+        // Only include issues tied to accessible projects (exclude null-project issues for non-admins)
+        issues = issues.filter(i => i.projectId != null && accessibleProjectIds.has(i.projectId));
+      }
+      // Platform admins (isAdmin=true) see all issues — no filter applied
     } else {
       issues = [];
     }

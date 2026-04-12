@@ -709,11 +709,22 @@ router.get("/:id", requireAuth, async (req, res) => {
     const pAddress = project[0]?.siteAddress ?? null;
     const pSuburb = project[0]?.suburb ?? null;
 
+    // Build a set of checklist result IDs that already have an auto-created real
+    // issue so we don't show both the real issue and a synthetic duplicate.
+    const autoCreatedResultIds = new Set(
+      realIssues
+        .map(i => {
+          const match = i.description?.match(/\[auto:(\d+)\]/);
+          return match ? parseInt(match[1]) : null;
+        })
+        .filter((rid): rid is number => rid !== null)
+    );
+
     // Synthesise issues from failed/monitor checklist results so the Issues tab
     // always reflects what was found on the checklist, even if no manual issue
-    // record was raised.
+    // record was raised. Skip items that already have an auto-created real issue.
     const syntheticIssues = formattedResults
-      .filter(r => r.result === "fail" || r.result === "monitor")
+      .filter(r => (r.result === "fail" || r.result === "monitor") && !autoCreatedResultIds.has(r.id))
       .map(r => ({
         id: -(r.id),          // negative to avoid collision with real issue IDs
         projectId: inspection.projectId,
