@@ -598,18 +598,24 @@ export default function InspectionDetail() {
   const submitReport = async () => {
     if (!generatedReport) return;
     setSubmittingReport(true);
+    let succeeded = false;
     try {
       await apiFetch(`/api/reports/${generatedReport.id}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-      setReportDialogOpen(false);
-      setGeneratedReport(null);
-      await refreshReports();
-      setTab("Reports");
+      succeeded = true;
+      toast({ title: "Report approved", description: "The report has been saved successfully." });
     } catch {
+      toast({ title: "Approval failed", description: "Something went wrong. Please try again.", variant: "destructive" });
     } finally {
       setSubmittingReport(false);
+      setReportDialogOpen(false);
+      setGeneratedReport(null);
+    }
+    if (succeeded) {
+      await refreshReports();
+      setTab("Reports");
     }
   };
 
