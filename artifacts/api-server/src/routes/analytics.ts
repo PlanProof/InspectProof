@@ -7,25 +7,40 @@ const router: IRouter = Router();
 
 router.use(optionalAuth);
 
-/** Build SQL subquery fragments scoped to the current user's projects/inspections. */
-function buildUserScopeFragments(userId: number | null) {
-  const userProjects = userId
-    ? sql`(SELECT id FROM projects WHERE created_by_id = ${userId})`
-    : sql`(SELECT id FROM projects WHERE 1=0)`;
-  const userInspections = userId
-    ? sql`(SELECT id FROM inspections WHERE project_id IN (SELECT id FROM projects WHERE created_by_id = ${userId}))`
-    : sql`(SELECT id FROM inspections WHERE 1=0)`;
-  return { userProjects, userInspections };
+/** Build SQL subquery fragments scoped to the current user's org (via org_admin_id). */
+function buildUserScopeFragments(authUser: { id: number; isAdmin?: boolean; isCompanyAdmin?: boolean; adminUserId?: string } | null) {
+  if (!authUser) {
+    return {
+      userProjects: sql`(SELECT id FROM projects WHERE 1=0)`,
+      userInspections: sql`(SELECT id FROM inspections WHERE 1=0)`,
+    };
+  }
+  if (authUser.isAdmin) {
+    // Platform admins see everything
+    return {
+      userProjects: sql`(SELECT id FROM projects)`,
+      userInspections: sql`(SELECT id FROM inspections)`,
+    };
+  }
+  // Use org_admin_id to scope projects — consistent with the projects list route
+  const orgAdminId = authUser.isCompanyAdmin
+    ? authUser.id
+    : (authUser.adminUserId ? parseInt(authUser.adminUserId) : authUser.id);
+  return {
+    userProjects: sql`(SELECT id FROM projects WHERE org_admin_id = ${orgAdminId})`,
+    userInspections: sql`(SELECT id FROM inspections WHERE project_id IN (SELECT id FROM projects WHERE org_admin_id = ${orgAdminId}))`,
+  };
 }
 
 router.get("/dashboard", async (req, res) => {
   try {
-    const userId = (req as any).authUser?.id ?? null;
+    const authUser = (req as any).authUser ?? null;
+    const userId = authUser?.id ?? null;
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
     const todayStr = now.toISOString().split("T")[0];
 
-    const { userProjects, userInspections } = buildUserScopeFragments(userId);
+    const { userProjects, userInspections } = buildUserScopeFragments(authUser);
 
     // Fire all independent queries concurrently
     const [
@@ -48,11 +63,11 @@ router.get("/dashboard", async (req, res) => {
     ] = await Promise.all([
       db.select({ count: sql<number>`count(*)::int` })
         .from(projectsTable)
-        .where(userId ? sql`${projectsTable.createdById} = ${userId}` : sql`1=0`),
+        .where(sql`${projectsTable.id} IN ${userProjects}`),
 
       db.select({ count: sql<number>`count(*)::int` })
         .from(projectsTable)
-        .where(userId ? sql`${projectsTable.createdById} = ${userId} AND ${projectsTable.status} = 'active'` : sql`1=0`),
+        .where(sql`${projectsTable.id} IN ${userProjects} AND ${projectsTable.status} = 'active'`),
 
       db.select({ count: sql<number>`count(*)::int` })
         .from(inspectionsTable)
@@ -64,15 +79,15 @@ router.get("/dashboard", async (req, res) => {
 
       db.select({ count: sql<number>`count(*)::int` })
         .from(issuesTable)
-        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`),
+        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved', 'rejected')`),
 
       db.select({ count: sql<number>`count(*)::int` })
         .from(issuesTable)
-        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.severity} = 'critical' AND ${issuesTable.status} NOT IN ('closed', 'resolved')`),
+        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.severity} = 'critical' AND ${issuesTable.status} NOT IN ('closed', 'resolved', 'rejected')`),
 
       db.select({ count: sql<number>`count(*)::int` })
         .from(issuesTable)
-        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.dueDate} < ${todayStr} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`),
+        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.dueDate} < ${todayStr} AND ${issuesTable.status} NOT IN ('closed', 'resolved', 'rejected')`),
 
       db.select({ count: sql<number>`count(*)::int` })
         .from(reportsTable)
@@ -107,14 +122,14 @@ router.get("/dashboard", async (req, res) => {
         stage: projectsTable.stage,
         count: sql<number>`count(*)::int`,
       }).from(projectsTable)
-        .where(userId ? sql`${projectsTable.createdById} = ${userId} AND ${projectsTable.status} = 'active'` : sql`1=0`)
+        .where(sql`${projectsTable.id} IN ${userProjects} AND ${projectsTable.status} = 'active'`)
         .groupBy(projectsTable.stage),
 
       db.select({
         severity: issuesTable.severity,
         count: sql<number>`count(*)::int`,
       }).from(issuesTable)
-        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`)
+        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved', 'rejected')`)
         .groupBy(issuesTable.severity),
 
       db.select({
@@ -198,8 +213,9 @@ router.get("/dashboard", async (req, res) => {
 
 router.get("/trends", async (req, res) => {
   try {
-    const userId = (req as any).authUser?.id ?? null;
-    const { userProjects, userInspections } = buildUserScopeFragments(userId);
+    const authUser = (req as any).authUser ?? null;
+    const userId = authUser?.id ?? null;
+    const { userProjects, userInspections } = buildUserScopeFragments(authUser);
 
     const [
       inspectionsByMonth,
@@ -246,7 +262,7 @@ router.get("/trends", async (req, res) => {
         name: issuesTable.severity,
         count: sql<number>`count(*)::int`,
       }).from(issuesTable)
-        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`)
+        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved', 'rejected')`)
         .groupBy(issuesTable.severity)
         .orderBy(sql`count(*) DESC`),
 
@@ -323,8 +339,9 @@ router.get("/trends", async (req, res) => {
 
 router.get("/insights", async (req, res) => {
   try {
-    const userId = (req as any).authUser?.id ?? null;
-    const { userProjects, userInspections } = buildUserScopeFragments(userId);
+    const authUser = (req as any).authUser ?? null;
+    const userId = authUser?.id ?? null;
+    const { userProjects, userInspections } = buildUserScopeFragments(authUser);
 
     const [
       [totalInspRow],
@@ -343,7 +360,7 @@ router.get("/insights", async (req, res) => {
 
       db.select({ count: sql<number>`count(*)::int` })
         .from(issuesTable)
-        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`),
+        .where(sql`${issuesTable.projectId} IN ${userProjects} AND ${issuesTable.status} NOT IN ('closed', 'resolved', 'rejected')`),
 
       db.select({ count: sql<number>`count(*)::int` })
         .from(checklistResultsTable)

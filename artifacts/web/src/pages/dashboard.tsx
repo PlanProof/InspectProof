@@ -712,9 +712,10 @@ export default function Dashboard() {
 
   const allInspections = (data as any).allInspections ?? data.upcomingInspections ?? [];
 
-  const openDefects = (issues as any[] ?? []).filter(i => i.status !== "resolved").length;
+  const OPEN_STATUSES = new Set(["open", "in_progress", "pending_review"]);
+  const openDefects = (issues as any[] ?? []).filter(i => OPEN_STATUSES.has(i.status)).length;
   const overdueDefects = (issues as any[] ?? []).filter(i => {
-    if (!i.dueDate || i.status === "resolved") return false;
+    if (!i.dueDate || !OPEN_STATUSES.has(i.status)) return false;
     return new Date(i.dueDate) < new Date();
   }).length;
   const today = new Date();
