@@ -605,6 +605,7 @@ function ChecklistsPanel({
 // ── Main Panel (embeddable, no AppLayout) ─────────────────────────────────────
 export function DocTemplatesPanel() {
   const { user } = useAuth();
+  const isAdmin = user?.isAdmin ?? false;
   const [templates, setTemplates] = useState<DocTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -887,24 +888,26 @@ export function DocTemplatesPanel() {
               <Plus className="h-3 w-3" />New
             </button>
           </div>
-          {/* Discipline selector */}
-          <div className="px-2 py-2 border-b border-border bg-muted/10">
-            <div className="flex flex-wrap gap-1">
-              {DISCIPLINES.map(d => (
-                <button
-                  key={d}
-                  onClick={() => { setDocDiscipline(d); setSelectedId(null); }}
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
-                    docDiscipline === d
-                      ? "bg-sidebar text-white border-sidebar"
-                      : "bg-muted text-muted-foreground border-transparent hover:border-muted-foreground/30 hover:text-sidebar"
-                  }`}
-                >
-                  {d.split(" ")[0]}
-                </button>
-              ))}
+          {/* Discipline selector — admins only */}
+          {isAdmin && (
+            <div className="px-2 py-2 border-b border-border bg-muted/10">
+              <div className="flex flex-wrap gap-1">
+                {DISCIPLINES.map(d => (
+                  <button
+                    key={d}
+                    onClick={() => { setDocDiscipline(d); setSelectedId(null); }}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
+                      docDiscipline === d
+                        ? "bg-sidebar text-white border-sidebar"
+                        : "bg-muted text-muted-foreground border-transparent hover:border-muted-foreground/30 hover:text-sidebar"
+                    }`}
+                  >
+                    {d.split(" ")[0]}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
           <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
             {templatesLoading ? (
               <div className="py-8 text-center">
