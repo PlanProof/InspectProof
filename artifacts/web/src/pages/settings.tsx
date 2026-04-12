@@ -6,7 +6,7 @@ import {
   CheckCircle2, ChevronRight, Shield, Database, Download,
   ToggleLeft, Upload, Trash2, PenLine, CreditCard, Zap, BarChart3,
   ArrowRight, Eye, EyeOff, Plus, X, Edit2, Check, Mail, BookUser,
-  Link2, Calendar, Bold, Italic, AlignLeft,
+  Link2, Calendar, Bold, Italic, AlignLeft, Network,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -36,16 +36,17 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return res.json();
 }
 
-type Tab = "profile" | "security" | "notifications" | "organisation" | "platform" | "billing" | "integrations";
+type Tab = "profile" | "security" | "notifications" | "organisation" | "my-organisations" | "platform" | "billing" | "integrations";
 
-const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "profile",       label: "Profile",        icon: User },
-  { id: "security",      label: "Security",       icon: Lock },
-  { id: "notifications", label: "Notifications",  icon: Bell },
-  { id: "organisation",  label: "Organisation",   icon: Building2 },
-  { id: "platform",      label: "Platform",       icon: Palette },
-  { id: "integrations",  label: "Integrations",   icon: Link2 },
-  { id: "billing",       label: "Billing",        icon: CreditCard },
+const TABS: { id: Tab; label: string; icon: React.ElementType; badge?: () => React.ReactNode }[] = [
+  { id: "profile",           label: "Profile",           icon: User },
+  { id: "security",          label: "Security",          icon: Lock },
+  { id: "notifications",     label: "Notifications",     icon: Bell },
+  { id: "organisation",      label: "Organisation",      icon: Building2 },
+  { id: "my-organisations",  label: "My Organisations",  icon: Network },
+  { id: "platform",          label: "Platform",          icon: Palette },
+  { id: "integrations",      label: "Integrations",      icon: Link2 },
+  { id: "billing",           label: "Billing",           icon: CreditCard },
 ];
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -244,7 +245,7 @@ export default function Settings() {
       <div className="flex gap-6">
         {/* Sidebar nav */}
         <nav className="w-52 shrink-0 space-y-1">
-          {TABS.filter(t => t.id !== "billing" || canManageBilling).map(({ id, label, icon: Icon }) => (
+          {TABS.filter(t => t.id !== "billing" || canManageBilling).map(({ id, label, icon: Icon, badge: Badge }) => (
             <button
               key={id}
               onClick={() => {
@@ -262,6 +263,7 @@ export default function Settings() {
             >
               <Icon className="h-4 w-4 shrink-0" />
               {label}
+              {Badge && <Badge />}
               {activeTab === id && <ChevronRight className="h-3.5 w-3.5 ml-auto opacity-60" />}
             </button>
           ))}
@@ -269,13 +271,14 @@ export default function Settings() {
 
         {/* Content */}
         <div className="flex-1 min-w-0 space-y-4">
-          {activeTab === "profile"       && <ProfileTab user={user} loading={loadingUser} isOnboarding={isOnboarding && onboardingStep === "profile"} onOnboardingComplete={handleProfileOnboardingComplete} />}
-          {activeTab === "security"      && <SecurityTab />}
-          {activeTab === "notifications" && <NotificationsTab />}
-          {activeTab === "organisation"  && <OrganisationTab isOnboarding={isOnboarding && onboardingStep === "organisation"} onOnboardingComplete={handleOrgOnboardingComplete} />}
-          {activeTab === "platform"      && <PlatformTab />}
-          {activeTab === "integrations"  && <IntegrationsTab />}
-          {activeTab === "billing"       && (canManageBilling ? <BillingTab /> : null)}
+          {activeTab === "profile"           && <ProfileTab user={user} loading={loadingUser} isOnboarding={isOnboarding && onboardingStep === "profile"} onOnboardingComplete={handleProfileOnboardingComplete} />}
+          {activeTab === "security"          && <SecurityTab />}
+          {activeTab === "notifications"     && <NotificationsTab />}
+          {activeTab === "organisation"      && <OrganisationTab isOnboarding={isOnboarding && onboardingStep === "organisation"} onOnboardingComplete={handleOrgOnboardingComplete} />}
+          {activeTab === "my-organisations"  && <MyOrganisationsTab />}
+          {activeTab === "platform"          && <PlatformTab />}
+          {activeTab === "integrations"      && <IntegrationsTab />}
+          {activeTab === "billing"           && (canManageBilling ? <BillingTab /> : null)}
         </div>
       </div>
     </AppLayout>
@@ -2655,5 +2658,193 @@ function BillingTab() {
         </div>
       </SectionCard>
     </>
+  );
+}
+
+// ── My Organisations Tab ───────────────────────────────────────────────────────
+type OrgMembership = {
+  id: number;
+  orgId: number;
+  orgAdminId: number;
+  orgName: string | null;
+  orgAdminEmail: string;
+  role: string;
+  permissions: Record<string, boolean>;
+  status: "pending" | "active" | "suspended" | "revoked";
+  joinedAt: string | null;
+  createdAt: string;
+};
+
+function MyOrganisationsTab() {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["user-organisations"],
+    queryFn: () => apiFetch("/api/user/organisations"),
+  });
+  const [actionPending, setActionPending] = useState<number | null>(null);
+  const [notification, setNotification] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
+  const orgs: OrgMembership[] = data?.organisations ?? [];
+  const pending = orgs.filter(o => o.status === "pending");
+  const active = orgs.filter(o => o.status === "active");
+
+  async function acceptInvite(membershipId: number) {
+    setActionPending(membershipId);
+    try {
+      await apiFetch(`/api/orgs/memberships/${membershipId}/accept`, { method: "POST" });
+      setNotification({ type: "success", msg: "Invitation accepted successfully." });
+      refetch();
+    } catch {
+      setNotification({ type: "error", msg: "Failed to accept invitation." });
+    } finally {
+      setActionPending(null);
+    }
+  }
+
+  async function declineInvite(membershipId: number) {
+    setActionPending(membershipId);
+    try {
+      await apiFetch(`/api/orgs/memberships/${membershipId}/decline`, { method: "POST" });
+      setNotification({ type: "success", msg: "Invitation declined." });
+      refetch();
+    } catch {
+      setNotification({ type: "error", msg: "Failed to decline invitation." });
+    } finally {
+      setActionPending(null);
+    }
+  }
+
+  async function leaveOrg(orgAdminId: number, orgName: string) {
+    if (!confirm(`Leave ${orgName}? You will lose access to their projects and inspections.`)) return;
+    setActionPending(orgAdminId);
+    try {
+      await apiFetch(`/api/user/organisations/${orgAdminId}`, { method: "DELETE" });
+      setNotification({ type: "success", msg: `Left ${orgName}.` });
+      refetch();
+    } catch {
+      setNotification({ type: "error", msg: "Failed to leave organisation." });
+    } finally {
+      setActionPending(null);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-secondary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-sidebar">My Organisations</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Manage which organisations you are a member of. Members can share access to projects and inspections across organisations.
+        </p>
+      </div>
+
+      {notification && (
+        <div className={cn(
+          "flex items-center gap-2 rounded-lg px-4 py-3 text-sm",
+          notification.type === "success" ? "bg-green-50 border border-green-200 text-green-700" : "bg-red-50 border border-red-200 text-red-700"
+        )}>
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {notification.msg}
+          <button onClick={() => setNotification(null)} className="ml-auto opacity-60 hover:opacity-100">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {pending.length > 0 && (
+        <SectionCard title={`Pending Invitations (${pending.length})`} description="You have been invited to join these organisations.">
+          <div className="space-y-3">
+            {pending.map(org => (
+              <div key={org.id} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0">
+                    <Network className="h-4 w-4 text-amber-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-sidebar truncate">{org.orgName}</p>
+                    <p className="text-xs text-muted-foreground">{org.orgAdminEmail}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => acceptInvite(org.id)}
+                    disabled={actionPending === org.id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-secondary text-white hover:bg-secondary/90 disabled:opacity-60 transition"
+                  >
+                    {actionPending === org.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    Accept
+                  </button>
+                  <button
+                    onClick={() => declineInvite(org.id)}
+                    disabled={actionPending === org.id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-border text-muted-foreground hover:bg-muted/40 disabled:opacity-60 transition"
+                  >
+                    <X className="h-3 w-3" />
+                    Decline
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      <SectionCard
+        title="Active Memberships"
+        description="Organisations you are currently a member of."
+      >
+        {active.length === 0 ? (
+          <div className="text-center py-6 text-sm text-muted-foreground">
+            <Network className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
+            <p>You are not a member of any additional organisations.</p>
+            <p className="text-xs mt-1">Ask your organisation admin to send you an invitation.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {active.map(org => (
+              <div key={org.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-muted/10">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-secondary/10 border border-secondary/20 flex items-center justify-center shrink-0">
+                    <Building2 className="h-4 w-4 text-secondary" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-sidebar truncate">{org.orgName}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-muted-foreground">{org.orgAdminEmail}</span>
+                      {org.role && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/60">
+                          {org.role}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  {org.joinedAt && (
+                    <span className="text-xs text-muted-foreground hidden sm:block">
+                      Joined {new Date(org.joinedAt).toLocaleDateString()}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => leaveOrg(org.orgAdminId, org.orgName ?? "this organisation")}
+                    disabled={actionPending === org.orgAdminId}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 transition"
+                  >
+                    {actionPending === org.orgAdminId ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                    Leave
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+    </div>
   );
 }

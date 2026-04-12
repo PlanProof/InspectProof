@@ -98,6 +98,12 @@ export default function SettingsScreen() {
   const [calendarLoading, setCalendarLoading] = useState(true);
   const [disconnectingCal, setDisconnectingCal] = useState<string | null>(null);
 
+  // Multi-org state
+  type OrgMembership = { id: number; orgAdminId: number; orgName: string; orgAdminEmail: string; role?: string; status: string; joinedAt?: string };
+  const [orgMemberships, setOrgMemberships] = useState<OrgMembership[]>([]);
+  const [orgLoading, setOrgLoading] = useState(false);
+  const [orgAction, setOrgAction] = useState<number | null>(null);
+
   const [orgDetails, setOrgDetails] = useState<{
     name?: string; abn?: string; acn?: string; phone?: string;
     address?: string; suburb?: string; state?: string; postcode?: string;
@@ -199,6 +205,97 @@ export default function SettingsScreen() {
       setDeleting(false);
     }
   }
+
+  const fetchOrgMemberships = useCallback(async () => {
+    if (!token) return;
+    setOrgLoading(true);
+    try {
+      const res = await fetch(getApiUrl("/api/user/organisations"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setOrgMemberships(data.organisations ?? []);
+      }
+    } catch {}
+    setOrgLoading(false);
+  }, [token]);
+
+  useEffect(() => { fetchOrgMemberships(); }, [fetchOrgMemberships]);
+
+  async function handleAcceptInvite(membershipId: number) {
+    setOrgAction(membershipId);
+    try {
+      const res = await fetch(getApiUrl(`/api/orgs/memberships/${membershipId}/accept`), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        fetchOrgMemberships();
+      } else {
+        Alert.alert("Error", "Failed to accept invitation.");
+      }
+    } catch {
+      Alert.alert("Error", "Network error. Please try again.");
+    } finally {
+      setOrgAction(null);
+    }
+  }
+
+  async function handleDeclineInvite(membershipId: number) {
+    setOrgAction(membershipId);
+    try {
+      const res = await fetch(getApiUrl(`/api/orgs/memberships/${membershipId}/decline`), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        fetchOrgMemberships();
+      } else {
+        Alert.alert("Error", "Failed to decline invitation.");
+      }
+    } catch {
+      Alert.alert("Error", "Network error. Please try again.");
+    } finally {
+      setOrgAction(null);
+    }
+  }
+
+  async function handleLeaveOrg(orgAdminId: number, orgName: string) {
+    Alert.alert(
+      "Leave Organisation",
+      `Are you sure you want to leave ${orgName}? You will lose access to their projects and inspections.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Leave",
+          style: "destructive",
+          onPress: async () => {
+            setOrgAction(orgAdminId);
+            try {
+              const res = await fetch(getApiUrl(`/api/user/organisations/${orgAdminId}`), {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (res.ok) {
+                fetchOrgMemberships();
+              } else {
+                Alert.alert("Error", "Failed to leave organisation.");
+              }
+            } catch {
+              Alert.alert("Error", "Network error. Please try again.");
+            } finally {
+              setOrgAction(null);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  const pendingInvites = orgMemberships.filter(o => o.status === "pending");
+  const activeOrgs = orgMemberships.filter(o => o.status === "active");
+  const hasMultiOrg = orgMemberships.length > 0;
 
   const initials = `${(user?.firstName ?? "?")[0]}${(user?.lastName ?? "?")[0]}`.toUpperCase();
 
@@ -333,6 +430,75 @@ export default function SettingsScreen() {
             />
           </View>
         </View>
+
+        {/* My Organisations */}
+        {(hasMultiOrg || pendingInvites.length > 0) && (
+          <View style={styles.section}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <Text style={styles.sectionTitle}>My Organisations</Text>
+              {orgLoading && <ActivityIndicator size="small" color={Colors.secondary} />}
+            </View>
+            {pendingInvites.length > 0 && (
+              <View style={[styles.group, { marginBottom: 10 }]}>
+                {pendingInvites.map(org => (
+                  <View key={org.id} style={[styles.row, { flexDirection: "column", alignItems: "flex-start", gap: 8 }]}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <View style={[styles.rowIcon, { backgroundColor: "#FEF9C3" }]}>
+                        <Feather name="mail" size={17} color="#A16207" />
+                      </View>
+                      <View style={styles.rowBody}>
+                        <Text style={styles.rowLabel}>{org.orgName}</Text>
+                        <Text style={styles.rowSublabel}>Pending invitation · {org.orgAdminEmail}</Text>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: "row", gap: 8, paddingLeft: 42 }}>
+                      <Pressable
+                        onPress={() => handleAcceptInvite(org.id)}
+                        disabled={orgAction === org.id}
+                        style={({ pressed }) => [styles.orgBtn, styles.orgBtnPrimary, pressed && { opacity: 0.75 }, orgAction === org.id && { opacity: 0.5 }]}
+                      >
+                        {orgAction === org.id ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={styles.orgBtnPrimaryText}>Accept</Text>
+                        )}
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleDeclineInvite(org.id)}
+                        disabled={orgAction === org.id}
+                        style={({ pressed }) => [styles.orgBtn, styles.orgBtnOutline, pressed && { opacity: 0.75 }, orgAction === org.id && { opacity: 0.5 }]}
+                      >
+                        <Text style={styles.orgBtnOutlineText}>Decline</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+            {activeOrgs.length > 0 && (
+              <View style={styles.group}>
+                {activeOrgs.map(org => (
+                  <View key={org.id} style={[styles.row, { justifyContent: "space-between" }]}>
+                    <View style={[styles.rowIcon, { backgroundColor: Colors.secondaryLight ?? "#EFF6FF" }]}>
+                      <Feather name="briefcase" size={17} color={Colors.secondary} />
+                    </View>
+                    <View style={[styles.rowBody, { flex: 1 }]}>
+                      <Text style={styles.rowLabel}>{org.orgName}</Text>
+                      {org.role && <Text style={styles.rowSublabel}>{org.role}</Text>}
+                    </View>
+                    <Pressable
+                      onPress={() => handleLeaveOrg(org.orgAdminId, org.orgName)}
+                      disabled={orgAction === org.orgAdminId}
+                      style={({ pressed }) => [{ paddingHorizontal: 8, paddingVertical: 4 }, pressed && { opacity: 0.75 }]}
+                    >
+                      <Text style={{ fontSize: 12, color: Colors.danger, fontFamily: "PlusJakartaSans_600SemiBold" }}>Leave</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Notifications */}
         <View style={styles.section}>
@@ -737,4 +903,13 @@ const styles = StyleSheet.create({
   orgDetailValue: {
     flex: 1, fontSize: 13, fontFamily: "PlusJakartaSans_400Regular", color: Colors.text,
   },
+
+  orgBtn: {
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, alignItems: "center", justifyContent: "center",
+    minWidth: 72,
+  },
+  orgBtnPrimary: { backgroundColor: Colors.secondary },
+  orgBtnPrimaryText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: "#fff" },
+  orgBtnOutline: { borderWidth: 1, borderColor: Colors.border },
+  orgBtnOutlineText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold", color: Colors.text },
 });

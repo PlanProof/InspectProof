@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useListProjects, useCreateProject, CreateProjectRequestProjectType } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, Label } from "@/components/ui";
-import { Search, Plus, Building, ChevronDown, ChevronUp, ChevronsUpDown, X, AlertTriangle, TrendingUp } from "lucide-react";
+import { Search, Plus, Building, ChevronDown, ChevronUp, ChevronsUpDown, X, AlertTriangle, TrendingUp, Network } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
 import { AddressAutocomplete, type AddressFields } from "@/components/AddressAutocomplete";
@@ -262,6 +262,7 @@ function ProjectUsageBar({ current, max, planLabel }: { current: number; max: nu
 export default function Projects() {
   const [search, setSearch] = useState("");
   const [statusTab, setStatusTab] = useState<StatusTab>("active");
+  const [selectedOrgId, setSelectedOrgId] = useState<string>("all");
   const [, navigate] = useLocation();
   const { data: projects, isLoading, refetch } = useListProjects({});
   const { data: subscription } = useSubscription();
@@ -279,15 +280,30 @@ export default function Projects() {
   const atLimit = maxProjects !== null && activeCount >= maxProjects;
   const planLabel: string = subscription?.limits?.label ?? "";
 
+  // Derive unique orgs from project data for filter dropdown
+  const orgOptions = (() => {
+    const seen = new Map<string, string>();
+    for (const p of projects ?? []) {
+      const key = p.orgAdminId != null ? String(p.orgAdminId) : null;
+      const name = p.orgName ?? null;
+      if (key && name && !seen.has(key)) seen.set(key, name);
+    }
+    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+  })();
+  const isMultiOrg = orgOptions.length > 1;
+
   const tabFiltered = projects?.filter(p => {
     if (statusTab === "all") return true;
     return p.status === statusTab;
   });
 
-  const filtered = tabFiltered?.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.siteAddress.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = tabFiltered?.filter(p => {
+    const matchesSearch =
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.siteAddress.toLowerCase().includes(search.toLowerCase());
+    const matchesOrg = selectedOrgId === "all" || String(p.orgAdminId) === selectedOrgId;
+    return matchesSearch && matchesOrg;
+  });
 
   const sorted = [...(filtered ?? [])].sort((a, b) => {
     const dir = sortDir === "asc" ? 1 : -1;
@@ -386,8 +402,8 @@ export default function Projects() {
         </div>
 
         {/* Search bar */}
-        <div className="p-4 border-b flex items-center gap-4 bg-muted/10">
-          <div className="relative flex-1 max-w-md">
+        <div className="p-4 border-b flex flex-wrap items-center gap-3 bg-muted/10">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search projects..."
@@ -396,6 +412,21 @@ export default function Projects() {
               className="pl-9 bg-background"
             />
           </div>
+          {isMultiOrg && (
+            <div className="flex items-center gap-2">
+              <Network className="h-4 w-4 text-muted-foreground shrink-0" />
+              <select
+                value={selectedOrgId}
+                onChange={e => setSelectedOrgId(e.target.value)}
+                className="text-sm border border-input rounded-lg px-2.5 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-secondary/30 transition"
+              >
+                <option value="all">All Organisations</option>
+                {orgOptions.map(o => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {isLoading ? (
@@ -411,6 +442,9 @@ export default function Projects() {
                 <SortableHead col="stage" label="Stage" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="clientName" label="Client" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="totalInspections" label="Inspections" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="text-right" />
+                {isMultiOrg && selectedOrgId === "all" && (
+                  <TableHead className="text-xs text-muted-foreground">Organisation</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -447,6 +481,16 @@ export default function Projects() {
                     <TableCell className="capitalize text-sm">{project.stage.replace('_', ' ')}</TableCell>
                     <TableCell>{project.clientName}</TableCell>
                     <TableCell className="text-right font-medium">{project.totalInspections}</TableCell>
+                    {isMultiOrg && selectedOrgId === "all" && (
+                      <TableCell>
+                        {project.orgName && (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted border border-border/60 text-muted-foreground">
+                            <Network className="h-2.5 w-2.5" />
+                            {project.orgName}
+                          </span>
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}

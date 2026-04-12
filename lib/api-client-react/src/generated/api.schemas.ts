@@ -131,6 +131,8 @@ export interface Project {
   openIssues: number;
   createdAt: string;
   updatedAt: string;
+  orgAdminId?: number | null;
+  orgName?: string | null;
 }
 
 export type InspectionInspectionType =
@@ -178,6 +180,11 @@ export interface Inspection {
   failCount: number;
   naCount: number;
   createdAt: string;
+  projectAddress?: string | null;
+  projectSuburb?: string | null;
+  orgAdminId?: number | null;
+  orgName?: string | null;
+  checklistTemplateName?: string | null;
 }
 
 export type IssueSeverity = (typeof IssueSeverity)[keyof typeof IssueSeverity];

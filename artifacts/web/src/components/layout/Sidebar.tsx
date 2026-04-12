@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import {
@@ -30,6 +30,10 @@ const navigation = [
   { name: "Team",        href: "/inspectors",  icon: UsersRound },
 ];
 
+function apiBase() {
+  return import.meta.env.BASE_URL.replace(/\/$/, "");
+}
+
 function useOrgName(apiCompanyName: string | null | undefined): string | null {
   const [localOrg, setLocalOrg] = useState<string | null>(null);
   useEffect(() => {
@@ -44,10 +48,38 @@ function useOrgName(apiCompanyName: string | null | undefined): string | null {
   return apiCompanyName || localOrg || null;
 }
 
+function usePendingInviteCount(): number {
+  const [count, setCount] = useState(0);
+  const { user } = useAuth();
+
+  const fetch_ = useCallback(async () => {
+    if (!user) return;
+    const token = localStorage.getItem("inspectproof_token") ?? "";
+    try {
+      const res = await fetch(`${apiBase()}/api/user/organisations`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const body = await res.json() as { organisations: Array<{ status: string }> };
+        setCount((body.organisations ?? []).filter(o => o.status === "pending").length);
+      }
+    } catch {}
+  }, [user]);
+
+  useEffect(() => {
+    fetch_();
+    const interval = setInterval(fetch_, 60_000);
+    return () => clearInterval(interval);
+  }, [fetch_]);
+
+  return count;
+}
+
 export function Sidebar() {
   const [location] = useLocation();
   const { logout, user } = useAuth();
   const orgName = useOrgName(user?.companyName);
+  const pendingInviteCount = usePendingInviteCount();
 
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl">
@@ -142,6 +174,11 @@ export function Sidebar() {
         >
           <Settings className="mr-3 h-5 w-5 text-sidebar-foreground/50 group-hover:text-white" />
           Settings
+          {pendingInviteCount > 0 && (
+            <span className="ml-auto min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1">
+              {pendingInviteCount}
+            </span>
+          )}
         </Link>
         <button
           onClick={logout}

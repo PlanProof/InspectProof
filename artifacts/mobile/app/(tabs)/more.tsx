@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { useTabBarHeight } from "@/hooks/useTabBarHeight";
+import { getApiUrl } from "@/constants/api";
 
 const logoImage = require("@/assets/images/logo.png");
 
@@ -54,7 +55,28 @@ function MenuItem({ icon, label, sublabel, onPress, danger = false, badge }: Men
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useTabBarHeight();
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
+  const [pendingInviteCount, setPendingInviteCount] = useState(0);
+
+  const fetchPendingInvites = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(getApiUrl("/api/user/organisations"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const body = await res.json();
+        const count = (body.organisations ?? []).filter((m: { status: string }) => m.status === "pending").length;
+        setPendingInviteCount(count);
+      }
+    } catch {}
+  }, [token]);
+
+  useEffect(() => {
+    fetchPendingInvites();
+    const interval = setInterval(fetchPendingInvites, 60000);
+    return () => clearInterval(interval);
+  }, [fetchPendingInvites]);
 
   const roleLabel: Record<string, string> = {
     admin: "Administrator",
@@ -152,6 +174,7 @@ export default function MoreScreen() {
             label="Settings"
             sublabel="App preferences and configuration"
             onPress={() => router.push("/settings" as any)}
+            badge={pendingInviteCount > 0 ? pendingInviteCount : undefined}
           />
           <MenuItem
             icon="message-circle"

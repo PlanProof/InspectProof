@@ -435,6 +435,45 @@ async function runSchemaMigrations() {
       updated_at timestamp NOT NULL DEFAULT now()
     )`);
 
+    // user_organisations table (Task #49 - multi-org membership)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_organisations (
+        id serial PRIMARY KEY,
+        user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        org_admin_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role text NOT NULL DEFAULT 'inspector',
+        permissions text,
+        status text NOT NULL DEFAULT 'active',
+        invited_by_id integer REFERENCES users(id) ON DELETE SET NULL,
+        joined_at timestamp,
+        created_at timestamp NOT NULL DEFAULT now(),
+        UNIQUE (user_id, org_admin_id)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS user_organisations_user_id_idx ON user_organisations(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS user_organisations_org_admin_id_idx ON user_organisations(org_admin_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS user_organisations_status_idx ON user_organisations(status)`);
+    await pool.query(`ALTER TABLE user_organisations ADD COLUMN IF NOT EXISTS invite_token text`);
+
+    // Migrate existing user-org relationships from adminUserId into user_organisations
+    // This inserts a row for every non-admin user that has adminUserId set, skipping existing rows
+    await pool.query(`
+      INSERT INTO user_organisations (user_id, org_admin_id, role, permissions, status, joined_at, created_at)
+      SELECT
+        u.id AS user_id,
+        u.admin_user_id::integer AS org_admin_id,
+        COALESCE(u.role, 'inspector') AS role,
+        u.permissions,
+        'active' AS status,
+        u.created_at AS joined_at,
+        u.created_at
+      FROM users u
+      WHERE u.admin_user_id IS NOT NULL
+        AND u.admin_user_id ~ '^[0-9]+$'
+        AND u.is_company_admin = false
+      ON CONFLICT (user_id, org_admin_id) DO NOTHING
+    `);
+
     logger.info("Schema migrations applied");
   } catch (err) {
     logger.error({ err }, "Schema migration failed — continuing");

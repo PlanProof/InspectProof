@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, sql, and, inArray } from "drizzle-orm";
-import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable, internalStaffTable, orgContractorsTable, orgContractorProjectAssignmentsTable, inductionsTable, inductionAttendeesTable } from "@workspace/db";
+import { db, projectsTable, inspectionsTable, issuesTable, documentsTable, activityLogsTable, usersTable, projectInspectionTypesTable, checklistTemplatesTable, checklistItemsTable, documentChecklistLinksTable, checklistResultsTable, notesTable, reportsTable, projectContractorsTable, internalStaffTable, orgContractorsTable, orgContractorProjectAssignmentsTable, inductionsTable, inductionAttendeesTable, userOrganisationsTable } from "@workspace/db";
 import { sendContractorDefectReportEmail } from "../lib/email";
 import { checkProjectQuota, getOrgMemberIds } from "../lib/quota";
 import { optionalAuth, requireAuth, type AuthUser } from "../middleware/auth";
@@ -67,9 +67,52 @@ function formatProject(p: any, totalInspections = 0, openIssues = 0) {
     completedDate: p.completedDate,
     totalInspections,
     openIssues,
+    orgId: p.orgAdminId ?? null,
+    orgAdminId: p.orgAdminId ?? null,
+    orgName: p.orgName ?? null,
     createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
     updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : p.updatedAt,
   };
+}
+
+/**
+ * Returns the set of org admin IDs this user may access data for.
+ * - Primary org (derived from adminUserId) is included unless suspended/revoked in user_organisations.
+ * - Additional cross-org memberships are included only when status = "active".
+ */
+async function getAccessibleOrgAdminIds(user: AuthUser): Promise<Set<number>> {
+  const primaryAdminId = user.isCompanyAdmin ? user.id : (user.adminUserId ? parseInt(user.adminUserId) : user.id);
+
+  const allMemberships = await db
+    .select({ orgAdminId: userOrganisationsTable.orgAdminId, status: userOrganisationsTable.status })
+    .from(userOrganisationsTable)
+    .where(eq(userOrganisationsTable.userId, user.id));
+
+  const blockedOrgAdminIds = new Set(
+    allMemberships.filter(m => m.status !== "active").map(m => m.orgAdminId),
+  );
+  const activeExtraOrgAdminIds = allMemberships
+    .filter(m => m.status === "active")
+    .map(m => m.orgAdminId);
+
+  const accessible = new Set<number>(activeExtraOrgAdminIds);
+  if (!blockedOrgAdminIds.has(primaryAdminId)) {
+    accessible.add(primaryAdminId);
+  }
+  return accessible;
+}
+
+/** Build the full set of user IDs visible to a user across all their orgs */
+async function getMultiOrgMemberIds(user: AuthUser): Promise<number[]> {
+  if (user.isAdmin) return []; // admin handles differently
+  const accessibleOrgAdminIds = await getAccessibleOrgAdminIds(user);
+  const memberIds: number[] = [];
+  for (const adminId of accessibleOrgAdminIds) {
+    const ids = await getOrgMemberIds(adminId);
+    memberIds.push(...ids);
+  }
+  memberIds.push(user.id);
+  return [...new Set(memberIds)];
 }
 
 async function generateReferenceNumber(orgAdminId: number): Promise<string> {
@@ -120,17 +163,37 @@ function formatDoc(d: any) {
 
 router.get("/", optionalAuth, async (req, res) => {
   try {
-    const { status, search } = req.query;
+    const { status, search, orgId } = req.query;
     let projects = await db.select().from(projectsTable).orderBy(sql`${projectsTable.updatedAt} DESC`);
 
-    // Scope projects to the requesting user's organisation (all members share visibility).
-    // Platform admins are scoped to their own org just like company admins — they do NOT
-    // see cross-tenant data in list views. Per-record access for support is handled separately.
     if (req.authUser) {
-      const adminId = effectiveAdminId(req.authUser);
-      const orgMemberIds = await getOrgMemberIds(adminId);
-      const orgSet = new Set([...orgMemberIds, req.authUser.id]);
-      projects = projects.filter(p => orgSet.has(p.createdById));
+      if (req.authUser.isAdmin) {
+        // Platform admin: full visibility — no filtering
+        // orgId filter still applies for scoping view
+        if (orgId) {
+          const filterOrgAdminId = parseInt(orgId as string);
+          if (!isNaN(filterOrgAdminId)) {
+            projects = projects.filter(p => p.orgAdminId === filterOrgAdminId);
+          }
+        }
+      } else {
+        // Build the set of org admin IDs this user can access (respects suspend/revoke)
+        const accessibleOrgAdminIds = await getAccessibleOrgAdminIds(req.authUser);
+
+        // Filter projects by their owning org (orgAdminId), not by createdById
+        projects = projects.filter(p => p.orgAdminId != null && accessibleOrgAdminIds.has(p.orgAdminId));
+
+        // Optional orgId filter: narrow to a single org the user is authorised for
+        if (orgId) {
+          const filterOrgAdminId = parseInt(orgId as string);
+          if (!isNaN(filterOrgAdminId) && accessibleOrgAdminIds.has(filterOrgAdminId)) {
+            projects = projects.filter(p => p.orgAdminId === filterOrgAdminId);
+          } else if (!isNaN(filterOrgAdminId)) {
+            // Requested org not accessible — return nothing
+            projects = [];
+          }
+        }
+      }
     } else {
       // Unauthenticated — return nothing
       projects = [];
@@ -149,12 +212,26 @@ router.get("/", optionalAuth, async (req, res) => {
       );
     }
 
+    // Resolve orgName for each project from its orgAdminId
+    const orgAdminIdSet = new Set(projects.map(p => p.orgAdminId).filter((id): id is number => id != null));
+    const orgAdminMap: Record<number, string> = {};
+    if (orgAdminIdSet.size > 0) {
+      const orgAdmins = await db
+        .select({ id: usersTable.id, companyName: usersTable.companyName, firstName: usersTable.firstName, lastName: usersTable.lastName })
+        .from(usersTable)
+        .where(inArray(usersTable.id, [...orgAdminIdSet]));
+      for (const admin of orgAdmins) {
+        orgAdminMap[admin.id] = admin.companyName ?? `${admin.firstName} ${admin.lastName}`.trim();
+      }
+    }
+
     const result = await Promise.all(projects.map(async (p) => {
       const [inspCount] = await db.select({ count: sql<number>`count(*)::int` })
         .from(inspectionsTable).where(eq(inspectionsTable.projectId, p.id));
       const [issueCount] = await db.select({ count: sql<number>`count(*)::int` })
         .from(issuesTable).where(sql`${issuesTable.projectId} = ${p.id} AND ${issuesTable.status} NOT IN ('closed', 'resolved')`);
-      return formatProject(p, inspCount.count, issueCount.count);
+      const projectWithOrg = { ...p, orgName: p.orgAdminId ? orgAdminMap[p.orgAdminId] ?? null : null };
+      return formatProject(projectWithOrg, inspCount.count, issueCount.count);
     }));
 
     res.json(result);

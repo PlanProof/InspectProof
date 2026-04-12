@@ -27,6 +27,7 @@ import internalRouter from "./internal";
 import calendarIntegrationsRouter from "./calendarIntegrations";
 import geocodeRouter from "./geocode";
 import newslettersRouter from "./newsletters";
+import orgsRouter from "./orgs";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use(internalRouter);
 router.use(calendarIntegrationsRouter);
 router.use(geocodeRouter);
 router.use(newslettersRouter);
+router.use(orgsRouter);
 
 export default router;

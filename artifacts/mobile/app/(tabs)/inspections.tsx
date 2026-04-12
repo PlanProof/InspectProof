@@ -52,6 +52,7 @@ export default function InspectionsScreen() {
   const { token } = useAuth();
   const [activeFilter, setActiveFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [selectedOrgId, setSelectedOrgId] = useState("all");
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
   const { data: inspections = [], isLoading, isError, refetch, isRefetching } = useQuery<any[]>({
@@ -66,8 +67,22 @@ export default function InspectionsScreen() {
     enabled: !!token,
   });
 
+  // Derive unique orgs for multi-org filter
+  const orgOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const i of inspections) {
+      const key = i.orgAdminId != null ? String(i.orgAdminId) : null;
+      const name = i.orgName ?? null;
+      if (key && name && !seen.has(key)) seen.set(key, name);
+    }
+    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+  }, [inspections]);
+  const isMultiOrg = orgOptions.length > 1;
+
   const filtered = useMemo(() => {
     let result = inspections;
+
+    if (selectedOrgId !== "all") result = result.filter(i => String(i.orgAdminId) === selectedOrgId);
 
     const statusVal = STATUS_VALUES[activeFilter];
     if (statusVal) result = result.filter(i => i.status === statusVal);
@@ -86,7 +101,7 @@ export default function InspectionsScreen() {
     }
 
     return result;
-  }, [inspections, activeFilter, search]);
+  }, [inspections, activeFilter, search, selectedOrgId]);
 
   // Group by upcoming vs past
   const now = new Date().toISOString().split("T")[0];
@@ -153,6 +168,32 @@ export default function InspectionsScreen() {
             </Pressable>
           ))}
         </ScrollView>
+
+        {/* Org filter chips — only shown when user is in multiple orgs */}
+        {isMultiOrg && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+            {[{ id: "all", name: "All Orgs" }, ...orgOptions].map(o => {
+              const active = selectedOrgId === o.id;
+              return (
+                <Pressable
+                  key={o.id}
+                  onPress={() => setSelectedOrgId(o.id)}
+                  style={({ pressed }) => [
+                    styles.chip,
+                    styles.chipOrg,
+                    active && styles.chipOrgActive,
+                    pressed && { opacity: 0.75 },
+                  ]}
+                >
+                  {active && o.id !== "all" && <Feather name="briefcase" size={11} color={Colors.secondary} style={{ marginRight: 4 }} />}
+                  <Text style={[styles.chipText, styles.chipTextOrg, active && styles.chipTextOrgActive]}>
+                    {o.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
       </View>
 
       <ScrollView
@@ -191,7 +232,7 @@ export default function InspectionsScreen() {
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Upcoming & Active</Text>
                 <View style={styles.cardList}>
-                  {upcoming.map(i => <InspectionCard key={i.id} inspection={i} showProject />)}
+                  {upcoming.map(i => <InspectionCard key={i.id} inspection={i} showProject showOrgLabel={isMultiOrg && selectedOrgId === "all"} />)}
                 </View>
               </View>
             )}
@@ -199,7 +240,7 @@ export default function InspectionsScreen() {
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Past Inspections</Text>
                 <View style={styles.cardList}>
-                  {past.map(i => <InspectionCard key={i.id} inspection={i} showProject />)}
+                  {past.map(i => <InspectionCard key={i.id} inspection={i} showProject showOrgLabel={isMultiOrg && selectedOrgId === "all"} />)}
                 </View>
               </View>
             )}
@@ -299,6 +340,10 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   chipTextActive: { color: Colors.accent },
+  chipOrg: { backgroundColor: Colors.surface, borderColor: Colors.border },
+  chipOrgActive: { backgroundColor: Colors.infoLight, borderColor: Colors.secondary },
+  chipTextOrg: { color: Colors.textTertiary },
+  chipTextOrgActive: { color: Colors.secondary },
   list: { padding: 16, gap: 16 },
   skeleton: { height: 130, borderRadius: 12, backgroundColor: Colors.border, marginBottom: 10 },
   section: { gap: 10 },

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, isNull, gt, count } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { db, usersTable, invitationsTable } from "@workspace/db";
+import { db, usersTable, invitationsTable, userOrganisationsTable } from "@workspace/db";
 import { sendTokenInviteEmail } from "../lib/email";
 import { requireAuth } from "../middleware/auth";
 import { getLimits } from "../lib/planLimits";
@@ -79,10 +79,65 @@ router.post("/app-invite", requireAuth, async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Check if already a member
+    // Check if user already exists (cross-org invite support)
     const existing = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
     if (existing.length > 0) {
-      res.status(409).json({ error: "conflict", message: "An account with this email already exists." });
+      const existingUser = existing[0];
+      // If the user already belongs to this org, reject
+      const sameOrg = existingUser.adminUserId === String(orgOwner.id) || existingUser.id === orgOwner.id;
+      if (sameOrg) {
+        res.status(409).json({ error: "already_member", message: "This user is already a member of your organisation." });
+        return;
+      }
+      // Check if there's already a membership (any status) for this user+org pair
+      const [existingMembership] = await db
+        .select()
+        .from(userOrganisationsTable)
+        .where(and(
+          eq(userOrganisationsTable.userId, existingUser.id),
+          eq(userOrganisationsTable.orgAdminId, orgOwner.id),
+        ));
+      if (existingMembership) {
+        if (existingMembership.status === "pending") {
+          res.status(409).json({ error: "already_invited", message: "This user already has a pending invitation to your organisation." });
+        } else {
+          res.status(409).json({ error: "already_member", message: "This user is already a member of your organisation." });
+        }
+        return;
+      }
+      // Create a pending multi-org membership record with a token for secure acceptance
+      const inviteRole = role ?? "inspector";
+      const invitePermissions = JSON.stringify({ editTemplates: false, addInspectors: false, createProjects: false });
+      const crossOrgToken = randomUUID();
+      const crossOrgExpiresAt = new Date(Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+      await db.insert(userOrganisationsTable).values({
+        userId: existingUser.id,
+        orgAdminId: orgOwner.id,
+        role: inviteRole,
+        permissions: invitePermissions,
+        status: "pending",
+        invitedById: inviter.id,
+        inviteToken: crossOrgToken,
+      });
+      // Also persist to invitationsTable for audit trail with same token
+      await db.insert(invitationsTable).values({
+        token: crossOrgToken,
+        email: normalizedEmail,
+        companyName,
+        invitedById: String(orgOwner.id),
+        role: inviteRole,
+        userType: "inspector",
+        permissions: invitePermissions,
+        expiresAt: crossOrgExpiresAt,
+      }).onConflictDoNothing();
+      // Send an invitation email with the token for secure acceptance
+      const inviterName = `${inviter.firstName} ${inviter.lastName}`.trim();
+      await sendTokenInviteEmail(
+        { toEmail: normalizedEmail, inviteeName: name?.trim() || null, inviterName, companyName, token: crossOrgToken },
+        req.log
+      ).catch(() => {});
+      req.log.info({ email: normalizedEmail, existingUserId: existingUser.id, orgAdminId: orgOwner.id }, "Cross-org invite sent to existing user");
+      res.json({ success: true, message: `Invite sent to ${normalizedEmail}` });
       return;
     }
 
@@ -167,7 +222,7 @@ router.get("/pending", requireAuth, async (req, res) => {
 
 router.post("/:token/resend", requireAuth, async (req, res) => {
   try {
-    const { token } = req.params;
+    const token = String(req.params.token);
 
     const inviterRows = await db.select().from(usersTable).where(eq(usersTable.id, req.authUser!.id));
     const inviter = inviterRows[0];
@@ -221,7 +276,7 @@ router.post("/:token/resend", requireAuth, async (req, res) => {
 
 router.delete("/:token", requireAuth, async (req, res) => {
   try {
-    const { token } = req.params;
+    const token = String(req.params.token);
 
     const callerRows = await db.select().from(usersTable).where(eq(usersTable.id, req.authUser!.id));
     const caller = callerRows[0];
@@ -428,6 +483,17 @@ router.post("/accept", async (req, res) => {
       marketingEmailSource: optedIn ? "inspectproof_signup" : null,
       marketingEmailScope: optedIn ? "inspectproof_and_related_updates" : null,
     }).returning();
+
+    // Create initial user_organisations record for this new user
+    await db.insert(userOrganisationsTable).values({
+      userId: newUser.id,
+      orgAdminId: parseInt(invite.invitedById),
+      role: invite.role,
+      permissions,
+      status: "active",
+      invitedById: parseInt(invite.invitedById),
+      joinedAt: new Date(),
+    }).onConflictDoNothing();
 
     // Mark token as used
     await db.update(invitationsTable).set({ usedAt: new Date() }).where(eq(invitationsTable.token, token));

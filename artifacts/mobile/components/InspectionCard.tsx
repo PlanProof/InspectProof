@@ -19,8 +19,10 @@ interface InspectionCardProps {
     passCount: number;
     failCount: number;
     naCount: number;
+    orgName?: string | null;
   };
   showProject?: boolean;
+  showOrgLabel?: boolean;
 }
 
 const statusLabels: Record<string, string> = {
@@ -43,7 +45,7 @@ const typeIcons: Record<string, string> = {
   progress: "trending-up",
 };
 
-export function InspectionCard({ inspection, showProject = true }: InspectionCardProps) {
+export function InspectionCard({ inspection, showProject = true, showOrgLabel = false }: InspectionCardProps) {
   const total = inspection.passCount + inspection.failCount;
   const date = new Date(inspection.scheduledDate);
   const formattedDate = date.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" });
@@ -62,12 +64,20 @@ export function InspectionCard({ inspection, showProject = true }: InspectionCar
               color={inspection.status === "follow_up_required" ? Colors.danger : Colors.secondary}
             />
           </View>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.type}>{INSPECTION_TYPES[inspection.inspectionType] || (inspection.inspectionType || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())} Inspection</Text>
             {showProject && <Text style={styles.projectName} numberOfLines={1}>{inspection.projectName}</Text>}
           </View>
         </View>
-        <Badge label={statusLabels[inspection.status] || inspection.status} variant="status" value={inspection.status} size="sm" />
+        <View style={styles.badgeGroup}>
+          {showOrgLabel && inspection.orgName ? (
+            <View style={styles.orgBadge}>
+              <Feather name="layers" size={10} color="#7c3aed" />
+              <Text style={styles.orgBadgeText} numberOfLines={1}>{inspection.orgName}</Text>
+            </View>
+          ) : null}
+          <Badge label={statusLabels[inspection.status] || inspection.status} variant="status" value={inspection.status} size="sm" />
+        </View>
       </View>
 
       <View style={styles.meta}>
@@ -151,6 +161,27 @@ const styles = StyleSheet.create({
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: Colors.textSecondary,
     maxWidth: 180,
+  },
+  badgeGroup: {
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  orgBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#f3e8ff",
+    borderWidth: 1,
+    borderColor: "#d8b4fe",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    maxWidth: 110,
+  },
+  orgBadgeText: {
+    fontSize: 10,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#7c3aed",
   },
   meta: {
     flexDirection: "row",

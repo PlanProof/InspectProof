@@ -41,6 +41,7 @@ export default function ProjectsScreen() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
   const [stageFilter, setStageFilter] = useState("all");
+  const [selectedOrgId, setSelectedOrgId] = useState("all");
 
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
@@ -56,10 +57,23 @@ export default function ProjectsScreen() {
     enabled: !!token,
   });
 
+  // Derive unique orgs for filter
+  const orgOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const p of projects) {
+      const key = p.orgAdminId != null ? String(p.orgAdminId) : null;
+      const name = p.orgName ?? null;
+      if (key && name && !seen.has(key)) seen.set(key, name);
+    }
+    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+  }, [projects]);
+  const isMultiOrg = orgOptions.length > 1;
+
   const filtered = useMemo(() => {
     return projects.filter(p => {
       if (statusFilter !== "all" && p.status !== statusFilter) return false;
       if (stageFilter  !== "all" && p.stage  !== stageFilter)  return false;
+      if (selectedOrgId !== "all" && String(p.orgAdminId) !== selectedOrgId) return false;
       if (search.trim()) {
         const s = search.toLowerCase();
         return (
@@ -71,11 +85,11 @@ export default function ProjectsScreen() {
       }
       return true;
     });
-  }, [projects, statusFilter, stageFilter, search]);
+  }, [projects, statusFilter, stageFilter, selectedOrgId, search]);
 
   const handleRefresh = useCallback(() => { refetch(); }, [refetch]);
 
-  const activeFilters = (statusFilter !== "all" ? 1 : 0) + (stageFilter !== "all" ? 1 : 0);
+  const activeFilters = (statusFilter !== "all" ? 1 : 0) + (stageFilter !== "all" ? 1 : 0) + (selectedOrgId !== "all" ? 1 : 0);
 
   return (
     <View style={styles.container}>
@@ -152,9 +166,33 @@ export default function ProjectsScreen() {
           })}
         </ScrollView>
 
+        {/* Org filter chips — only shown when user is in multiple orgs */}
+        {isMultiOrg && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+          >
+            {[{ id: "all", name: "All Orgs" }, ...orgOptions].map(o => {
+              const active = selectedOrgId === o.id;
+              return (
+                <Pressable
+                  key={o.id}
+                  onPress={() => setSelectedOrgId(o.id)}
+                  style={({ pressed }) => [styles.chip, styles.chipStage, active && styles.chipStageActive, pressed && { opacity: 0.75 }]}
+                >
+                  <Text style={[styles.chipText, styles.chipTextStage, active && styles.chipTextStageActive]}>
+                    {o.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
+
         {/* Active filter summary + clear */}
         {activeFilters > 0 && (
-          <Pressable style={({ pressed }) => [styles.clearRow, pressed && { opacity: 0.75 }]} onPress={() => { setStatusFilter("all"); setStageFilter("all"); }}>
+          <Pressable style={({ pressed }) => [styles.clearRow, pressed && { opacity: 0.75 }]} onPress={() => { setStatusFilter("all"); setStageFilter("all"); setSelectedOrgId("all"); }}>
             <Feather name="filter" size={12} color={Colors.secondary} />
             <Text style={styles.clearText}>
               {activeFilters} filter{activeFilters > 1 ? "s" : ""} active · tap to clear
@@ -200,7 +238,7 @@ export default function ProjectsScreen() {
             }
           />
         ) : (
-          filtered.map(p => <ProjectCard key={p.id} project={p} />)
+          filtered.map(p => <ProjectCard key={p.id} project={p} showOrgLabel={isMultiOrg && selectedOrgId === "all"} />)
         )}
       </ScrollView>
     </View>

@@ -7,7 +7,7 @@ import {
   Users, Smartphone, Monitor, Mail, Phone,
   UserPlus, Send, Pencil, X, Check, Loader2, Shield, Building2,
   Crown, Lock, Unlock, Clock, Trash2, RefreshCw, ChevronDown, ChevronUp,
-  CreditCard, FileText, Star,
+  CreditCard, FileText, Star, Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -41,12 +41,20 @@ type TeamMember = {
   inspectionsCompleted: number;
   initials: string;
   color: string;
+  isMultiOrg?: boolean;
+  orgCount?: number;
 };
 
 const AVATAR_COLORS = [
   "bg-teal-500", "bg-blue-500", "bg-violet-500", "bg-amber-500",
   "bg-rose-400", "bg-emerald-500", "bg-sky-500", "bg-orange-500",
 ];
+
+const PERM_LABELS: Record<string, string> = {
+  editTemplates:  "Edit Templates",
+  addInspectors:  "Add Members",
+  createProjects: "Create Projects",
+};
 
 const ROLE_MAP: Record<string, string> = {
   admin:              "Owner",
@@ -511,6 +519,12 @@ function MemberRow({
               <Monitor className="h-2.5 w-2.5" /> Office User
             </span>
           )}
+          {member.isMultiOrg && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-violet-50 text-violet-700 border-violet-200 flex items-center gap-0.5"
+              title={`Member of ${member.orgCount ?? 2} organisations`}>
+              <Network className="h-2.5 w-2.5" /> {member.orgCount ?? 2} Orgs
+            </span>
+          )}
           {isInvited && (
             <span className="text-[10px] text-amber-600 italic">(pending)</span>
           )}
@@ -816,12 +830,24 @@ export default function Inspectors() {
   const [addMemberSaving, setAddMemberSaving] = useState(false);
   const [addMemberResult, setAddMemberResult] = useState<{ ok: boolean; msg: string; tempPassword?: string } | null>(null);
 
+  // Multi-org member data
+  type OrgMemberInfo = { userId: number; isMultiOrg: boolean; orgCount: number };
+  const [orgMemberMap, setOrgMemberMap] = useState<Record<number, OrgMemberInfo>>({});
+
   const members: TeamMember[] = useMemo(() => {
     if (!rawUsers) return [];
     return (rawUsers as any[])
       .filter(u => !removedIds.has(u.id))
-      .map(u => ({ ...apiUserToMember(u), ...(overrides[u.id] ?? {}) }));
-  }, [rawUsers, overrides, removedIds]);
+      .map(u => {
+        const orgInfo = orgMemberMap[u.id];
+        return {
+          ...apiUserToMember(u),
+          ...(overrides[u.id] ?? {}),
+          isMultiOrg: orgInfo?.isMultiOrg ?? false,
+          orgCount: orgInfo?.orgCount ?? 1,
+        };
+      });
+  }, [rawUsers, overrides, removedIds, orgMemberMap]);
 
   // Seat counter excludes the current admin themselves (the API returns them in the list,
   // but the plan limit only applies to *team members*, not the admin account).
@@ -1006,6 +1032,79 @@ export default function Inspectors() {
   const adminCount = members.filter(m => m.isCompanyAdmin).length;
   const inspectorCount = members.filter(m => hasMobile(m.userType)).length;
   const officeCount = members.filter(m => hasWeb(m.userType)).length;
+
+  // Cross-org members: members from orgMemberMap who are NOT already primary members
+  type CrossOrgMember = { membershipId: number; userId: number; firstName: string; lastName: string; email: string; role?: string; status: string; joinedAt?: string; permissions?: Permissions };
+  const [crossOrgMembers, setCrossOrgMembers] = useState<CrossOrgMember[]>([]);
+  const [revokingOrgMember, setRevokingOrgMember] = useState<number | null>(null);
+  const [confirmRevokeOrgId, setConfirmRevokeOrgId] = useState<number | null>(null);
+  const [suspendingOrgMember, setSuspendingOrgMember] = useState<number | null>(null);
+
+  const fetchCrossOrgMembers = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiBase()}/api/orgs/members`, { headers: authHeader() });
+      if (res.ok) {
+        const body = await res.json();
+        const map: Record<number, OrgMemberInfo> = {};
+        for (const m of (body.members ?? [])) {
+          map[m.userId] = { userId: m.userId, isMultiOrg: m.isMultiOrg, orgCount: m.orgCount };
+        }
+        setOrgMemberMap(map);
+        setCrossOrgMembers(body.members ?? []);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchCrossOrgMembers(); }, [fetchCrossOrgMembers]);
+
+  const revokeOrgMember = useCallback(async (userId: number) => {
+    setRevokingOrgMember(userId);
+    try {
+      const res = await fetch(`${apiBase()}/api/orgs/members/${userId}`, {
+        method: "DELETE",
+        headers: authHeader(),
+      });
+      if (res.ok) {
+        setCrossOrgMembers(prev => prev.filter(m => m.userId !== userId));
+        setOrgMemberMap(prev => {
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
+        setConfirmRevokeOrgId(null);
+      }
+    } catch {}
+    setRevokingOrgMember(null);
+  }, []);
+
+  const patchOrgMemberStatus = useCallback(async (userId: number, status: "active" | "suspended") => {
+    setSuspendingOrgMember(userId);
+    try {
+      const res = await fetch(`${apiBase()}/api/orgs/members/${userId}`, {
+        method: "PATCH",
+        headers: { ...authHeader(), "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        setCrossOrgMembers(prev => prev.map(m => m.userId === userId ? { ...m, status } : m));
+      }
+    } catch {}
+    setSuspendingOrgMember(null);
+  }, []);
+
+  const patchOrgMemberPermission = useCallback(async (userId: number, currentPerms: Permissions, key: keyof Permissions) => {
+    const newPerms = { ...currentPerms, [key]: !currentPerms[key] };
+    try {
+      const res = await fetch(`${apiBase()}/api/orgs/members/${userId}`, {
+        method: "PATCH",
+        headers: { ...authHeader(), "Content-Type": "application/json" },
+        body: JSON.stringify({ permissions: newPerms }),
+      });
+      if (res.ok) {
+        setCrossOrgMembers(prev => prev.map(m => m.userId === userId ? { ...m, permissions: newPerms } : m));
+      }
+    } catch {}
+  }, []);
 
   return (
     <AppLayout>
@@ -1492,6 +1591,114 @@ export default function Inspectors() {
           ))}
         </div>
       </Card>
+
+      {/* Cross-org members — members who joined via multi-org invite */}
+      {currentUser?.isCompanyAdmin && crossOrgMembers.filter(m => m.status === "active" || m.status === "suspended").length > 0 && (
+        <Card className="shadow-md border-violet-200/60 overflow-hidden mt-4">
+          <div className="px-6 py-3 bg-violet-50/60 border-b border-violet-200/50 flex items-center gap-2">
+            <Network className="h-4 w-4 text-violet-600 shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-violet-900">Cross-Organisation Members</h3>
+              <p className="text-xs text-violet-600">
+                Users with explicit membership in your organisation who belong to other organisations. They have access to your projects and inspections based on the permissions below.
+              </p>
+            </div>
+          </div>
+          <div className="divide-y divide-violet-100/60">
+            {crossOrgMembers.filter(m => m.status === "active" || m.status === "suspended").map(m => {
+              const isSuspended = m.status === "suspended";
+              return (
+                <div key={m.userId} className={`flex items-center gap-4 px-6 py-3.5 hover:bg-violet-50/40 transition-colors group ${isSuspended ? "opacity-60" : ""}`}>
+                  <div className={`h-9 w-9 rounded-full ${isSuspended ? "bg-gray-400" : AVATAR_COLORS[m.userId % AVATAR_COLORS.length]} flex items-center justify-center text-white font-bold text-xs shrink-0`}>
+                    {`${m.firstName?.[0] ?? ""}${m.lastName?.[0] ?? ""}`.toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm text-sidebar">{m.firstName} {m.lastName}</span>
+                      {m.role && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-violet-50 text-violet-700 border-violet-200">
+                          {ROLE_MAP[m.role] ?? m.role}
+                        </span>
+                      )}
+                      {isSuspended ? (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-yellow-50 text-yellow-700 border-yellow-200 flex items-center gap-0.5">
+                          Suspended
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-0.5">
+                          <Network className="h-2.5 w-2.5" /> Cross-Org
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                      <Mail className="h-3 w-3" />{m.email}
+                      {m.joinedAt && <span className="text-muted-foreground/60">· Joined {new Date(m.joinedAt).toLocaleDateString()}</span>}
+                    </p>
+                    {m.permissions && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {(Object.entries(m.permissions) as [keyof Permissions, boolean][]).map(([key, enabled]) => (
+                          <button
+                            key={key}
+                            onClick={() => patchOrgMemberPermission(m.userId, m.permissions!, key)}
+                            title={`Toggle ${PERM_LABELS[key] ?? key}`}
+                            className={`text-[10px] font-medium px-2 py-0.5 rounded border transition-colors ${enabled ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" : "bg-muted text-muted-foreground border-border hover:bg-accent"}`}
+                          >
+                            {PERM_LABELS[key] ?? key}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {confirmRevokeOrgId === m.userId ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-red-700 font-medium">Remove this member?</span>
+                      <button
+                        onClick={() => revokeOrgMember(m.userId)}
+                        disabled={revokingOrgMember === m.userId}
+                        className="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-2 py-1 rounded transition-colors disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {revokingOrgMember === m.userId ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                        Yes, remove
+                      </button>
+                      <button onClick={() => setConfirmRevokeOrgId(null)} className="text-xs text-muted-foreground hover:text-sidebar px-1 py-1 rounded">
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                      {isSuspended ? (
+                        <button
+                          onClick={() => patchOrgMemberStatus(m.userId, "active")}
+                          disabled={suspendingOrgMember === m.userId}
+                          className="flex items-center gap-1 text-xs text-emerald-700 hover:underline font-medium px-2 py-1 rounded hover:bg-emerald-50 disabled:opacity-50"
+                        >
+                          {suspendingOrgMember === m.userId ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                          Reinstate
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => patchOrgMemberStatus(m.userId, "suspended")}
+                          disabled={suspendingOrgMember === m.userId}
+                          className="flex items-center gap-1 text-xs text-yellow-700 hover:underline font-medium px-2 py-1 rounded hover:bg-yellow-50 disabled:opacity-50"
+                        >
+                          {suspendingOrgMember === m.userId ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                          Suspend
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setConfirmRevokeOrgId(m.userId)}
+                        className="flex items-center gap-1 text-xs text-red-600 hover:underline font-medium px-2 py-1 rounded hover:bg-red-50"
+                      >
+                        <Trash2 className="h-3 w-3" /> Revoke
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
     </AppLayout>
   );
 }

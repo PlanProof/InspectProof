@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, ilike, and, gte, lte, inArray, isNotNull, type SQL } from "drizzle-orm";
-import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable, reportsTable } from "@workspace/db";
+import { db, inspectionsTable, projectsTable, checklistItemsTable, checklistResultsTable, issuesTable, notesTable, activityLogsTable, usersTable, checklistTemplatesTable, reportsTable, userOrganisationsTable } from "@workspace/db";
 import { checkInspectionQuota, getOrgMemberIds } from "../lib/quota";
 import { optionalAuth, requireAuth, isInspectorOnly, type AuthUser } from "../middleware/auth";
 import { decodeSessionToken } from "../lib/session-token";
@@ -8,6 +8,46 @@ import { decodeSessionToken } from "../lib/session-token";
 import { sendInspectionAssignedEmail } from "../lib/email";
 import { sendExpoPush } from "../lib/expoPush";
 import { createCalendarEvent, updateCalendarEvent, deleteCalendarEvent } from "../lib/calendarEventService";
+
+/**
+ * Returns the set of org admin IDs this user may access data for.
+ * - Primary org (derived from adminUserId) is included unless suspended/revoked in user_organisations.
+ * - Additional cross-org memberships are included only when status = "active".
+ */
+async function getAccessibleOrgAdminIds(user: AuthUser): Promise<Set<number>> {
+  const primaryAdminId = user.isCompanyAdmin ? user.id : (user.adminUserId ? parseInt(user.adminUserId) : user.id);
+
+  const allMemberships = await db
+    .select({ orgAdminId: userOrganisationsTable.orgAdminId, status: userOrganisationsTable.status })
+    .from(userOrganisationsTable)
+    .where(eq(userOrganisationsTable.userId, user.id));
+
+  const blockedOrgAdminIds = new Set(
+    allMemberships.filter(m => m.status !== "active").map(m => m.orgAdminId),
+  );
+  const activeExtraOrgAdminIds = allMemberships
+    .filter(m => m.status === "active")
+    .map(m => m.orgAdminId);
+
+  const accessible = new Set<number>(activeExtraOrgAdminIds);
+  if (!blockedOrgAdminIds.has(primaryAdminId)) {
+    accessible.add(primaryAdminId);
+  }
+  return accessible;
+}
+
+/** Build the full set of user IDs visible to a user across all their orgs */
+async function getMultiOrgMemberIds(user: AuthUser): Promise<number[]> {
+  if (user.isAdmin) return [];
+  const accessibleOrgAdminIds = await getAccessibleOrgAdminIds(user);
+  const memberIds: number[] = [];
+  for (const adminId of accessibleOrgAdminIds) {
+    const ids = await getOrgMemberIds(adminId);
+    memberIds.push(...ids);
+  }
+  memberIds.push(user.id);
+  return [...new Set(memberIds)];
+}
 
 /** Returns true if the authenticated user may access the inspection (via its project). */
 async function canAccessInspection(inspection: { projectId: number | null; inspectorId?: number | null }, user: AuthUser): Promise<boolean> {
@@ -231,7 +271,7 @@ router.get("/calendar/disciplines", optionalAuth, async (req, res) => {
 
 router.get("/", optionalAuth, async (req, res) => {
   try {
-    const { projectId, status, inspectorId, fromDate, toDate } = req.query;
+    const { projectId, status, inspectorId, fromDate, toDate, orgId } = req.query;
 
     // Determine which project IDs the caller may access — resolved once, used in SQL
     // Values: "all" = unrestricted, "none" = deny all, number[] = specific project IDs
@@ -241,18 +281,42 @@ router.get("/", optionalAuth, async (req, res) => {
       // Inspector-role: further restricted to their own assignments below
       accessibleProjectIds = "all";
     } else if (req.authUser) {
-      // All users (including platform admins) are scoped to their own organisation.
-      // Platform admins do NOT see cross-tenant data in the list view.
-      const adminId = req.authUser.isCompanyAdmin || req.authUser.isAdmin
-        ? req.authUser.id
-        : (req.authUser.adminUserId ? parseInt(req.authUser.adminUserId) : req.authUser.id);
-      const orgMemberIds = await getOrgMemberIds(adminId);
-      const orgSet = new Set([...orgMemberIds, req.authUser.id]);
-      const allProjects = await db.select({ id: projectsTable.id, createdById: projectsTable.createdById })
-        .from(projectsTable);
-      accessibleProjectIds = allProjects
-        .filter(p => orgSet.has(p.createdById))
-        .map(p => p.id);
+      if (req.authUser.isAdmin) {
+        // Platform admin: full visibility across all orgs
+        if (orgId) {
+          const filterOrgAdminId = parseInt(orgId as string);
+          if (!isNaN(filterOrgAdminId)) {
+            const allProjects = await db.select({ id: projectsTable.id }).from(projectsTable)
+              .where(eq(projectsTable.orgAdminId, filterOrgAdminId));
+            accessibleProjectIds = allProjects.map(p => p.id);
+          } else {
+            accessibleProjectIds = "all";
+          }
+        } else {
+          accessibleProjectIds = "all";
+        }
+      } else {
+        // Build the set of org admin IDs this user can access (respects suspend/revoke)
+        const accessibleOrgAdminIds = await getAccessibleOrgAdminIds(req.authUser);
+
+        const allProjects = await db.select({ id: projectsTable.id, orgAdminId: projectsTable.orgAdminId })
+          .from(projectsTable);
+
+        let filteredProjects = allProjects.filter(p => p.orgAdminId != null && accessibleOrgAdminIds.has(p.orgAdminId));
+
+        // Optional orgId filter: narrow to a single org the user is authorised for
+        if (orgId) {
+          const filterOrgAdminId = parseInt(orgId as string);
+          if (!isNaN(filterOrgAdminId) && accessibleOrgAdminIds.has(filterOrgAdminId)) {
+            filteredProjects = filteredProjects.filter(p => p.orgAdminId === filterOrgAdminId);
+          } else if (!isNaN(filterOrgAdminId)) {
+            // Requested org not accessible — deny
+            filteredProjects = [];
+          }
+        }
+
+        accessibleProjectIds = filteredProjects.map(p => p.id);
+      }
     } else {
       // Unauthenticated – only show test project inspections
       const testProjects = await db.select({ id: projectsTable.id }).from(projectsTable)
@@ -270,11 +334,12 @@ router.get("/", optionalAuth, async (req, res) => {
     }
 
     if (accessibleProjectIds !== "all") {
-      if (accessibleProjectIds.length === 0) {
+      const idArr = accessibleProjectIds as number[];
+      if (idArr.length === 0) {
         res.json([]);
         return;
       }
-      const idList = sql.join(accessibleProjectIds.map(id => sql`${id}`), sql`, `);
+      const idList = sql.join(idArr.map(id => sql`${id}`), sql`, `);
       conditions.push(sql`i.project_id IN (${idList})`);
     }
 
@@ -300,6 +365,9 @@ router.get("/", optionalAuth, async (req, res) => {
         p.name AS "projectName",
         p.site_address AS "projectAddress",
         p.suburb AS "projectSuburb",
+        p.org_admin_id AS "orgAdminId",
+        p.org_admin_id AS "orgId",
+        org_admin.company_name AS "orgName",
         i.inspection_type AS "inspectionType",
         i.status,
         i.scheduled_date AS "scheduledDate",
@@ -320,11 +388,12 @@ router.get("/", optionalAuth, async (req, res) => {
         i.created_at AS "createdAt"
       FROM inspections i
       LEFT JOIN projects p ON p.id = i.project_id
+      LEFT JOIN users org_admin ON org_admin.id = p.org_admin_id
       LEFT JOIN users u ON u.id = i.inspector_id
       LEFT JOIN checklist_templates ct ON ct.id = i.checklist_template_id
       LEFT JOIN checklist_results cr ON cr.inspection_id = i.id
       ${whereClause}
-      GROUP BY i.id, p.name, p.site_address, p.suburb, u.first_name, u.last_name, ct.name, ct.discipline
+      GROUP BY i.id, p.name, p.site_address, p.suburb, p.org_admin_id, org_admin.company_name, u.first_name, u.last_name, ct.name, ct.discipline
       ORDER BY i.scheduled_date DESC
     `);
 

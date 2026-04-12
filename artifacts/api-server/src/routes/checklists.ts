@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, and, or } from "drizzle-orm";
-import { db, checklistTemplatesTable, checklistItemsTable, usersTable } from "@workspace/db";
+import { eq, sql, and, or, inArray } from "drizzle-orm";
+import { db, checklistTemplatesTable, checklistItemsTable, usersTable, userOrganisationsTable } from "@workspace/db";
 import { requireAuth, type AuthUser } from "../middleware/auth";
 
 const router: IRouter = Router();
@@ -8,6 +8,32 @@ const router: IRouter = Router();
 function effectiveAdminId(user: AuthUser): number {
   if (user.isAdmin || user.isCompanyAdmin) return user.id;
   return user.adminUserId ? parseInt(user.adminUserId) : user.id;
+}
+
+/**
+ * Returns all org admin IDs the user may access templates for.
+ * Mirrors the logic in projects.ts / inspections.ts.
+ */
+async function getAccessibleOrgAdminIds(user: AuthUser): Promise<Set<number>> {
+  const primaryAdminId = user.isCompanyAdmin ? user.id : (user.adminUserId ? parseInt(user.adminUserId) : user.id);
+
+  const allMemberships = await db
+    .select({ orgAdminId: userOrganisationsTable.orgAdminId, status: userOrganisationsTable.status })
+    .from(userOrganisationsTable)
+    .where(eq(userOrganisationsTable.userId, user.id));
+
+  const blockedOrgAdminIds = new Set(
+    allMemberships.filter(m => m.status !== "active").map(m => m.orgAdminId),
+  );
+  const activeExtraOrgAdminIds = allMemberships
+    .filter(m => m.status === "active")
+    .map(m => m.orgAdminId);
+
+  const accessible = new Set<number>(activeExtraOrgAdminIds);
+  if (!blockedOrgAdminIds.has(primaryAdminId)) {
+    accessible.add(primaryAdminId);
+  }
+  return accessible;
 }
 
 async function requireTemplateEdit(req: any, res: any): Promise<boolean> {
@@ -75,23 +101,31 @@ function formatItem(i: any) {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const { discipline } = req.query;
-    const adminId = effectiveAdminId(req.authUser!);
+    const user = req.authUser!;
 
-    const ownershipFilter = or(
-      eq(checklistTemplatesTable.isGlobal, true),
-      eq(checklistTemplatesTable.createdById, adminId)
-    );
+    let ownershipFilter;
+    if (user.isAdmin) {
+      // Platform admins see all templates
+      ownershipFilter = undefined;
+    } else {
+      // Build list of accessible org admin IDs (respects suspend/revoke)
+      const accessibleOrgAdminIds = await getAccessibleOrgAdminIds(user);
+      const adminIdList = [...accessibleOrgAdminIds];
+      ownershipFilter = or(
+        eq(checklistTemplatesTable.isGlobal, true),
+        adminIdList.length > 0
+          ? inArray(checklistTemplatesTable.createdById, adminIdList)
+          : eq(checklistTemplatesTable.createdById, -1), // no match if no accessible orgs
+      );
+    }
 
-    const templates = discipline
-      ? await db.select().from(checklistTemplatesTable)
-          .where(and(
-            eq(checklistTemplatesTable.discipline, discipline as string),
-            ownershipFilter
-          ))
-          .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.sortOrder} ASC`)
-      : await db.select().from(checklistTemplatesTable)
-          .where(ownershipFilter)
-          .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.sortOrder} ASC`);
+    const baseWhere = discipline
+      ? and(eq(checklistTemplatesTable.discipline, discipline as string), ownershipFilter)
+      : ownershipFilter;
+
+    const templates = await db.select().from(checklistTemplatesTable)
+      .where(baseWhere)
+      .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.sortOrder} ASC`);
 
     const result = await Promise.all(templates.map(async (t) => {
       const [countRow] = await db.select({ count: sql<number>`count(*)::int` })

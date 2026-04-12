@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and, or, count } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, userOrganisationsTable } from "@workspace/db";
 import { sendWelcomeWithCredentialsEmail } from "../lib/email";
 import { requireAuth } from "../middleware/auth";
 import { getLimits } from "../lib/planLimits";
@@ -151,6 +151,20 @@ router.post("/", requireAuth, async (req, res) => {
       requiresPasswordChange: true,
       adminUserId: resolvedAdminUserId,
     }).returning();
+
+    // Always create a user_organisations row so membership is queryable via the junction table.
+    // This ensures suspend/revoke/list APIs work consistently for all org members.
+    const orgAdminUserId = parseInt(resolvedAdminUserId);
+    if (!isNaN(orgAdminUserId) && orgAdminUserId !== user.id) {
+      await db.insert(userOrganisationsTable).values({
+        userId: user.id,
+        orgAdminId: orgAdminUserId,
+        role: data.role || "inspector",
+        permissions: permissions ?? null,
+        status: "active",
+        joinedAt: new Date(),
+      }).onConflictDoNothing();
+    }
 
     res.status(201).json(formatUser(user));
 

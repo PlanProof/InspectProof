@@ -1,4 +1,5 @@
-import { pgTable, serial, text, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, timestamp, integer, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -78,3 +79,20 @@ export const invitationsTable = pgTable("invitations", {
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof usersTable.$inferSelect;
+
+export const userOrganisationsTable = pgTable("user_organisations", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  orgAdminId: integer("org_admin_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("inspector"),
+  permissions: text("permissions"),
+  status: text("status").notNull().default("active"),
+  invitedById: integer("invited_by_id").references(() => usersTable.id, { onDelete: "set null" }),
+  inviteToken: text("invite_token"),
+  joinedAt: timestamp("joined_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  check("user_organisations_status_check", sql`${t.status} IN ('pending', 'active', 'suspended', 'revoked')`),
+]);
+
+export type UserOrganisation = typeof userOrganisationsTable.$inferSelect;

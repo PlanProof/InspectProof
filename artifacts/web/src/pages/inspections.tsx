@@ -5,7 +5,7 @@ import {
   Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge,
   Dialog, DialogContent, DialogHeader, DialogTitle, Label,
 } from "@/components/ui";
-import { Search, Calendar as CalendarIcon, CheckCircle2, XCircle, Clock, Plus, ChevronDown, ChevronUp, ChevronsUpDown, Square, CheckSquare, Users, Tag, Download, Loader2, X, MapPin } from "lucide-react";
+import { Search, Calendar as CalendarIcon, CheckCircle2, XCircle, Clock, Plus, ChevronDown, ChevronUp, ChevronsUpDown, Square, CheckSquare, Users, Tag, Download, Loader2, X, MapPin, Network } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -313,6 +313,7 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
 export default function Inspections() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [selectedOrgId, setSelectedOrgId] = useState<string>("all");
   const [newOpen, setNewOpen] = useState(false);
   const [, navigate] = useLocation();
   const { data: inspections, isLoading, refetch } = useListInspections({});
@@ -338,13 +339,26 @@ export default function Inspections() {
     else { setSortCol(col); setSortDir("asc"); }
   };
 
+  // Derive unique orgs from inspection data for filter dropdown
+  const orgOptions = (() => {
+    const seen = new Map<string, string>();
+    for (const i of inspections ?? []) {
+      const key = i.orgAdminId != null ? String(i.orgAdminId) : null;
+      const name = i.orgName ?? null;
+      if (key && name && !seen.has(key)) seen.set(key, name);
+    }
+    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+  })();
+  const isMultiOrg = orgOptions.length > 1;
+
   const filtered = inspections?.filter(i => {
     const matchesSearch = !search.trim() || (
       (i.projectName ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (i.inspectionType ?? "").toLowerCase().includes(search.toLowerCase())
     );
     const matchesStatus = statusFilter === "all" || i.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesOrg = selectedOrgId === "all" || String(i.orgAdminId) === selectedOrgId;
+    return matchesSearch && matchesStatus && matchesOrg;
   });
 
   const sorted = [...(filtered ?? [])].sort((a, b) => {
@@ -490,7 +504,7 @@ export default function Inspections() {
               className="pl-9 bg-background"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {(["all", "scheduled", "in_progress", "completed"] as StatusFilter[]).map(s => (
               <button
                 key={s}
@@ -505,6 +519,21 @@ export default function Inspections() {
               </button>
             ))}
           </div>
+          {isMultiOrg && (
+            <div className="flex items-center gap-2 ml-auto">
+              <Network className="h-4 w-4 text-muted-foreground shrink-0" />
+              <select
+                value={selectedOrgId}
+                onChange={e => setSelectedOrgId(e.target.value)}
+                className="text-sm border border-input rounded-lg px-2.5 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-secondary/30 transition"
+              >
+                <option value="all">All Organisations</option>
+                {orgOptions.map(o => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Select-all-matching banner */}
@@ -578,18 +607,26 @@ export default function Inspections() {
                     </TableCell>
                     <TableCell>
                       <div className="font-medium text-sidebar group-hover:text-secondary transition-colors">{insp.projectName}</div>
-                      {((insp as any).projectAddress || (insp as any).projectSuburb) && (
+                      {(insp.projectAddress || insp.projectSuburb) && (
                         <div className="flex items-center gap-0.5 text-[11px] text-muted-foreground mt-0.5">
                           <MapPin className="h-2.5 w-2.5 shrink-0" />
                           <span className="truncate max-w-[200px]">
-                            {[(insp as any).projectAddress, (insp as any).projectSuburb].filter(Boolean).join(", ")}
+                            {[insp.projectAddress, insp.projectSuburb].filter(Boolean).join(", ")}
+                          </span>
+                        </div>
+                      )}
+                      {isMultiOrg && selectedOrgId === "all" && insp.orgName && (
+                        <div className="flex items-center gap-0.5 mt-1">
+                          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border bg-violet-50 text-violet-700 border-violet-200">
+                            <Network className="h-2.5 w-2.5" />
+                            {insp.orgName}
                           </span>
                         </div>
                       )}
                     </TableCell>
                     <TableCell className="capitalize">{
-                      (insp as { checklistTemplateName?: string }).checklistTemplateName
-                        ? cleanTypeName((insp as { checklistTemplateName?: string }).checklistTemplateName!)
+                      insp.checklistTemplateName
+                        ? cleanTypeName(insp.checklistTemplateName)
                         : insp.inspectionType.replace(/_/g, ' ')
                     }</TableCell>
                     <TableCell>

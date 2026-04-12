@@ -20,8 +20,10 @@ interface ProjectCardProps {
     totalInspections: number;
     openIssues: number;
     buildingClassification: string;
+    orgName?: string | null;
   };
   compact?: boolean;
+  showOrgLabel?: boolean;
 }
 
 const statusLabels: Record<string, string> = {
@@ -31,7 +33,7 @@ const statusLabels: Record<string, string> = {
   archived: "Archived",
 };
 
-export function ProjectCard({ project, compact = false }: ProjectCardProps) {
+export function ProjectCard({ project, compact = false, showOrgLabel = false }: ProjectCardProps) {
   const hasCriticalIssues = project.openIssues > 0;
 
   return (
@@ -41,6 +43,12 @@ export function ProjectCard({ project, compact = false }: ProjectCardProps) {
     >
       <View style={styles.header}>
         <Badge label={statusLabels[project.status] || project.status} variant="status" value={project.status} size="sm" />
+        {showOrgLabel && project.orgName ? (
+          <View style={styles.orgBadge}>
+            <Feather name="layers" size={10} color="#7c3aed" />
+            <Text style={styles.orgBadgeText} numberOfLines={1}>{project.orgName}</Text>
+          </View>
+        ) : null}
       </View>
 
       <Text style={styles.name} numberOfLines={1}>{project.name}</Text>
@@ -95,6 +103,23 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 2,
+  },
+  orgBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#f3e8ff",
+    borderWidth: 1,
+    borderColor: "#d8b4fe",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    maxWidth: 140,
+  },
+  orgBadgeText: {
+    fontSize: 10,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: "#7c3aed",
   },
   name: {
     fontSize: 15,
