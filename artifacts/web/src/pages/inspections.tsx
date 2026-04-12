@@ -5,7 +5,7 @@ import {
   Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge,
   Dialog, DialogContent, DialogHeader, DialogTitle, Label,
 } from "@/components/ui";
-import { Search, Calendar as CalendarIcon, CheckCircle2, XCircle, Clock, Plus, ChevronDown, ChevronUp, ChevronsUpDown, Square, CheckSquare, Users, Tag, Download, Loader2, X } from "lucide-react";
+import { Search, Calendar as CalendarIcon, CheckCircle2, XCircle, Clock, Plus, ChevronDown, ChevronUp, ChevronsUpDown, Square, CheckSquare, Users, Tag, Download, Loader2, X, MapPin } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -576,7 +576,17 @@ export default function Inspections() {
                         ? <CheckSquare className="h-4 w-4 text-secondary" />
                         : <Square className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground/80" />}
                     </TableCell>
-                    <TableCell className="font-medium text-sidebar group-hover:text-secondary transition-colors">{insp.projectName}</TableCell>
+                    <TableCell>
+                      <div className="font-medium text-sidebar group-hover:text-secondary transition-colors">{insp.projectName}</div>
+                      {((insp as any).projectAddress || (insp as any).projectSuburb) && (
+                        <div className="flex items-center gap-0.5 text-[11px] text-muted-foreground mt-0.5">
+                          <MapPin className="h-2.5 w-2.5 shrink-0" />
+                          <span className="truncate max-w-[200px]">
+                            {[(insp as any).projectAddress, (insp as any).projectSuburb].filter(Boolean).join(", ")}
+                          </span>
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="capitalize">{
                       (insp as { checklistTemplateName?: string }).checklistTemplateName
                         ? cleanTypeName((insp as { checklistTemplateName?: string }).checklistTemplateName!)

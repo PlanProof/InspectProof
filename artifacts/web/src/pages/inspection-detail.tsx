@@ -12,7 +12,7 @@ import {
   UserCheck, ChevronDown, FolderOpen, Upload, File,
   FileImage, FileSpreadsheet, CheckSquare, PencilLine,
   RefreshCw, Eye, ShieldCheck, Flame, Home, ClipboardCheck, Trash2, Camera, Link2,
-  PenLine, Share2, Copy, ExternalLink,
+  PenLine, Share2, Copy, ExternalLink, MapPin,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -112,6 +112,8 @@ interface Inspection {
   id: number;
   projectId: number;
   projectName: string;
+  projectAddress?: string | null;
+  projectSuburb?: string | null;
   inspectionType: string;
   status: string;
   scheduledDate: string;
@@ -764,6 +766,17 @@ export default function InspectionDetail() {
             <h1 className="text-2xl font-bold text-sidebar leading-tight">
               {inspection.projectName}
             </h1>
+            {(inspection.projectAddress || inspection.projectSuburb) && (
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([inspection.projectAddress, inspection.projectSuburb].filter(Boolean).join(", "))}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-secondary transition-colors mt-1"
+              >
+                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                <span>{[inspection.projectAddress, inspection.projectSuburb].filter(Boolean).join(", ")}</span>
+              </a>
+            )}
             <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5" />
