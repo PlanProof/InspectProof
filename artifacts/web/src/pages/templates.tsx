@@ -37,17 +37,28 @@ const DISCIPLINE_META: Record<string, { active: string; accent: string }> = {
 };
 
 const TYPE_META: Record<string, { label: string; color: string; dot: string }> = {
-  footing:      { label: "Footing",       color: "bg-amber-100 text-amber-800 border-amber-200",    dot: "bg-amber-500" },
-  slab:         { label: "Slab",          color: "bg-orange-100 text-orange-800 border-orange-200",  dot: "bg-orange-500" },
-  frame:        { label: "Frame",         color: "bg-blue-100 text-blue-800 border-blue-200",         dot: "bg-blue-500" },
-  waterproofing:{ label: "Waterproofing", color: "bg-cyan-100 text-cyan-800 border-cyan-200",         dot: "bg-cyan-500" },
-  occupancy:    { label: "Occupancy",     color: "bg-purple-100 text-purple-800 border-purple-200",   dot: "bg-purple-500" },
-  final:        { label: "Final",         color: "bg-green-100 text-green-800 border-green-200",      dot: "bg-green-500" },
-  fire_safety:  { label: "Fire Safety",   color: "bg-red-100 text-red-800 border-red-200",            dot: "bg-red-500" },
-  pool_barrier: { label: "Pool Barrier",  color: "bg-teal-100 text-teal-800 border-teal-200",         dot: "bg-teal-500" },
-  lock_up:      { label: "Lock-Up",       color: "bg-indigo-100 text-indigo-800 border-indigo-200",   dot: "bg-indigo-500" },
-  fit_out:      { label: "Fit-Out",       color: "bg-pink-100 text-pink-800 border-pink-200",         dot: "bg-pink-500" },
+  footing:          { label: "Footing",         color: "bg-amber-100 text-amber-800 border-amber-200",    dot: "bg-amber-500" },
+  slab:             { label: "Slab",            color: "bg-orange-100 text-orange-800 border-orange-200",  dot: "bg-orange-500" },
+  bs_footing_slab:  { label: "Footing & Slab",  color: "bg-amber-100 text-amber-800 border-amber-200",    dot: "bg-amber-600" },
+  frame:            { label: "Frame",           color: "bg-blue-100 text-blue-800 border-blue-200",         dot: "bg-blue-500" },
+  waterproofing:    { label: "Waterproofing",   color: "bg-cyan-100 text-cyan-800 border-cyan-200",         dot: "bg-cyan-500" },
+  occupancy:        { label: "Occupancy",       color: "bg-purple-100 text-purple-800 border-purple-200",   dot: "bg-purple-500" },
+  final:            { label: "Final",           color: "bg-green-100 text-green-800 border-green-200",      dot: "bg-green-500" },
+  fire_safety:      { label: "Fire Safety",     color: "bg-red-100 text-red-800 border-red-200",            dot: "bg-red-500" },
+  fire_penetration: { label: "Fire Separation", color: "bg-rose-100 text-rose-800 border-rose-200",         dot: "bg-rose-600" },
+  pool_barrier:     { label: "Pool Barrier",    color: "bg-teal-100 text-teal-800 border-teal-200",         dot: "bg-teal-500" },
+  lock_up:          { label: "Lock-Up",         color: "bg-indigo-100 text-indigo-800 border-indigo-200",   dot: "bg-indigo-500" },
+  fit_out:          { label: "Fit-Out",         color: "bg-pink-100 text-pink-800 border-pink-200",         dot: "bg-pink-500" },
 };
+
+const BS_INSPECTION_TYPE_ORDER = [
+  "bs_footing_slab",
+  "frame",
+  "waterproofing",
+  "final",
+  "occupancy",
+  "fire_penetration",
+];
 function typeMeta(type: string) {
   const key = Object.keys(TYPE_META).find(k => type?.toLowerCase().includes(k)) ?? "";
   return TYPE_META[key] ?? { label: type, color: "bg-muted text-muted-foreground border-border", dot: "bg-muted-foreground" };
@@ -1269,7 +1280,17 @@ export default function Templates() {
                       </div>
                     )}
 
-                    {isOpen && items.map((t, idx) => {
+                    {isOpen && (discipline === "Building Surveyor"
+                      ? [...items].sort((a, b) => {
+                          const ai = BS_INSPECTION_TYPE_ORDER.indexOf(a.inspectionType);
+                          const bi = BS_INSPECTION_TYPE_ORDER.indexOf(b.inspectionType);
+                          const av = ai === -1 ? 999 : ai;
+                          const bv = bi === -1 ? 999 : bi;
+                          if (av !== bv) return av - bv;
+                          return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+                        })
+                      : items
+                    ).map((t, idx) => {
                       const meta = typeMeta(t.inspectionType);
                       const isSelected = selectedId === t.id;
                       return (

@@ -20,6 +20,7 @@ function fmt(t: any) {
       try { return JSON.parse(t.linkedChecklistIds ?? "[]"); } catch { return []; }
     })(),
     backgroundImage: t.backgroundImage ?? null,
+    discipline: t.discipline ?? null,
     isGlobal: t.userId == null,
     createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : t.createdAt,
     updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : t.updatedAt,
@@ -65,12 +66,13 @@ router.get("/:id", requireAuth, async (req, res) => {
 router.post("/", requireAuth, async (req, res) => {
   try {
     const adminId = effectiveAdminId(req.authUser!);
-    const { name, content, linkedChecklistIds, backgroundImage } = req.body;
+    const { name, content, linkedChecklistIds, backgroundImage, discipline } = req.body;
     const [row] = await db.insert(docTemplatesTable).values({
       name: name ?? "Untitled Template",
       content: content ?? "",
       linkedChecklistIds: JSON.stringify(linkedChecklistIds ?? []),
       backgroundImage: backgroundImage ?? null,
+      discipline: discipline ?? null,
       userId: adminId,
     }).returning();
     res.json(fmt(row));
@@ -85,12 +87,13 @@ router.put("/:id", requireAuth, async (req, res) => {
     if (!existing) { res.status(404).json({ error: "not_found" }); return; }
     if (!canEdit(existing, req.authUser!)) { res.status(403).json({ error: "forbidden", message: "Platform templates cannot be modified." }); return; }
 
-    const { name, content, linkedChecklistIds, backgroundImage } = req.body;
+    const { name, content, linkedChecklistIds, backgroundImage, discipline } = req.body;
     const update: any = { updatedAt: new Date() };
     if (name !== undefined) update.name = name;
     if (content !== undefined) update.content = content;
     if (linkedChecklistIds !== undefined) update.linkedChecklistIds = JSON.stringify(linkedChecklistIds);
     if (backgroundImage !== undefined) update.backgroundImage = backgroundImage;
+    if (discipline !== undefined) update.discipline = discipline;
     const [row] = await db.update(docTemplatesTable).set(update).where(eq(docTemplatesTable.id, parseInt(req.params.id))).returning();
     if (!row) { res.status(404).json({ error: "not_found" }); return; }
     res.json(fmt(row));

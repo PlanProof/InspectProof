@@ -478,6 +478,48 @@ async function runSchemaMigrations() {
   } catch (err) {
     logger.error({ err }, "Schema migration failed — continuing");
   }
+
+  // Task #50 migrations run in their own block so pre-existing migration failures above
+  // do not prevent these from running.
+  try {
+    // doc_templates: discipline column (Task #50)
+    await pool.query(`ALTER TABLE doc_templates ADD COLUMN IF NOT EXISTS discipline text`);
+
+    // Task #50: remove standalone 'footing' and 'slab' Building Surveyor checklist templates
+    // (replaced by the combined 'bs_footing_slab' type). Safe to run repeatedly — WHERE clause
+    // is a no-op once the rows are gone.
+    await pool.query(`
+      DELETE FROM checklist_items
+      WHERE template_id IN (
+        SELECT id FROM checklist_templates
+        WHERE discipline = 'Building Surveyor'
+          AND inspection_type IN ('footing', 'slab')
+      )
+    `);
+    await pool.query(`
+      DELETE FROM checklist_templates
+      WHERE discipline = 'Building Surveyor'
+        AND inspection_type IN ('footing', 'slab')
+    `);
+
+    // Task #50: remove old global doc templates that lack a discipline and are now duplicated
+    // by newer global templates with discipline set. Safe to run repeatedly (no-op if already gone).
+    await pool.query(`
+      DELETE FROM doc_templates old_t
+      WHERE old_t.user_id IS NULL
+        AND old_t.discipline IS NULL
+        AND EXISTS (
+          SELECT 1 FROM doc_templates new_t
+          WHERE new_t.user_id IS NULL
+            AND new_t.discipline IS NOT NULL
+            AND new_t.name = old_t.name
+        )
+    `);
+
+    logger.info("Task #50 migrations applied");
+  } catch (err) {
+    logger.error({ err }, "Task #50 migration failed — continuing");
+  }
 }
 
 async function ensurePlanConfigsSeed() {
