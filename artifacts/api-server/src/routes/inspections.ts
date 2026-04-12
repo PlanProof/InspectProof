@@ -617,6 +617,8 @@ router.get("/:id", requireAuth, async (req, res) => {
       ? await db.select().from(projectsTable).where(eq(projectsTable.id, inspection.projectId))
       : [];
     const pName = project[0]?.name || "Standalone";
+    const pAddress = project[0]?.siteAddress ?? null;
+    const pSuburb = project[0]?.suburb ?? null;
 
     // Synthesise issues from failed/monitor checklist results so the Issues tab
     // always reflects what was found on the checklist, even if no manual issue
@@ -674,6 +676,8 @@ router.get("/:id", requireAuth, async (req, res) => {
       id: inspection.id,
       projectId: inspection.projectId,
       projectName: pName,
+      projectAddress: pAddress,
+      projectSuburb: pSuburb,
       inspectionType: inspection.inspectionType,
       status: inspection.status,
       scheduledDate: inspection.scheduledDate,
