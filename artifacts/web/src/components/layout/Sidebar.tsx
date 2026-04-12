@@ -19,15 +19,15 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 
 const navigation = [
-  { name: "Home",        href: "/dashboard",   icon: Home },
-  { name: "Projects",    href: "/projects",    icon: FolderOpen },
-  { name: "Inspections", href: "/inspections", icon: CheckSquare },
-  { name: "Calendar",    href: "/calendar",    icon: CalendarDays },
-  { name: "Issues & Defects", href: "/issues", icon: AlertTriangle },
-  { name: "Templates",   href: "/templates",   icon: FileText },
-  { name: "Analytics",   href: "/analytics",   icon: BarChart3 },
-  { name: "Activity",    href: "/activity",    icon: Activity },
-  { name: "Team",        href: "/inspectors",  icon: UsersRound },
+  { name: "Home",             href: "/dashboard",   icon: Home },
+  { name: "Projects",         href: "/projects",    icon: FolderOpen },
+  { name: "Inspections",      href: "/inspections", icon: CheckSquare },
+  { name: "Issues & Defects", href: "/issues",      icon: AlertTriangle },
+  { name: "Calendar",         href: "/calendar",    icon: CalendarDays },
+  { name: "Templates",        href: "/templates",   icon: FileText },
+  { name: "Analytics",        href: "/analytics",   icon: BarChart3 },
+  { name: "Activity",         href: "/activity",    icon: Activity },
+  { name: "Team",             href: "/inspectors",  icon: UsersRound },
 ];
 
 function apiBase() {
