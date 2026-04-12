@@ -2616,10 +2616,6 @@ function OrgContractorCombobox({
         <p className="text-sm text-muted-foreground">All library contractors are assigned to this project.</p>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        Search and add contractors from your library. Manage the library in{" "}
-        <strong>Settings → Organisation → Contractor Library</strong>.
-      </p>
     </div>
   );
 }
