@@ -11,7 +11,7 @@ const UNSUBSCRIBE_SECRET = process.env.JWT_SECRET || "inspectproof-unsubscribe-s
 const APP_BASE_URL = process.env.APP_BASE_URL || "https://inspectproof.com.au";
 
 function requireSuperAdmin(req: any, res: any, next: any) {
-  if (!req.authUser?.isSuperAdmin) {
+  if (!req.authUser?.isAdmin) {
     return res.status(403).json({ error: "forbidden" });
   }
   next();
