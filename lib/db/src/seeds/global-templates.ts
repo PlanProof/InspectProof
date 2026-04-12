@@ -427,6 +427,140 @@ const GLOBAL_DOC_TEMPLATES: Array<{ name: string; discipline: string; content: s
     linkedChecklistIds: [],
   },
   {
+    name: "Site Feasibility Report",
+    discipline: "Builder / QC",
+    content: `<div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:40px;">
+    <div style="background:#0B1933;color:#fff;padding:24px 32px;display:flex;justify-content:space-between;align-items:center;border-radius:8px 8px 0 0;">
+      <div>
+        <div style="font-size:22px;font-weight:700;letter-spacing:1px;">{{company_name}}</div>
+        <div style="font-size:11px;color:#C5D92D;margin-top:4px;">Builder / Quality Control · ABN {{abn}}</div>
+      </div>
+      <div style="text-align:right;font-size:11px;color:#ccc;">
+        <div>{{company_address}}</div>
+        <div>{{phone}} · {{email}}</div>
+      </div>
+    </div>
+    <div style="border:2px solid #10b981;padding:18px 32px;background:#ecfdf5;">
+      <div style="font-size:18px;font-weight:700;color:#065f46;letter-spacing:1px;text-align:center;text-transform:uppercase;">Site Feasibility Report</div>
+      <div style="text-align:center;font-size:11px;color:#047857;margin-top:4px;">Prepared by {{inspector_name}} · {{inspection_date}}</div>
+    </div>
+    <div style="padding:28px 32px;background:#fff;border:1px solid #e5e7eb;border-top:none;">
+
+      <div style="font-weight:600;color:#0B1933;font-size:14px;margin-bottom:16px;border-bottom:2px solid #10b981;padding-bottom:8px;">Project Details</div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:28px;">
+        <tr><td style="padding:8px;background:#f0fdf4;font-weight:600;color:#0B1933;width:36%;font-size:13px;">Project</td><td style="padding:8px;font-size:13px;border-bottom:1px solid #f1f5f9;">{{project_name}}</td></tr>
+        <tr><td style="padding:8px;background:#f0fdf4;font-weight:600;color:#0B1933;font-size:13px;">Site Address</td><td style="padding:8px;font-size:13px;border-bottom:1px solid #f1f5f9;">{{project_address}}</td></tr>
+        <tr><td style="padding:8px;background:#f0fdf4;font-weight:600;color:#0B1933;font-size:13px;">Assessment Date</td><td style="padding:8px;font-size:13px;border-bottom:1px solid #f1f5f9;">{{inspection_date}}</td></tr>
+        <tr><td style="padding:8px;background:#f0fdf4;font-weight:600;color:#0B1933;font-size:13px;">Assessor</td><td style="padding:8px;font-size:13px;border-bottom:1px solid #f1f5f9;">{{inspector_name}}</td></tr>
+        <tr><td style="padding:8px;background:#f0fdf4;font-weight:600;color:#0B1933;font-size:13px;">Overall Assessment</td><td style="padding:8px;font-size:13px;border-bottom:1px solid #f1f5f9;font-weight:700;color:#065f46;">{{result}}</td></tr>
+      </table>
+
+      <div style="font-weight:600;color:#0B1933;font-size:14px;margin-bottom:16px;border-bottom:2px solid #10b981;padding-bottom:8px;">Site Characteristics</div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:28px;">
+        <thead>
+          <tr style="background:#064e3b;color:#fff;">
+            <th style="padding:9px 12px;text-align:left;font-size:12px;font-weight:600;width:28%;">Item</th>
+            <th style="padding:9px 12px;text-align:left;font-size:12px;font-weight:600;width:14%;">Status</th>
+            <th style="padding:9px 12px;text-align:left;font-size:12px;font-weight:600;">Observations / Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#f0fdf4;">
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Contours &amp; Gradient</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Slope, cut/fill requirements, retaining walls</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Site Hazards</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Unstable ground, contamination, flooding, bushfire</td>
+          </tr>
+          <tr style="background:#f0fdf4;">
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Site Access</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Vehicle access, gates, road condition, delivery clearances</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Sediment Control Measures</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Sediment fences, hay bales, silt traps, run-off management</td>
+          </tr>
+          <tr style="background:#f0fdf4;">
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Overhead Power Lines</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Proximity to works, clearance zones, crane exclusion areas</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Easements &amp; Encumbrances</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Drainage, sewer, electricity, pipeline easements; title search</td>
+          </tr>
+          <tr style="background:#f0fdf4;">
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Neighbouring Properties</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Setbacks, party wall considerations, overshadowing, privacy</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Fencing</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Existing boundary fences, hoarding requirements, perimeter security</td>
+          </tr>
+          <tr style="background:#f0fdf4;">
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Traffic Management</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">TMP requirements, truck routes, pedestrian safety, parking</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Services &amp; Utilities</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Water, sewer, gas, electrical, NBN — existing connections &amp; capacity</td>
+          </tr>
+          <tr style="background:#f0fdf4;">
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Vegetation &amp; Trees</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Protected trees, clearing approvals, root zone impacts</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Soil Conditions</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Bearing capacity, reactive soils, rock, fill material</td>
+          </tr>
+          <tr style="background:#f0fdf4;">
+            <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0B1933;border-bottom:1px solid #d1fae5;">Stormwater &amp; Drainage</td>
+            <td style="padding:9px 12px;font-size:12px;border-bottom:1px solid #d1fae5;">&#9723;</td>
+            <td style="padding:9px 12px;font-size:12px;color:#374151;border-bottom:1px solid #d1fae5;">Existing drainage, council requirements, on-site detention</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="font-weight:600;color:#0B1933;font-size:14px;margin-bottom:16px;border-bottom:2px solid #10b981;padding-bottom:8px;">Checklist Findings</div>
+      <div style="margin-bottom:28px;">{{checklist_items}}</div>
+
+      <div style="font-weight:600;color:#0B1933;font-size:14px;margin-bottom:12px;border-bottom:2px solid #10b981;padding-bottom:8px;">Inspector Notes &amp; Recommendations</div>
+      <div style="font-size:13px;color:#374151;line-height:1.7;margin-bottom:28px;">{{notes}}</div>
+
+      <div style="border-top:2px solid #e5e7eb;padding-top:20px;">
+        {{signature_block}}
+        <div style="display:flex;justify-content:space-between;margin-top:32px;">
+          <div>
+            <div style="border-top:1px solid #374151;width:220px;margin-bottom:4px;"></div>
+            <div style="font-size:11px;color:#6b7280;">Assessor Signature</div>
+            <div style="font-size:12px;font-weight:600;color:#0B1933;margin-top:2px;">{{inspector_name}}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:11px;color:#6b7280;">Date</div>
+            <div style="font-size:13px;font-weight:600;color:#0B1933;margin-top:2px;">{{inspection_date}}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="background:#0B1933;color:#9ca3af;font-size:10px;padding:10px 32px;text-align:center;border-radius:0 0 8px 8px;">
+      This document was generated by InspectProof · {{company_name}}
+    </div>
+  </div>`,
+    linkedChecklistIds: [],
+  },
+  {
     name: "Inspection Summary Report",
     discipline: "Building Surveyor",
     content: `<div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:40px;">
