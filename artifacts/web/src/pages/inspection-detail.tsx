@@ -2561,6 +2561,50 @@ function OverviewTab({
             )}
           </div>
         </div>
+
+        {/* Site Location map */}
+        {(inspection.projectAddress || inspection.projectSuburb) && (() => {
+          const fullAddress = [inspection.projectAddress, inspection.projectSuburb].filter(Boolean).join(", ");
+          const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`;
+          const embedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(fullAddress)}&output=embed&z=15`;
+          return (
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3">
+                <Link
+                  href={`/projects/${inspection.projectId}`}
+                  className="text-sm font-semibold text-sidebar hover:text-secondary transition-colors flex items-center gap-1.5"
+                >
+                  <MapPin className="h-3.5 w-3.5 text-secondary" /> Site Location
+                </Link>
+                <a
+                  href={mapsSearchUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-secondary hover:underline font-medium"
+                >
+                  Open in Maps ↗
+                </a>
+              </div>
+              <div className="relative w-full" style={{ paddingBottom: "70%" }}>
+                <iframe
+                  title="Site location map"
+                  className="absolute inset-0 w-full h-full border-0"
+                  src={embedUrl}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              </div>
+              <div className="px-5 py-2.5 border-t border-border bg-muted/30">
+                <Link
+                  href={`/projects/${inspection.projectId}`}
+                  className="text-xs text-muted-foreground hover:text-secondary transition-colors truncate block"
+                >
+                  {fullAddress}
+                </Link>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Confirm replace checklist dialog */}
