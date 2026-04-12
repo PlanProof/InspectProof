@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, lt, and, ne, desc, inArray } from "drizzle-orm";
-import { db, issuesTable, issueCommentsTable, projectsTable, activityLogsTable, usersTable } from "@workspace/db";
+import { db, issuesTable, issueCommentsTable, projectsTable, activityLogsTable, usersTable, inspectionsTable, checklistTemplatesTable } from "@workspace/db";
 import { optionalAuth, requireAuth } from "../middleware/auth";
 import { getOrgMemberIds } from "../lib/quota";
 import { sendEmail } from "../lib/email";
@@ -39,10 +39,40 @@ async function formatIssue(i: any) {
     if (users[0]) assigneeName = `${users[0].firstName} ${users[0].lastName}`.trim();
   }
 
+  let inspectionType: string | null = null;
+  let inspectionScheduledDate: string | null = null;
+  let inspectionTemplateName: string | null = null;
+  if (i.inspectionId) {
+    const rows = await db
+      .select({
+        inspectionType: inspectionsTable.inspectionType,
+        scheduledDate: inspectionsTable.scheduledDate,
+        checklistTemplateId: inspectionsTable.checklistTemplateId,
+      })
+      .from(inspectionsTable)
+      .where(eq(inspectionsTable.id, i.inspectionId));
+    if (rows[0]) {
+      inspectionType = rows[0].inspectionType ?? null;
+      inspectionScheduledDate = rows[0].scheduledDate instanceof Date
+        ? rows[0].scheduledDate.toISOString()
+        : (rows[0].scheduledDate ?? null);
+      if (rows[0].checklistTemplateId) {
+        const tmpl = await db
+          .select({ name: checklistTemplatesTable.name })
+          .from(checklistTemplatesTable)
+          .where(eq(checklistTemplatesTable.id, rows[0].checklistTemplateId));
+        inspectionTemplateName = tmpl[0]?.name ?? null;
+      }
+    }
+  }
+
   return {
     id: i.id,
     projectId: i.projectId,
     inspectionId: i.inspectionId,
+    inspectionType,
+    inspectionScheduledDate,
+    inspectionTemplateName,
     title: i.title,
     description: i.description,
     severity: i.severity,

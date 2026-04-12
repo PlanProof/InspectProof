@@ -3,12 +3,18 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useListIssues, useListProjects, useListUsers, useCreateIssue } from "@workspace/api-client-react";
 import type { Issue, CreateIssueRequestSeverity, CreateIssueRequestPriority, CreateIssueRequestStatus } from "@workspace/api-client-react";
 import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, Label } from "@/components/ui";
-import { Search, Plus, ExternalLink, Camera, ChevronUp, ChevronDown, ChevronsUpDown, Loader2, X, CheckCircle2, Upload, Bell, AlertTriangle, Image, MessageSquare, Clock, User, ArrowRight, Ban, Square, CheckSquare, Users, Tag, Archive } from "lucide-react";
+import { Search, Plus, ExternalLink, Camera, ChevronUp, ChevronDown, ChevronsUpDown, Loader2, X, CheckCircle2, Upload, Bell, AlertTriangle, Image, MessageSquare, Clock, User, ArrowRight, Ban, Square, CheckSquare, Users, Tag, Archive, ClipboardList } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 
 function apiBase() {
   return import.meta.env.BASE_URL.replace(/\/$/, "");
+}
+
+function cleanInspType(inspectionType: string | null | undefined, templateName: string | null | undefined): string {
+  if (templateName) return templateName.replace(/\s*[-—–]\s*(Class\s*\d[\d\-a-z]*\s*)?/i, "").trim();
+  if (!inspectionType) return "Inspection";
+  return inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
 const ISSUE_CATEGORIES = [
@@ -707,7 +713,7 @@ export default function Issues() {
                       : <Square className="h-4 w-4" />}
                   </button>
                 </TableHead>
-                <SortableHead col="id" label="ID" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
+                <SortableHead col="id" label="Issue #" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="title" label="Title" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="severity" label="Severity / Priority" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                 <SortableHead col="status" label="Status" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
@@ -733,14 +739,26 @@ export default function Issues() {
                     <TableCell className="font-mono text-xs text-muted-foreground">#{issue.id}</TableCell>
                     <TableCell>
                       <div className="font-medium text-sidebar">{issue.title}</div>
-                      {issue.category && (
-                        <span className="text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">{issue.category}</span>
-                      )}
-                      {issue.dueDate && new Date(issue.dueDate) < new Date() && !["closed", "resolved", "rejected"].includes(issue.status) && (
-                        <span className="text-[10px] text-orange-600 font-semibold flex items-center gap-0.5 mt-0.5">
-                          <AlertTriangle className="h-3 w-3" /> Overdue
-                        </span>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                        {issue.category && (
+                          <span className="text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">{issue.category}</span>
+                        )}
+                        {(issue as any).inspectionId && (
+                          <a
+                            href={`/inspections/${(issue as any).inspectionId}`}
+                            onClick={e => e.stopPropagation()}
+                            className="inline-flex items-center gap-0.5 text-[10px] text-secondary hover:underline font-medium"
+                          >
+                            <ClipboardList className="h-2.5 w-2.5" />
+                            {cleanInspType((issue as any).inspectionType, (issue as any).inspectionTemplateName)}
+                          </a>
+                        )}
+                        {issue.dueDate && new Date(issue.dueDate) < new Date() && !["closed", "resolved", "rejected"].includes(issue.status) && (
+                          <span className="text-[10px] text-orange-600 font-semibold flex items-center gap-0.5">
+                            <AlertTriangle className="h-3 w-3" /> Overdue
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
@@ -1100,17 +1118,27 @@ export default function Issues() {
 
                     {/* Inspection link */}
                     {selectedIssue.inspectionId && (
-                      <div className="text-sm text-muted-foreground bg-muted/20 border border-border rounded-md px-3 py-2 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <Image className="h-4 w-4 shrink-0" />
-                          <span>Linked to Inspection #{selectedIssue.inspectionId}</span>
+                      <div className="text-sm bg-blue-50/60 border border-blue-100 rounded-md px-3 py-2.5 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <ClipboardList className="h-4 w-4 shrink-0 text-secondary" />
+                          <div className="min-w-0">
+                            <div className="font-medium text-sidebar text-xs truncate">
+                              {cleanInspType(selectedIssue.inspectionType, selectedIssue.inspectionTemplateName)}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              Inspection #{selectedIssue.inspectionId}
+                              {selectedIssue.inspectionScheduledDate && (
+                                <> &middot; {formatDate(selectedIssue.inspectionScheduledDate)}</>
+                              )}
+                            </div>
+                          </div>
                         </div>
                         <a
                           href={`/inspections/${selectedIssue.inspectionId}`}
-                          className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0"
+                          className="text-xs text-secondary hover:underline flex items-center gap-1 shrink-0 font-medium"
                         >
                           <ExternalLink className="h-3 w-3" />
-                          View inspection
+                          Open
                         </a>
                       </div>
                     )}
