@@ -506,11 +506,8 @@ export default function InspectionDetail() {
   const disciplineReportTypes = inspection
     ? getAllowedReportTypes(inspection.checklistTemplateDiscipline)
     : DEFAULT_DISCIPLINE_TYPES;
-  // Show all report types — discipline-relevant ones float to the top
-  const REPORT_TYPES_DESKTOP = [
-    ...ALL_REPORT_TYPES_META.filter(rt => disciplineReportTypes.includes(rt.key)),
-    ...ALL_REPORT_TYPES_META.filter(rt => !disciplineReportTypes.includes(rt.key)),
-  ];
+  // Only show report types relevant to the inspection's discipline
+  const REPORT_TYPES_DESKTOP = ALL_REPORT_TYPES_META.filter(rt => disciplineReportTypes.includes(rt.key));
 
   const generateReport = async () => {
     if (!inspection) return;
@@ -1381,62 +1378,41 @@ export default function InspectionDetail() {
                     <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Standard Report Types</span>
                     <div className="flex-1 border-t border-border" />
                   </div>
-                  {inspection && (() => {
-                    const discipline = inspection.checklistTemplateDiscipline;
-                    return discipline ? (
-                      <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground mb-2">
-                        <Building className="h-3 w-3 shrink-0" />
-                        <span>Recommended for <span className="font-semibold text-foreground">{discipline}</span> appear first</span>
-                      </div>
-                    ) : null;
-                  })()}
                   <div className="space-y-1.5">
-                    {REPORT_TYPES_DESKTOP.map((rt, idx) => {
+                    {REPORT_TYPES_DESKTOP.map((rt) => {
                       const Icon = rt.icon;
                       const isSelected = !selectedGenDocTemplateId && selectedReportType === rt.key;
-                      // Prefer linked template's defaultReportType as recommended; fall back to discipline heuristic
                       const isRecommended = inspection
                         ? (linkedReportType ? rt.key === linkedReportType : rt.key === getSuggestedReportType(inspection))
                         : false;
-                      const isDisciplineType = disciplineReportTypes.includes(rt.key);
-                      const prevIsDiscipline = idx > 0 ? disciplineReportTypes.includes(REPORT_TYPES_DESKTOP[idx - 1].key) : true;
-                      const showDivider = !isDisciplineType && prevIsDiscipline;
                       return (
-                        <div key={rt.key}>
-                          {showDivider && disciplineReportTypes.length > 0 && (
-                            <div className="flex items-center gap-2 py-1.5">
-                              <div className="flex-1 border-t border-dashed border-border" />
-                              <span className="text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wide">Other types</span>
-                              <div className="flex-1 border-t border-dashed border-border" />
-                            </div>
+                        <label
+                          key={rt.key}
+                          className={cn(
+                            "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                            isSelected ? "border-sidebar bg-sidebar/5" : "border-border hover:border-sidebar/30"
                           )}
-                          <label
-                            className={cn(
-                              "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                              isSelected ? "border-sidebar bg-sidebar/5" : "border-border hover:border-sidebar/30"
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name="reportSource"
-                              value={rt.key}
-                              checked={isSelected}
-                              onChange={() => { setSelectedGenDocTemplateId(null); setSelectedReportType(rt.key); }}
-                              className="sr-only"
-                            />
-                            <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", isSelected ? "text-sidebar" : "text-muted-foreground")} />
-                            <div className="flex-1 min-w-0">
-                              <span className={cn("text-sm font-medium block", isSelected ? "text-sidebar" : "text-foreground")}>
-                                {rt.label}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground leading-snug">{rt.desc}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                              {isRecommended && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-pear text-sidebar">Recommended</span>}
-                              {isSelected && <span className="text-xs text-sidebar font-semibold">Selected</span>}
-                            </div>
-                          </label>
-                        </div>
+                        >
+                          <input
+                            type="radio"
+                            name="reportSource"
+                            value={rt.key}
+                            checked={isSelected}
+                            onChange={() => { setSelectedGenDocTemplateId(null); setSelectedReportType(rt.key); }}
+                            className="sr-only"
+                          />
+                          <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", isSelected ? "text-sidebar" : "text-muted-foreground")} />
+                          <div className="flex-1 min-w-0">
+                            <span className={cn("text-sm font-medium block", isSelected ? "text-sidebar" : "text-foreground")}>
+                              {rt.label}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground leading-snug">{rt.desc}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                            {isRecommended && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-pear text-sidebar">Recommended</span>}
+                            {isSelected && <span className="text-xs text-sidebar font-semibold">Selected</span>}
+                          </div>
+                        </label>
                       );
                     })}
                   </div>
