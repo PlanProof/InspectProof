@@ -1375,27 +1375,31 @@ export function DocTemplatesPanel() {
             ) : (
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
                 <p className="text-[10px] text-muted-foreground px-1 pt-1 pb-1 leading-snug">
-                  Link checklists to this template. Select a discipline to browse its checklists.
+                  {isAdmin
+                    ? "Link checklists to this template. Select a discipline to browse its checklists."
+                    : "Link checklists from your discipline to this template."}
                 </p>
-                {/* Discipline selector */}
-                <div className="px-1 pb-1">
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Discipline</label>
-                  <div className="flex flex-wrap gap-1">
-                    {DISCIPLINES.map(d => (
-                      <button
-                        key={d}
-                        onClick={() => setChecklistDiscipline(d)}
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
-                          checklistDiscipline === d
-                            ? "bg-secondary text-white border-secondary"
-                            : "bg-card text-muted-foreground border-muted/60 hover:border-secondary/50 hover:text-sidebar"
-                        }`}
-                      >
-                        {d}
-                      </button>
-                    ))}
+                {/* Discipline selector — admins only */}
+                {isAdmin && (
+                  <div className="px-1 pb-1">
+                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Discipline</label>
+                    <div className="flex flex-wrap gap-1">
+                      {DISCIPLINES.map(d => (
+                        <button
+                          key={d}
+                          onClick={() => setChecklistDiscipline(d)}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
+                            checklistDiscipline === d
+                              ? "bg-secondary text-white border-secondary"
+                              : "bg-card text-muted-foreground border-muted/60 hover:border-secondary/50 hover:text-sidebar"
+                          }`}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
                 <div className="border-t border-muted/50 pt-1" />
                 {!checklistTemplates || checklistTemplates.length === 0 ? (
                   <div className="text-center py-6">
