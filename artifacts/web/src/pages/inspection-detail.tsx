@@ -971,7 +971,7 @@ export default function InspectionDetail() {
           onReload={load}
         />
       )}
-      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults ?? []} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} inspection={inspection} internalStaff={internalStaff} contractors={contractors} orgContractors={orgContractors} />}
+      {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults ?? []} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} onCountsChange={(pass, fail) => setInspection(prev => prev ? { ...prev, passCount: pass, failCount: fail } : prev)} inspection={inspection} internalStaff={internalStaff} contractors={contractors} orgContractors={orgContractors} />}
       {tab === "Issues" && <IssuesTab issues={inspection.issues} inspectionId={inspection.id} projectId={inspection.projectId} onReload={load} contractors={contractors} internalStaff={internalStaff} orgContractors={orgContractors} />}
       {tab === "Documents" && (
         <DocumentsTab
@@ -2813,6 +2813,7 @@ function ChecklistTab({
   docsByItem,
   inspectionId,
   onReload,
+  onCountsChange,
   inspection,
   internalStaff,
   contractors = [],
@@ -2822,6 +2823,7 @@ function ChecklistTab({
   docsByItem: Record<number, { id: number; name: string; mimeType?: string }[]>;
   inspectionId: number;
   onReload: () => void;
+  onCountsChange?: (passCount: number, failCount: number) => void;
   inspection: Inspection;
   internalStaff: { id: number; name: string; role: string }[];
   contractors?: { id: number; name: string; trade: string; email: string | null }[];
@@ -3060,12 +3062,33 @@ ${checklistRows}
   const saveItem = async (itemId: number, draft: ItemDraft) => {
     setSaving(itemId);
     const showDefect = draft.result === "fail" || draft.result === "monitor";
+    const newResultValue = draft.result === "pending" ? null : draft.result;
+
+    // Optimistically update UI immediately — no waiting for the server
+    const prevResults = localResults;
+    const optimisticResults = localResults.map(r => r.id !== itemId ? r : {
+      ...r,
+      result: newResultValue,
+      notes: draft.notes || undefined,
+      severity: showDefect ? (draft.severity || null) : r.severity,
+      location: showDefect ? (draft.location || null) : r.location,
+      tradeAllocated: showDefect ? (draft.tradeAllocated || null) : r.tradeAllocated,
+      recommendedAction: showDefect ? (draft.recommendedAction || null) : r.recommendedAction,
+    });
+    setLocalResults(optimisticResults);
+    setEditingId(null);
+
+    // Update pass/fail counts in the header without a full page reload
+    const passCount = optimisticResults.filter(r => r.result === "pass").length;
+    const failCount = optimisticResults.filter(r => r.result === "fail").length;
+    onCountsChange?.(passCount, failCount);
+
     try {
       await apiFetch(`/api/inspections/${inspectionId}/checklist/${itemId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          result: draft.result === "pending" ? null : draft.result,
+          result: newResultValue,
           notes: draft.notes || null,
           ...(showDefect ? {
             severity: draft.severity || null,
@@ -3075,18 +3098,13 @@ ${checklistRows}
           } : {}),
         }),
       });
-      setLocalResults(rs => rs.map(r => r.id !== itemId ? r : {
-        ...r,
-        result: draft.result === "pending" ? null : draft.result,
-        notes: draft.notes || undefined,
-        severity: showDefect ? (draft.severity || null) : r.severity,
-        location: showDefect ? (draft.location || null) : r.location,
-        tradeAllocated: showDefect ? (draft.tradeAllocated || null) : r.tradeAllocated,
-        recommendedAction: showDefect ? (draft.recommendedAction || null) : r.recommendedAction,
-      }));
-      setEditingId(null);
-      onReload();
     } catch {
+      // Revert optimistic update if the save failed
+      setLocalResults(prevResults);
+      onCountsChange?.(
+        prevResults.filter(r => r.result === "pass").length,
+        prevResults.filter(r => r.result === "fail").length,
+      );
       alert("Failed to save. Please try again.");
     } finally {
       setSaving(null);
