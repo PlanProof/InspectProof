@@ -2845,6 +2845,8 @@ function ChecklistTab({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<number, ItemDraft>>({});
   const [saving, setSaving] = useState<number | null>(null);
+  const [savedRecently, setSavedRecently] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [uploadingItemId, setUploadingItemId] = useState<number | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
@@ -3110,6 +3112,10 @@ ${checklistRows}
           } : {}),
         }),
       });
+      // Flash the "Saved" indicator briefly
+      setSavedRecently(true);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => setSavedRecently(false), 2500);
     } catch {
       // Revert optimistic update if the save failed
       setLocalResults(prevResults);
@@ -3176,8 +3182,28 @@ ${checklistRows}
         </div>
       )}
 
-      {/* Photo Sheet button */}
-      <div className="flex justify-end">
+      {/* Toolbar row: auto-save status + Photo Sheet */}
+      <div className="flex items-center justify-between">
+        {/* Auto-save indicator */}
+        <div className="flex items-center gap-1.5 text-xs select-none">
+          {saving !== null ? (
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Saving…
+            </span>
+          ) : savedRecently ? (
+            <span className="flex items-center gap-1.5 text-green-600 font-medium">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Saved
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-muted-foreground/60">
+              <CheckCircle2 className="h-3 w-3" />
+              Results save automatically
+            </span>
+          )}
+        </div>
+
         <button
           onClick={generatePhotoSheet}
           className="flex items-center gap-2 px-4 py-2 rounded-lg border border-muted bg-card text-sm font-medium text-sidebar hover:bg-muted/40 transition-colors"
