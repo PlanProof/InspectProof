@@ -709,22 +709,19 @@ router.get("/:id", requireAuth, async (req, res) => {
     const pAddress = project[0]?.siteAddress ?? null;
     const pSuburb = project[0]?.suburb ?? null;
 
-    // Build a set of checklist result IDs that already have an auto-created real
-    // issue so we don't show both the real issue and a synthetic duplicate.
-    const autoCreatedResultIds = new Set(
-      realIssues
-        .map(i => {
-          const match = i.description?.match(/\[auto:(\d+)\]/);
-          return match ? parseInt(match[1]) : null;
-        })
-        .filter((rid): rid is number => rid !== null)
+    // Separate auto-created issues (from checklist) from manually raised ones.
+    // Auto-created issues have [auto:NNN] in their description and are represented
+    // by synthetic issues below (with richer checklist data). Manual issues are
+    // shown as-is alongside the synthetic ones.
+    const manualIssues = realIssues.filter(
+      i => !i.description?.match(/^\[auto:\d+\]/)
     );
 
-    // Synthesise issues from failed/monitor checklist results so the Issues tab
-    // always reflects what was found on the checklist, even if no manual issue
-    // record was raised. Skip items that already have an auto-created real issue.
+    // Synthesise issues from ALL failed/monitor checklist results so the Issues
+    // tab shows the Checklist-style presentation (with Fail/Monitor badges, code
+    // references, recommended actions, etc.) for every defect found on the form.
     const syntheticIssues = formattedResults
-      .filter(r => (r.result === "fail" || r.result === "monitor") && !autoCreatedResultIds.has(r.id))
+      .filter(r => r.result === "fail" || r.result === "monitor")
       .map(r => ({
         id: -(r.id),          // negative to avoid collision with real issue IDs
         projectId: inspection.projectId,
@@ -796,10 +793,10 @@ router.get("/:id", requireAuth, async (req, res) => {
       createdAt: inspection.createdAt instanceof Date ? inspection.createdAt.toISOString() : inspection.createdAt,
       checklistResults: formattedResults,
       issues: [
-        ...realIssues.map(i => ({
+        ...manualIssues.map(i => ({
           id: i.id, projectId: i.projectId, inspectionId: i.inspectionId,
           title: i.title,
-          description: (i.description ?? "").replace(/^\[auto:\d+\]\s*/, ""),
+          description: i.description ?? "",
           severity: i.severity,
           status: i.status, location: i.location, codeReference: i.codeReference,
           responsibleParty: i.responsibleParty, dueDate: i.dueDate, resolvedDate: i.resolvedDate,
