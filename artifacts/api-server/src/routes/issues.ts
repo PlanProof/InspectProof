@@ -66,6 +66,9 @@ async function formatIssue(i: any) {
     }
   }
 
+  // Strip internal [auto:NNN] tracking markers from descriptions before returning
+  const cleanDesc = (i.description ?? "").replace(/^\[auto:\d+\]\s*/, "");
+
   return {
     id: i.id,
     projectId: i.projectId,
@@ -74,7 +77,7 @@ async function formatIssue(i: any) {
     inspectionScheduledDate,
     inspectionTemplateName,
     title: i.title,
-    description: i.description,
+    description: cleanDesc,
     severity: i.severity,
     category: i.category ?? null,
     priority: i.priority ?? null,

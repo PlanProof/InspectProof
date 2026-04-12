@@ -798,7 +798,9 @@ router.get("/:id", requireAuth, async (req, res) => {
       issues: [
         ...realIssues.map(i => ({
           id: i.id, projectId: i.projectId, inspectionId: i.inspectionId,
-          title: i.title, description: i.description, severity: i.severity,
+          title: i.title,
+          description: (i.description ?? "").replace(/^\[auto:\d+\]\s*/, ""),
+          severity: i.severity,
           status: i.status, location: i.location, codeReference: i.codeReference,
           responsibleParty: i.responsibleParty, dueDate: i.dueDate, resolvedDate: i.resolvedDate,
           assignedToId: i.assignedToId, projectName: pName, source: "manual" as const,
