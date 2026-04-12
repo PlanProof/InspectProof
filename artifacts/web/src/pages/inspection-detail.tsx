@@ -326,7 +326,7 @@ function severityColors(sev: string) {
   return map[sev] ?? "bg-gray-50 text-gray-500 border-gray-200";
 }
 
-const TABS = ["Overview", "Checklist", "Issues", "Documents", "Reports"] as const;
+const TABS = ["Overview", "Checklist", "Issues & Defects", "Documents", "Reports"] as const;
 type Tab = typeof TABS[number];
 
 // ── Report type catalogue ─────────────────────────────────────────────────────
@@ -970,7 +970,7 @@ export default function InspectionDetail() {
             }`}
           >
             {t}
-            {t === "Issues" && inspection.issues.length > 0 && (
+            {t === "Issues & Defects" && inspection.issues.length > 0 && (
               <span className="text-xs bg-red-100 text-red-600 font-semibold rounded-full px-1.5 py-0.5 leading-none">
                 {inspection.issues.length}
               </span>
@@ -999,7 +999,7 @@ export default function InspectionDetail() {
         />
       )}
       {tab === "Checklist" && <ChecklistTab results={inspection.checklistResults ?? []} docsByItem={docsByItem} inspectionId={inspection.id} onReload={load} onCountsChange={(pass, fail) => setInspection(prev => prev ? { ...prev, passCount: pass, failCount: fail } : prev)} inspection={inspection} internalStaff={internalStaff} contractors={contractors} orgContractors={orgContractors} />}
-      {tab === "Issues" && <IssuesTab issues={inspection.issues} inspectionId={inspection.id} projectId={inspection.projectId} onReload={load} contractors={contractors} internalStaff={internalStaff} orgContractors={orgContractors} />}
+      {tab === "Issues & Defects" && <IssuesTab issues={inspection.issues} inspectionId={inspection.id} projectId={inspection.projectId} onReload={load} contractors={contractors} internalStaff={internalStaff} orgContractors={orgContractors} />}
       {tab === "Documents" && (
         <DocumentsTab
           documents={projectDocuments}
@@ -4052,10 +4052,7 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
     );
   }
 
-  const checklistIssues = issues.filter(i => i.source === "checklist");
-  const manualIssues = issues.filter(i => i.source !== "checklist");
-
-  // ── Trade dropdown shared across both issue types ──
+  // ── Trade dropdown shared across all issues ──
   function TradeDropdown({ issue }: { issue: Issue }) {
     const currentVal = localTrades[issue.id] ?? "";
     return (
@@ -4163,34 +4160,48 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
         </div>
       )}
 
-      {/* Checklist defects */}
-      {checklistIssues.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <ClipboardList className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold text-sidebar">Checklist Defects</span>
-            <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{checklistIssues.length}</span>
-          </div>
-          <div className="space-y-3">
-            {checklistIssues.map(issue => {
-              const isResolved = issue.status === "resolved";
-              const isExpanded = expandedCorrection === issue.id;
-              return (
-                <div
-                  key={issue.id}
-                  className={cn(
-                    "bg-card border rounded-xl p-5 transition-all",
-                    isResolved
-                      ? "border-green-200 bg-green-50/20"
-                      : issue.result === "monitor"
-                        ? "border-amber-200 bg-amber-50/30"
-                        : "border-red-200 bg-red-50/20"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-4 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                        {isResolved ? (
+      {/* Unified issues & defects list */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-semibold text-sidebar">Issues & Defects</span>
+          <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{issues.length}</span>
+        </div>
+        <div className="space-y-3">
+          {issues.map(issue => {
+            const isChecklist = issue.source === "checklist";
+            const isResolved = issue.status === "resolved";
+            const isExpanded = expandedCorrection === issue.id;
+            return (
+              <div
+                key={issue.id}
+                className={cn(
+                  "bg-card border rounded-xl p-5 transition-all",
+                  isResolved
+                    ? "border-green-200 bg-green-50/20"
+                    : issue.result === "monitor"
+                      ? "border-amber-200 bg-amber-50/30"
+                      : isChecklist
+                        ? "border-red-200 bg-red-50/20"
+                        : "border-border"
+                )}
+              >
+                <div className="flex items-start justify-between gap-4 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                      {/* Source badge */}
+                      {isChecklist ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded border bg-sidebar/5 text-sidebar/70 border-sidebar/20">
+                          <ClipboardList className="h-3 w-3" /> Checklist
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded border bg-muted text-muted-foreground border-muted-foreground/20">
+                          <AlertTriangle className="h-3 w-3" /> Raised
+                        </span>
+                      )}
+                      {/* Result badge (checklist items) */}
+                      {isChecklist && (
+                        isResolved ? (
                           <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border bg-green-50 text-green-700 border-green-200">
                             <CheckCircle2 className="h-3 w-3" /> Corrected
                           </span>
@@ -4202,115 +4213,76 @@ function IssuesTab({ issues, inspectionId, projectId, onReload, contractors, int
                           <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border bg-red-50 text-red-700 border-red-200">
                             <XCircle className="h-3 w-3" /> Fail
                           </span>
-                        )}
-                        {issue.severity && (
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded border capitalize ${severityColors(issue.severity)}`}>
-                            {issue.severity}
-                          </span>
-                        )}
-                        {issue.category && (
-                          <span className="text-xs text-muted-foreground border border-muted/50 rounded px-2 py-0.5">
-                            {issue.category}
-                          </span>
-                        )}
-                        <span className="text-xs text-muted-foreground capitalize border border-muted/50 rounded px-2 py-0.5">
-                          {(issue.status ?? "open").replace(/_/g, " ")}
+                        )
+                      )}
+                      {issue.severity && (
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded border capitalize ${severityColors(issue.severity)}`}>
+                          {issue.severity}
                         </span>
-                      </div>
-                      <h3 className="font-semibold text-sidebar leading-snug">{issue.title}</h3>
-                    </div>
-
-                    {/* Correct button */}
-                    {!isResolved && (
-                      <button
-                        onClick={() => setExpandedCorrection(isExpanded ? null : issue.id)}
-                        className={cn(
-                          "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
-                          isExpanded
-                            ? "bg-green-600 text-white border-green-600"
-                            : "border-green-300 text-green-700 hover:bg-green-50"
-                        )}
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        {isExpanded ? "Cancel" : "Correct"}
-                      </button>
-                    )}
-                  </div>
-
-                  {issue.description && (
-                    <p className="text-sm text-muted-foreground leading-relaxed mb-2">{issue.description}</p>
-                  )}
-                  {issue.recommendedAction && (
-                    <div className="mt-2 p-2.5 rounded-lg bg-sidebar/5 border border-sidebar/10 text-xs text-sidebar">
-                      <span className="font-semibold">Recommended action:</span> {issue.recommendedAction}
-                    </div>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
-                    {issue.location && <span><span className="font-medium">Location:</span> {issue.location}</span>}
-                    {issue.codeReference && <span><span className="font-medium">Code ref:</span> {issue.codeReference}</span>}
-                  </div>
-
-                  <TradeDropdown issue={issue} />
-
-                  {/* Inline correction form */}
-                  {isExpanded && !isResolved && (
-                    <DefectCorrectionPanel
-                      issue={issue}
-                      inspectionId={inspectionId}
-                      projectId={projectId}
-                      onDone={() => { setExpandedCorrection(null); onReload(); }}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Manually raised issues */}
-      {manualIssues.length > 0 && (
-        <div>
-          {checklistIssues.length > 0 && (
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold text-sidebar">Raised Issues</span>
-              <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{manualIssues.length}</span>
-            </div>
-          )}
-          <div className="space-y-3">
-            {manualIssues.map(issue => (
-              <div key={issue.id} className="bg-card border border-border rounded-xl p-5">
-                <div className="flex items-start justify-between gap-4 mb-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded border capitalize ${severityColors(issue.severity)}`}>
-                        {issue.severity}
-                      </span>
+                      )}
+                      {issue.category && (
+                        <span className="text-xs text-muted-foreground border border-muted/50 rounded px-2 py-0.5">
+                          {issue.category}
+                        </span>
+                      )}
                       <span className="text-xs text-muted-foreground capitalize border border-muted/50 rounded px-2 py-0.5">
-                        {issue.status.replace(/_/g, " ")}
+                        {(issue.status ?? "open").replace(/_/g, " ")}
                       </span>
+                      {issue.dueDate && !isChecklist && (
+                        <span className="text-xs text-muted-foreground border border-muted/50 rounded px-2 py-0.5">
+                          Due {formatDate(issue.dueDate)}
+                        </span>
+                      )}
                     </div>
-                    <h3 className="font-semibold text-sidebar">{issue.title}</h3>
+                    <h3 className="font-semibold text-sidebar leading-snug">{issue.title}</h3>
                   </div>
-                  {issue.dueDate && (
-                    <div className="text-right shrink-0">
-                      <div className="text-xs text-muted-foreground">Due</div>
-                      <div className="text-sm font-medium text-sidebar">{formatDate(issue.dueDate)}</div>
-                    </div>
+
+                  {/* Correct button (checklist defects only) */}
+                  {isChecklist && !isResolved && (
+                    <button
+                      onClick={() => setExpandedCorrection(isExpanded ? null : issue.id)}
+                      className={cn(
+                        "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
+                        isExpanded
+                          ? "bg-green-600 text-white border-green-600"
+                          : "border-green-300 text-green-700 hover:bg-green-50"
+                      )}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {isExpanded ? "Cancel" : "Correct"}
+                    </button>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">{issue.description}</p>
-                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+
+                {issue.description && (
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-2">{issue.description}</p>
+                )}
+                {issue.recommendedAction && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-sidebar/5 border border-sidebar/10 text-xs text-sidebar">
+                    <span className="font-semibold">Recommended action:</span> {issue.recommendedAction}
+                  </div>
+                )}
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
                   {issue.location && <span><span className="font-medium">Location:</span> {issue.location}</span>}
                   {issue.codeReference && <span><span className="font-medium">Code ref:</span> {issue.codeReference}</span>}
                 </div>
+
                 <TradeDropdown issue={issue} />
+
+                {/* Inline correction form (checklist defects only) */}
+                {isChecklist && isExpanded && !isResolved && (
+                  <DefectCorrectionPanel
+                    issue={issue}
+                    inspectionId={inspectionId}
+                    projectId={projectId}
+                    onDone={() => { setExpandedCorrection(null); onReload(); }}
+                  />
+                )}
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      )}
+      </div>
     </div>
   );
 }
