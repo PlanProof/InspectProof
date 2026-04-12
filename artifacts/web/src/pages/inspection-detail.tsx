@@ -843,16 +843,6 @@ export default function InspectionDetail() {
                 Mark as Complete
               </Button>
             )}
-            {(inspection.status === "completed" || inspection.status === "follow_up_required") && (
-              <Button
-                size="sm"
-                onClick={() => openReportDialog(inspection)}
-                className="gap-1.5 bg-brand-pear hover:bg-brand-pear/90 text-sidebar font-semibold"
-              >
-                <FileText className="h-3.5 w-3.5" />
-                Generate Report
-              </Button>
-            )}
             {/* Sign Off */}
             {inspection.status === "completed" && !(inspection as any).signedOffAt && (
               <Button
@@ -912,14 +902,6 @@ export default function InspectionDetail() {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Button
-              size="sm"
-              onClick={() => openReportDialog(inspection)}
-              className="gap-1.5 bg-brand-pear hover:bg-brand-pear/90 text-sidebar font-bold shadow-sm"
-            >
-              <FileText className="h-3.5 w-3.5" />
-              Create Report
-            </Button>
             <button
               onClick={() => setBannerDismissed(true)}
               className="p-1.5 rounded-md text-white/50 hover:text-white hover:bg-white/10 transition-colors"
