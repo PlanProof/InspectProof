@@ -132,6 +132,39 @@ const PROFESSIONALS = [
       "Annual fire safety statement support",
     ],
   },
+  {
+    icon: "key" as const,
+    label: "Property Managers",
+    description:
+      "Conduct entry, exit and routine condition reports to protect asset value and resolve disputes with auditable property records generated from the field.",
+    bullets: [
+      "Routine condition report documentation",
+      "Entry, exit and periodic inspection records",
+      "Maintenance defect reporting with photo evidence",
+    ],
+  },
+  {
+    icon: "life-buoy" as const,
+    label: "Pool Inspectors",
+    description:
+      "Inspect pool barriers against AS 1926.1 requirements, document non-conformances on-site and issue pool safety certificates to reduce owner liability.",
+    bullets: [
+      "Pool barrier compliance checks aligned to AS 1926.1",
+      "Safety certificate documentation and lodgement",
+      "Non-compliant barrier defect reporting",
+    ],
+  },
+  {
+    icon: "briefcase" as const,
+    label: "Insurance Assessors",
+    description:
+      "Document property damage systematically, categorise loss against policy wording and prepare reinstatement estimates — defensible records for every claim.",
+    bullets: [
+      "Property damage assessment and documentation",
+      "Photo evidence captured per insurance policy standards",
+      "Reinstatement cost estimation and report generation",
+    ],
+  },
 ];
 
 export default function WelcomeScreen() {
@@ -211,7 +244,7 @@ export default function WelcomeScreen() {
         <View style={styles.statsStrip}>
           {[
             { n: "10+", label: "Inspection\nTypes" },
-            { n: "8", label: "Professional\nDisciplines" },
+            { n: "11", label: "Professional\nDisciplines" },
             { n: "AU", label: "Built for\nAustralia" },
           ].map((s) => (
             <View key={s.label} style={styles.statItem}>
@@ -247,7 +280,7 @@ export default function WelcomeScreen() {
             </View>
             <Text style={styles.sectionTitle}>Built for every professional</Text>
             <Text style={styles.sectionSubtitle}>
-              From building surveyors to fire safety engineers — InspectProof covers every discipline in Australia's built environment.
+              From building surveyors to insurance assessors — InspectProof covers every discipline in Australia's built environment.
             </Text>
           </View>
 

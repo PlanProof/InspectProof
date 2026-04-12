@@ -16,6 +16,9 @@ import {
   ShieldAlert,
   Home,
   Flame,
+  Key,
+  Waves,
+  FileSearch,
   BarChart3,
   MapPin,
   Calendar,
@@ -580,6 +583,57 @@ const PROFESSIONALS = [
         "Fire and smoke dampers in HVAC actuated correctly in test mode — AS 1682.2",
         "Fire-rated walls, doors and penetration seals intact — no holes in rated construction",
         "Fire systems commissioning report and Essential Safety Measures schedule prepared",
+      ],
+    },
+  },
+  {
+    icon: Key,
+    role: "Property Managers",
+    description:
+      "Conduct thorough entry, exit and routine condition reports to protect asset value, resolve tenant disputes and maintain auditable property records — all generated and delivered from the field.",
+    checklistPreview: {
+      templateName: "Routine Condition Report — Residential Tenancy",
+      items: [
+        "Entry condition verified against previous report — all discrepancies photographed and noted",
+        "All keys, remotes and swipe cards accounted for and in working order — RTRA s.95",
+        "Internal walls and ceilings — no new marks, staining, holes or damage beyond fair wear and tear",
+        "All smoke alarms tested and operational — battery condition noted — Building Fire Safety Regulation",
+        "Hot water system, air conditioning and fixed appliances checked for operation — faults noted",
+        "Yard and external areas — gardens maintained per lease conditions, no unapproved structures",
+      ],
+    },
+  },
+  {
+    icon: Waves,
+    role: "Pool Inspectors",
+    description:
+      "Inspect pool barriers against AS 1926.1 compliance requirements, document non-conformances on-site and issue pool safety certificates — reducing risk and liability for owners and agents.",
+    checklistPreview: {
+      templateName: "Pool Barrier Compliance Inspection — AS 1926.1",
+      items: [
+        "Pool barrier height minimum 1200mm above finished ground level on non-climbable zone side — AS 1926.1 Cl 2.2",
+        "Non-climbable zone (NCZ) 900mm clear on outside of barrier — no climbable objects within NCZ",
+        "Self-closing and self-latching gate tested — held ajar and released; latch engages positively",
+        "Gate latch positioned minimum 1500mm above ground or on pool-side of barrier — AS 1926.1 Cl 2.7",
+        "No direct access from habitable building to pool area — compliant barrier or resettable latch at all doorways",
+        "Pool safety certificate completed — rectification items and re-inspection requirements noted",
+      ],
+    },
+  },
+  {
+    icon: FileSearch,
+    role: "Insurance Assessors",
+    description:
+      "Document property damage with systematic photo evidence, categorise loss against policy wording and prepare reinstatement cost estimates — creating defensible assessment records for every claim.",
+    checklistPreview: {
+      templateName: "Property Damage Assessment — Insurance Inspection",
+      items: [
+        "Property access confirmed — insured present, policy details and claim number verified before inspection commences",
+        "Damage scope defined — storm, fire, flood, impact or gradual damage categorised per policy wording",
+        "All affected areas photographed systematically — roof, structure, interior and contents — timestamped",
+        "Building structure assessed for safety to occupy — structural engineer referral recommended where required",
+        "Cause of damage documented — weather event data, incident reports or investigation findings referenced",
+        "Reinstatement cost estimate prepared — itemised scope of works with current Australian market rates applied",
       ],
     },
   },
