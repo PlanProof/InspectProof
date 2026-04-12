@@ -461,6 +461,7 @@ function MemberRow({
   onEdit,
   isInviting,
   justSent,
+  isCurrentUserAdmin,
 }: {
   member: TeamMember;
   onTogglePlatform: (id: number) => void;
@@ -468,6 +469,7 @@ function MemberRow({
   onEdit: (m: TeamMember) => void;
   isInviting?: boolean;
   justSent?: boolean;
+  isCurrentUserAdmin: boolean;
 }) {
   const rawRole = member.role;
   const roleBadge = ROLE_BADGE[rawRole] ?? "bg-muted text-muted-foreground border-muted/60";
@@ -574,7 +576,10 @@ function MemberRow({
       {/* Platform Access */}
       <div className="flex flex-col items-center min-w-[100px] gap-1">
         <div className="flex items-center gap-2">
-          <Toggle on={member.platformAccess} onChange={() => onTogglePlatform(member.id)} />
+          <Toggle
+            on={member.platformAccess}
+            onChange={isCurrentUserAdmin ? () => onTogglePlatform(member.id) : () => {}}
+          />
           <span className="text-xs font-medium text-muted-foreground">Platform</span>
         </div>
         <div className="flex items-center gap-1">
@@ -583,16 +588,21 @@ function MemberRow({
             {member.platformAccess ? "Access granted" : "No access"}
           </span>
         </div>
+        {!isCurrentUserAdmin && (
+          <span className="text-[9px] text-muted-foreground/50 italic">Admin only</span>
+        )}
       </div>
 
-      {/* Edit */}
-      <button
-        onClick={() => onEdit(member)}
-        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-secondary/10 text-muted-foreground hover:text-secondary shrink-0"
-        title="Edit member"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </button>
+      {/* Edit — only visible to company admins */}
+      {isCurrentUserAdmin && (
+        <button
+          onClick={() => onEdit(member)}
+          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-secondary/10 text-muted-foreground hover:text-secondary shrink-0"
+          title="Edit member"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -1188,22 +1198,24 @@ export default function Inspectors() {
             Manage your team, permissions, app access and platform roles.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => { if (!atLimit) setShowInviteForm(!showInviteForm); }} disabled={atLimit} className="gap-2">
-            <Send className="h-4 w-4" /> Send App Invite
-          </Button>
-          <Button
-            onClick={() => {
-              if (atLimit) return;
-              setShowAddMember(true);
-              setAddMemberResult(null);
-            }}
-            disabled={atLimit}
-            className="gap-2 shadow-lg shadow-primary/20"
-          >
-            <UserPlus className="h-4 w-4" /> Add Team Member
-          </Button>
-        </div>
+        {(currentUser?.isCompanyAdmin) && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => { if (!atLimit) setShowInviteForm(!showInviteForm); }} disabled={atLimit} className="gap-2">
+              <Send className="h-4 w-4" /> Send App Invite
+            </Button>
+            <Button
+              onClick={() => {
+                if (atLimit) return;
+                setShowAddMember(true);
+                setAddMemberResult(null);
+              }}
+              disabled={atLimit}
+              className="gap-2 shadow-lg shadow-primary/20"
+            >
+              <UserPlus className="h-4 w-4" /> Add Team Member
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Upgrade banner when at plan limit */}
@@ -1475,6 +1487,7 @@ export default function Inspectors() {
               onEdit={setEditingMember}
               isInviting={invitingId === member.id}
               justSent={inviteSentFor === member.id}
+              isCurrentUserAdmin={currentUser?.isCompanyAdmin ?? false}
             />
           ))}
         </div>
