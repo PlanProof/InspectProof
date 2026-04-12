@@ -73,7 +73,7 @@ function formatDisplayTime(t: string) {
 export default function CreateInspectionScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useTabBarHeight();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const queryClient = useQueryClient();
   const baseUrl = process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "";
 
@@ -128,10 +128,14 @@ export default function CreateInspectionScreen() {
     enabled: !!token && !!selectedProject && mode === "project",
   });
 
+  const userDiscipline = user?.profession || null;
+
   const { data: templates = [], isLoading: loadingTemplates } = useQuery<any[]>({
-    queryKey: ["checklist-templates", token],
+    queryKey: ["checklist-templates", token, userDiscipline],
     queryFn: async () => {
-      const res = await fetch(`${baseUrl}/api/checklist-templates`, {
+      const url = new URL(`${baseUrl}/api/checklist-templates`);
+      if (userDiscipline) url.searchParams.set("discipline", userDiscipline);
+      const res = await fetch(url.toString(), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("Failed");

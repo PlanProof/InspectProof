@@ -10,6 +10,7 @@ import {
   Highlighter, Palette, Eraser,
 } from "lucide-react";
 import { useListChecklistTemplates, useListInspections, useListProjects } from "@workspace/api-client-react";
+import { useAuth } from "@/hooks/use-auth";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface DocTemplate {
@@ -525,6 +526,7 @@ function ChecklistsPanel({
 
 // ── Main Panel (embeddable, no AppLayout) ─────────────────────────────────────
 export function DocTemplatesPanel() {
+  const { user } = useAuth();
   const [templates, setTemplates] = useState<DocTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -545,7 +547,11 @@ export function DocTemplatesPanel() {
   const [renameValue, setRenameValue] = useState("");
   const [saved, setSaved] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
-  const [checklistDiscipline, setChecklistDiscipline] = useState("Building Surveyor");
+  const [checklistDiscipline, setChecklistDiscipline] = useState(user?.profession || "Building Surveyor");
+
+  useEffect(() => {
+    if (user?.profession) setChecklistDiscipline(user.profession);
+  }, [user?.profession]);
 
   const bgInputRef = useRef<HTMLInputElement>(null);
   const docxInputRef = useRef<HTMLInputElement>(null);
