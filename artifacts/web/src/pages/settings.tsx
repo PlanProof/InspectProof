@@ -657,7 +657,7 @@ function ProfileTab({ user, loading, isOnboarding = false, onOnboardingComplete 
           <FormField label="Phone Number">
             <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+61 400 000 000" />
           </FormField>
-          <FormField label={<span className="flex items-center gap-1">Profession <span className="text-red-500">*</span></span>}>
+          <FormField label={<span className="flex items-center gap-1">Profession <span className="text-red-500">*</span></span>} hint="Your professional discipline — determines which inspection checklists are available to you. This is your credential, not your company role.">
             <select
               value={profession}
               onChange={e => { setProfession(e.target.value); setProfessionCustom(""); setProfessionError(false); }}
