@@ -4,7 +4,7 @@ import { useListIssues, useListProjects, useListUsers, useCreateIssue } from "@w
 import type { Issue, CreateIssueRequestSeverity, CreateIssueRequestPriority, CreateIssueRequestStatus } from "@workspace/api-client-react";
 import { Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, Label } from "@/components/ui";
 import { Search, Plus, ExternalLink, Camera, ChevronUp, ChevronDown, ChevronsUpDown, Loader2, X, CheckCircle2, Upload, Bell, AlertTriangle, Image, MessageSquare, Clock, User, ArrowRight, Ban, Square, CheckSquare, Users, Tag, Archive, ClipboardList } from "lucide-react";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate, cn, formatInspectionType } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 
 function apiBase() {
@@ -14,7 +14,7 @@ function apiBase() {
 function cleanInspType(inspectionType: string | null | undefined, templateName: string | null | undefined): string {
   if (templateName) return templateName.replace(/\s*[-—–]\s*(Class\s*\d[\d\-a-z]*\s*)?/i, "").trim();
   if (!inspectionType) return "Inspection";
-  return inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  return formatInspectionType(inspectionType);
 }
 
 const ISSUE_CATEGORIES = [

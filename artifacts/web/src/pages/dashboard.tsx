@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatInspectionType } from "@/lib/utils";
 import { useGetDashboardAnalytics } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -34,7 +35,7 @@ function typeColor(type: string) {
   return TYPE_COLORS[key] ?? DEFAULT_COLOR;
 }
 function typeLabel(type: string) {
-  return type?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) ?? type;
+  return formatInspectionType(type) ?? type;
 }
 
 // Inspector initials avatar

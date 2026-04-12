@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { formatInspectionType } from "@/lib/utils";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
@@ -196,7 +197,7 @@ function buildPreviewData(project: any, inspection: any): Record<string, string>
     "{{ncc_class}}":       project?.buildingClassification ?? "",
     "{{lot_number}}":      "",
     "{{da_number}}":       project?.daNumber ?? "",
-    "{{inspection_type}}": inspection ? (inspection.inspectionType ?? "").replace(/_/g, " ") : "",
+    "{{inspection_type}}": inspection ? formatInspectionType(inspection.inspectionType ?? "") : "",
     "{{inspection_date}}": inspection?.scheduledDate ? au(inspection.scheduledDate) : "",
     "{{inspection_time}}": inspection?.scheduledTime ?? "",
     "{{result}}":          inspection ? `${inspection.passCount ?? 0} Pass / ${inspection.failCount ?? 0} Fail` : "",
@@ -260,7 +261,7 @@ function fillTokens(content: string, inspection: any, project: any): string {
     "{{ncc_class}}":        project?.buildingClassification ?? "",
     "{{lot_number}}":       "",
     "{{da_number}}":        project?.daNumber ?? "",
-    "{{inspection_type}}":  (inspection.inspectionType ?? "").replace(/_/g, " "),
+    "{{inspection_type}}":  formatInspectionType(inspection.inspectionType ?? ""),
     "{{inspection_date}}":  inspection.scheduledDate ? au(inspection.scheduledDate) : "",
     "{{inspection_time}}":  inspection.scheduledTime ?? "",
     "{{result}}":           `${passCount} Pass / ${failCount} Fail`,
@@ -468,7 +469,7 @@ function GenerateReportDialog({ template, onClose }: { template: DocTemplate; on
                   <option value="">Choose an inspection…</option>
                   {filtered.map((i: any) => (
                     <option key={i.id} value={i.id}>
-                      {i.projectName} — {(i.inspectionType ?? "").replace(/_/g, " ")} — {i.scheduledDate}
+                      {i.projectName} — {formatInspectionType(i.inspectionType ?? "")} — {i.scheduledDate}
                     </option>
                   ))}
                 </select>
@@ -588,7 +589,7 @@ function ChecklistsPanel({
                     </div>
                     <div className="min-w-0">
                       <div className="font-medium truncate leading-tight">{ct.name}</div>
-                      <div className="text-muted-foreground text-[10px] capitalize">{(ct.inspectionType ?? "").replace(/_/g, " ")}</div>
+                      <div className="text-muted-foreground text-[10px]">{formatInspectionType(ct.inspectionType ?? "")}</div>
                     </div>
                   </button>
                 );
@@ -1010,7 +1011,7 @@ export function DocTemplatesPanel() {
                       >
                         {previewProjectInspections.map((i: any) => (
                           <option key={i.id} value={String(i.id)}>
-                            {(i.inspectionType ?? "").replace(/_/g, " ")} — {i.scheduledDate}
+                            {formatInspectionType(i.inspectionType ?? "")} — {i.scheduledDate}
                           </option>
                         ))}
                       </select>
@@ -1382,7 +1383,7 @@ export function DocTemplatesPanel() {
                       >
                         {previewProjectInspections.map((i: any) => (
                           <option key={i.id} value={String(i.id)}>
-                            {(i.inspectionType ?? "").replace(/_/g, " ")} — {i.scheduledDate}
+                            {formatInspectionType(i.inspectionType ?? "")} — {i.scheduledDate}
                           </option>
                         ))}
                       </select>

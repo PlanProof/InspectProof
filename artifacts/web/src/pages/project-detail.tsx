@@ -13,7 +13,7 @@ import {
   Download, Mail, Loader2, Link2, Unlink, Award, Send, BarChart2,
   Smartphone, X, Info, ZoomIn, User as UserIcon, ShieldCheck, UserCheck, Paperclip, MapPin
 } from "lucide-react";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate, cn, formatInspectionType } from "@/lib/utils";
 import { PDFViewer } from "@/components/PDFViewer";
 import { useListUsers, useCreateInspection, useGetMe, useListChecklistTemplates, type User } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -869,7 +869,7 @@ function OverviewTab({ project, onRefresh, onGoToContacts }: { project: Project;
                 >
                   {inspectionStatusIcon(i.status)}
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sidebar capitalize truncate group-hover:text-secondary transition-colors">{i.checklistTemplateName ? cleanTypeName(i.checklistTemplateName) : i.inspectionType.replace(/_/g, " ")}</div>
+                    <div className="font-medium text-sidebar truncate group-hover:text-secondary transition-colors">{i.checklistTemplateName ? cleanTypeName(i.checklistTemplateName) : formatInspectionType(i.inspectionType)}</div>
                     <div className="text-xs text-muted-foreground">{formatDate(i.scheduledDate)}</div>
                   </div>
                   {inspectionStatusBadge(i.status)}
@@ -1998,7 +1998,7 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
           <p className="text-sm text-muted-foreground">
             Are you sure you want to delete the{" "}
             <span className="font-medium text-sidebar capitalize">
-              {inspectionToDelete ? (inspectionToDelete.checklistTemplateName ? cleanTypeName(inspectionToDelete.checklistTemplateName) : inspectionToDelete.inspectionType.replace(/_/g, " ")) : ""}
+              {inspectionToDelete ? (inspectionToDelete.checklistTemplateName ? cleanTypeName(inspectionToDelete.checklistTemplateName) : formatInspectionType(inspectionToDelete.inspectionType)) : ""}
             </span>{" "}
             inspection? This will also remove all associated checklist results, notes, and issues. This action cannot be undone.
           </p>
@@ -2053,7 +2053,7 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
                           }
                           <div className="min-w-0">
                             <div className="font-medium text-sm text-sidebar truncate">{t.name}</div>
-                            <div className="text-xs text-muted-foreground capitalize">{t.inspectionType.replace(/_/g, " ")} · {t.itemCount} checklist item{t.itemCount !== 1 ? "s" : ""}</div>
+                            <div className="text-xs text-muted-foreground">{formatInspectionType(t.inspectionType)} · {t.itemCount} checklist item{t.itemCount !== 1 ? "s" : ""}</div>
                           </div>
                         </div>
                         <div className="shrink-0">
@@ -2111,7 +2111,7 @@ function InspectionsTab({ project, onRefresh }: { project: Project; onRefresh: (
                         {inspectionStatusIcon(insp.status, (insp as any).signedOffAt)}
                         <div>
                           <div className="font-medium text-sm text-sidebar capitalize group-hover:text-secondary transition-colors">
-                            {insp.checklistTemplateName ? cleanTypeName(insp.checklistTemplateName) : insp.inspectionType.replace(/_/g, " ")}
+                            {insp.checklistTemplateName ? cleanTypeName(insp.checklistTemplateName) : formatInspectionType(insp.inspectionType)}
                           </div>
                           <div className="text-xs text-muted-foreground">#{idx + 1}</div>
                         </div>
@@ -2385,7 +2385,7 @@ function InspectionTypesTab({ projectId }: { projectId: number }) {
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-sm text-sidebar">{type.name}</div>
                             <div className="text-xs text-muted-foreground capitalize mt-0.5">
-                              {type.inspectionType.replace(/_/g, " ")} · {type.itemCount} checklist items
+                              {formatInspectionType(type.inspectionType)} · {type.itemCount} checklist items
                             </div>
                           </div>
                           {type.isSelected && (

@@ -1,4 +1,5 @@
 import { db, inspectionsTable, projectsTable, usersTable, userCalendarIntegrationsTable } from "@workspace/db";
+import { formatInspectionType } from "./inspectionTypes";
 import { eq, and } from "drizzle-orm";
 import type { Logger } from "pino";
 import { google } from "googleapis";
@@ -117,7 +118,7 @@ interface EventDetails {
 }
 
 function buildEventBody(details: EventDetails): { summary: string; description: string; startDateTime: string; endDateTime: string } {
-  const typeLabel = details.inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const typeLabel = formatInspectionType(details.inspectionType);
   const summary = `${typeLabel} — ${details.projectName}`;
   const deepLink = `${APP_BASE_URL}/inspections/${details.inspectionId}`;
   const description = [

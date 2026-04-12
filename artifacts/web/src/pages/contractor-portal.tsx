@@ -1,4 +1,5 @@
 import { useParams } from "wouter";
+import { formatInspectionType } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef } from "react";
 import {
@@ -100,7 +101,7 @@ function IssueCard({
     },
   });
 
-  const typeLabel = (s: string) => s?.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+  const typeLabel = (s: string) => formatInspectionType(s);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">

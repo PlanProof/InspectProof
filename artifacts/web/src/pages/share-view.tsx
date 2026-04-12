@@ -1,4 +1,5 @@
 import { useParams } from "wouter";
+import { formatInspectionType } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -229,7 +230,7 @@ export default function ShareView() {
     ? Math.round((inspection.passCount / inspection.totalItems) * 100)
     : 0;
 
-  const typeLabel = (s: string) => s?.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+  const typeLabel = (s: string) => formatInspectionType(s);
 
   return (
     <div className="min-h-screen bg-gray-50">

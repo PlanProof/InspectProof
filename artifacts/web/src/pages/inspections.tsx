@@ -7,7 +7,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, Label,
 } from "@/components/ui";
 import { Search, Calendar as CalendarIcon, CheckCircle2, XCircle, Clock, Plus, ChevronDown, ChevronUp, ChevronsUpDown, Square, CheckSquare, Users, Tag, Download, Loader2, X, MapPin, Network } from "lucide-react";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate, cn, formatInspectionType } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -461,7 +461,7 @@ export default function Inspections() {
     const rows = selectedInspections.map(i => [
       i.id,
       `"${(i.projectName ?? "").replace(/"/g, '""')}"`,
-      `"${(i.inspectionType ?? "").replace(/"/g, '""')}"`,
+      `"${formatInspectionType(i.inspectionType ?? "").replace(/"/g, '""')}"`,
       i.scheduledDate ?? "",
       i.status,
       `"${(i.inspectorName ?? "").replace(/"/g, '""')}"`,
@@ -641,7 +641,7 @@ export default function Inspections() {
                     <TableCell className="capitalize">{
                       insp.checklistTemplateName
                         ? cleanTypeName(insp.checklistTemplateName)
-                        : insp.inspectionType.replace(/_/g, ' ')
+                        : formatInspectionType(insp.inspectionType)
                     }</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5 text-sm">

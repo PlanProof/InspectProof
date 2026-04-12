@@ -12,7 +12,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, X, ExternalLink, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate, cn, formatInspectionType } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface CalendarInspection {
@@ -121,7 +121,7 @@ function PreviewCard({
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-              {insp.inspectionType?.replace(/_/g, " ")}
+              {formatInspectionType(insp.inspectionType)}
             </p>
             <h3 className="text-base font-bold text-sidebar leading-tight truncate">{insp.projectName}</h3>
           </div>
@@ -241,7 +241,7 @@ export default function CalendarPage() {
     const effectiveStatus = getEffectiveStatus(i);
     return {
       id: i.id,
-      title: `${i.projectName} — ${i.inspectionType?.replace(/_/g, " ")}`,
+      title: `${i.projectName} — ${formatInspectionType(i.inspectionType)}`,
       start: startDate,
       end: endDate,
       resource: i,

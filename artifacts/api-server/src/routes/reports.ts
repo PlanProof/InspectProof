@@ -5,6 +5,7 @@ import PDFDocument from "pdfkit";
 import sharp from "sharp";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { sendReportEmail } from "../lib/email";
+import { formatInspectionType as formatInspType } from "../lib/inspectionTypes";
 
 const FONT_DIR         = path.join(__dirname, "..", "fonts");
 const FONT_REGULAR     = path.join(FONT_DIR, "PlusJakartaSans-Regular.ttf");
@@ -91,27 +92,6 @@ const REPORT_TYPE_LABELS: Record<string, string> = {
   fire_inspection_report:   "Fire Safety Inspection Report",
 };
 
-const INSPECTION_TYPE_LABELS: Record<string, string> = {
-  footing: "Footing", footings: "Footings", slab: "Slab", frame: "Frame",
-  pre_plaster: "Pre-Plaster", waterproofing: "Waterproofing", lock_up: "Lock-Up",
-  pool_barrier: "Pool Barrier", final: "Final", special: "Special",
-  preliminary: "Preliminary", progress: "Progress",
-  qc_footing: "QC — Footings", qc_frame: "QC — Frame", qc_fitout: "QC — Fit-Out",
-  qc_pre_handover: "QC — Pre-Handover", non_conformance: "Non-Conformance",
-  hold_point: "Hold Point", daily_site: "Daily Site Diary",
-  fire_safety: "Fire Safety", annual_fire_safety: "Annual Fire Safety",
-  fire_active: "Active Systems", fire_passive: "Passive Systems",
-  fire_egress: "Egress & Evacuation",
-  se_footing_slab: "Footing & Slab",
-  structural_footing_slab: "Structural — Footing & Slab",
-  structural_frame: "Structural — Frame", structural_final: "Structural — Final",
-  plumbing: "Plumbing", drainage: "Drainage", pressure_test: "Pressure Test",
-  electrical: "Electrical", compliance: "Compliance", structural: "Structural",
-  pre_purchase_building: "Building Inspection", pre_purchase_pest: "Pest Inspection",
-  pre_purchase_combined: "Building & Pest",
-  safety_inspection: "Safety Inspection", hazard_assessment: "Hazard Assessment",
-  incident_inspection: "Incident Investigation",
-};
 
 const ROLE_LABELS: Record<string, string> = {
   admin:                "Administrator",
@@ -221,9 +201,7 @@ function generateReportHtml(
   const formatDate = (d: string | null | undefined) =>
     d ? new Date(d).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }) : "—";
 
-  const inspType = (inspection?.inspectionType || "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c: string) => c.toUpperCase());
+  const inspType = formatInspType(inspection?.inspectionType || "");
 
   const siteAddress = project
     ? [project.siteAddress, project.suburb, project.state, project.postcode].filter(Boolean).join(" ")
@@ -558,9 +536,7 @@ async function generateReportContent(
   const formatDate = (d: string | null) =>
     d ? new Date(d).toLocaleDateString("en-AU", { day: "2-digit", month: "long", year: "numeric" }) : "—";
 
-  const inspType = (inspection?.inspectionType || "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c: string) => c.toUpperCase());
+  const inspType = formatInspType(inspection?.inspectionType || "");
 
   const siteAddress = project
     ? [project.siteAddress, project.suburb, project.state, project.postcode].filter(Boolean).join(" ")
@@ -1089,10 +1065,7 @@ router.post("/generate", requireAuth, async (req, res) => {
       certifierForHtml = cRows[0] ?? null;
     }
 
-    const inspType = inspection.inspectionType
-      ? (INSPECTION_TYPE_LABELS[inspection.inspectionType]
-          || inspection.inspectionType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()))
-      : "";
+    const inspType = formatInspType(inspection.inspectionType ?? "");
 
     const typeLabel = REPORT_TYPE_LABELS[reportType] || reportType;
     const projectLabel = project?.name ?? "Standalone Inspection";
@@ -1795,7 +1768,7 @@ function buildPdf(
 
     // Narrative — use scheduledDate for inspection date, completedDate for issued date
     const inspType = inspectionForPdf?.inspectionType
-      ? inspectionForPdf.inspectionType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())
+      ? formatInspType(inspectionForPdf.inspectionType)
       : "inspection";
     const dateConducted = inspectionForPdf?.scheduledDate
       ? new Date(inspectionForPdf.scheduledDate).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })

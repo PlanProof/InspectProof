@@ -14,7 +14,7 @@ import {
   RefreshCw, Eye, ShieldCheck, Flame, Home, ClipboardCheck, Trash2, Camera, Link2,
   PenLine, Share2, Copy, ExternalLink, MapPin, Key, Droplets, FileSearch,
 } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatInspectionType } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { PDFViewer } from "@/components/PDFViewer";
 
@@ -277,7 +277,7 @@ function fillDocTemplate(template: DocTemplate, inspection: any, project: any): 
     "{{ncc_class}}":        project?.nccClass ?? "",
     "{{lot_number}}":       project?.lotNumber ?? "",
     "{{da_number}}":        project?.daNumber ?? "",
-    "{{inspection_type}}":  (inspection.inspectionType ?? "").replace(/_/g, " "),
+    "{{inspection_type}}":  formatInspectionType(inspection.inspectionType ?? ""),
     "{{inspection_date}}":  inspection.scheduledDate ? au(inspection.scheduledDate) : "",
     "{{inspection_time}}":  inspection.scheduledTime ?? "",
     "{{result}}":           `${inspection.passCount ?? 0} Pass / ${inspection.failCount ?? 0} Fail`,
@@ -775,7 +775,7 @@ export default function InspectionDetail() {
           <ChevronRight className="h-3.5 w-3.5" />
           <Link href={`/projects/${inspection.projectId}`} className="hover:text-sidebar transition-colors">{inspection.projectName}</Link>
           <ChevronRight className="h-3.5 w-3.5" />
-          <span className="text-sidebar font-medium capitalize">{inspection.inspectionType.replace(/_/g, " ")} Inspection</span>
+          <span className="text-sidebar font-medium">{formatInspectionType(inspection.inspectionType)} Inspection</span>
         </div>
 
         {/* ── Header card ── */}
@@ -786,7 +786,7 @@ export default function InspectionDetail() {
                 {inspection.status.replace(/_/g, " ")}
               </span>
               <span className="text-xs text-muted-foreground border border-muted/50 rounded-full px-2.5 py-1 capitalize">
-                {inspection.inspectionType.replace(/_/g, " ")} Inspection
+                {formatInspectionType(inspection.inspectionType)} Inspection
               </span>
             </div>
             <h1 className="text-2xl font-bold text-sidebar leading-tight">
@@ -2100,7 +2100,7 @@ function OverviewTab({
               <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
                 {[
                   { label: "Project", value: inspection.projectName },
-                  { label: "Type", value: inspection.inspectionType.replace(/_/g, " ") },
+                  { label: "Type", value: formatInspectionType(inspection.inspectionType) },
                   { label: "Status", value: inspection.status.replace(/_/g, " ") },
                   { label: "Scheduled Date", value: formatDate(inspection.scheduledDate) },
                   { label: "Scheduled Time", value: inspection.scheduledTime ?? "TBC" },

@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { db, emailLogsTable } from "@workspace/db";
+import { formatInspectionType } from "./inspectionTypes";
 
 export type EmailLogger = {
   warn: (obj: Record<string, unknown>, msg: string) => void;
@@ -175,7 +176,7 @@ function inspectionAssignedHtml(opts: {
   isReassignment?: boolean;
 }): string {
   const { inspectorName, inspectionType, projectName, projectAddress, scheduledDate, scheduledTime, inspectionId, isReassignment } = opts;
-  const typeLabel = inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const typeLabel = formatInspectionType(inspectionType);
   const dateLabel = formatDateAU(scheduledDate);
   const timeLabel = scheduledTime ? ` at ${scheduledTime}` : "";
   const link = `${APP_BASE_URL}/inspections/${inspectionId}`;
@@ -221,7 +222,7 @@ export async function sendInspectionAssignedEmail(
   log?: EmailLogger
 ): Promise<boolean> {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping inspection email"); return false; }
-  const typeLabel = opts.inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const typeLabel = formatInspectionType(opts.inspectionType);
   const heading = opts.isReassignment ? "Inspection Reassigned to You" : "You've Been Assigned an Inspection";
   const subject = `${heading} — ${typeLabel} at ${opts.projectName}`;
   try {
@@ -660,7 +661,7 @@ function reportEmailHtml(opts: {
   reportId: number;
 }): string {
   const { recipientName, reportTitle, reportType, projectName, projectAddress, senderName, senderCompany, reportId } = opts;
-  const typeLabel = reportType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const typeLabel = formatInspectionType(reportType);
   const fullPdfLink = `${APP_BASE_URL}/api/reports/${reportId}/pdf`;
   const senderLine = senderCompany ? `${senderName}, ${senderCompany}` : senderName;
   const greeting_line = recipientName ? `Hi ${recipientName},` : "Hello,";
@@ -753,7 +754,7 @@ export async function sendReportEmail(opts: {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping report email"); return; }
 
   const html = reportEmailHtml(opts);
-  const typeLabel = opts.reportType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const typeLabel = formatInspectionType(opts.reportType);
   const subject = `${typeLabel} — ${opts.projectName} (InspectProof)`;
   const attachmentFilename = buildEmailPdfFilename(opts.reportTitle, opts.projectName);
 
@@ -869,7 +870,7 @@ export interface InspectionReminderEmailOpts {
 
 function inspectionReminderHtml(opts: InspectionReminderEmailOpts): string {
   const { inspectorName, inspectionType, projectName, projectAddress, scheduledDate, scheduledTime, inspectionId, reminderType, daysUntil, daysOverdue, assignedInspectorName } = opts;
-  const typeLabel = inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const typeLabel = formatInspectionType(inspectionType);
   const dateLabel = formatDateAU(scheduledDate);
   const timeLabel = scheduledTime ? ` at ${scheduledTime}` : "";
   const link = `${APP_BASE_URL}/inspections/${inspectionId}`;
@@ -922,7 +923,7 @@ export async function sendInspectionReminderEmail(
   log?: EmailLogger
 ): Promise<boolean> {
   if (!isConfigured()) { log?.warn({}, "Resend not configured — skipping inspection reminder email"); return false; }
-  const typeLabel = opts.inspectionType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  const typeLabel = formatInspectionType(opts.inspectionType);
   let subject: string;
   if (opts.reminderType === "upcoming") {
     const dayWord = opts.daysUntil === 1 ? "Tomorrow" : `in ${opts.daysUntil} Days`;
