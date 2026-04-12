@@ -7,6 +7,7 @@ import {
   ToggleLeft, Upload, Trash2, PenLine, CreditCard, Zap, BarChart3,
   ArrowRight, Eye, EyeOff, Plus, X, Edit2, Check, Mail, BookUser,
   Link2, Calendar, Bold, Italic, AlignLeft, Network,
+  Copy, RefreshCw, Rss, ExternalLink,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -291,8 +292,14 @@ function IntegrationsTab() {
     queryKey: ["calendar-integration-status"],
     queryFn: () => apiFetch("/api/integrations/calendar/status"),
   });
+  const { data: icalData, isLoading: icalLoading } = useQuery({
+    queryKey: ["calendar-ical-url"],
+    queryFn: () => apiFetch("/api/integrations/calendar/ical-url"),
+  });
+
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [icalCopied, setIcalCopied] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
   const urlSuccess = urlParams.get("success");
@@ -340,6 +347,20 @@ function IntegrationsTab() {
     window.location.href = `${base}/api/integrations/calendar/${provider}/connect?token=${encodeURIComponent(token)}`;
   }
 
+  function copyIcalUrl() {
+    if (!icalData?.feedUrl) return;
+    navigator.clipboard.writeText(icalData.feedUrl).then(() => {
+      setIcalCopied(true);
+      setTimeout(() => setIcalCopied(false), 2000);
+    });
+  }
+
+  function openGoogleSubscribe() {
+    if (!icalData?.feedUrl) return;
+    const encoded = encodeURIComponent(icalData.feedUrl);
+    window.open(`https://www.google.com/calendar/render?cid=${encoded}`, "_blank");
+  }
+
   const googleConnected = status?.google?.connected ?? false;
   const msConnected = status?.microsoft?.connected ?? false;
   const googleAvail = status?.googleAvailable ?? false;
@@ -360,112 +381,163 @@ function IntegrationsTab() {
         </div>
       )}
 
+      {/* ── iCal / Webcal Feed ──────────────────────────────────────────────── */}
       <SectionCard
-        title="Calendar Integration"
-        description="Connect your calendar to automatically create events for new inspection bookings."
+        title="Subscribe to Your Inspection Calendar"
+        description="Get your personal inspection feed URL and add it to any calendar app — Google Calendar, Outlook, Apple Calendar, or any app that supports iCal subscriptions."
+      >
+        {icalLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Feed URL box */}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">Your personal feed URL</label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 bg-muted/40 border border-border rounded-lg px-3 py-2 min-w-0">
+                  <Rss className="h-3.5 w-3.5 text-secondary shrink-0" />
+                  <span className="text-xs text-muted-foreground font-mono truncate flex-1">
+                    {icalData?.feedUrl ?? "Loading…"}
+                  </span>
+                </div>
+                <Button variant="outline" onClick={copyIcalUrl} className="shrink-0 gap-1.5">
+                  {icalCopied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  {icalCopied ? "Copied!" : "Copy"}
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                Keep this URL private — anyone with it can view your inspection schedule.
+              </p>
+            </div>
+
+            {/* Quick subscribe buttons */}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">Quick subscribe</label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={openGoogleSubscribe}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted text-xs font-medium text-sidebar transition-colors"
+                >
+                  <img src="https://www.gstatic.com/images/branding/product/1x/calendar_2020q4_32dp.png" alt="Google" className="h-4 w-4" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  Add to Google Calendar
+                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                </button>
+                <button
+                  onClick={() => { if (icalData?.feedUrl) window.open(`webcal://${icalData.feedUrl.replace(/^https?:\/\//, "")}`, "_blank"); }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted text-xs font-medium text-sidebar transition-colors"
+                >
+                  <Calendar className="h-4 w-4 text-secondary" />
+                  Apple Calendar / Outlook
+                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+
+            {/* Instructions */}
+            <div className="bg-muted/30 rounded-lg border border-border p-3 space-y-2">
+              <p className="text-xs font-semibold text-sidebar">How to subscribe manually</p>
+              <ol className="space-y-1 text-xs text-muted-foreground list-decimal list-inside">
+                <li><span className="font-medium text-sidebar">Google Calendar</span> — Open Google Calendar → Other calendars (+) → From URL → paste your feed URL</li>
+                <li><span className="font-medium text-sidebar">Outlook</span> — Open Outlook Calendar → Add calendar → Subscribe from web → paste your feed URL</li>
+                <li><span className="font-medium text-sidebar">Apple Calendar</span> — File → New Calendar Subscription → paste your feed URL</li>
+              </ol>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              The feed includes all inspections assigned to you. Your calendar app will refresh it automatically (typically every few hours).
+            </p>
+          </div>
+        )}
+      </SectionCard>
+
+      {/* ── OAuth Integrations (Google / Microsoft) ─────────────────────────── */}
+      <SectionCard
+        title="Live Calendar Sync"
+        description="Connect Google Calendar or Microsoft Outlook for real-time two-way sync — inspection bookings are automatically created, updated and removed in your calendar as they change."
       >
         {isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading…
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {/* Google Calendar */}
-            <div className="flex items-center justify-between gap-4 py-3 border-b last:border-0">
+            <div className="flex items-center justify-between gap-4 p-3 rounded-xl border border-border bg-muted/20">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
                   <Calendar className="h-5 w-5 text-blue-600" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-sidebar">Google Calendar</p>
                   {googleConnected ? (
-                    <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                    <p className="text-xs text-green-600 font-medium flex items-center gap-1 mt-0.5">
                       <CheckCircle2 className="h-3 w-3" />
                       Connected{status?.google?.calendarName ? ` — ${status.google.calendarName}` : ""}
                     </p>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Not connected</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{googleAvail ? "Not connected" : "Requires configuration"}</p>
                   )}
                 </div>
               </div>
               <div className="shrink-0">
                 {googleConnected ? (
-                  <Button
-                    variant="danger"
-                    onClick={() => handleDisconnect("google")}
-                    disabled={disconnecting === "google"}
-                  >
+                  <Button variant="danger" onClick={() => handleDisconnect("google")} disabled={disconnecting === "google"}>
                     {disconnecting === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     Disconnect
                   </Button>
                 ) : googleAvail ? (
                   <Button onClick={() => handleConnect("google")} variant="outline">
                     <Link2 className="h-4 w-4" />
-                    Connect Google Calendar
+                    Connect
                   </Button>
                 ) : (
-                  <span className="text-xs text-muted-foreground italic">Not available</span>
+                  <span className="text-[11px] text-muted-foreground bg-muted px-2.5 py-1 rounded-full font-medium">Coming soon</span>
                 )}
               </div>
             </div>
 
             {/* Microsoft Outlook */}
-            <div className="flex items-center justify-between gap-4 py-3">
+            <div className="flex items-center justify-between gap-4 p-3 rounded-xl border border-border bg-muted/20">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
                   <Calendar className="h-5 w-5 text-indigo-600" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-sidebar">Microsoft Outlook</p>
                   {msConnected ? (
-                    <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                    <p className="text-xs text-green-600 font-medium flex items-center gap-1 mt-0.5">
                       <CheckCircle2 className="h-3 w-3" />
                       Connected{status?.microsoft?.calendarName ? ` — ${status.microsoft.calendarName}` : ""}
                     </p>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Not connected</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{msAvail ? "Not connected" : "Requires configuration"}</p>
                   )}
                 </div>
               </div>
               <div className="shrink-0">
                 {msConnected ? (
-                  <Button
-                    variant="danger"
-                    onClick={() => handleDisconnect("microsoft")}
-                    disabled={disconnecting === "microsoft"}
-                  >
+                  <Button variant="danger" onClick={() => handleDisconnect("microsoft")} disabled={disconnecting === "microsoft"}>
                     {disconnecting === "microsoft" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     Disconnect
                   </Button>
                 ) : msAvail ? (
                   <Button onClick={() => handleConnect("microsoft")} variant="outline">
                     <Link2 className="h-4 w-4" />
-                    Connect Outlook
+                    Connect
                   </Button>
                 ) : (
-                  <span className="text-xs text-muted-foreground italic">Not available</span>
+                  <span className="text-[11px] text-muted-foreground bg-muted px-2.5 py-1 rounded-full font-medium">Coming soon</span>
                 )}
               </div>
             </div>
+
+            <p className="text-xs text-muted-foreground pt-1">
+              Live sync automatically creates, updates and removes calendar events when inspections change. Use the iCal feed above for a simpler read-only subscription that works with any calendar app today.
+            </p>
           </div>
         )}
-      </SectionCard>
-
-      <SectionCard title="How it works" description="">
-        <ul className="space-y-2.5 text-sm text-muted-foreground">
-          {[
-            "When you connect a calendar, new inspection bookings assigned to you are automatically added as events.",
-            "Events include the inspection type, project name, address, and a direct link back to the inspection.",
-            "If an inspection is rescheduled, the calendar event is updated automatically.",
-            "If an inspection is cancelled or deleted, the calendar event is removed.",
-            "You can connect both Google Calendar and Outlook at the same time.",
-          ].map((text, i) => (
-            <li key={i} className="flex items-start gap-2">
-              <CheckCircle2 className="h-4 w-4 text-secondary shrink-0 mt-0.5" />
-              {text}
-            </li>
-          ))}
-        </ul>
       </SectionCard>
     </>
   );

@@ -1,10 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, userCalendarIntegrationsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, userCalendarIntegrationsTable, inspectionsTable, projectsTable, usersTable } from "@workspace/db";
+import { eq, and, gte } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
 import { decodeSessionToken } from "../lib/session-token";
 import { google } from "googleapis";
 import { Client } from "@microsoft/microsoft-graph-client";
+import crypto from "crypto";
+import { formatInspectionType } from "../lib/inspectionTypes";
 
 const APP_BASE_URL = process.env.APP_BASE_URL || "https://inspectproof.com.au";
 const WEB_BASE_URL = process.env.APP_BASE_URL || "https://inspectproof.com.au";
@@ -313,6 +315,146 @@ router.post("/integrations/calendar/microsoft/disconnect", requireAuth, async (r
   } catch (err) {
     req.log.error({ err }, "Microsoft disconnect error");
     res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ── iCal / Webcal Feed ────────────────────────────────────────────────────────
+
+const ICAL_SECRET = process.env.APP_SECRET || process.env.SESSION_SECRET || "inspectproof-ical";
+
+function generateIcalToken(userId: number): string {
+  return crypto.createHmac("sha256", ICAL_SECRET).update(`ical:${userId}`).digest("hex");
+}
+
+function escapeIcalText(str: string): string {
+  return (str ?? "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+}
+
+function toIcalDate(date: string | Date): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "";
+  return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+function toIcalDateOnly(date: string): string {
+  return date.replace(/-/g, "");
+}
+
+function buildIcalFeed(inspections: any[], userName: string): string {
+  const now = toIcalDate(new Date());
+  const prodId = "-//InspectProof//InspectProof Calendar//EN";
+
+  const events = inspections.map((insp) => {
+    const uid = `inspection-${insp.id}@inspectproof.com.au`;
+    const dtstart = insp.scheduledDate ? `DTSTART;VALUE=DATE:${toIcalDateOnly(insp.scheduledDate)}` : `DTSTART;VALUE=DATE:${toIcalDateOnly(new Date().toISOString().slice(0, 10))}`;
+    const dtend = insp.scheduledDate ? `DTEND;VALUE=DATE:${toIcalDateOnly(insp.scheduledDate)}` : "";
+    const summary = escapeIcalText(`${formatInspectionType(insp.inspectionType ?? "")} — ${insp.projectName ?? "Project"}`);
+    const location = escapeIcalText([insp.projectAddress, insp.projectSuburb, insp.projectState].filter(Boolean).join(", "));
+    const description = escapeIcalText([
+      insp.projectName ? `Project: ${insp.projectName}` : "",
+      location ? `Address: ${location}` : "",
+      `Status: ${insp.status ?? "scheduled"}`,
+      insp.notes ? `Notes: ${insp.notes}` : "",
+    ].filter(Boolean).join("\\n"));
+    const url = `${APP_BASE_URL}/inspection/${insp.id}`;
+    const statusMap: Record<string, string> = { completed: "COMPLETED", cancelled: "CANCELLED", scheduled: "CONFIRMED" };
+    const vcalStatus = statusMap[insp.status ?? ""] ?? "CONFIRMED";
+
+    return [
+      "BEGIN:VEVENT",
+      `UID:${uid}`,
+      `DTSTAMP:${now}`,
+      dtstart,
+      dtend,
+      `SUMMARY:${summary}`,
+      location ? `LOCATION:${location}` : "",
+      `DESCRIPTION:${description}`,
+      `URL:${url}`,
+      `STATUS:${vcalStatus}`,
+      "END:VEVENT",
+    ].filter(Boolean).join("\r\n");
+  });
+
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    `PRODID:${prodId}`,
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "X-WR-CALNAME:InspectProof Inspections",
+    "X-WR-CALDESC:Your InspectProof inspection schedule",
+    "X-WR-TIMEZONE:Australia/Sydney",
+    ...events,
+    "END:VCALENDAR",
+  ].join("\r\n");
+}
+
+router.get("/integrations/calendar/ical-url", requireAuth, async (req, res) => {
+  const userId = req.authUser!.id;
+  const token = generateIcalToken(userId);
+  const feedUrl = `${APP_BASE_URL}/api/integrations/calendar/ical/feed/${token}.ics`;
+  res.json({ feedUrl, token });
+});
+
+router.get("/integrations/calendar/ical/feed/:tokenFile", async (req, res) => {
+  const tokenFile = req.params.tokenFile;
+  const token = tokenFile.endsWith(".ics") ? tokenFile.slice(0, -4) : tokenFile;
+
+  if (!/^[0-9a-f]{64}$/.test(token)) {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+
+  // Find the user whose token matches
+  let matchedUserId: number | null = null;
+  try {
+    const allUsers = await db.select({ id: usersTable.id }).from(usersTable);
+    for (const u of allUsers) {
+      if (generateIcalToken(u.id) === token) {
+        matchedUserId = u.id;
+        break;
+      }
+    }
+  } catch (err) {
+    req.log.error({ err }, "iCal feed: user lookup failed");
+    res.status(500).send("Internal error");
+    return;
+  }
+
+  if (!matchedUserId) {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+
+  try {
+    const [user] = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName }).from(usersTable).where(eq(usersTable.id, matchedUserId));
+
+    // Fetch inspections for this user (as inspector)
+    const inspections = await db
+      .select({
+        id: inspectionsTable.id,
+        inspectionType: inspectionsTable.inspectionType,
+        scheduledDate: inspectionsTable.scheduledDate,
+        status: inspectionsTable.status,
+        notes: inspectionsTable.notes,
+        projectName: projectsTable.name,
+        projectAddress: projectsTable.siteAddress,
+        projectSuburb: projectsTable.suburb,
+        projectState: projectsTable.state,
+      })
+      .from(inspectionsTable)
+      .leftJoin(projectsTable, eq(inspectionsTable.projectId, projectsTable.id))
+      .where(eq(inspectionsTable.inspectorId, matchedUserId));
+
+    const icsContent = buildIcalFeed(inspections, user ? `${user.firstName} ${user.lastName}` : "");
+
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="inspectproof.ics"`);
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.send(icsContent);
+  } catch (err) {
+    req.log.error({ err }, "iCal feed: generation failed");
+    res.status(500).send("Internal error");
   }
 });
 
