@@ -47,7 +47,7 @@ router.get("/admin/newsletters/stats", requireAuth, requireSuperAdmin, async (re
       .from(usersTable)
       .where(and(
         eq(usersTable.marketingEmailOptIn, true),
-        eq(usersTable.isLocked, false),
+        eq(usersTable.isActive, true),
       ));
 
     const campaigns = await db
@@ -108,7 +108,7 @@ router.post("/admin/newsletters/send", requireAuth, requireSuperAdmin, async (re
       .from(usersTable)
       .where(and(
         eq(usersTable.marketingEmailOptIn, true),
-        eq(usersTable.isLocked, false),
+        eq(usersTable.isActive, true),
       ));
 
     if (subscribers.length === 0) {
