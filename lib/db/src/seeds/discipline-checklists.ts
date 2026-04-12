@@ -479,6 +479,39 @@ export async function seedDisciplineChecklists() {
     ],
   );
 
+  await seedTemplate(
+    "Site Feasibility Inspection", "Builder / QC", "builder_site_feasibility", "Site Feasibility Inspection",
+    "Pre-construction site feasibility assessment covering ground conditions, access, hazards, services and statutory constraints.",
+    80,
+    [
+      { category: "Contours & Gradient", description: "Site slope assessed — cut and fill requirements, retaining wall needs and potential for differential settlement identified", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Contours & Gradient", description: "Steeply sloping lots checked for additional engineering requirements and cost implications", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Site Hazards", description: "Evidence of contamination, fill, mine subsidence or unstable ground investigated — geotech report obtained if required", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Site Hazards", description: "Bushfire, flood and overland flow risks checked against council mapping and planning certificates", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Site Access", description: "Vehicle access to site confirmed — driveway crossover, gate width and road conditions adequate for delivery vehicles and concrete trucks", riskLevel: "medium", defectTrigger: true, requirePhoto: true },
+      { category: "Site Access", description: "Crane and heavy plant access assessed — overhead clearance and ground bearing confirmed", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Sediment Control", description: "Sediment fence location planned along all downslope boundaries before earthworks commence", riskLevel: "high", defectTrigger: true, requirePhoto: false, codeReference: "Managing Urban Stormwater: Soils and Construction (Blue Book)" },
+      { category: "Sediment Control", description: "Temporary stabilisation measures (hay bales, rock check dams, silt traps) identified for site runoff management", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Sediment Control", description: "Sediment stockpile areas identified — minimum 10m from watercourses and drainage lines", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Overhead Power Lines", description: "Overhead power lines located on and adjacent to site — safe work distances established per SafeWork guidelines", riskLevel: "critical", defectTrigger: true, requirePhoto: true },
+      { category: "Overhead Power Lines", description: "Exclusion zones marked for scaffolding, cranes and elevated work platforms operating near power lines", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "Easements", description: "Title search reviewed — all drainage, sewer, water, electrical and pipeline easements identified and plotted on site plan", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Easements", description: "No structures or permanent works proposed within easement boundaries — confirmed with relevant authority if required", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Neighbours", description: "Adjoining property conditions documented — any existing damage, encroachments or sensitive structures noted", riskLevel: "medium", defectTrigger: false, requirePhoto: true },
+      { category: "Neighbours", description: "Setbacks from proposed building to all boundaries verified against development consent and BCA", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Neighbours", description: "Potential impact on neighbouring properties assessed — overshadowing, privacy, noise and vibration from excavation", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Fencing", description: "Existing boundary fences inspected and ownership/responsibility confirmed", riskLevel: "low", defectTrigger: false, requirePhoto: true },
+      { category: "Fencing", description: "Hoarding or temporary site fencing required — height, type and signage requirements confirmed with council", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Traffic Management", description: "Traffic Management Plan (TMP) requirement assessed — pedestrian safety, truck routes and signage planned", riskLevel: "high", defectTrigger: true, requirePhoto: false },
+      { category: "Traffic Management", description: "On-street parking impacts identified — council permits obtained for hoardings, crane pads or skip bins on road reserve", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Services & Utilities", description: "Underground services located via Dial Before You Dig — gas, water, sewer, electrical and comms marked on site plan", riskLevel: "critical", defectTrigger: true, requirePhoto: false },
+      { category: "Services & Utilities", description: "Existing service connections (water, sewer, electrical) adequate for proposed works — upgrade requirements noted", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+      { category: "Vegetation & Trees", description: "Significant or protected trees identified — Tree Management Plans and council approvals in place before clearing", riskLevel: "high", defectTrigger: true, requirePhoto: true },
+      { category: "Soil Conditions", description: "Soil classification determined (AS 2870) — reactive clay, sandy or rock conditions confirmed from test bores or neighbouring data", riskLevel: "high", defectTrigger: false, requirePhoto: false, codeReference: "AS 2870" },
+      { category: "Stormwater & Drainage", description: "Existing site drainage assessed — on-site detention (OSD) requirements and discharge points confirmed with council", riskLevel: "medium", defectTrigger: false, requirePhoto: false },
+    ],
+  );
+
   // ─────────────────────────────────────────────────────────────────────────
   // SITE SUPERVISOR
   // ─────────────────────────────────────────────────────────────────────────
