@@ -403,7 +403,9 @@ export default function InspectionDetail() {
   const [error, setError] = useState<string | null>(null);
   const [docsByItem, setDocsByItem] = useState<Record<number, { id: number; name: string; mimeType?: string }[]>>({});
   const [reports, setReports] = useState<any[]>([]);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(() =>
+    localStorage.getItem(`report-banner-dismissed-${inspId}`) === "1"
+  );
   const [markCompleteOpen, setMarkCompleteOpen] = useState(false);
   const [markCompleteNotes, setMarkCompleteNotes] = useState("");
   const [signingOff, setSigningOff] = useState(false);
@@ -486,6 +488,10 @@ export default function InspectionDetail() {
       }
       setDocsByItem(byItem);
       setReports(reports);
+      if (reports.length > 0) {
+        localStorage.setItem(`report-banner-dismissed-${inspId}`, "1");
+        setBannerDismissed(true);
+      }
       setInspectors(users);
       setTemplates(tmpls);
       setProjectDocuments(projDocs);
@@ -566,6 +572,10 @@ export default function InspectionDetail() {
     try {
       const updated = await apiFetch(`/api/reports?inspectionId=${inspId}`).catch(() => []);
       setReports(updated);
+      if (updated.length > 0) {
+        localStorage.setItem(`report-banner-dismissed-${inspId}`, "1");
+        setBannerDismissed(true);
+      }
     } catch {}
   }, [inspId]);
 
@@ -922,7 +932,7 @@ export default function InspectionDetail() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={() => setBannerDismissed(true)}
+              onClick={() => { setBannerDismissed(true); localStorage.setItem(`report-banner-dismissed-${inspId}`, "1"); }}
               className="p-1.5 rounded-md text-white/50 hover:text-white hover:bg-white/10 transition-colors"
             >
               <X className="h-4 w-4" />
