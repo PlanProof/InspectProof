@@ -658,6 +658,7 @@ export default function Admin() {
   const [emailPage, setEmailPage] = useState(1);
   const [emailTypeFilter, setEmailTypeFilter] = useState("");
   const [emailStatusFilter, setEmailStatusFilter] = useState("");
+  const [emailExpandedGroups, setEmailExpandedGroups] = useState<Set<string>>(new Set());
   const [activityEntityType, setActivityEntityType] = useState("");
   const [activityDateFrom, setActivityDateFrom] = useState("");
   const [activityDateTo, setActivityDateTo] = useState("");
@@ -1654,153 +1655,216 @@ export default function Admin() {
         )}
 
         {/* ── Emails Tab ── */}
-        {tab === "emails" && (
-          <div>
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-              <div>
-                <h2 className="text-xl font-bold text-[#0B1933]">Email Logs</h2>
-                <p className="text-sm text-gray-500">All outbound emails sent by the system</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                  <select
-                    value={emailTypeFilter}
-                    onChange={e => { setEmailTypeFilter(e.target.value); setEmailPage(1); }}
-                    className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#466DB5]/30"
-                  >
-                    <option value="">All types</option>
-                    <option value="inspection_assigned">Inspection assigned</option>
-                    <option value="inspection_reminder">Inspection reminder</option>
-                    <option value="feedback_notification">Feedback notification</option>
-                    <option value="app_invite">App invite</option>
-                    <option value="token_invite">Token invite</option>
-                    <option value="welcome_credentials">Welcome credentials</option>
-                    <option value="password_reset">Password reset</option>
-                    <option value="report_delivery">Report delivery</option>
-                    <option value="contractor_defect_report">Contractor defect report</option>
-                    <option value="welcome">Welcome</option>
-                    <option value="email_verification">Email verification</option>
-                  </select>
-                </div>
-                <select
-                  value={emailStatusFilter}
-                  onChange={e => { setEmailStatusFilter(e.target.value); setEmailPage(1); }}
-                  className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#466DB5]/30"
-                >
-                  <option value="">All statuses</option>
-                  <option value="sent">Sent</option>
-                  <option value="failed">Failed</option>
-                </select>
-                <button
-                  onClick={() => refetchEmailLogs()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0B1933] text-white text-sm font-medium rounded-lg hover:bg-[#0B1933]/90 transition"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Refresh
-                </button>
-              </div>
-            </div>
+        {tab === "emails" && (() => {
+          const EMAIL_TYPE_LABELS: Record<string, string> = {
+            inspection_assigned: "Inspection Assigned",
+            inspection_reminder: "Inspection Reminder",
+            feedback_notification: "Feedback Notification",
+            app_invite: "App Invite",
+            token_invite: "Token Invite",
+            welcome_credentials: "Welcome Credentials",
+            password_reset: "Password Reset",
+            report_delivery: "Report Delivery",
+            contractor_defect_report: "Contractor Defect Report",
+            welcome: "Welcome",
+            email_verification: "Email Verification",
+            newsletter: "Newsletter",
+          };
+          const RETRYABLE = new Set(["inspection_assigned", "inspection_reminder", "welcome"]);
 
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              {emailLogsLoading ? (
-                <div className="px-6 py-10 text-center">
-                  <RefreshCw className="w-6 h-6 text-gray-300 mx-auto mb-2 animate-spin" />
-                  <p className="text-sm text-gray-400">Loading email logs…</p>
+          const logs: any[] = emailLogsData?.logs ?? [];
+
+          const grouped: Record<string, any[]> = {};
+          for (const log of logs) {
+            const k = log.type ?? "unknown";
+            if (!grouped[k]) grouped[k] = [];
+            grouped[k].push(log);
+          }
+          const groupKeys = Object.keys(grouped).sort();
+
+          const toggleGroup = (key: string) => {
+            setEmailExpandedGroups(prev => {
+              const next = new Set(prev);
+              next.has(key) ? next.delete(key) : next.add(key);
+              return next;
+            });
+          };
+
+          const LogRows = ({ rows }: { rows: any[] }) => (
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-gray-50/80 border-b border-gray-100">
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide w-12">ID</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Recipient</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Sent at</th>
+                  <th className="px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Message ID</th>
+                  <th className="px-4 py-2.5 w-16"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((log: any) => (
+                  <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                    <td className="px-4 py-3 text-xs text-gray-400">#{log.id}</td>
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-[#0B1933] truncate max-w-52">{log.recipient ?? "—"}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {log.status === "sent" ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                          <CheckCircle2 className="w-3 h-3" /> Sent
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">
+                          <AlertCircle className="w-3 h-3" /> Failed
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
+                      {log.createdAt ? new Date(log.createdAt).toLocaleString("en-AU") : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-gray-400 font-mono truncate max-w-36 block" title={log.resendMessageId ?? log.errorMessage}>
+                        {log.resendMessageId
+                          ? log.resendMessageId
+                          : log.errorMessage
+                            ? <span className="text-red-400">{log.errorMessage.slice(0, 40)}</span>
+                            : "—"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {log.status === "failed" && RETRYABLE.has(log.type) && (
+                        <button
+                          onClick={() => retryEmail.mutate(log.id)}
+                          disabled={retryEmail.isPending}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#466DB5] border border-[#466DB5]/30 rounded-lg hover:bg-blue-50 transition disabled:opacity-50"
+                        >
+                          <RefreshCw className="w-3 h-3" /> Retry
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          );
+
+          return (
+            <div>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <div>
+                  <h2 className="text-xl font-bold text-[#0B1933]">Email Logs</h2>
+                  <p className="text-sm text-gray-500">All outbound emails sent by the system</p>
                 </div>
-              ) : !emailLogsData?.logs?.length ? (
-                <div className="px-6 py-10 text-center">
-                  <Mail className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">No email logs found</p>
-                  <p className="text-xs text-gray-300 mt-1">Emails will appear here as they are sent</p>
-                </div>
-              ) : (
-                <>
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50">
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">ID</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Recipient</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Sent at</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Message ID</th>
-                        <th className="px-4 py-3"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {emailLogsData.logs.map((log: any) => (
-                        <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50/60">
-                          <td className="px-4 py-3 text-xs text-gray-400">#{log.id}</td>
-                          <td className="px-4 py-3">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                              {log.type?.replace(/_/g, " ")}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="text-sm font-medium text-[#0B1933] truncate max-w-48">{log.recipient ?? "—"}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            {log.status === "sent" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
-                                <CheckCircle2 className="w-3 h-3" /> Sent
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">
-                                <AlertCircle className="w-3 h-3" /> Failed
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-xs text-gray-400">
-                            {log.createdAt ? new Date(log.createdAt).toLocaleString("en-AU") : "—"}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="text-xs text-gray-400 font-mono truncate max-w-36 block" title={log.resendMessageId ?? log.errorMessage}>
-                              {log.resendMessageId ? log.resendMessageId : log.errorMessage ? <span className="text-red-400">{log.errorMessage.slice(0, 40)}</span> : "—"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            {log.status === "failed" && (log.type === "inspection_assigned" || log.type === "inspection_reminder" || log.type === "welcome") && (
-                              <button
-                                onClick={() => retryEmail.mutate(log.id)}
-                                disabled={retryEmail.isPending}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#466DB5] border border-[#466DB5]/30 rounded-lg hover:bg-blue-50 transition disabled:opacity-50"
-                              >
-                                <RefreshCw className="w-3 h-3" /> Retry
-                              </button>
-                            )}
-                          </td>
-                        </tr>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                    <select
+                      value={emailTypeFilter}
+                      onChange={e => { setEmailTypeFilter(e.target.value); setEmailPage(1); setEmailExpandedGroups(new Set()); }}
+                      className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#466DB5]/30"
+                    >
+                      <option value="">All types</option>
+                      {Object.entries(EMAIL_TYPE_LABELS).map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
                       ))}
-                    </tbody>
-                  </table>
-                  {emailLogsData.pages > 1 && (
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-                      <p className="text-xs text-gray-400">
-                        Page {emailLogsData.page} of {emailLogsData.pages} &mdash; {emailLogsData.total} total
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setEmailPage(p => Math.max(1, p - 1))}
-                          disabled={emailLogsData.page <= 1}
-                          className="px-3 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"
-                        >
-                          Previous
-                        </button>
-                        <button
-                          onClick={() => setEmailPage(p => Math.min(emailLogsData.pages, p + 1))}
-                          disabled={emailLogsData.page >= emailLogsData.pages}
-                          className="px-3 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"
-                        >
-                          Next
-                        </button>
+                    </select>
+                  </div>
+                  <select
+                    value={emailStatusFilter}
+                    onChange={e => { setEmailStatusFilter(e.target.value); setEmailPage(1); }}
+                    className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#466DB5]/30"
+                  >
+                    <option value="">All statuses</option>
+                    <option value="sent">Sent</option>
+                    <option value="failed">Failed</option>
+                  </select>
+                  <button
+                    onClick={() => refetchEmailLogs()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0B1933] text-white text-sm font-medium rounded-lg hover:bg-[#0B1933]/90 transition"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                {emailLogsLoading ? (
+                  <div className="px-6 py-10 text-center">
+                    <RefreshCw className="w-6 h-6 text-gray-300 mx-auto mb-2 animate-spin" />
+                    <p className="text-sm text-gray-400">Loading email logs…</p>
+                  </div>
+                ) : !logs.length ? (
+                  <div className="px-6 py-10 text-center">
+                    <Mail className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                    <p className="text-sm text-gray-400">No email logs found</p>
+                    <p className="text-xs text-gray-300 mt-1">Emails will appear here as they are sent</p>
+                  </div>
+                ) : emailTypeFilter ? (
+                  <>
+                    <LogRows rows={logs} />
+                    {emailLogsData.pages > 1 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                        <p className="text-xs text-gray-400">Page {emailLogsData.page} of {emailLogsData.pages} &mdash; {emailLogsData.total} total</p>
+                        <div className="flex gap-2">
+                          <button onClick={() => setEmailPage(p => Math.max(1, p - 1))} disabled={emailLogsData.page <= 1} className="px-3 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition">Previous</button>
+                          <button onClick={() => setEmailPage(p => Math.min(emailLogsData.pages, p + 1))} disabled={emailLogsData.page >= emailLogsData.pages} className="px-3 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition">Next</button>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </>
-              )}
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {groupKeys.map((key, gi) => {
+                      const rows = grouped[key];
+                      const failedCount = rows.filter((r: any) => r.status === "failed").length;
+                      const isOpen = emailExpandedGroups.has(key);
+                      const label = EMAIL_TYPE_LABELS[key] ?? key.replace(/_/g, " ");
+                      return (
+                        <div key={key} className={gi < groupKeys.length - 1 ? "border-b border-gray-100" : ""}>
+                          <button
+                            className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50/70 transition text-left"
+                            onClick={() => toggleGroup(key)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className={`transition-transform duration-150 text-gray-400 ${isOpen ? "rotate-90" : ""}`}>▶</span>
+                              <span className="text-sm font-semibold text-[#0B1933]">{label}</span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                {rows.length} email{rows.length !== 1 ? "s" : ""}
+                              </span>
+                              {failedCount > 0 && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600">
+                                  <AlertCircle className="w-3 h-3" /> {failedCount} failed
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {rows[0]?.createdAt ? `Latest: ${new Date(rows[0].createdAt).toLocaleDateString("en-AU")}` : ""}
+                            </span>
+                          </button>
+                          {isOpen && (
+                            <div className="border-t border-gray-100">
+                              <LogRows rows={rows} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {emailLogsData && emailLogsData.pages > 1 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                        <p className="text-xs text-gray-400">Page {emailLogsData.page} of {emailLogsData.pages} &mdash; {emailLogsData.total} total</p>
+                        <div className="flex gap-2">
+                          <button onClick={() => setEmailPage(p => Math.max(1, p - 1))} disabled={emailLogsData.page <= 1} className="px-3 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition">Previous</button>
+                          <button onClick={() => setEmailPage(p => Math.min(emailLogsData.pages, p + 1))} disabled={emailLogsData.page >= emailLogsData.pages} className="px-3 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition">Next</button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── Invites Tab ── */}
         {tab === "invites" && (
@@ -2100,154 +2164,6 @@ export default function Admin() {
           </div>
         )}
 
-        {/* ── Emails Tab ── */}
-        {tab === "emails" && (
-          <div>
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-              <div>
-                <h2 className="text-xl font-bold text-[#0B1933]">Email Logs</h2>
-                <p className="text-sm text-gray-500">All outbound emails sent by the system</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                  <select
-                    value={emailTypeFilter}
-                    onChange={e => { setEmailTypeFilter(e.target.value); setEmailPage(1); }}
-                    className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#466DB5]/30"
-                  >
-                    <option value="">All types</option>
-                    <option value="inspection_assigned">Inspection assigned</option>
-                    <option value="inspection_reminder">Inspection reminder</option>
-                    <option value="feedback_notification">Feedback notification</option>
-                    <option value="app_invite">App invite</option>
-                    <option value="token_invite">Token invite</option>
-                    <option value="welcome_credentials">Welcome credentials</option>
-                    <option value="password_reset">Password reset</option>
-                    <option value="report_delivery">Report delivery</option>
-                    <option value="contractor_defect_report">Contractor defect report</option>
-                    <option value="welcome">Welcome</option>
-                    <option value="email_verification">Email verification</option>
-                  </select>
-                </div>
-                <select
-                  value={emailStatusFilter}
-                  onChange={e => { setEmailStatusFilter(e.target.value); setEmailPage(1); }}
-                  className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#466DB5]/30"
-                >
-                  <option value="">All statuses</option>
-                  <option value="sent">Sent</option>
-                  <option value="failed">Failed</option>
-                </select>
-                <button
-                  onClick={() => refetchEmailLogs()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0B1933] text-white text-sm font-medium rounded-lg hover:bg-[#0B1933]/90 transition"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Refresh
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              {emailLogsLoading ? (
-                <div className="px-6 py-10 text-center">
-                  <RefreshCw className="w-6 h-6 text-gray-300 mx-auto mb-2 animate-spin" />
-                  <p className="text-sm text-gray-400">Loading email logs…</p>
-                </div>
-              ) : !emailLogsData?.logs?.length ? (
-                <div className="px-6 py-10 text-center">
-                  <Mail className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">No email logs found</p>
-                  <p className="text-xs text-gray-300 mt-1">Emails will appear here as they are sent</p>
-                </div>
-              ) : (
-                <>
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50">
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">ID</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Recipient</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Sent at</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Message ID</th>
-                        <th className="px-4 py-3"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {emailLogsData.logs.map((log: any) => (
-                        <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50/60">
-                          <td className="px-4 py-3 text-xs text-gray-400">#{log.id}</td>
-                          <td className="px-4 py-3">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                              {log.type?.replace(/_/g, " ")}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="text-sm font-medium text-[#0B1933] truncate max-w-48">{log.recipient ?? "—"}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            {log.status === "sent" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
-                                <CheckCircle2 className="w-3 h-3" /> Sent
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">
-                                <AlertCircle className="w-3 h-3" /> Failed
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-xs text-gray-400">
-                            {log.createdAt ? new Date(log.createdAt).toLocaleString("en-AU") : "—"}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="text-xs text-gray-400 font-mono truncate max-w-36 block" title={log.resendMessageId ?? log.errorMessage}>
-                              {log.resendMessageId ? log.resendMessageId : log.errorMessage ? <span className="text-red-400">{log.errorMessage.slice(0, 40)}</span> : "—"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            {log.status === "failed" && (log.type === "inspection_assigned" || log.type === "inspection_reminder" || log.type === "welcome") && (
-                              <button
-                                onClick={() => retryEmail.mutate(log.id)}
-                                disabled={retryEmail.isPending}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#466DB5] border border-[#466DB5]/30 rounded-lg hover:bg-blue-50 transition disabled:opacity-50"
-                              >
-                                <RefreshCw className="w-3 h-3" /> Retry
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {emailLogsData.pages > 1 && (
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-                      <p className="text-xs text-gray-400">
-                        Page {emailLogsData.page} of {emailLogsData.pages} &mdash; {emailLogsData.total} total
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setEmailPage(p => Math.max(1, p - 1))}
-                          disabled={emailLogsData.page <= 1}
-                          className="px-3 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"
-                        >
-                          Previous
-                        </button>
-                        <button
-                          onClick={() => setEmailPage(p => Math.min(emailLogsData.pages, p + 1))}
-                          disabled={emailLogsData.page >= emailLogsData.pages}
-                          className="px-3 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
         {/* ── Newsletters Tab ── */}
         {tab === "newsletters" && (
           <div className="space-y-6">
