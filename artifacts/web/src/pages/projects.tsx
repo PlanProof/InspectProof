@@ -7,6 +7,7 @@ import { Search, Plus, Building, ChevronDown, ChevronUp, ChevronsUpDown, X, Aler
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
 import { AddressAutocomplete, type AddressFields } from "@/components/AddressAutocomplete";
+import { useAuth } from "@/hooks/use-auth";
 
 // ── NCC Building Classifications ─────────────────────────────────────────────
 
@@ -264,9 +265,12 @@ export default function Projects() {
   const [statusTab, setStatusTab] = useState<StatusTab>("active");
   const [selectedOrgId, setSelectedOrgId] = useState<string>("all");
   const [, navigate] = useLocation();
+  const { user } = useAuth();
   const { data: projects, isLoading, refetch } = useListProjects({});
   const { data: subscription } = useSubscription();
   const [isNewOpen, setIsNewOpen] = useState(false);
+
+  const canCreateProject = !user || user.isAdmin || user.isCompanyAdmin || (user.permissions?.createProjects ?? false);
   const [sortCol, setSortCol] = useState("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -334,29 +338,31 @@ export default function Projects() {
           <p className="text-muted-foreground mt-1">Manage construction projects and certifications.</p>
         </div>
         <div className="flex items-center gap-2">
-          {atLimit ? (
-            <div className="relative group">
-              <Button disabled className="shadow-lg shadow-primary/20 opacity-50 cursor-not-allowed">
+          {canCreateProject && (
+            atLimit ? (
+              <div className="relative group">
+                <Button disabled className="shadow-lg shadow-primary/20 opacity-50 cursor-not-allowed">
+                  <Plus className="mr-2 h-4 w-4" /> New Project
+                </Button>
+                <div className="absolute right-0 top-full mt-1.5 w-72 bg-popover border border-border rounded-lg shadow-lg p-3 text-sm hidden group-hover:block z-10">
+                  <p className="font-medium text-sidebar mb-1">Project limit reached</p>
+                  <p className="text-muted-foreground text-xs mb-2">
+                    Your {planLabel} plan allows up to {maxProjects} project{maxProjects === 1 ? "" : "s"}.
+                    Upgrade your plan to create more.
+                  </p>
+                  <button
+                    onClick={() => navigate("/billing")}
+                    className="text-xs text-secondary font-semibold hover:underline"
+                  >
+                    View upgrade options →
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Button onClick={() => setIsNewOpen(true)} className="shadow-lg shadow-primary/20">
                 <Plus className="mr-2 h-4 w-4" /> New Project
               </Button>
-              <div className="absolute right-0 top-full mt-1.5 w-72 bg-popover border border-border rounded-lg shadow-lg p-3 text-sm hidden group-hover:block z-10">
-                <p className="font-medium text-sidebar mb-1">Project limit reached</p>
-                <p className="text-muted-foreground text-xs mb-2">
-                  Your {planLabel} plan allows up to {maxProjects} project{maxProjects === 1 ? "" : "s"}.
-                  Upgrade your plan to create more.
-                </p>
-                <button
-                  onClick={() => navigate("/billing")}
-                  className="text-xs text-secondary font-semibold hover:underline"
-                >
-                  View upgrade options →
-                </button>
-              </div>
-            </div>
-          ) : (
-            <Button onClick={() => setIsNewOpen(true)} className="shadow-lg shadow-primary/20">
-              <Plus className="mr-2 h-4 w-4" /> New Project
-            </Button>
+            )
           )}
         </div>
       </div>

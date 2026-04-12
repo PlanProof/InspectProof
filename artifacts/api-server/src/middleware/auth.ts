@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { decodeSessionToken } from "../lib/session-token";
+import { parsePermissions, type PermissionsData } from "../lib/permissions";
 
 export interface AuthUser {
   id: number;
@@ -14,6 +15,7 @@ export interface AuthUser {
   companyName: string | null;
   adminUserId: string | null;
   plan: string;
+  permissions: PermissionsData;
 }
 
 declare global {
@@ -55,6 +57,7 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
             companyName: users[0].companyName ?? null,
             adminUserId: users[0].adminUserId ?? null,
             plan: users[0].plan ?? "free_trial",
+            permissions: parsePermissions(users[0].permissions),
           };
         }
       }

@@ -243,9 +243,16 @@ router.get("/", optionalAuth, async (req, res) => {
 
 router.post("/", requireAuth, checkProjectQuota, async (req, res) => {
   try {
+    const user = req.authUser!;
+    // Only platform admins, org admins, and members explicitly granted createProjects may create projects
+    if (!user.isAdmin && !user.isCompanyAdmin && !user.permissions.createProjects) {
+      res.status(403).json({ error: "forbidden", message: "You do not have permission to create projects." });
+      return;
+    }
+
     const data = req.body;
-    const createdById = req.authUser!.id;
-    const adminId = effectiveAdminId(req.authUser!);
+    const createdById = user.id;
+    const adminId = effectiveAdminId(user);
     const referenceNumber = data.referenceNumber?.trim() || await generateReferenceNumber(adminId);
     const [project] = await db.insert(projectsTable).values({
       referenceNumber,

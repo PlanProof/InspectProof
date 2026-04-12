@@ -420,7 +420,19 @@ router.get("/", optionalAuth, async (req, res) => {
 router.post("/", requireAuth, checkInspectionQuota, async (req, res) => {
   try {
     const data = req.body;
-    const actorId = req.authUser!.id;
+    const user = req.authUser!;
+    const actorId = user.id;
+
+    // Verify the user has access to the project they're creating an inspection for
+    if (!user.isAdmin && data.projectId) {
+      const accessibleOrgAdminIds = await getAccessibleOrgAdminIds(user);
+      const [project] = await db.select({ orgAdminId: projectsTable.orgAdminId })
+        .from(projectsTable).where(eq(projectsTable.id, data.projectId));
+      if (!project || project.orgAdminId == null || !accessibleOrgAdminIds.has(project.orgAdminId)) {
+        res.status(403).json({ error: "forbidden", message: "You do not have access to this project." });
+        return;
+      }
+    }
 
     // Auto-resolve checklistTemplateId from inspectionType if not explicitly provided
     let resolvedTemplateId: number | null = data.checklistTemplateId ?? null;
