@@ -347,18 +347,29 @@ function IntegrationsTab() {
     window.location.href = `${base}/api/integrations/calendar/${provider}/connect?token=${encodeURIComponent(token)}`;
   }
 
+  // Build the feed URL from the current origin so it works in dev + production
+  const icalFeedUrl = icalData?.token
+    ? `${window.location.origin}${apiBase()}/api/integrations/calendar/ical/feed/${icalData.token}.ics`
+    : null;
+
   function copyIcalUrl() {
-    if (!icalData?.feedUrl) return;
-    navigator.clipboard.writeText(icalData.feedUrl).then(() => {
+    if (!icalFeedUrl) return;
+    navigator.clipboard.writeText(icalFeedUrl).then(() => {
       setIcalCopied(true);
       setTimeout(() => setIcalCopied(false), 2000);
     });
   }
 
   function openGoogleSubscribe() {
-    if (!icalData?.feedUrl) return;
-    const encoded = encodeURIComponent(icalData.feedUrl);
+    if (!icalFeedUrl) return;
+    const encoded = encodeURIComponent(icalFeedUrl);
     window.open(`https://www.google.com/calendar/render?cid=${encoded}`, "_blank");
+  }
+
+  function openOutlookSubscribe() {
+    if (!icalFeedUrl) return;
+    const encoded = encodeURIComponent(icalFeedUrl);
+    window.open(`https://outlook.live.com/calendar/0/addfromweb?url=${encoded}`, "_blank");
   }
 
   const googleConnected = status?.google?.connected ?? false;
@@ -399,7 +410,7 @@ function IntegrationsTab() {
                 <div className="flex-1 flex items-center gap-2 bg-muted/40 border border-border rounded-lg px-3 py-2 min-w-0">
                   <Rss className="h-3.5 w-3.5 text-secondary shrink-0" />
                   <span className="text-xs text-muted-foreground font-mono truncate flex-1">
-                    {icalData?.feedUrl ?? "Loading…"}
+                    {icalFeedUrl ?? "Loading…"}
                   </span>
                 </div>
                 <Button variant="outline" onClick={copyIcalUrl} className="shrink-0 gap-1.5">
@@ -421,15 +432,23 @@ function IntegrationsTab() {
                   className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted text-xs font-medium text-sidebar transition-colors"
                 >
                   <img src="https://www.gstatic.com/images/branding/product/1x/calendar_2020q4_32dp.png" alt="Google" className="h-4 w-4" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                  Add to Google Calendar
+                  Google Calendar
                   <ExternalLink className="h-3 w-3 text-muted-foreground" />
                 </button>
                 <button
-                  onClick={() => { if (icalData?.feedUrl) window.open(`webcal://${icalData.feedUrl.replace(/^https?:\/\//, "")}`, "_blank"); }}
+                  onClick={openOutlookSubscribe}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted text-xs font-medium text-sidebar transition-colors"
+                >
+                  <img src="https://res.cdn.office.net/assets/mail/pwa/v1/bg-outlook.svg" alt="Outlook" className="h-4 w-4" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  Outlook.com
+                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                </button>
+                <button
+                  onClick={() => { if (icalFeedUrl) window.open(`webcal://${icalFeedUrl.replace(/^https?:\/\//, "")}`, "_blank"); }}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted text-xs font-medium text-sidebar transition-colors"
                 >
                   <Calendar className="h-4 w-4 text-secondary" />
-                  Apple Calendar / Outlook
+                  Apple Calendar
                   <ExternalLink className="h-3 w-3 text-muted-foreground" />
                 </button>
               </div>
@@ -438,10 +457,11 @@ function IntegrationsTab() {
             {/* Instructions */}
             <div className="bg-muted/30 rounded-lg border border-border p-3 space-y-2">
               <p className="text-xs font-semibold text-sidebar">How to subscribe manually</p>
-              <ol className="space-y-1 text-xs text-muted-foreground list-decimal list-inside">
-                <li><span className="font-medium text-sidebar">Google Calendar</span> — Open Google Calendar → Other calendars (+) → From URL → paste your feed URL</li>
-                <li><span className="font-medium text-sidebar">Outlook</span> — Open Outlook Calendar → Add calendar → Subscribe from web → paste your feed URL</li>
-                <li><span className="font-medium text-sidebar">Apple Calendar</span> — File → New Calendar Subscription → paste your feed URL</li>
+              <ol className="space-y-1.5 text-xs text-muted-foreground list-decimal list-inside">
+                <li><span className="font-medium text-sidebar">Outlook (desktop)</span> — Calendar → Add calendar → Subscribe from web → paste the <span className="font-medium">https://</span> URL above → Subscribe</li>
+                <li><span className="font-medium text-sidebar">Outlook 365</span> — outlook.office.com → Add calendar → Subscribe from web → paste the feed URL</li>
+                <li><span className="font-medium text-sidebar">Google Calendar</span> — Other calendars (+) → From URL → paste the feed URL</li>
+                <li><span className="font-medium text-sidebar">Apple Calendar</span> — File → New Calendar Subscription → paste the feed URL</li>
               </ol>
             </div>
 

@@ -392,8 +392,9 @@ function buildIcalFeed(inspections: any[], userName: string): string {
 router.get("/integrations/calendar/ical-url", requireAuth, async (req, res) => {
   const userId = req.authUser!.id;
   const token = generateIcalToken(userId);
-  const feedUrl = `${APP_BASE_URL}/api/integrations/calendar/ical/feed/${token}.ics`;
-  res.json({ feedUrl, token });
+  // Return only the token — the client constructs the full URL from its own origin
+  // so it works correctly in both dev and production environments
+  res.json({ token });
 });
 
 router.get("/integrations/calendar/ical/feed/:tokenFile", async (req, res) => {
