@@ -52,15 +52,15 @@ const ROLE_MAP: Record<string, string> = {
   admin:              "Owner",
   certifier:          "Building Certifier",
   inspector:          "Inspector",
-  building_inspector: "Inspector",
-  engineer:           "Inspector",
-  plumber:            "Inspector",
-  project_manager:    "Manager",
-  builder:            "Inspector",
-  supervisor:         "Manager",
-  whs:                "Inspector",
-  pre_purchase:       "Inspector",
-  fire_engineer:      "Inspector",
+  building_inspector: "Building Inspector",
+  engineer:           "Structural Engineer",
+  plumber:            "Plumbing Officer",
+  project_manager:    "Project Manager",
+  builder:            "Builder / QC",
+  supervisor:         "Site Supervisor",
+  whs:                "WHS Officer",
+  pre_purchase:       "Pre-Purchase Inspector",
+  fire_engineer:      "Fire Safety Engineer",
   staff:              "Staff",
 };
 
@@ -91,22 +91,51 @@ function apiUserToMember(u: any): TeamMember {
   };
 }
 
-const ROLES = ["Building Certifier", "Inspector", "Manager", "Staff"];
-const ADD_MEMBER_ROLES = ["Building Certifier", "Inspector", "Manager", "Staff"];
+const ROLES = [
+  "Building Certifier",
+  "Structural Engineer",
+  "Plumbing Officer",
+  "Builder / QC",
+  "Site Supervisor",
+  "WHS Officer",
+  "Pre-Purchase Inspector",
+  "Fire Safety Engineer",
+  "Inspector",
+  "Project Manager",
+  "Staff",
+];
+const ADD_MEMBER_ROLES = ROLES;
 
 const ROLE_REVERSE: Record<string, string> = {
-  "Building Certifier": "certifier",
-  Inspector:            "inspector",
-  Manager:              "supervisor",
-  Staff:                "staff",
+  "Building Certifier":     "certifier",
+  "Structural Engineer":    "engineer",
+  "Plumbing Officer":       "plumber",
+  "Builder / QC":           "builder",
+  "Site Supervisor":        "supervisor",
+  "WHS Officer":            "whs",
+  "Pre-Purchase Inspector": "pre_purchase",
+  "Fire Safety Engineer":   "fire_engineer",
+  Inspector:                "inspector",
+  "Building Inspector":     "building_inspector",
+  "Project Manager":        "project_manager",
+  Staff:                    "staff",
 };
 
 const ROLE_BADGE: Record<string, string> = {
-  Owner:               "bg-amber-50 text-amber-700 border-amber-200",
-  "Building Certifier":"bg-emerald-50 text-emerald-700 border-emerald-200",
-  Manager:             "bg-violet-50 text-violet-700 border-violet-200",
-  Inspector:           "bg-blue-50 text-blue-700 border-blue-200",
-  Staff:               "bg-muted text-muted-foreground border-muted/60",
+  Owner:                    "bg-amber-50 text-amber-700 border-amber-200",
+  "Building Certifier":     "bg-emerald-50 text-emerald-700 border-emerald-200",
+  "Structural Engineer":    "bg-blue-50 text-blue-700 border-blue-200",
+  "Plumbing Officer":       "bg-teal-50 text-teal-700 border-teal-200",
+  "Builder / QC":           "bg-amber-50 text-amber-800 border-amber-300",
+  "Site Supervisor":        "bg-orange-50 text-orange-700 border-orange-200",
+  "WHS Officer":            "bg-red-50 text-red-700 border-red-200",
+  "Pre-Purchase Inspector": "bg-purple-50 text-purple-700 border-purple-200",
+  "Fire Safety Engineer":   "bg-rose-50 text-rose-700 border-rose-200",
+  Inspector:                "bg-blue-50 text-blue-700 border-blue-200",
+  "Building Inspector":     "bg-blue-50 text-blue-700 border-blue-200",
+  "Project Manager":        "bg-violet-50 text-violet-700 border-violet-200",
+  Manager:                  "bg-violet-50 text-violet-700 border-violet-200",
+  Staff:                    "bg-muted text-muted-foreground border-muted/60",
 };
 
 function apiBase() {
