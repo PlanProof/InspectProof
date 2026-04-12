@@ -1071,7 +1071,7 @@ export default function Inspectors() {
     } finally {
       setAddMemberSaving(false);
     }
-  }, [addMemberForm, currentUser, refetch]);
+  }, [addMemberForm, currentUser, emailLookup, refetch]);
 
   const adminCount = members.filter(m => m.isCompanyAdmin).length;
   const inspectorCount = members.filter(m => hasMobile(m.userType)).length;
