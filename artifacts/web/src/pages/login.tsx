@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLogin } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Label } from "@/components/ui";
-import { AlertTriangle, Check, ChevronLeft, Loader2, Zap, Rocket, Building2, Eye, EyeOff } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, Loader2, Zap, Rocket, Building2, Eye, EyeOff, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const API = (path: string) => `/api${path}`;
@@ -315,6 +315,18 @@ function SignInForm() {
 }
 
 /* ── Sign Up flow ─────────────────────────────────────────── */
+const SIGNUP_DISCIPLINES = [
+  "Building Surveyor",
+  "Structural Engineer",
+  "Plumbing Officer",
+  "Builder / QC",
+  "Site Supervisor",
+  "WHS Officer",
+  "Pre-Purchase Inspector",
+  "Fire Safety Engineer",
+  "Other",
+];
+
 type AccountDetails = {
   firstName: string;
   lastName: string;
@@ -323,6 +335,7 @@ type AccountDetails = {
   confirmPassword: string;
   organization: string;
   marketingOptIn: boolean;
+  profession: string;
 };
 
 function SignUpFlow() {
@@ -335,6 +348,7 @@ function SignUpFlow() {
     confirmPassword: "",
     organization: "",
     marketingOptIn: false,
+    profession: "",
   });
 
   return step === 1 ? (
@@ -365,6 +379,7 @@ function AccountStep({
     e.preventDefault();
     setError("");
     if (!account.organization.trim()) { setError("Company or organisation name is required."); return; }
+    if (!account.profession) { setError("Please select your professional discipline."); return; }
     if (account.password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (account.password !== account.confirmPassword) { setError("Passwords do not match."); return; }
     onNext();
@@ -427,6 +442,35 @@ function AccountStep({
                 className="bg-muted/50 border-muted-foreground/20 focus-visible:ring-primary"
               />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="su-discipline">
+              Your Discipline <span className="text-destructive">*</span>
+            </Label>
+            <select
+              id="su-discipline"
+              value={account.profession}
+              onChange={e => setAccount(a => ({ ...a, profession: e.target.value }))}
+              required
+              className="w-full h-9 rounded-md border border-input bg-muted/50 px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="" disabled>Select your discipline…</option>
+              {SIGNUP_DISCIPLINES.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+            {account.profession === "Other" && (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 flex items-start gap-2">
+                <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+                <span>
+                  No problem — you can still sign up and explore the platform. Once you're in, please reach out to our support team at{" "}
+                  <a href="mailto:support@inspectproof.com.au" className="underline font-semibold hover:text-amber-900">
+                    support@inspectproof.com.au
+                  </a>{" "}
+                  and we'll work with you to create checklists tailored to your discipline.
+                </span>
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="su-email">Work email</Label>
@@ -612,6 +656,7 @@ function PlanStep({ account, onBack }: { account: AccountDetails; onBack: () => 
           password: account.password,
           organization: account.organization,
           plan: selected,
+          profession: account.profession === "Other" ? null : (account.profession || null),
           marketingEmailOptIn: account.marketingOptIn,
         }),
       });
