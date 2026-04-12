@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import express from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, notInArray } from "drizzle-orm";
 import {
   db,
   inspectionsTable,
@@ -129,6 +129,25 @@ router.post("/inspections/:id/sign-off", requireAuth, async (req, res) => {
 
     if (!(await canAccessInspection(insp, caller))) {
       res.status(403).json({ error: "forbidden", message: "Access denied." });
+      return;
+    }
+
+    // Block sign-off if any issues/defects are still unresolved
+    const RESOLVED_STATUSES = ["closed", "resolved", "rejected"];
+    const openIssues = await db.select({ id: issuesTable.id })
+      .from(issuesTable)
+      .where(
+        and(
+          eq(issuesTable.inspectionId, inspId),
+          notInArray(issuesTable.status, RESOLVED_STATUSES)
+        )
+      );
+    if (openIssues.length > 0) {
+      res.status(422).json({
+        error: "unresolved_issues",
+        message: `${openIssues.length} issue${openIssues.length !== 1 ? "s" : ""} must be resolved before signing off.`,
+        count: openIssues.length,
+      });
       return;
     }
 

@@ -645,7 +645,10 @@ export default function InspectionDetail() {
       // Reload inspection to reflect signedOffAt
       const updated = await apiFetch(`/api/inspections/${inspection.id}`);
       setInspection(updated);
-    } catch {
+    } catch (err: any) {
+      if (err?.error === "unresolved_issues" || err?.message?.includes("must be resolved")) {
+        toast({ title: "Cannot Sign Off", description: err.message ?? "All issues and defects must be resolved before signing off.", variant: "destructive" });
+      }
     } finally {
       setSigningOff(false);
     }
@@ -841,20 +844,39 @@ export default function InspectionDetail() {
               </Button>
             )}
             {/* Sign Off */}
-            {inspection.status === "completed" && !(inspection as any).signedOffAt && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleSignOff}
-                disabled={signingOff}
-                className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50"
-              >
-                {signingOff
-                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  : <PenLine className="h-3.5 w-3.5" />}
-                Sign Off
-              </Button>
-            )}
+            {inspection.status === "completed" && !(inspection as any).signedOffAt && (() => {
+              const unresolvedCount = inspection.issues.filter(
+                i => !["closed", "resolved", "rejected"].includes(i.status)
+              ).length;
+              const blocked = unresolvedCount > 0;
+              return (
+                <div className="flex flex-col items-end gap-0.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSignOff}
+                    disabled={signingOff || blocked}
+                    title={blocked ? `${unresolvedCount} unresolved issue${unresolvedCount !== 1 ? "s" : ""} — resolve all before signing off` : undefined}
+                    className={cn(
+                      "gap-1.5",
+                      blocked
+                        ? "border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
+                        : "border-blue-300 text-blue-700 hover:bg-blue-50"
+                    )}
+                  >
+                    {signingOff
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <PenLine className="h-3.5 w-3.5" />}
+                    Sign Off
+                  </Button>
+                  {blocked && (
+                    <span className="text-[10px] text-amber-600 font-medium">
+                      {unresolvedCount} open issue{unresolvedCount !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
             {(inspection as any).signedOffAt && (
               <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
                 <CheckCircle2 className="h-3 w-3" /> Signed Off
