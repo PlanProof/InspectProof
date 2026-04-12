@@ -3,7 +3,7 @@ import { formatInspectionType } from "@/lib/utils";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui";
 import {
-  Plus, Trash2, FileText, Image, Eye, Edit3, ChevronRight,
+  Plus, Trash2, FileText, Image, Edit3, ChevronRight,
   Copy, Check, X, Link2, ClipboardList, Printer, ChevronDown, Folder,
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter, AlignRight,
   List, ListOrdered, Table, Minus, Upload,
@@ -628,7 +628,7 @@ export function DocTemplatesPanel() {
       .catch(console.error)
       .finally(() => setTemplatesLoading(false));
   }, []);
-  const [rightTab, setRightTab] = useState<"fields" | "preview" | "checklists">("fields");
+  const [rightTab, setRightTab] = useState<"fields" | "checklists">("fields");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [saved, setSaved] = useState(false);
@@ -833,7 +833,7 @@ export function DocTemplatesPanel() {
 
   const linkedCount = selected?.linkedChecklistIds.length ?? 0;
 
-  const [centerMode, setCenterMode] = useState<"edit" | "preview">("edit");
+  const [centerMode, setCenterMode] = useState<"edit" | "preview">("preview");
   const [migrating, setMigrating] = useState(false);
   const localCount = (() => { try { return JSON.parse(localStorage.getItem("inspectproof_doc_templates") ?? "[]").length; } catch { return 0; } })();
 
@@ -973,57 +973,44 @@ export function DocTemplatesPanel() {
         <div className="flex-1 flex flex-col min-w-0">
           {selected ? (
             <>
-              {/* ── Row 1: Edit / Preview toggle + Generate Report ── */}
+              {/* ── Row 1: Live data selectors + Edit Source + Generate Report ── */}
               <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                {/* Edit / Preview toggle */}
-                <div className="flex items-center rounded-lg overflow-hidden border border-border shadow-sm">
-                  <button
-                    onClick={() => setCenterMode("edit")}
-                    className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition-colors ${centerMode === "edit" ? "bg-secondary text-white" : "bg-card text-muted-foreground hover:bg-muted"}`}
+                {/* Project selector */}
+                <select
+                  value={previewProjectId}
+                  onChange={e => setPreviewProjectId(e.target.value)}
+                  className="text-xs rounded-lg border border-border bg-background px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-secondary/50 max-w-[200px] truncate"
+                >
+                  {!(allProjects as any[])?.length && <option value="">Loading projects…</option>}
+                  {(allProjects as any[] ?? []).map((p: any) => (
+                    <option key={p.id} value={String(p.id)}>{p.name}</option>
+                  ))}
+                </select>
+                {previewProjectInspections.length > 0 && (
+                  <select
+                    value={previewInspectionId}
+                    onChange={e => setPreviewInspectionId(e.target.value)}
+                    className="text-xs rounded-lg border border-border bg-background px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-secondary/50 max-w-[240px] truncate"
                   >
-                    <Edit3 className="h-3 w-3" />
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => setCenterMode("preview")}
-                    className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition-colors ${centerMode === "preview" ? "bg-secondary text-white" : "bg-card text-muted-foreground hover:bg-muted"}`}
-                  >
-                    <Eye className="h-3 w-3" />
-                    Preview
-                  </button>
-                </div>
-
-                {/* Preview: project + inspection selectors */}
-                {centerMode === "preview" && (
-                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    <select
-                      value={previewProjectId}
-                      onChange={e => setPreviewProjectId(e.target.value)}
-                      className="text-xs rounded-lg border border-border bg-background px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-secondary/50 max-w-[200px] truncate"
-                    >
-                      {!(allProjects as any[])?.length && <option value="">Loading projects…</option>}
-                      {(allProjects as any[] ?? []).map((p: any) => (
-                        <option key={p.id} value={String(p.id)}>{p.name}</option>
-                      ))}
-                    </select>
-                    {previewProjectInspections.length > 0 && (
-                      <select
-                        value={previewInspectionId}
-                        onChange={e => setPreviewInspectionId(e.target.value)}
-                        className="text-xs rounded-lg border border-border bg-background px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-secondary/50 max-w-[240px] truncate"
-                      >
-                        {previewProjectInspections.map((i: any) => (
-                          <option key={i.id} value={String(i.id)}>
-                            {formatInspectionType(i.inspectionType ?? "")} — {i.scheduledDate}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${previewProject ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
-                      {previewProject ? "Live data" : "Test data"}
-                    </span>
-                  </div>
+                    {previewProjectInspections.map((i: any) => (
+                      <option key={i.id} value={String(i.id)}>
+                        {formatInspectionType(i.inspectionType ?? "")} — {i.scheduledDate}
+                      </option>
+                    ))}
+                  </select>
                 )}
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${previewProject ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>
+                  {previewProject ? "Live data" : "Test data"}
+                </span>
+
+                {/* Edit Source toggle (subtle) */}
+                <button
+                  onClick={() => setCenterMode(centerMode === "edit" ? "preview" : "edit")}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${centerMode === "edit" ? "bg-secondary text-white border-secondary" : "bg-card text-muted-foreground border-border hover:bg-muted"}`}
+                >
+                  <Edit3 className="h-3 w-3" />
+                  {centerMode === "edit" ? "Done Editing" : "Edit"}
+                </button>
 
                 <button
                   onClick={() => setGenerateOpen(true)}
@@ -1326,7 +1313,7 @@ export function DocTemplatesPanel() {
           )}
         </div>
 
-        {/* ── Right panel: Fields + Preview + Linked Checklists ─────────────── */}
+        {/* ── Right panel: Fields + Linked Checklists ─────────────────────── */}
         {selected && (
           <div className="w-[280px] shrink-0 flex flex-col bg-card border border-border rounded-xl overflow-hidden shadow-sm">
             {/* Tab bar */}
@@ -1337,13 +1324,6 @@ export function DocTemplatesPanel() {
               >
                 <ChevronRight className="h-3 w-3" />
                 Fields
-              </button>
-              <button
-                onClick={() => setRightTab("preview")}
-                className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-[11px] font-semibold transition-colors ${rightTab === "preview" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"}`}
-              >
-                <Eye className="h-3 w-3" />
-                Preview
               </button>
               <button
                 onClick={() => setRightTab("checklists")}
@@ -1359,70 +1339,10 @@ export function DocTemplatesPanel() {
               </button>
             </div>
 
-            {rightTab === "preview" ? (
-              <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
-                {/* Project / Inspection selector */}
-                <div>
-                  <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
-                    <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wide shrink-0">Project</span>
-                    <select
-                      value={previewProjectId}
-                      onChange={e => setPreviewProjectId(e.target.value)}
-                      className="flex-1 min-w-0 text-[9px] text-amber-700 bg-transparent border-none outline-none cursor-pointer font-medium"
-                    >
-                      {!(allProjects as any[])?.length && <option value="">Loading…</option>}
-                      {(allProjects as any[] ?? []).map((p: any) => (
-                        <option key={p.id} value={String(p.id)}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {previewProjectInspections.length > 0 && (
-                    <div className="mt-1 flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-md px-2 py-1">
-                      <span className="text-[9px] font-bold text-blue-700 uppercase tracking-wide shrink-0">Insp</span>
-                      <select
-                        value={previewInspectionId}
-                        onChange={e => setPreviewInspectionId(e.target.value)}
-                        className="flex-1 min-w-0 text-[9px] text-blue-700 bg-transparent border-none outline-none cursor-pointer font-medium"
-                      >
-                        {previewProjectInspections.map((i: any) => (
-                          <option key={i.id} value={String(i.id)}>
-                            {formatInspectionType(i.inspectionType ?? "")} — {i.scheduledDate}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  <div className={`mt-1 flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-semibold ${previewProject ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-800"}`}>
-                    {previewProject ? "Live data" : "Test data (no project selected)"}
-                  </div>
-                </div>
-                {/* Scaled A4 live preview */}
-                <div style={{ width: "256px", position: "relative", height: `${Math.round(1123 * (256 / 794))}px`, flexShrink: 0 }}>
-                  <div style={{
-                    width: "794px",
-                    minHeight: "1123px",
-                    background: "white",
-                    transform: `scale(${256 / 794})`,
-                    transformOrigin: "top left",
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    boxShadow: "0 2px 12px rgba(0,0,0,0.12)",
-                    pointerEvents: "none",
-                  }}>
-                    <ReportShell companyName="InspectProof" inspectorName={previewData["{{inspector_name}}"] || undefined} backgroundImage={selected.backgroundImage}>
-                      <div
-                        style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
-                        dangerouslySetInnerHTML={{ __html: fillWithData(liveContent || selected.content, previewData) }}
-                      />
-                    </ReportShell>
-                  </div>
-                </div>
-              </div>
-            ) : rightTab === "fields" ? (
+            {rightTab === "fields" ? (
               <div className="flex-1 overflow-y-auto p-2 space-y-3">
                 <div className="px-1 pt-1">
-                  <p className="text-[10px] text-muted-foreground">Click a field to insert at cursor. Preview updates live in the Preview tab.</p>
+                  <p className="text-[10px] text-muted-foreground">Click a field to insert at cursor. Switch to Edit mode first, then click to insert.</p>
                 </div>
                 {FIELD_GROUPS.map(group => (
                   <div key={group.label}>
