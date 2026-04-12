@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { PDFViewer } from "@/components/PDFViewer";
-import { useListUsers, useCreateInspection, useGetMe, type User } from "@workspace/api-client-react";
+import { useListUsers, useCreateInspection, useGetMe, useListChecklistTemplates, type User } from "@workspace/api-client-react";
+import { useAuth } from "@/hooks/use-auth";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1686,8 +1687,12 @@ function BookInspectionDialog({
   defaultTemplateName?: string;
   defaultInspectionType?: string;
 }) {
+  const { user: currentUser } = useAuth();
   const { data: users } = useListUsers({});
   const createInspection = useCreateInspection();
+  const { data: disciplineTemplates = [] } = useListChecklistTemplates(
+    currentUser?.profession ? { discipline: currentUser.profession } : {}
+  );
 
   const today = new Date().toISOString().split("T")[0];
   const [form, setForm] = useState({
@@ -1731,7 +1736,8 @@ function BookInspectionDialog({
       // Prefer the explicit defaultTemplateId (from booking a specific card),
       // then fall back to the allocated type's templateId that matches the selected inspectionType
       const matchedTemplateId = defaultTemplateId
-        ?? allocatedTypes.find(t => t.inspectionType === form.inspectionType)?.templateId;
+        ?? allocatedTypes.find(t => t.inspectionType === form.inspectionType)?.templateId
+        ?? (disciplineTemplates as any[]).find(t => t.inspectionType === form.inspectionType)?.id;
       await createInspection.mutateAsync({
         data: {
           projectId,
@@ -1795,6 +1801,14 @@ function BookInspectionDialog({
                   <optgroup key={folder} label={folder}>
                     {allocatedTypes.filter(t => t.folder === folder).map(t => (
                       <option key={t.templateId} value={t.inspectionType}>{cleanTypeName(t.name)}</option>
+                    ))}
+                  </optgroup>
+                ))
+              ) : (disciplineTemplates as any[]).length > 0 ? (
+                Array.from(new Set((disciplineTemplates as any[]).map(t => t.folder || "General"))).sort().map(folder => (
+                  <optgroup key={folder} label={folder}>
+                    {(disciplineTemplates as any[]).filter(t => (t.folder || "General") === folder).map(t => (
+                      <option key={t.id} value={t.inspectionType}>{cleanTypeName(t.name)}</option>
                     ))}
                   </optgroup>
                 ))

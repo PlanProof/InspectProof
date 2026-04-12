@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useListInspections, useListProjects, useListUsers, useCreateInspection } from "@workspace/api-client-react";
+import { useListInspections, useListProjects, useListUsers, useCreateInspection, useListChecklistTemplates } from "@workspace/api-client-react";
+import { useAuth } from "@/hooks/use-auth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
   Button, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Badge,
@@ -99,9 +100,13 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const { user } = useAuth();
   const { data: projects } = useListProjects({});
   const { data: users } = useListUsers({});
   const createInspection = useCreateInspection();
+  const { data: disciplineTemplates = [] } = useListChecklistTemplates(
+    user?.profession ? { discipline: user.profession } : {}
+  );
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -142,7 +147,8 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
     if (!form.scheduledDate) { setError("Please set a scheduled date."); return; }
     setSubmitting(true);
     try {
-      const matchedTemplateId = allocatedTypes.find(t => t.inspectionType === form.inspectionType)?.templateId;
+      const matchedTemplateId = allocatedTypes.find(t => t.inspectionType === form.inspectionType)?.templateId
+        ?? (disciplineTemplates as any[]).find(t => t.inspectionType === form.inspectionType)?.id;
       await createInspection.mutateAsync({
         data: {
           ...(isCustom ? {} : { projectId: Number(form.projectId) }),
@@ -216,6 +222,14 @@ function NewInspectionDialog({ open, onClose, onCreated }: {
                     <optgroup key={folder} label={folder}>
                       {allocatedTypes.filter(t => t.folder === folder).map(t => (
                         <option key={t.templateId} value={t.inspectionType}>{cleanTypeName(t.name)}</option>
+                      ))}
+                    </optgroup>
+                  ))
+                ) : (disciplineTemplates as any[]).length > 0 ? (
+                  Array.from(new Set((disciplineTemplates as any[]).map(t => t.folder || "General"))).sort().map(folder => (
+                    <optgroup key={folder} label={folder}>
+                      {(disciplineTemplates as any[]).filter(t => (t.folder || "General") === folder).map(t => (
+                        <option key={t.id} value={t.inspectionType}>{cleanTypeName(t.name)}</option>
                       ))}
                     </optgroup>
                   ))
