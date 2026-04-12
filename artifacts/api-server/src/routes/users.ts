@@ -191,6 +191,37 @@ function generateTempPassword(): string {
   return result;
 }
 
+// ── Email lookup — check if an address is already in the system ──────────────
+router.get("/lookup", requireAuth, async (req, res) => {
+  const email = String(req.query.email ?? "").toLowerCase().trim();
+  if (!email) {
+    res.status(400).json({ error: "bad_request", message: "email is required" });
+    return;
+  }
+  try {
+    const caller = req.authUser!;
+    const [existing] = await db.select({
+      id: usersTable.id,
+      firstName: usersTable.firstName,
+      lastName: usersTable.lastName,
+      adminUserId: usersTable.adminUserId,
+    }).from(usersTable).where(eq(usersTable.email, email));
+
+    if (!existing) {
+      res.json({ found: false });
+      return;
+    }
+
+    const orgOwnerId = caller.isCompanyAdmin ? caller.id : parseInt(caller.adminUserId ?? "0");
+    const sameOrg = existing.adminUserId === String(orgOwnerId) || existing.id === orgOwnerId;
+
+    res.json({ found: true, sameOrg, firstName: existing.firstName, lastName: existing.lastName });
+  } catch (err) {
+    req.log.error({ err }, "User lookup error");
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 // Save or update the caller's Expo push token
 router.put("/me/push-token", requireAuth, async (req, res) => {
   try {

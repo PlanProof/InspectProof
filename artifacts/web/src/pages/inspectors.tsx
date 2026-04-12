@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, type ComponentType } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, type ComponentType } from "react";
 import { useListUsers } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -829,6 +829,9 @@ export default function Inspectors() {
   });
   const [addMemberSaving, setAddMemberSaving] = useState(false);
   const [addMemberResult, setAddMemberResult] = useState<{ ok: boolean; msg: string; tempPassword?: string } | null>(null);
+  type EmailLookup = { status: "checking" | "new" | "same-org" | "cross-org"; firstName?: string; lastName?: string };
+  const [emailLookup, setEmailLookup] = useState<EmailLookup | null>(null);
+  const emailLookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Multi-org member data
   type OrgMemberInfo = { userId: number; isMultiOrg: boolean; orgCount: number };
@@ -987,15 +990,55 @@ export default function Inspectors() {
     }
   }, [members]);
 
+  const lookupEmail = useCallback((email: string) => {
+    if (emailLookupTimer.current) clearTimeout(emailLookupTimer.current);
+    const trimmed = email.trim();
+    if (!trimmed) { setEmailLookup(null); return; }
+    setEmailLookup({ status: "checking" });
+    emailLookupTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`${apiBase()}/api/users/lookup?email=${encodeURIComponent(trimmed)}`, { headers: authHeader() });
+        if (!res.ok) { setEmailLookup({ status: "new" }); return; }
+        const body = await res.json();
+        if (!body.found) setEmailLookup({ status: "new" });
+        else if (body.sameOrg) setEmailLookup({ status: "same-org" });
+        else setEmailLookup({ status: "cross-org", firstName: body.firstName, lastName: body.lastName });
+      } catch {
+        setEmailLookup(null);
+      }
+    }, 450);
+  }, []);
+
   const addMember = useCallback(async () => {
-    if (!addMemberForm.firstName || !addMemberForm.lastName || !addMemberForm.email) return;
+    const isCrossOrg = emailLookup?.status === "cross-org";
+    if (!addMemberForm.email) return;
+    if (!isCrossOrg && (!addMemberForm.firstName || !addMemberForm.lastName)) return;
     setAddMemberSaving(true);
     setAddMemberResult(null);
     try {
+      const dbRole = ROLE_REVERSE[addMemberForm.role] ?? addMemberForm.role.toLowerCase();
+
+      if (isCrossOrg) {
+        const res = await fetch(`${apiBase()}/api/invites/app-invite`, {
+          method: "POST",
+          headers: authHeader(),
+          body: JSON.stringify({ email: addMemberForm.email, role: dbRole }),
+        });
+        const body = await res.json().catch(() => ({})) as any;
+        if (!res.ok) {
+          setAddMemberResult({ ok: false, msg: body?.message || "Failed to send invite" });
+          return;
+        }
+        setAddMemberResult({ ok: true, msg: `Invitation sent to ${addMemberForm.email}` });
+        setAddMemberForm({ firstName: "", lastName: "", email: "", phone: "", role: "Inspector", userType: "inspector" });
+        setEmailLookup(null);
+        refetch();
+        return;
+      }
+
       const inviterName = currentUser?.firstName && currentUser?.lastName
         ? `${currentUser.firstName} ${currentUser.lastName}`
         : "Your administrator";
-      const dbRole = ROLE_REVERSE[addMemberForm.role] ?? addMemberForm.role.toLowerCase();
       const res = await fetch(`${apiBase()}/api/users`, {
         method: "POST",
         headers: authHeader(),
@@ -1021,6 +1064,7 @@ export default function Inspectors() {
         tempPassword: body.temporaryPassword,
       });
       setAddMemberForm({ firstName: "", lastName: "", email: "", phone: "", role: "Inspector", userType: "inspector" });
+      setEmailLookup(null);
       refetch();
     } catch {
       setAddMemberResult({ ok: false, msg: "Network error — please try again" });
@@ -1165,47 +1209,85 @@ export default function Inspectors() {
               </div>
             ) : (
               <div className="px-6 py-5 space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">First Name <span className="text-red-500">*</span></label>
-                    <input
-                      value={addMemberForm.firstName}
-                      onChange={e => setAddMemberForm(f => ({ ...f, firstName: e.target.value }))}
-                      className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
-                      placeholder="First name" disabled={addMemberSaving}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Last Name <span className="text-red-500">*</span></label>
-                    <input
-                      value={addMemberForm.lastName}
-                      onChange={e => setAddMemberForm(f => ({ ...f, lastName: e.target.value }))}
-                      className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
-                      placeholder="Last name" disabled={addMemberSaving}
-                    />
-                  </div>
-                </div>
 
+                {/* Email — shown first so lookup fires before name fields */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Email Address <span className="text-red-500">*</span></label>
-                  <input
-                    type="email" value={addMemberForm.email}
-                    onChange={e => setAddMemberForm(f => ({ ...f, email: e.target.value }))}
-                    className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
-                    placeholder="member@example.com" disabled={addMemberSaving}
-                  />
+                  <div className="relative">
+                    <input
+                      type="email" value={addMemberForm.email}
+                      onChange={e => {
+                        setAddMemberForm(f => ({ ...f, email: e.target.value }));
+                        lookupEmail(e.target.value);
+                      }}
+                      className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background pr-8"
+                      placeholder="member@example.com" disabled={addMemberSaving}
+                    />
+                    {emailLookup?.status === "checking" && (
+                      <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+
+                  {/* Same-org conflict */}
+                  {emailLookup?.status === "same-org" && (
+                    <p className="text-xs text-red-500 flex items-center gap-1">
+                      <X className="h-3 w-3 shrink-0" /> This person is already a member of your team.
+                    </p>
+                  )}
+
+                  {/* Cross-org existing user — invite mode */}
+                  {emailLookup?.status === "cross-org" && (
+                    <div className="flex items-start gap-2.5 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-lg mt-1">
+                      <Users className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-blue-800">
+                          {emailLookup.firstName} {emailLookup.lastName} already has an InspectProof account.
+                        </p>
+                        <p className="text-xs text-blue-700 mt-0.5">
+                          A team invite will be sent — they'll receive an email to accept or decline joining your organisation.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Phone <span className="text-xs font-normal text-muted-foreground">(optional)</span></label>
-                  <input
-                    type="tel" value={addMemberForm.phone}
-                    onChange={e => setAddMemberForm(f => ({ ...f, phone: e.target.value }))}
-                    className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
-                    placeholder="04xx xxx xxx" disabled={addMemberSaving}
-                  />
-                </div>
+                {/* Name + Phone — only needed for brand-new users */}
+                {emailLookup?.status !== "cross-org" && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">First Name <span className="text-red-500">*</span></label>
+                        <input
+                          value={addMemberForm.firstName}
+                          onChange={e => setAddMemberForm(f => ({ ...f, firstName: e.target.value }))}
+                          className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+                          placeholder="First name" disabled={addMemberSaving}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Last Name <span className="text-red-500">*</span></label>
+                        <input
+                          value={addMemberForm.lastName}
+                          onChange={e => setAddMemberForm(f => ({ ...f, lastName: e.target.value }))}
+                          className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+                          placeholder="Last name" disabled={addMemberSaving}
+                        />
+                      </div>
+                    </div>
 
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Phone <span className="text-xs font-normal text-muted-foreground">(optional)</span></label>
+                      <input
+                        type="tel" value={addMemberForm.phone}
+                        onChange={e => setAddMemberForm(f => ({ ...f, phone: e.target.value }))}
+                        className="w-full text-sm border border-input rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-secondary/30 bg-background"
+                        placeholder="04xx xxx xxx" disabled={addMemberSaving}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Role — always shown */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Role</label>
                   <select value={addMemberForm.role} onChange={e => setAddMemberForm(f => ({ ...f, role: e.target.value }))}
@@ -1215,54 +1297,61 @@ export default function Inspectors() {
                   </select>
                 </div>
 
-                {/* Account type — multi-select */}
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Account Type <span className="text-[10px] font-normal normal-case text-muted-foreground">(select one or both)</span></label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([
-                      { key: "mobile", label: "Field Inspector", icon: Smartphone, desc: "Uses mobile app",   active: hasMobile(addMemberForm.userType) },
-                      { key: "web",    label: "Office User",     icon: Monitor,    desc: "Uses web platform", active: hasWeb(addMemberForm.userType) },
-                    ] as const).map(({ key, label, icon: Icon, desc, active }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        disabled={addMemberSaving}
-                        onClick={() => {
-                          const curMobile = hasMobile(addMemberForm.userType);
-                          const curWeb    = hasWeb(addMemberForm.userType);
-                          const nextMobile = key === "mobile" ? !curMobile : curMobile;
-                          const nextWeb    = key === "web"    ? !curWeb    : curWeb;
-                          if (!nextMobile && !nextWeb) return;
-                          setAddMemberForm(f => ({ ...f, userType: mergeAccess(nextMobile, nextWeb) }));
-                        }}
-                        className={cn(
-                          "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all relative",
-                          active
-                            ? "border-secondary bg-secondary/8 text-secondary"
-                            : "border-muted/60 bg-background text-muted-foreground hover:border-secondary/40"
-                        )}
-                      >
-                        {active && <Check className="absolute top-1.5 right-1.5 h-3 w-3 text-secondary" />}
-                        <Icon className="h-4 w-4" />
-                        <span className="text-xs font-semibold">{label}</span>
-                        <span className="text-[10px] opacity-70">{desc}</span>
-                      </button>
-                    ))}
+                {/* Account type — only for new users */}
+                {emailLookup?.status !== "cross-org" && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-sidebar uppercase tracking-wide">Account Type <span className="text-[10px] font-normal normal-case text-muted-foreground">(select one or both)</span></label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        { key: "mobile", label: "Field Inspector", icon: Smartphone, desc: "Uses mobile app",   active: hasMobile(addMemberForm.userType) },
+                        { key: "web",    label: "Office User",     icon: Monitor,    desc: "Uses web platform", active: hasWeb(addMemberForm.userType) },
+                      ] as const).map(({ key, label, icon: Icon, desc, active }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          disabled={addMemberSaving}
+                          onClick={() => {
+                            const curMobile = hasMobile(addMemberForm.userType);
+                            const curWeb    = hasWeb(addMemberForm.userType);
+                            const nextMobile = key === "mobile" ? !curMobile : curMobile;
+                            const nextWeb    = key === "web"    ? !curWeb    : curWeb;
+                            if (!nextMobile && !nextWeb) return;
+                            setAddMemberForm(f => ({ ...f, userType: mergeAccess(nextMobile, nextWeb) }));
+                          }}
+                          className={cn(
+                            "flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all relative",
+                            active
+                              ? "border-secondary bg-secondary/8 text-secondary"
+                              : "border-muted/60 bg-background text-muted-foreground hover:border-secondary/40"
+                          )}
+                        >
+                          {active && <Check className="absolute top-1.5 right-1.5 h-3 w-3 text-secondary" />}
+                          <Icon className="h-4 w-4" />
+                          <span className="text-xs font-semibold">{label}</span>
+                          <span className="text-[10px] opacity-70">{desc}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {currentUserCompany && (
                   <div className="flex items-center gap-2.5 px-3 py-2.5 bg-secondary/5 border border-secondary/20 rounded-lg">
                     <Building2 className="h-3.5 w-3.5 text-secondary shrink-0" />
                     <p className="text-xs text-muted-foreground">
-                      This member will be linked to <span className="font-semibold text-sidebar">{currentUserCompany}</span>.
+                      {emailLookup?.status === "cross-org"
+                        ? <>They will be invited to join <span className="font-semibold text-sidebar">{currentUserCompany}</span> as a secondary organisation.</>
+                        : <>This member will be linked to <span className="font-semibold text-sidebar">{currentUserCompany}</span>.</>
+                      }
                     </p>
                   </div>
                 )}
 
-                <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
-                  A temporary password will be generated and emailed with setup instructions.
-                </p>
+                {emailLookup?.status !== "cross-org" && (
+                  <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+                    A temporary password will be generated and emailed with setup instructions.
+                  </p>
+                )}
 
                 {addMemberResult && !addMemberResult.ok && (
                   <p className="text-sm text-red-600 flex items-center gap-1.5">
@@ -1271,16 +1360,30 @@ export default function Inspectors() {
                 )}
 
                 <div className="flex justify-end gap-2 pt-1">
-                  <button onClick={() => { setShowAddMember(false); setAddMemberResult(null); }} disabled={addMemberSaving}
+                  <button
+                    onClick={() => { setShowAddMember(false); setAddMemberResult(null); setEmailLookup(null); }}
+                    disabled={addMemberSaving}
                     className="px-4 py-2 rounded-lg text-sm font-medium border border-border text-muted-foreground hover:bg-muted/30 transition-colors disabled:opacity-50">
                     Cancel
                   </button>
                   <button
                     onClick={addMember}
-                    disabled={addMemberSaving || !addMemberForm.firstName || !addMemberForm.lastName || !addMemberForm.email}
+                    disabled={
+                      addMemberSaving ||
+                      !addMemberForm.email ||
+                      emailLookup?.status === "same-org" ||
+                      emailLookup?.status === "checking" ||
+                      (emailLookup?.status !== "cross-org" && (!addMemberForm.firstName || !addMemberForm.lastName))
+                    }
                     className="px-4 py-2 rounded-lg text-sm font-semibold bg-sidebar text-white hover:bg-sidebar/90 transition-colors flex items-center gap-2 disabled:opacity-50">
-                    {addMemberSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
-                    {addMemberSaving ? "Creating…" : "Create Account & Send Email"}
+                    {addMemberSaving
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <UserPlus className="h-3.5 w-3.5" />
+                    }
+                    {addMemberSaving
+                      ? (emailLookup?.status === "cross-org" ? "Sending Invite…" : "Creating…")
+                      : (emailLookup?.status === "cross-org" ? "Send Team Invite" : "Create Account & Send Email")
+                    }
                   </button>
                 </div>
               </div>
