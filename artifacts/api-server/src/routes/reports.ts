@@ -870,9 +870,7 @@ CERTIFICATION
 `;
 
   if (reportType === "inspection_certificate") {
-    content += overallResult === "PASS"
-      ? `I hereby certify that the above-referenced work has been inspected and complies with the requirements of the National Construction Code and the relevant conditions of the Development Approval / Construction Certificate.`
-      : `I hereby certify that the above-referenced work has been inspected. Non-compliances have been identified and are detailed in this report. Re-inspection will be required following rectification works.`;
+    content += `I hereby certify that the above-referenced work has been inspected in accordance with the National Construction Code and the relevant conditions of the Development Approval / Construction Certificate. The findings of this inspection are detailed in this report.`;
   } else if (reportType === "non_compliance_notice") {
     content += `This Non-Compliance Notice is issued pursuant to the Environmental Planning and Assessment Act 1979 / Building Act. The responsible party is required to rectify all identified non-compliances within the specified timeframe and notify the certifier upon completion.`;
   } else if (reportType === "defect_notice") {
