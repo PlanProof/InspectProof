@@ -692,7 +692,7 @@ router.get("/:id/inspection-types", requireAuth, async (req, res) => {
       .leftJoin(checklistItemsTable, eq(checklistItemsTable.templateId, checklistTemplatesTable.id))
       .where(disciplineFilter ? eq(checklistTemplatesTable.discipline, disciplineFilter) : undefined)
       .groupBy(checklistTemplatesTable.id)
-      .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.sort_order} ASC, ${checklistTemplatesTable.name} ASC`);
+      .orderBy(sql`${checklistTemplatesTable.folder} ASC, ${checklistTemplatesTable.sortOrder} ASC, ${checklistTemplatesTable.name} ASC`);
 
     const selected = await db.select().from(projectInspectionTypesTable)
       .where(eq(projectInspectionTypesTable.projectId, id));
