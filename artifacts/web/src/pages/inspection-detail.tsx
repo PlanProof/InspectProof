@@ -890,16 +890,18 @@ export default function InspectionDetail() {
                     disabled={signingOff || blocked}
                     title={blocked ? `${unresolvedCount} unresolved issue${unresolvedCount !== 1 ? "s" : ""} — resolve all before signing off` : undefined}
                     className={cn(
-                      "gap-1.5",
+                      "gap-1.5 transition-all duration-300",
                       blocked
                         ? "border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
-                        : "border-blue-300 text-blue-700 hover:bg-blue-50"
+                        : signingOff
+                          ? "border-green-300 text-green-700 bg-green-50"
+                          : "border-blue-300 text-blue-700 hover:bg-blue-50"
                     )}
                   >
                     {signingOff
                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       : <PenLine className="h-3.5 w-3.5" />}
-                    Sign Off
+                    {signingOff ? "Signing Off…" : "Sign Off"}
                   </Button>
                   {blocked && (
                     <span className="text-[10px] text-amber-600 font-medium">
@@ -910,9 +912,14 @@ export default function InspectionDetail() {
               );
             })()}
             {(inspection as any).signedOffAt && (
-              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                <CheckCircle2 className="h-3 w-3" /> Signed Off
-              </span>
+              <div className="flex flex-col items-end gap-0.5">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-600 text-white shadow-sm">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Inspection Signed Off
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {new Date((inspection as any).signedOffAt).toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" })}
+                </span>
+              </div>
             )}
             {/* Share Link */}
             <Button
