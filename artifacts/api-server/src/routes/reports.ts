@@ -1518,12 +1518,13 @@ function addPageFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: num
   const footerRight = `Page ${pageNum} of ${totalPages}`;
   // Centre the single line vertically in the footer band
   const footerY = pageH - footerH + 15;
-  const halfW = (pageW - MARGIN * 2) / 2 - 10;
+  const pageNumW = 70;
+  const leftW = pageW - MARGIN * 2 - pageNumW - 8;
 
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
-    .text(footerLeft, MARGIN, footerY, { width: halfW * 1.6, lineBreak: false, ellipsis: true });
+    .text(footerLeft, MARGIN, footerY, { width: leftW, lineBreak: false, ellipsis: true });
   doc.fillColor("#9CA3AF").fontSize(7).font(F)
-    .text(footerRight, pageW - MARGIN - 60, footerY, { width: 60, align: "right", lineBreak: false });
+    .text(footerRight, pageW - MARGIN - pageNumW, footerY, { width: pageNumW, align: "right", lineBreak: false });
 
   doc.restore();
 }
