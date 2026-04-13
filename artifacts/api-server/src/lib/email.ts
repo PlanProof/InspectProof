@@ -196,7 +196,7 @@ function inspectionAssignedHtml(opts: {
       { label: "Scheduled", value: `${dateLabel}${timeLabel}`, highlight: true },
     ])}
     ${ctaButton(link, "View Inspection Details →")}
-    <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.7;font-family:${BASE_FONT};">If you have any questions, please contact your team leader or reply to this email.</p>`;
+    <p style="margin:0;font-size:13px;color:#9ca3af;line-height:1.7;font-family:${BASE_FONT};">If you have any questions, please contact your team leader.</p>`;
 
   return emailWrapper({
     title: heading,
