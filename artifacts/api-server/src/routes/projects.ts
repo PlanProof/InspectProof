@@ -585,17 +585,18 @@ router.post("/:id/documents", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { name, fileName, fileSize, mimeType, fileUrl, folder, includedInInspection, inspectionId } = req.body;
+    const resolvedFileName = fileName || name || "file";
     const [doc] = await db.insert(documentsTable).values({
       projectId: id,
-      name: name || fileName,
+      name: name || fileName || "file",
       category: "other",
-      fileName: fileName,
+      fileName: resolvedFileName,
       fileSize: fileSize || null,
       mimeType: mimeType || null,
       fileUrl: fileUrl || null,
       folder: folder || "General",
       includedInInspection: includedInInspection ?? true,
-      uploadedById: 1,
+      uploadedById: req.authUser!.id,
       ...(inspectionId ? { inspectionId: Number(inspectionId) } : {}),
     }).returning();
     res.status(201).json(formatDoc(doc));
