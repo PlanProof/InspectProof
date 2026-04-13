@@ -543,7 +543,6 @@ async function generateReportContent(
     : [inspection?.siteAddress, inspection?.suburb].filter(Boolean).join(" ") || "—";
 
   let content = `${typeLabel.toUpperCase()}
-${"=".repeat(typeLabel.length)}
 
 DOCUMENT REFERENCE: ${project?.certificationNumber || "—"}
 DATE ISSUED: ${formatDate(inspection?.completedDate || new Date().toISOString().split("T")[0])}
@@ -1764,20 +1763,6 @@ function buildPdf(
         .text(label.toUpperCase(), mx, mY + 30, { width: metricColW, align: "center", lineBreak: false });
     });
     doc.y = mY + 56;
-
-    // Narrative — use scheduledDate for inspection date, completedDate for issued date
-    const inspType = inspectionForPdf?.inspectionType
-      ? formatInspType(inspectionForPdf.inspectionType)
-      : "inspection";
-    const dateConducted = inspectionForPdf?.scheduledDate
-      ? new Date(inspectionForPdf.scheduledDate).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })
-      : new Date().toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
-    const narrative = failCount === 0
-      ? `This ${inspType} was conducted on ${dateConducted}. All ${totalCount} inspection item${totalCount !== 1 ? "s" : ""} assessed were found to be compliant with the applicable building standards and requirements.`
-      : `This ${inspType} was conducted on ${dateConducted}. Of the ${totalCount} items assessed, ${failCount} non-compliance${failCount !== 1 ? "s were" : " was"} identified requiring rectification prior to re-inspection. ${monCount > 0 ? `${monCount} item${monCount !== 1 ? "s require" : " requires"} ongoing monitoring.` : ""}`;
-    doc.fillColor("#374151").fontSize(9.5).font(F)
-      .text(narrative, MARGIN, doc.y, { width: contentW });
-    doc.moveDown(0.8);
 
     // Key findings: top-severity fail items (up to 5)
     const failLines = rawLines.filter(l => /\[✗ FAIL\]/.test(l));
