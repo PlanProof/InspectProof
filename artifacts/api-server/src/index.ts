@@ -520,6 +520,7 @@ async function runSchemaMigrations() {
   } catch (err) {
     logger.error({ err }, "Task #50 migration failed — continuing");
   }
+
 }
 
 async function ensurePlanConfigsSeed() {
@@ -655,12 +656,76 @@ async function initStripe() {
   }
 }
 
+// Runs AFTER ensureGlobalTemplatesSeed() to remove standalone footing/slab
+// duplicates and apply the correct sort ordering within each BS folder.
+// Safe to run repeatedly — all operations are idempotent.
+async function ensureInspectionTypeCleanup() {
+  try {
+    // Delete standalone footing/slab templates that exist alongside a combined
+    // "Footing & Slab" (bs_footing_slab) template in the same folder.
+    await pool.query(`
+      DELETE FROM checklist_items
+      WHERE template_id IN (
+        SELECT t.id FROM checklist_templates t
+        WHERE t.inspection_type IN ('footing', 'slab')
+          AND EXISTS (
+            SELECT 1 FROM checklist_templates combo
+            WHERE combo.folder = t.folder
+              AND combo.inspection_type = 'bs_footing_slab'
+          )
+      )
+    `);
+    await pool.query(`
+      DELETE FROM checklist_templates t
+      WHERE t.inspection_type IN ('footing', 'slab')
+        AND EXISTS (
+          SELECT 1 FROM checklist_templates combo
+          WHERE combo.folder = t.folder
+            AND combo.inspection_type = 'bs_footing_slab'
+        )
+    `);
+    // Apply standard sort ordering:
+    // 1. Footing & Slab, 2. Frame, 3. Waterproofing, 4. Final, 5. Occupancy, 6+. rest
+    await pool.query(`
+      UPDATE checklist_templates SET sort_order = CASE inspection_type
+        WHEN 'bs_footing_slab'    THEN 1
+        WHEN 'frame'              THEN 2
+        WHEN 'steel_frame'        THEN 2
+        WHEN 'waterproofing'      THEN 3
+        WHEN 'pre_plaster'        THEN 4
+        WHEN 'lock_up'            THEN 5
+        WHEN 'final'              THEN 10
+        WHEN 'pool_final'         THEN 10
+        WHEN 'occupancy'          THEN 11
+        WHEN 'fire_penetration'   THEN 20
+        WHEN 'fire_separation'    THEN 21
+        ELSE sort_order
+      END
+      WHERE folder IN (
+        'Dwelling 1 Storey (Class 1)',
+        'Dwelling 2 Storey (Class 1)',
+        'Class 2-9',
+        'Shed Steel (Class 10)',
+        'Shed Timber Framed (Class 10)',
+        'Swimming Pool / Spa (Class 10b)',
+        'Class 5'
+      )
+    `);
+    logger.info("Inspection type cleanup applied");
+  } catch (err) {
+    logger.error({ err }, "Inspection type cleanup failed — continuing");
+  }
+}
+
 async function runBackgroundTasks() {
   try {
     await ensureGlobalTemplatesSeed();
   } catch (err) {
     logger.error({ err }, "Global template seed failed — continuing");
   }
+
+  // Run AFTER seed so it removes any templates the seed re-creates
+  await ensureInspectionTypeCleanup();
 
   try {
     await initStripe();
