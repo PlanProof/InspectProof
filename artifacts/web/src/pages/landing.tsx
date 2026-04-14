@@ -30,6 +30,8 @@ import {
   AlertTriangle,
   CheckCheck,
   Clock,
+  Loader2,
+  Check,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -39,153 +41,344 @@ const NAV_LINKS = [
   { label: "How It Works", href: "#how-it-works" },
 ];
 
-function Header() {
-  const [mobileOpen, setMobileOpen] = useState(false);
+/* ── Waitlist modal ─────────────────────────────────────── */
+const DISCIPLINES = [
+  "Building Surveyor",
+  "Structural Engineer",
+  "Plumbing Inspector",
+  "Builder / QC",
+  "Site Supervisor",
+  "WHS Officer",
+  "Pre-Purchase Inspector",
+  "Fire Safety Engineer",
+  "Property Manager",
+  "Pool Inspector",
+  "Insurance Assessor",
+  "Other",
+];
+
+function WaitlistModal({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [profession, setProfession] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    setStatus("loading");
+    try {
+      const res = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, name, profession }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setStatus("success");
+      } else {
+        setErrorMsg(data.error || "Something went wrong. Please try again.");
+        setStatus("error");
+      }
+    } catch {
+      setErrorMsg("Something went wrong. Please try again.");
+      setStatus("error");
+    }
+  };
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 px-4 sm:px-6 pt-4">
-      <div className="mx-auto max-w-6xl">
-        <div className="relative flex h-14 items-center rounded-2xl bg-white px-5 shadow-lg shadow-black/8">
-          {/* Logo */}
-          <div className="flex flex-1 items-center gap-2">
-            <img src={`${import.meta.env.BASE_URL}logo-light.png`} alt="InspectProof" className="h-9 w-9 object-contain" />
-            <span className="text-[22px] text-[#0B1933] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>
-              InspectProof
-            </span>
-          </div>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(11,25,51,0.75)", backdropFilter: "blur(4px)" }}
+    >
+      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl p-8">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="Close"
+        >
+          <X className="h-5 w-5" />
+        </button>
 
-          {/* Desktop nav — absolutely centred */}
-          <nav className="absolute left-1/2 hidden -translate-x-1/2 md:flex items-center gap-7">
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="text-sm text-gray-500 hover:text-[#0B1933] transition-colors"
-              >
-                {link.label}
-              </a>
-            ))}
-          </nav>
-
-          {/* Sign In */}
-          <div className="flex flex-1 justify-end items-center gap-3">
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#466DB5] px-4 py-2 text-sm font-medium text-white hover:bg-[#3a5c9a] transition-colors"
-            >
-              Sign In <ChevronRight className="h-3.5 w-3.5" />
-            </Link>
-            {/* Mobile menu button */}
+        {status === "success" ? (
+          <div className="text-center py-4">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
+              <Check className="h-7 w-7 text-green-600" />
+            </div>
+            <h3 className="text-xl font-bold text-[#0B1933] mb-2">You're on the list!</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Thanks for your interest. We'll be in touch when InspectProof is ready for new sign-ups.
+            </p>
             <button
-              className="md:hidden p-1 text-gray-500 hover:text-[#0B1933]"
-              onClick={() => setMobileOpen(!mobileOpen)}
+              onClick={onClose}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#0B1933] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#162444] transition-colors"
             >
-              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              Done
             </button>
           </div>
-        </div>
-
-        {/* Mobile nav */}
-        {mobileOpen && (
-          <div className="md:hidden mt-1 rounded-2xl bg-white shadow-lg shadow-black/8 px-5 py-3">
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="block py-2.5 text-sm text-gray-500 hover:text-[#0B1933] border-b border-gray-100 last:border-0"
-                onClick={() => setMobileOpen(false)}
+        ) : (
+          <>
+            <div className="mb-6">
+              <h3
+                className="text-2xl font-bold text-[#0B1933] mb-1"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                {link.label}
-              </a>
-            ))}
-          </div>
+                Join the waitlist
+              </h3>
+              <p className="text-sm text-gray-500">
+                New sign-ups are currently by invitation. Enter your details and we'll reach out when we open up for new users.
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {status === "error" && errorMsg && (
+                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  {errorMsg}
+                </div>
+              )}
+              <div>
+                <label htmlFor="wl-name" className="block text-sm font-medium text-gray-700 mb-1">
+                  Full name
+                </label>
+                <input
+                  id="wl-name"
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  required
+                  placeholder="Jane Smith"
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#466DB5] focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label htmlFor="wl-email" className="block text-sm font-medium text-gray-700 mb-1">
+                  Work email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="wl-email"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  placeholder="you@company.com.au"
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#466DB5] focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label htmlFor="wl-profession" className="block text-sm font-medium text-gray-700 mb-1">
+                  Profession
+                </label>
+                <select
+                  id="wl-profession"
+                  value={profession}
+                  onChange={e => setProfession(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#466DB5] focus:border-transparent"
+                >
+                  <option value="">Select your discipline…</option>
+                  {DISCIPLINES.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={status === "loading"}
+                className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#0B1933] px-6 py-3 text-sm font-semibold text-white hover:bg-[#162444] transition-colors disabled:opacity-60"
+              >
+                {status === "loading" ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Submitting…
+                  </>
+                ) : (
+                  <>
+                    Request early access <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+              <p className="text-xs text-gray-400 text-center">
+                We won't share your details. Existing users can{" "}
+                <Link to="/login" className="underline hover:text-gray-600">sign in here</Link>.
+              </p>
+            </form>
+          </>
         )}
       </div>
-    </header>
+    </div>
+  );
+}
+
+function Header() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [showWaitlist, setShowWaitlist] = useState(false);
+
+  return (
+    <>
+      {showWaitlist && <WaitlistModal onClose={() => setShowWaitlist(false)} />}
+      <header className="fixed inset-x-0 top-0 z-50 px-4 sm:px-6 pt-4">
+        <div className="mx-auto max-w-6xl">
+          <div className="relative flex h-14 items-center rounded-2xl bg-white px-5 shadow-lg shadow-black/8">
+            {/* Logo */}
+            <div className="flex flex-1 items-center gap-2">
+              <img src={`${import.meta.env.BASE_URL}logo-light.png`} alt="InspectProof" className="h-9 w-9 object-contain" />
+              <span className="text-[22px] text-[#0B1933] leading-none" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>
+                InspectProof
+              </span>
+            </div>
+
+            {/* Desktop nav — absolutely centred */}
+            <nav className="absolute left-1/2 hidden -translate-x-1/2 md:flex items-center gap-7">
+              {NAV_LINKS.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="text-sm text-gray-500 hover:text-[#0B1933] transition-colors"
+                >
+                  {link.label}
+                </a>
+              ))}
+            </nav>
+
+            {/* Sign In */}
+            <div className="flex flex-1 justify-end items-center gap-3">
+              <Link
+                to="/login"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-[#0B1933]/20 px-4 py-2 text-sm font-medium text-[#0B1933] hover:bg-gray-50 transition-colors"
+              >
+                Sign In
+              </Link>
+              <button
+                onClick={() => setShowWaitlist(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#466DB5] px-4 py-2 text-sm font-medium text-white hover:bg-[#3a5c9a] transition-colors"
+              >
+                Get Early Access <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+              {/* Mobile menu button */}
+              <button
+                className="md:hidden p-1 text-gray-500 hover:text-[#0B1933]"
+                onClick={() => setMobileOpen(!mobileOpen)}
+              >
+                {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile nav */}
+          {mobileOpen && (
+            <div className="md:hidden mt-1 rounded-2xl bg-white shadow-lg shadow-black/8 px-5 py-3">
+              {NAV_LINKS.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="block py-2.5 text-sm text-gray-500 hover:text-[#0B1933] border-b border-gray-100 last:border-0"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  {link.label}
+                </a>
+              ))}
+              <Link
+                to="/login"
+                className="block py-2.5 text-sm text-gray-500 hover:text-[#0B1933]"
+                onClick={() => setMobileOpen(false)}
+              >
+                Sign In
+              </Link>
+            </div>
+          )}
+        </div>
+      </header>
+    </>
   );
 }
 
 function Hero() {
+  const [showWaitlist, setShowWaitlist] = useState(false);
+
   return (
-    <section className="relative overflow-hidden bg-[#0B1933]">
-      {/* ── Two-column layout ─────────────────────────────────── */}
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-[55%_45%] min-h-[88vh] items-center gap-0">
+    <>
+      {showWaitlist && <WaitlistModal onClose={() => setShowWaitlist(false)} />}
+      <section className="relative overflow-hidden bg-[#0B1933]">
+        {/* ── Two-column layout ─────────────────────────────────── */}
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid lg:grid-cols-[55%_45%] min-h-[88vh] items-center gap-0">
 
-          {/* Left: text content */}
-          <div className="py-36 lg:py-24 lg:pr-16 z-10 relative">
-            <h1
-              className="text-4xl sm:text-5xl font-normal leading-[1.1] mb-6"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              <span className="text-white block">Inspection records</span>
-              <span className="text-[#C5D92D] block">that prove compliance.</span>
-            </h1>
-
-            <p className="text-lg text-white/55 mb-10 leading-relaxed max-w-xl">
-              The field inspection platform for every professional working
-              within Australia's built environment. Capture, document and
-              report on every inspection — fast, accurate and audit-ready.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-start gap-4">
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 rounded-lg bg-[#C5D92D] px-7 py-3.5 text-base font-semibold text-[#0B1933] hover:bg-[#d4e83a] transition-colors"
+            {/* Left: text content */}
+            <div className="py-36 lg:py-24 lg:pr-16 z-10 relative">
+              <h1
+                className="text-4xl sm:text-5xl font-normal leading-[1.1] mb-6"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                Get Started <ArrowRight className="h-4 w-4" />
-              </Link>
-              <a
-                href="#how-it-works"
-                className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-7 py-3.5 text-base font-medium text-white hover:bg-white/10 transition-colors"
-              >
-                See How It Works
-              </a>
-            </div>
+                <span className="text-white block">Inspection records</span>
+                <span className="text-[#C5D92D] block">that prove compliance.</span>
+              </h1>
 
-            {/* Stats — inline under CTAs */}
-            <div className="mt-16 pt-8 border-t border-white/10 grid grid-cols-3 gap-0">
-              {[
-                { value: "Zero", label: "Missed hold points\nwith smart scheduling" },
-                { value: "< 2 min", label: "From inspection to\nsigned certificate" },
-                { value: "100%", label: "Audit-ready documentation,\nevery time" },
-              ].map((stat, i) => (
-                <div
-                  key={stat.label}
-                  className={`${i > 0 ? "border-l border-white/10 pl-6" : ""} ${i < 2 ? "pr-6" : ""}`}
+              <p className="text-lg text-white/55 mb-10 leading-relaxed max-w-xl">
+                The field inspection platform for every professional working
+                within Australia's built environment. Capture, document and
+                report on every inspection — fast, accurate and audit-ready.
+              </p>
+
+              <div className="flex flex-col sm:flex-row items-start gap-4">
+                <button
+                  onClick={() => setShowWaitlist(true)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#C5D92D] px-7 py-3.5 text-base font-semibold text-[#0B1933] hover:bg-[#d4e83a] transition-colors"
                 >
-                  <div
-                    className="text-3xl font-normal text-[#C5D92D] leading-none"
-                    style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                  >
-                    {stat.value}
-                  </div>
-                  <div className="text-xs text-white/45 mt-2 whitespace-pre-line leading-relaxed">
-                    {stat.label}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                  Request Early Access <ArrowRight className="h-4 w-4" />
+                </button>
+                <a
+                  href="#how-it-works"
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-7 py-3.5 text-base font-medium text-white hover:bg-white/10 transition-colors"
+                >
+                  See How It Works
+                </a>
+              </div>
 
-          {/* Right: hero image */}
-          <div className="hidden lg:block relative self-stretch">
-            {/* Left gradient fade from navy into the image */}
-            <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#0B1933] to-transparent z-10" />
-            {/* Top gradient */}
-            <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[#0B1933] to-transparent z-10" />
-            {/* Bottom gradient */}
-            <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#0B1933] to-transparent z-10" />
-            <img
-              src="/hero-construction-tablet.png"
-              alt="Construction professional reviewing inspection on a tablet"
-              className="absolute inset-0 w-full h-full object-cover object-center"
-              style={{ filter: "brightness(0.75) contrast(1.05)" }}
-            />
+              {/* Stats — inline under CTAs */}
+              <div className="mt-16 pt-8 border-t border-white/10 grid grid-cols-3 gap-0">
+                {[
+                  { value: "Zero", label: "Missed hold points\nwith smart scheduling" },
+                  { value: "< 2 min", label: "From inspection to\nsigned certificate" },
+                  { value: "100%", label: "Audit-ready documentation,\nevery time" },
+                ].map((stat, i) => (
+                  <div
+                    key={stat.label}
+                    className={`${i > 0 ? "border-l border-white/10 pl-6" : ""} ${i < 2 ? "pr-6" : ""}`}
+                  >
+                    <div
+                      className="text-3xl font-normal text-[#C5D92D] leading-none"
+                      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                    >
+                      {stat.value}
+                    </div>
+                    <div className="text-xs text-white/45 mt-2 whitespace-pre-line leading-relaxed">
+                      {stat.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right: hero image */}
+            <div className="hidden lg:block relative self-stretch">
+              {/* Left gradient fade from navy into the image */}
+              <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#0B1933] to-transparent z-10" />
+              {/* Top gradient */}
+              <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[#0B1933] to-transparent z-10" />
+              {/* Bottom gradient */}
+              <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#0B1933] to-transparent z-10" />
+              <img
+                src="/hero-construction-tablet.png"
+                alt="Construction professional reviewing inspection on a tablet"
+                className="absolute inset-0 w-full h-full object-cover object-center"
+                style={{ filter: "brightness(0.75) contrast(1.05)" }}
+              />
+            </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 }
 
@@ -528,10 +721,10 @@ const PROFESSIONALS = [
       items: [
         "Site entry is controlled — hoarding, gates and signage in place and undamaged",
         "All workers on site wearing required PPE — hard hats, high-vis, safety boots",
-        "All open edges, excavations and floor voids are barricaded or covered — WHS Reg s225",
-        "Mobile plant operating safely — spotters used where pedestrian/plant interaction exists",
-        "Site conditions assessed for high wind, lightning or extreme heat risk",
-        "Work progressing in line with programme — delays or issues noted",
+        "Active work areas barricaded — overhead and exclusion zones clearly marked",
+        "Materials stored safely — no unstable stacks, trip hazards or blocked emergency exits",
+        "Scaffolding tags current — no unauthorised modifications or missing guardrails",
+        "Daily pre-start meeting completed — trades briefed on today's hold points and critical activities",
       ],
     },
   },
@@ -539,16 +732,16 @@ const PROFESSIONALS = [
     icon: ShieldAlert,
     role: "WHS Officers",
     description:
-      "Document safety inspections and hazard assessments in the field with the same rigour as any compliance inspection. Raise issues instantly, track corrective actions and produce audit-ready WHS records.",
+      "Conduct site safety inspections systematically and build a defensible record of every audit. InspectProof gives WHS professionals the tools to document hazards, assign corrective actions and evidence compliance with the Work Health and Safety Act.",
     checklistPreview: {
-      templateName: "Site Safety Audit — WHS Officer",
+      templateName: "WHS Site Safety Inspection",
       items: [
-        "WHS Management Plan current, signed by PCBU and accessible on site — WHS Reg s293",
-        "Emergency response plan posted prominently — assembly point clearly marked",
-        "Edge protection, scaffolding or personal fall arrest in use at all work at heights >2m",
-        "All excavations >1.5m shored, battered or benched — no unprotected workers below",
-        "SWMS in place for all high-risk construction work — reviewed and signed by workers",
-        "Adequate first aid kit available and restocked — first aid officer identified",
+        "Emergency evacuation plan displayed and legible at site entry — assembly point clearly marked",
+        "First aid kit stocked and accessible — qualified first aider on site during work hours",
+        "Hazardous chemicals stored in compliant, bunded, labelled areas — SDS accessible on site",
+        "Plant and equipment daily pre-start checks completed and records on site",
+        "Electrical leads and RCDs tagged and tested — no damaged insulation or bypass devices",
+        "All workers inducted — SWMS reviewed, signed and current for high-risk construction work",
       ],
     },
   },
@@ -556,16 +749,16 @@ const PROFESSIONALS = [
     icon: Home,
     role: "Pre-Purchase Inspectors",
     description:
-      "Deliver professional building inspection reports faster than ever. Use purpose-built checklists, capture photo evidence on-site and generate branded client reports before you leave the property.",
+      "Deliver thorough pre-purchase building reports with photo evidence and clear condition assessments. InspectProof standardises every inspection and produces client-ready reports in minutes.",
     checklistPreview: {
-      templateName: "Pre-Purchase Building Inspection — AS 4349.1",
+      templateName: "Pre-Purchase Building Inspection",
       items: [
-        "Roof covering — tiles, metal or membrane in good condition; no slipped or missing materials",
-        "Roof space inspected — no active leaks, pest damage, missing insulation or structural concerns",
-        "External walls — no significant cracking, moisture penetration, spalling or damage",
-        "Internal walls and ceilings — no significant cracking, damp staining or structural movement",
-        "Bathrooms and laundry — no evidence of leaks, water damage or failed waterproofing",
-        "Overall condition assessment and major defects summary completed per AS 4349.1",
+        "Roof structure — rafters, battens and sarking inspected for damage, rot or termite activity",
+        "Roof covering — tiles, metal sheet or membrane checked for cracking, lifting or corrosion",
+        "Subfloor — bearers, joists and stumps inspected for decay, movement and ventilation",
+        "Rising damp and moisture — probed walls and checked wet areas for staining, mould or salt attack",
+        "Structural cracks assessed — width, location and orientation recorded with photos",
+        "Condition report grading applied per AS 4349.1 — defects categorised and prioritised",
       ],
     },
   },
@@ -573,16 +766,16 @@ const PROFESSIONALS = [
     icon: Flame,
     role: "Fire Safety Engineers",
     description:
-      "Conduct fire safety inspections, document passive and active fire system compliance and issue fire safety certificates — all from a platform built for the rigour of Australian fire safety standards.",
+      "Record fire safety system inspections and produce evidence-backed compliance reports. InspectProof helps fire safety professionals manage annual fire safety statements, essential services and system audits.",
     checklistPreview: {
-      templateName: "Fire Safety Systems Inspection",
+      templateName: "Annual Fire Safety Inspection",
       items: [
-        "Smoke detection system covers all required areas — no zone gaps — AS 1670.1",
-        "Fire alarm panel operational — no faults, monitored by approved monitoring company",
-        "Sprinkler control valve open and tagged — flow test confirms adequate pressure and flow",
-        "Fire and smoke dampers in HVAC actuated correctly in test mode — AS 1682.2",
-        "Fire-rated walls, doors and penetration seals intact — no holes in rated construction",
-        "Fire systems commissioning report and Essential Safety Measures schedule prepared",
+        "Sprinkler system — main isolation valve open, pressure gauges in normal range, no obstructions",
+        "Fire detection and alarm system — panel in normal mode, no faults or isolations, zones verified",
+        "Emergency and exit lighting — all fittings operational, charge indicators positive, lenses clean",
+        "Fire doors — self-closing devices operational, no wedges or hold-opens, seals intact",
+        "Portable fire extinguishers — correct type for hazard class, pressure in green, within service date",
+        "Annual Fire Safety Statement prepared — all essential services listed and graded",
       ],
     },
   },
@@ -590,13 +783,13 @@ const PROFESSIONALS = [
     icon: Key,
     role: "Property Managers",
     description:
-      "Conduct thorough entry, exit and routine condition reports to protect asset value, resolve tenant disputes and maintain auditable property records — all generated and delivered from the field.",
+      "Conduct ingoing and outgoing property inspections with a complete photographic record. Protect your clients and reduce disputes with timestamped evidence and standardised condition reports.",
     checklistPreview: {
-      templateName: "Routine Condition Report — Residential Tenancy",
+      templateName: "Routine Property Inspection",
       items: [
-        "Entry condition verified against previous report — all discrepancies photographed and noted",
-        "All keys, remotes and swipe cards accounted for and in working order — RTRA s.95",
-        "Internal walls and ceilings — no new marks, staining, holes or damage beyond fair wear and tear",
+        "General cleanliness — all rooms, wet areas and common spaces inspected and condition noted",
+        "Walls and ceilings — any new damage, staining or unauthorised fixtures noted and photographed",
+        "Floor coverings — carpets and hard floors inspected for damage, staining or wear beyond fair use",
         "All smoke alarms tested and operational — battery condition noted — Building Fire Safety Regulation",
         "Hot water system, air conditioning and fixed appliances checked for operation — faults noted",
         "Yard and external areas — gardens maintained per lease conditions, no unapproved structures",
@@ -641,91 +834,95 @@ const PROFESSIONALS = [
 
 function Professionals() {
   const [active, setActive] = useState(0);
+  const [showWaitlist, setShowWaitlist] = useState(false);
   const p = PROFESSIONALS[active];
 
   return (
-    <section id="professionals" className="bg-[#0B1933] py-24">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-14">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#C5D92D]/30 bg-[#C5D92D]/10 px-4 py-1.5 mb-4">
-            <span className="text-xs font-medium text-[#C5D92D] tracking-wide uppercase">
-              Who It's For
-            </span>
-          </div>
-          <h2
-            className="text-3xl sm:text-4xl font-normal text-white mb-4"
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-          >
-            Built for professionals<br />working within Australia's built environment
-          </h2>
-        </div>
-
-        {/* Tab bar */}
-        <div className="flex flex-wrap justify-center gap-2 mb-12">
-          {PROFESSIONALS.map((prof, i) => (
-            <button
-              key={prof.role}
-              onClick={() => setActive(i)}
-              className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition-colors ${
-                active === i
-                  ? "bg-[#C5D92D] text-[#0B1933]"
-                  : "border border-white/20 text-white/60 hover:text-white hover:border-white/40"
-              }`}
-            >
-              <prof.icon className="h-4 w-4" />
-              {prof.role}
-            </button>
-          ))}
-        </div>
-
-        {/* Content panel */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-8 md:p-12 grid md:grid-cols-2 gap-10 items-center">
-          <div>
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[#C5D92D]/15 border border-[#C5D92D]/30">
-              <p.icon className="h-6 w-6 text-[#C5D92D]" />
+    <>
+      {showWaitlist && <WaitlistModal onClose={() => setShowWaitlist(false)} />}
+      <section id="professionals" className="bg-[#0B1933] py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-14">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#C5D92D]/30 bg-[#C5D92D]/10 px-4 py-1.5 mb-4">
+              <span className="text-xs font-medium text-[#C5D92D] tracking-wide uppercase">
+                Who It's For
+              </span>
             </div>
-            <h3
-              className="text-2xl font-normal text-white mb-4"
+            <h2
+              className="text-3xl sm:text-4xl font-normal text-white mb-4"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
-              {p.role}
-            </h3>
-            <p className="text-white/60 leading-relaxed mb-8">{p.description}</p>
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2 rounded-md bg-[#C5D92D] px-6 py-3 text-sm font-semibold text-[#0B1933] hover:bg-[#d4e83a] transition-colors"
-            >
-              Get Started <ArrowRight className="h-4 w-4" />
-            </Link>
+              Built for professionals<br />working within Australia's built environment
+            </h2>
           </div>
-          <div className="w-full">
-            <div className="rounded-xl border border-white/10 bg-[#0B1933]/60 overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-white/5">
-                <CheckCircle2 className="h-4 w-4 text-[#C5D92D] shrink-0" />
-                <span className="text-xs font-semibold text-white/80 tracking-wide truncate">
-                  {p.checklistPreview.templateName}
-                </span>
+
+          {/* Tab bar */}
+          <div className="flex flex-wrap justify-center gap-2 mb-12">
+            {PROFESSIONALS.map((prof, i) => (
+              <button
+                key={prof.role}
+                onClick={() => setActive(i)}
+                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition-colors ${
+                  active === i
+                    ? "bg-[#C5D92D] text-[#0B1933]"
+                    : "border border-white/20 text-white/60 hover:text-white hover:border-white/40"
+                }`}
+              >
+                <prof.icon className="h-4 w-4" />
+                {prof.role}
+              </button>
+            ))}
+          </div>
+
+          {/* Content panel */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-8 md:p-12 grid md:grid-cols-2 gap-10 items-center">
+            <div>
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[#C5D92D]/15 border border-[#C5D92D]/30">
+                <p.icon className="h-6 w-6 text-[#C5D92D]" />
               </div>
-              <ul className="divide-y divide-white/5">
-                {p.checklistPreview.items.map((item) => (
-                  <li key={item} className="flex items-start gap-3 px-4 py-3">
-                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#C5D92D]/15 border border-[#C5D92D]/40">
-                      <CheckCircle2 className="h-3 w-3 text-[#C5D92D]" />
-                    </div>
-                    <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
-                      <span className="text-white/65 text-xs leading-relaxed">{item}</span>
-                      <span className="shrink-0 rounded-full bg-[#C5D92D]/15 px-2 py-0.5 text-[10px] font-semibold text-[#C5D92D] border border-[#C5D92D]/30">
-                        Pass
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <h3
+                className="text-2xl font-normal text-white mb-4"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {p.role}
+              </h3>
+              <p className="text-white/60 leading-relaxed mb-8">{p.description}</p>
+              <button
+                onClick={() => setShowWaitlist(true)}
+                className="inline-flex items-center gap-2 rounded-md bg-[#C5D92D] px-6 py-3 text-sm font-semibold text-[#0B1933] hover:bg-[#d4e83a] transition-colors"
+              >
+                Request Early Access <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="w-full">
+              <div className="rounded-xl border border-white/10 bg-[#0B1933]/60 overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-white/5">
+                  <CheckCircle2 className="h-4 w-4 text-[#C5D92D] shrink-0" />
+                  <span className="text-xs font-semibold text-white/80 tracking-wide truncate">
+                    {p.checklistPreview.templateName}
+                  </span>
+                </div>
+                <ul className="divide-y divide-white/5">
+                  {p.checklistPreview.items.map((item) => (
+                    <li key={item} className="flex items-start gap-3 px-4 py-3">
+                      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#C5D92D]/15 border border-[#C5D92D]/40">
+                        <CheckCircle2 className="h-3 w-3 text-[#C5D92D]" />
+                      </div>
+                      <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
+                        <span className="text-white/65 text-xs leading-relaxed">{item}</span>
+                        <span className="shrink-0 rounded-full bg-[#C5D92D]/15 px-2 py-0.5 text-[10px] font-semibold text-[#C5D92D] border border-[#C5D92D]/30">
+                          Pass
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 }
 
@@ -832,37 +1029,47 @@ function HowItWorks() {
 }
 
 function CTA() {
-  return (
-    <section className="bg-white py-24">
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
-        <div className="rounded-2xl bg-[#0B1933] px-8 py-16 relative overflow-hidden">
-          {/* Background accent */}
-          <div className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full bg-[#466DB5]/20 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-[#C5D92D]/10 blur-3xl" />
+  const [showWaitlist, setShowWaitlist] = useState(false);
 
-          <div className="relative">
-            <h2
-              className="text-3xl sm:text-4xl font-normal text-white mb-4"
-              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            >
-              Ready to streamline your inspections?
-            </h2>
-            <p className="text-white/60 mb-10 max-w-xl mx-auto">
-              Trusted by professionals working within Australia's built environment
-              for defensible, audit-ready inspection records — from the field, every time.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 rounded-md bg-[#C5D92D] px-8 py-3.5 text-base font-semibold text-[#0B1933] hover:bg-[#d4e83a] transition-colors shadow-lg shadow-[#C5D92D]/20"
+  return (
+    <>
+      {showWaitlist && <WaitlistModal onClose={() => setShowWaitlist(false)} />}
+      <section className="bg-white py-24">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
+          <div className="rounded-2xl bg-[#0B1933] px-8 py-16 relative overflow-hidden">
+            {/* Background accent */}
+            <div className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full bg-[#466DB5]/20 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-[#C5D92D]/10 blur-3xl" />
+
+            <div className="relative">
+              <h2
+                className="text-3xl sm:text-4xl font-normal text-white mb-4"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                Sign In to InspectProof <ArrowRight className="h-4 w-4" />
-              </Link>
+                Ready to streamline your inspections?
+              </h2>
+              <p className="text-white/60 mb-10 max-w-xl mx-auto">
+                New accounts are currently by invitation only. Join the waitlist and we'll be in touch when we open up for your profession.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <button
+                  onClick={() => setShowWaitlist(true)}
+                  className="inline-flex items-center gap-2 rounded-md bg-[#C5D92D] px-8 py-3.5 text-base font-semibold text-[#0B1933] hover:bg-[#d4e83a] transition-colors shadow-lg shadow-[#C5D92D]/20"
+                >
+                  Join the Waitlist <ArrowRight className="h-4 w-4" />
+                </button>
+                <Link
+                  to="/login"
+                  className="inline-flex items-center gap-2 rounded-md border border-white/20 bg-white/5 px-8 py-3.5 text-base font-medium text-white hover:bg-white/10 transition-colors"
+                >
+                  Sign In
+                </Link>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 }
 

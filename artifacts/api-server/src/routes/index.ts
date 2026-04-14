@@ -28,6 +28,7 @@ import calendarIntegrationsRouter from "./calendarIntegrations";
 import geocodeRouter from "./geocode";
 import newslettersRouter from "./newsletters";
 import orgsRouter from "./orgs";
+import waitlistRouter from "./waitlist";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(calendarIntegrationsRouter);
 router.use(geocodeRouter);
 router.use(newslettersRouter);
 router.use(orgsRouter);
+router.use(waitlistRouter);
 
 export default router;

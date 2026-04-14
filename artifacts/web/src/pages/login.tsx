@@ -40,10 +40,6 @@ function fmt(cents: number) {
 }
 
 export default function Login() {
-  const params = new URLSearchParams(window.location.search);
-  const urlMode = params.get("mode");
-  const [mode, setMode] = useState<"signin" | "signup">(urlMode === "signup" ? "signup" : "signin");
-
   return (
     <div className="min-h-screen w-full flex">
       {/* Left side */}
@@ -86,33 +82,7 @@ export default function Login() {
             <span className="leading-none text-lg text-[#0B1933]" style={{ fontFamily: "'OddliniUX', sans-serif", fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>InspectProof</span>
           </div>
 
-          {/* Tab toggle */}
-          <div className="flex rounded-lg border border-border bg-muted/40 p-1 mb-6">
-            <button
-              onClick={() => setMode("signin")}
-              className={cn(
-                "flex-1 text-sm font-medium py-2 rounded-md transition-all",
-                mode === "signin"
-                  ? "bg-background shadow text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Sign in
-            </button>
-            <button
-              onClick={() => setMode("signup")}
-              className={cn(
-                "flex-1 text-sm font-medium py-2 rounded-md transition-all",
-                mode === "signup"
-                  ? "bg-background shadow text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Create account
-            </button>
-          </div>
-
-          {mode === "signin" ? <SignInForm /> : <SignUpFlow />}
+          <SignInForm />
         </div>
         <p className="mt-8 text-xs text-muted-foreground/60 text-center">
           InspectProof &mdash; a product of PlanProof Technologies Pty Ltd
