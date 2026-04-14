@@ -243,12 +243,6 @@ function Header() {
 
             {/* Sign In */}
             <div className="flex flex-1 justify-end items-center gap-3">
-              <Link
-                to="/login"
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-[#0B1933]/20 px-4 py-2 text-sm font-medium text-[#0B1933] hover:bg-gray-50 transition-colors"
-              >
-                Sign In
-              </Link>
               <button
                 onClick={() => setShowWaitlist(true)}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-[#466DB5] px-4 py-2 text-sm font-medium text-white hover:bg-[#3a5c9a] transition-colors"
@@ -278,13 +272,6 @@ function Header() {
                   {link.label}
                 </a>
               ))}
-              <Link
-                to="/login"
-                className="block py-2.5 text-sm text-gray-500 hover:text-[#0B1933]"
-                onClick={() => setMobileOpen(false)}
-              >
-                Sign In
-              </Link>
             </div>
           )}
         </div>
