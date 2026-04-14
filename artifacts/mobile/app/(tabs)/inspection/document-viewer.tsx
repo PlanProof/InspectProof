@@ -433,17 +433,29 @@ export default function DocumentViewerScreen() {
   //     leaving the spinner up forever even when the content is visible.
   //   • Android WebView cannot render PDFs from file:// at all (blank screen).
   //
-  // Solution: load the authenticated remote URL directly in the WebView.
+  // Solution: append ?token= to the URL so the WebView can authenticate without
+  // custom headers (the auth middleware supports ?token= for clients that cannot
+  // set headers, e.g. <img> tags and WebView navigation requests).
   //   • iOS WKWebView renders HTTPS PDFs natively and fires onLoadEnd correctly.
-  //   • Android uses Google Docs Viewer with the same URL so it renders in-app.
+  //   • Android uses Google Docs Viewer with the token-bearing URL so it can
+  //     fetch the document from the production server.
   //
   // The local FileSystem download (happening in parallel) is kept solely to power
   // the share/download button once the file is ready.
+
+  // Build a URL with the auth token embedded as a query parameter so WebViews
+  // can load authenticated storage objects without needing an Authorization header.
+  const tokenizedUrl = useMemo(() => {
+    if (!url) return url;
+    const separator = url.includes("?") ? "&" : "?";
+    return token ? `${url}${separator}token=${encodeURIComponent(token)}` : url;
+  }, [url, token]);
+
   const useGoogleDocsViewer = Platform.OS === "android" && isPdf;
-  const pdfRenderUri = isPdf && url && Platform.OS !== "web"
+  const pdfRenderUri = isPdf && tokenizedUrl && Platform.OS !== "web"
     ? Platform.OS === "android"
-      ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(url)}`
-      : url   // iOS WKWebView: load remote HTTPS URL directly
+      ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(tokenizedUrl)}`
+      : tokenizedUrl   // iOS WKWebView: load remote HTTPS URL with ?token= for auth
     : null;
 
   // Safety timeout: if onLoadEnd hasn't fired after 8 s, clear the spinner anyway.
@@ -456,15 +468,15 @@ export default function DocumentViewerScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfRenderUri]);
 
-  // For the "Open in browser" fallback — uses the token-authenticated URL directly
+  // For the "Open in browser" fallback — uses the tokenized URL so auth works
   const openInBrowser = useCallback(async () => {
-    if (!url) return;
+    if (!tokenizedUrl) return;
     try {
-      await Linking.openURL(url);
+      await Linking.openURL(tokenizedUrl);
     } catch {
       Alert.alert("Error", "Could not open the document. Please try again.");
     }
-  }, [url]);
+  }, [tokenizedUrl]);
 
   // ── WebView scroll ↔ currentPage sync (native PDF only) ───────────────────────
   // When markup mode is entered we inject JS to read the WebView's scroll position

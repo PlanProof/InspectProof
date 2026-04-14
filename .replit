@@ -59,3 +59,6 @@ SMTP_USER = "contact@inspectproof.com.au"
 SMTP_FROM = "InspectProof <noreply@inspectproof.com.au>"
 APP_BASE_URL = "https://inspectproof.com.au"
 FEEDBACK_EMAIL = "contact@inspectproof.com.au"
+
+[objectStorage]
+defaultBucketID = "replit-objstore-97d074d9-8576-42de-97b0-9bf4a2a327c8"
